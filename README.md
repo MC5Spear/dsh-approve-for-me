@@ -19,13 +19,13 @@
 - `mode: rules` 表示「规则强制检查 + LLM 审查」；
 - `denyPatterns` **出厂为空数组**，即**规则层不拦截任何东西**——每一次升权请求都交给 LLM 判断。
 
-写明白这意味着什么：
+具体来说：
 
 1. **判定为安全的请求会被自动放行**（`allowed-once`，仅本次有效）。放行的是**升权后的沙箱权限**，也就是让工具能读写工作区之外、执行更宽的操作。
 2. **LLM 判定不是安全边界**。它是模型给出的判断：会被提示注入影响、会有误判、会随模型与档位变化。审查器的输入来自被审操作本身与其上下文（含会话转录），**这些内容是不可信数据**——提示词里写明了这一点，但它不构成保证。
 3. **失败姿态是 fail-closed**：审查超时、调用失败、输出不可解析、模型不可用 → 一律**拒绝**，并注入理由。默认不会因为「审不了」就放行。
 4. **规则强制检查（`denyPatterns`）不可被推翻**：命中即拒绝，LLM 与人工都不能改判；但它出厂为空，需要你显式配置（见下「出厂参考清单」）。
-5. 建议的启用姿势：先在非生产环境试跑；把 `denyPatterns` 抄进配置恢复确定性拦截；按需收窄 `allowEscalationTo`、`tools`、`trigger.presets`；需要人工备用通道时用 `fallback: 'ask'`。
+5. 建议的启用方式：先在非生产环境试跑；把 `denyPatterns` 抄进配置恢复确定性拦截；按需收窄 `allowEscalationTo`、`tools`、`trigger.presets`；需要人工备用通道时用 `fallback: 'ask'`。
 6. **本插件不修改宿主任何文件**，不打源码补丁——删除插件目录即完全回滚（见「回滚」）。
 
 **行为一览**
@@ -40,9 +40,9 @@
 
 ## 兼容性
 
-适配 dsh `0.2.0-rc.2`：`@deepseek-ai/dsh-llm` 与 `@deepseek-ai/dsh-typert-protocol` 钉版 `0.2.0-rc.2`，peer `@deepseek-ai/cordis` 对齐宿主 `~4.0.4`。
+适配 dsh `0.2.0-rc.2`：`@deepseek-ai/dsh-llm` 与 `@deepseek-ai/dsh-typert-protocol` 锁定为 `0.2.0-rc.2`，peer `@deepseek-ai/cordis` 与宿主同版（`~4.0.4`）。
 
-宿主装载 bundle 时会**精确校验 peer 钉版**：`package.json` 里声明的 `@deepseek-ai/*` 版本与运行时不一致时，该 bundle 会被**直接跳过**（宿主日志出现 `skipping profile bundle "dsh-approve-for-me"`），插件看起来「装了但没反应」。换宿主版本时先核对自己的钉版。
+宿主装载 bundle 时会**精确校验 peer 版本锁定**：`package.json` 里声明的 `@deepseek-ai/*` 版本与运行时不一致时，该 bundle 会被**直接跳过**（宿主日志出现 `skipping profile bundle "dsh-approve-for-me"`），插件看起来「装了但没反应」。换宿主版本时先核对自己锁定的版本。
 
 **装宿主锚点包请显式带版本**：npm 上这两个 peer 包的 `latest` 标签指向旧版本——`@deepseek-ai/dsh-llm` → `0.0.1-rc.1`、`@deepseek-ai/dsh-typert-protocol` → `0.1.0-rc.6`，`0.2.0-rc.2` 挂在 `next` 上。不带版本装会拿到对不上的旧包，插件随即被宿主跳过。宿主主包 `@deepseek-ai/dsh` 的 `latest` 就是 `0.2.0-rc.2`（上游另有 `0.2.1-alpha.1` 的 alpha 线在跑）。
 
@@ -64,7 +64,7 @@ node <安装目录>/tools/permission-preset.mjs --apply
 
 `<安装目录>` 指目标 profile 的 `node_modules\dsh-approve-for-me`。
 
-`dsh plugin` 把参数原样转发给 pnpm，pnpm 原生支持 git 源形态：`github:<owner>/<repo>`，也可用 `#<tag>` 钉标签（如 `github:MC5Spear/dsh-approve-for-me#v0.2.0`）。本包纯 JS、无构建步，不涉及宿主对 git 源插件 `prepare` 脚本的 allowBuilds 提示。
+`dsh plugin` 把参数原样转发给 pnpm，pnpm 原生支持 git 源形态：`github:<owner>/<repo>`，也可用 `#<tag>` 用标签锁定（如 `github:MC5Spear/dsh-approve-for-me#v0.2.0`）。本包纯 JS、无构建步，不涉及宿主对 git 源插件 `prepare` 脚本的 allowBuilds 提示。
 
 **GUI 形态**：设置页「插件」面板的安装对话框里粘贴同一 spec 即可（与 CLI 同一安装引擎；对话框先 inspect 再安装，pnpm 输出折叠可见）。
 
@@ -99,7 +99,7 @@ node <克隆目录>/tools/permission-preset.mjs --apply
 
 **包目录必须能自己解析依赖**：链接模式下 Node 按真实路径解析，克隆目录里要先 `npm install --omit=dev`。`@deepseek-ai/schemastery` 必须 ≥ 3.18.4——插件用 `.volatile()` 声明可热改字段，低于该版本整行会被设置接口跳过。
 
-装完重启宿主（host 半边要重启才装载；客户端半边随页面加载生效）。**重启要在服务进程树之外执行**：宿主服务默认会清理整棵进程树，从服务自身进程树内发起的重启会把自己一起杀掉、停在停止态。
+装完重启宿主（宿主侧要重启才装载；客户端侧随页面加载生效）。**重启要在服务进程树之外执行**：宿主服务默认会清理整棵进程树，从服务自身进程树内发起的重启会把自己一起杀掉、停在停止态。
 
 ## 审批时序
 
@@ -130,7 +130,7 @@ node <克隆目录>/tools/permission-preset.mjs --apply
 | `enabled` | `true` | 总开关；关闭时不注册应答者 |
 | `mode` | `rules` | `rules` = 规则强制检查 + LLM 审查；`off` = 不接管 |
 | `tools` | `[]` | 接管工具名单；留空 = 对所有工具生效，填了则只接管名单内工具的审批请求，其余原样交给下一个应答者 |
-| `allowEscalationTo` | `danger-full-access` | 自动放行的最宽升权目标；默认不因模式上限拦截 |
+| `allowEscalationTo` | `danger-full-access` | 自动放行允许的最宽升权目标；默认值即最宽档，等于不设额外上限 |
 | `denyPatterns` | `[]` | 规则强制拒绝清单；**留空＝不启用规则强制检查**，显式写入后命中即拒绝、不消耗 LLM 调用。出厂参考清单见下 |
 | `unknownSubject` | `reject` | `callId` 回查不到命令时：`reject` 直接拒绝，`review` 带 `degraded=command` 继续审查 |
 | `fallback` | `reject` | 审查未放行时：`reject` 直接拒绝，`ask` 交人工 |
@@ -138,13 +138,13 @@ node <克隆目录>/tools/permission-preset.mjs --apply
 | `reviewer.byParentModel` | `{}` | 按主模型映射：父模型 id（纯模型 id）→ `{ model, effort }` |
 | `reviewer.followParent` | `true` | 最后一层：跟随父 agent 当前模型 |
 | `reviewer.timeoutMs` | `90000` | 审查超时；`0` = 无审查超时（模型挂起则本次审批挂起） |
-| `reviewer.maxTokens` | `0` | 审查请求输出上限；**`0` = 本插件不设上限**，由模型自己的默认值决定（对齐 codex）。见下方「输出预算」 |
+| `reviewer.maxTokens` | `0` | 审查请求输出上限；**`0` = 本插件不设上限**，由模型自己的默认值决定（与 codex 一致）。见下方「输出预算」 |
 | `reviewer.temperature` | `0` | 审查请求温度 |
 | `reviewer.maxToolSteps` | `4` | 工具轮次上限；超限后追加「请直接给出结论」再请求一次（不带工具） |
 | `reviewer.toolTimeoutMs` | `5000` | 单次只读工具调用超时；超时按「无证据」处理 |
 | `human.timeoutMs` | `300000` | 人工响应时限，仅 `fallback: 'ask'` 时生效；`0` = 立即拒绝 |
 | `human.timeoutFrom` | `request` | 计时起点：`request` 从请求进入插件起算，`handoff` 从交人工起算 |
-| `context.*` | `24576` / `4096` / `40` / `true` 字节与条数 | 会话上下文预算、单条上限、取样条数、是否纳入工具结果 |
+| `context.*` | `24576` / `4096` / `40` / `true` | 依次是：会话上下文预算字节数、单条上限字节数、取样条数、是否纳入工具结果 |
 | `context.redactPatterns` | 6 条 | 脱敏清单；作用于提示词、工具结果与审计 |
 | `concurrency.max` / `queueMax` / `queueTimeoutMs` | `2` / `8` / `30000` | 全局并发、每会话排队上限、排队等待上限 |
 | `breaker.*` | `3` / `50` / `10` / `600000` | 熔断阈值：连续拒绝、窗口大小、窗口内拒绝、冷却时长。计数口径把 `error` 与 `deny` 同权（审查通道不再产出可信结论即计数，无论模型坏还是判定严）；`allow` 清零连续计数；`queue-overflow` 一类调度失败不计数。打开后新请求零 LLM 调用，直接拒绝并注入通道故障文案 |
@@ -171,7 +171,7 @@ node <克隆目录>/tools/permission-preset.mjs --apply
 (^|[^A-Za-z0-9])(shutdown|Stop-Computer)\b
 ```
 
-**这是文本匹配护栏，不是安全边界。** 同一意图的等价变形（改写、编码、别的命令组合）可以绕过它；它只是第一道筛子，用来把最危险的一批操作从 LLM 判断面里摘出去。清单公开不降低安全性——默认本来就为空，装填与否由你决定。
+**这是文本匹配护栏，不是安全边界。** 同一意图的等价变形（改写、编码、别的命令组合）可以绕过它；它只是第一道筛子，用来把最危险的一批操作从 LLM 的判断范围里摘出去。清单公开不降低安全性——默认本来就为空，装填与否由你决定。
 
 显式配置后：命中即直接拒绝（`action=deny source=rule`），不消耗 LLM 调用，LLM 与人工都不能推翻；审计行 reason 写明命中键与模式。文本引用类命令（如 `grep mkfs readme.md`）也会命中——fail-closed 口径，可自定义清单收窄。
 
@@ -189,7 +189,7 @@ node <克隆目录>/tools/permission-preset.mjs --apply
 
 ### 注入文案的三种口径
 
-主模型收到的注入文本按结局分三种，选择集中在 gate 的结算分支：
+主模型收到的注入文本按结局分三种，选择集中在 `gate` 的结算分支：
 
 - **超时**（审查超时 / 人工超时 / 排队超时）：点明「没等到结论、按拒绝处理、可以直接重试」——超时不是安全判定，主模型不该因此放弃或绕路。
 - **判定为危险**（deny：LLM 给出 `deny`、规则命中、升权超上限）：codex 原版拒绝文案，末句是「不要用等价手段绕过该拒绝……」。
@@ -310,7 +310,7 @@ Select-String -Path <宿主 stderr 日志> -Pattern '\[approve-for-me\]'
 
 **已知局限（实测登记，不粉饰）**
 
-- **原生记录不可达的根因是 `callId` 关联**：记录表在 `expandAssistant` 里把助手条目与工具行**一起**产出，用的是**块级 `callId`**；而审批携带的 `callId` 在**子调用（PTC）**场景指向子工具行的 `sub.callId`，两者对不上。因此按 `callId` 就地插入审批行这一分支**从未命中**（实测行序 `工具 run_code → 子工具 pwsh → 审批 → 上下文`）。客户端快照里确实存在能匹配的数据（自有视图就靠它算等式），缺的是**在记录表组装自己的记录时做那一步关联**——那一步在仓库外无法可靠插入。
+- **原生记录不可达的根因是 `callId` 关联**：记录表在 `expandAssistant` 里把助手条目与工具行**一起**产出，用的是**块级 `callId`**；而审批携带的 `callId` 在**子调用（PTC）**情形下指向子工具行的 `sub.callId`，两者对不上。因此按 `callId` 就地插入审批行这一分支**从未命中**（实测行序 `工具 run_code → 子工具 pwsh → 审批 → 上下文`）。客户端快照里确实存在能匹配的数据（自有视图就靠它算等式），缺的是**在记录表组装自己的记录时做那一步关联**——那一步在仓库外无法可靠插入。
 - **时长条拆不开**：记录表 UI 本来不渲染任何时长文本（实测扫描 39 个元素，时长正则零命中），`timeSeconds` 只反映在时间线条的段宽上，而段没有 `title` / `aria-label`。因此「工具段是否只含净执行」在记录表外既无法证实也无法证伪；相应验收判据落在**自有视图的等式**上，不是落在段宽上。
 - **这一项只能在宿主内部实现**：缺的那一步（在记录表组装自己的记录时按块级 `callId` 关联审批）在仓库外无法可靠插入。本插件不为此保留任何探测或降级开关——宿主哪天把审批做成记录表里的一等记录，本插件是否接入届时重新评估。
 
@@ -326,11 +326,11 @@ npm run probe:reviewer                             # 真实调用链：用真实
 npm run probe:budget                               # 输出预算：max_tokens × 档位 对正文/思考 token 的影响（见上文「输出预算」）
 ```
 
-`npm test` 默认带 `--import ./tools/_host-hooks.mjs`：宿主接线用例需要解析 `@deepseek-ai/*`，解析不到时它们会**自我跳过**——**别把跳过当成通过**。锚点（宿主安装树）由 `tools/_host-resolve.mjs` 解析，取值与优先级见 `tools/local-config.mjs`：本机配置的 `hostModules`（环境变量 `DSAFM_HOST_MODULES` 可覆盖；配置形状见 `tools/local-config.example.mjs`）→ `$DSH_HOME/profiles/node_modules` → 全局安装树；都探不到时按文档化跳过。`test/host-tree.test.mjs` 常驻守卫锚点树与钉版一致，锚点指错版本即红。沙箱拦 per-file 子进程时用等价的 `node --import ./tools/_host-hooks.mjs --test --experimental-test-isolation=none "test/*.test.mjs"`。
+`npm test` 默认带 `--import ./tools/_host-hooks.mjs`：宿主接线用例需要解析 `@deepseek-ai/*`，解析不到时它们会**自我跳过**——**别把跳过当成通过**。锚点（宿主安装树）由 `tools/_host-resolve.mjs` 解析，取值与优先级见 `tools/local-config.mjs`：本机配置的 `hostModules`（环境变量 `DSAFM_HOST_MODULES` 可覆盖；配置形状见 `tools/local-config.example.mjs`）→ `$DSH_HOME/profiles/node_modules` → 全局安装树；都探不到时按文档化跳过。`test/host-tree.test.mjs` 常驻守卫锚点树与锁定版本一致，锚点指错版本即红（红＝测试失败）。沙箱拦 per-file 子进程时用等价的 `node --import ./tools/_host-hooks.mjs --test --experimental-test-isolation=none "test/*.test.mjs"`。
 
 LLM 探针从 `$DSH_HOME/.credentials.yaml` 的 `refs.DEEPSEEK_API_KEY` 读取凭据，任何输出都不含密钥；凭据缺失或网络不可达时打印 `RESULT: SKIP — 未验证` 并以退出码 0 结束。
 
-设置面有一条**离线**回归：`test/fixtures/settings-dom-dump.txt` 是设置详情页的 DOM 与计算样式夹具，`test/settings-dom-dump.test.mjs` 拿它当常驻断言（结构回潮、取值与生效值脱钩、样式漂移都会先在这里红）。夹具是快照，宿主升级后需重新采集。
+设置界面有一条**离线**回归：`test/fixtures/settings-dom-dump.txt` 是设置详情页的 DOM 与计算样式夹具，`test/settings-dom-dump.test.mjs` 拿它当常驻断言（结构回潮、取值与生效值脱钩、样式漂移都会先在这里红）。夹具是快照，宿主升级后需重新采集。
 
 ## 回滚
 
@@ -359,4 +359,4 @@ MIT —— 版权行见 [`LICENSE`](LICENSE)。
 | 版本变更 | [`CHANGELOG.md`](CHANGELOG.md) |
 | 公开面的内容边界规则与开发/测试指南（不接受外部 PR） | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 
-本仓以 `v0.2.0` 为公开起点（2026-10）。开发期的逐轮审查报告、验证证据与本机部署配置不随仓发布；上面这几份是仅有的对外文档，且各自自包含——所依赖的事实都写在文档内部（外部依据给到上游包的 `文件:行号` 或公开 URL），不需要读者去别处找。
+本仓以 `v0.2.0` 为首个公开发布版本。开发期的逐轮审查报告、验证证据与本机部署配置不随仓发布；上面这几份是仅有的对外文档，且各自自包含——所依赖的事实都写在文档内部（外部依据给到上游包的 `文件:行号` 或公开 URL），不需要读者去别处找。

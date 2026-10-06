@@ -21,7 +21,7 @@ cd dsh-approve-for-me
 npm install --omit=dev
 ```
 
-**宿主解析锚点**：宿主接线用例需要解析 `@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-typert-protocol`、`@deepseek-ai/cordis` 等同版包（本包按 peer 钉版）。两种给法：
+**宿主解析锚点**：宿主接线用例需要解析 `@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-typert-protocol`、`@deepseek-ai/cordis` 等同版包（本包按 peer 版本锁定）。两种给法：
 
 1. 在克隆目录里显式装同版宿主包（CI 走这条）：
    `npm install --no-save @deepseek-ai/cordis@4.0.4 @deepseek-ai/dsh-llm@0.2.0-rc.2 @deepseek-ai/dsh-typert-protocol@0.2.0-rc.2 @deepseek-ai/schemastery@3.18.4`
@@ -61,7 +61,7 @@ npm run probe:typert        # 离线校验 ./typert 清单
 判据是一条命令，它同时跑在 CI 里：
 
 ```powershell
-npm run check:public-surface     # 结构 / 本机指纹 / 内部引用，三类判据零命中即绿
+npm run check:public-surface     # 结构 / 本机指纹 / 内部引用，三类判据零命中即绿（绿＝测试通过）
 ```
 
 **改动纪律**：影响判决路径的改动必须带可失败判据（把实现改回错误形态、对应断言必须红，再还原复绿）；安全语义（判决路径、fail-open 可能、凭据/路径处理）的事实记载在 README「先读这一节」与 `docs/design.md` §13.14，改动时两处跟着更新；真实凭据、真实会话内容与本机路径不进提交，测试夹具用假值（如 `sk-abc12345`）。
@@ -79,5 +79,5 @@ npm run check:public-surface     # 结构 / 本机指纹 / 内部引用，三类
 **运行真机的经验**（不是硬性要求）：
 
 - **别重启正在工作的实例**。宿主服务默认会清理整棵进程树：从服务自身进程树内发起的重启会把自己一起杀掉、服务停在停止态。重启命令要在服务进程树之外执行。
-- 建议备两个 profile（或两个实例）：一个跑日常开发与探针，一个做端到端验证。插件 host 半边改动要重启宿主才装载，client 半边随页面加载生效——两条调用链分开验，省得互相干扰。
+- 建议备两个 profile（或两个实例）：一个跑日常开发与探针，一个做端到端验证。插件宿主侧改动要重启宿主才装载，客户端侧随页面加载生效——两条调用链分开验，省得互相干扰。
 - 端到端结论（「真的自动放行了」）必须来自真机实测 + 审计行，不能由单测代替；单测证明的是分支正确性，不是宿主接线正确性。

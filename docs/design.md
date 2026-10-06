@@ -15,7 +15,7 @@
 
 **文档自包含要求**：需求稿与设计稿随仓公开，必须自包含——被引用的事实写进正文，并附公开可查的上游出处（本仓文件、公开 npm 包源码、公开 URL），不得把读者指向 `.local/` 下的登记物。
 
-**常驻检查器**：`tools/check-public-surface.mjs`（进 CI）扫描全部跟踪文件，三类判据：①**结构**——`.gitignore` 含 `.local/` 例外；没有跟踪文件落在 `.local/` 下；源码不经配置加载器（`tools/local-config.mjs`）不得直接写 `.local/` 字面。②**指纹**——跟踪文本零命中本机指纹（开发根、用户目录、宿主安装目录、实例端口、服务名、主机名等，含反斜杠/正斜杠/转义各形态）。③**引用**——零命中未随仓公开的内部引用（事实登记簿指针、事实/问题编号引用形态、过程稿文件名、证据/截图/临时区指针；短编号形态只在 Markdown 文档里判，避免撞上源码里的无关标识符）。全绿退出 0，有违规退出 1；`--verbose` 打印全部命中。豁免逐文件具名（判据自身必然承载禁用形态的检查器脚本等），不按模式豁免。
+**常驻检查器**：`tools/check-public-surface.mjs`（进 CI）扫描全部跟踪文件，三类判据：①**结构**——`.gitignore` 含 `.local/` 例外；没有跟踪文件落在 `.local/` 下；源码不经配置加载器（`tools/local-config.mjs`）不得直接写 `.local/` 字面。②**指纹**——跟踪文本零命中本机指纹（开发根、用户目录、宿主安装目录、实例端口、服务名、主机名等，含反斜杠/正斜杠/转义各形态）。③**引用**——零命中未随仓公开的内部引用（事实登记簿指针、事实/问题编号引用形态、过程稿文件名、证据/截图/临时区指针；短编号形态只在 Markdown 文档里判，避免撞上源码里的无关标识符）。全绿（绿＝测试通过）退出 0，有违规退出 1；`--verbose` 打印全部命中。豁免逐文件具名（判据自身必然承载禁用形态的检查器脚本等），不按模式豁免。
 
 ## 1. 范围与依据
 ### 1.1 目标
@@ -510,12 +510,12 @@ parse(text):
 ## 6. 配置与模型解析
 ### 6.1 settings schema（宿主行 id `approve-for-me`）
 
-**0.1.7 适配标记（待改，经设计审查 r25 P3 修正为具体方案）**：0.1.5 用 `ctx.settings.installSection(owner, ns, schema, entry, hooks)` 把这一节设为可读写的"设置命名空间"；0.1.7 **删除了该方法**，公开面只剩 `describe`/`update`/`replace`/`mutate` 一类读写通道，且设置只住在 profile patch（`settings.yaml` 仅作一次性导入源，导入写路径要求挂载行在场——找不到行或行无可热改字段时，分节只留在改名档里不被消费）——改为"宿主行的 `Config` 就是这一节"，行 id 即命名空间。适配方案：
+**0.1.7 适配**：0.1.5 用 `ctx.settings.installSection(owner, ns, schema, entry, hooks)` 把这一节设为可读写的"设置命名空间"；0.1.7 **删除了该方法**，公开面只剩 `describe`/`update`/`replace`/`mutate` 一类读写通道，且设置只住在 profile patch（`settings.yaml` 仅作一次性导入源，导入写路径要求挂载行在场——找不到行或行无可热改字段时，分节只留在改名档里不被消费）——改为"宿主行的 `Config` 就是这一节"，行 id 即命名空间。适配方案：
 
 1. **volatile 名单（穷举）**＝卡片可编辑集（`client.js:304-319` 的 FIELDS + PresetPicker 的 `trigger.presets` + 模型三控的 `reviewer.model/byParentModel/followParent`）＋ **`mode`**。即：`mode`、`tools`、`allowEscalationTo`、`unknownSubject`、`fallback`、`denyPatterns`、`trigger.presets/unknown/auditEverySkip/subagents`、`reviewer.*`（全部 8 字段）、`human.*`、`ui.inject/injectMaxBytes/humanCardDuringReview`、`ui.trace.capture/ownView/turnSummary/legacyRow`、`language.ui/agent`。**不转**：`enabled`（生命周期开关，卡片不编辑）、`concurrency.*`、`breaker.*`（scheduler 在 apply 期快照，volatile 更新不重建，转了会静默失效）、`audit.*`、`context.*`（同因）。名单已覆盖旧一次性导入档 `.imported` 分节全部 4 键（`reviewer.model/timeoutMs`、`human.timeoutMs`、`ui.trace.capture`），导入兼容面成立。
 2. **读通道**：`apply(ctx, config)` 收到的 config 里 volatile 字段是**稳定引用对象**（schemastery 的 volatile 语义）；插件侧不再调用 settings 服务（`inject` 去掉 `'settings'`）。`current()` ＝**每次调用现算 `normalizeConfig(config)`**——引用被宿主原地更新，重算即热改生效，无需缓存失效通知；resolver 缓存失效＝`ctx.on('loader/volatile-update', invalidate)`（`llm/adapters-updated` 监听保持）。
-3. **`normalizeConfig()` 改造**（`lib/config.js:185-193`）：合并后**深度解包**——递归把 `isVolatile(v) ? v.get() : v` 换成当前快照（defaults 与传入值两侧都要解；`Config({})` 的 defaults 也含 detached 引用）。解包结果是**每次现算的普通对象，不冻结**：下游只读展开、无变异需求，且每次调用都重建，无需冻结开销（r26 审查附注④-3 曾疑为冻结——以实现与测试为准）。
-4. **`mode` 热改的请求期生效**：`createMode().mode()` 首查 `current()?.mode === 'off'` → 直接返回 `'off'`（gate `:165` 的 `rt.mode(request) !== 'auto'` 即走 `next()`）——否则 volatile 化的 `off` 因 apply 不重跑而永不生效（现状只在 apply 期检查注册，`gate.js` 请求期不查 `cfg.mode`，审查 r25 P3）。apply 期的"off 不注册"检查保留（重启路径干净）。
+3. **`normalizeConfig()` 改造**（`lib/config.js:185-193`）：合并后**深度解包**——递归把 `isVolatile(v) ? v.get() : v` 换成当前快照（defaults 与传入值两侧都要解；`Config({})` 的 defaults 也含 detached 引用）。解包结果是**每次现算的普通对象，不冻结**：下游只读展开、无变异需求，且每次调用都重建，无需冻结开销。
+4. **`mode` 热改的请求期生效**：`createMode().mode()` 首查 `current()?.mode === 'off'` → 直接返回 `'off'`（gate `:165` 的 `rt.mode(request) !== 'auto'` 即走 `next()`）——没有这一查，volatile 化的 `off` 会因 apply 不重跑而永不生效。apply 期的"off 不注册"检查保留（重启路径干净）。
 5. 剩余字段与默认值不变，仍以 `lib/config.js:23-170` 为准（下表省略逐字段注释，注释在源码里）：
 
 ```js
@@ -908,7 +908,7 @@ R30 只在显示层加换算读数：存储、审计行（`ms=`）、注入文�
 
 **合法口径与占位（判据④⑦）**。「合法」与 `fromDraft` 的数字校验同一口径：有限、`≥ 0`、**整数**——`12x`、`-1`、`1.5` 都非法；空串也走占位。草稿读数为占位 `—` 时**不得沿用上一个合法值**、不得整段隐藏；生效值读数一行常驻（含草稿非法期间）。生效值不是合法数字（快照缺该键或类型异常）时同样占位，不报错。
 
-**双语**：新字典键三对——`seconds.resolved`（「生效：{v}」／`Effective: {v}`）、`seconds.draft`（「草稿：{v}」／`Draft: {v}`）、`seconds.unit`（「秒」／`s`）。`{v}` 处替换为「数字 空格 单位」或占位 `—`。文案不得含退役短语（`test/client.test.mjs` 静态扫描与 dump 断言守着）。现有字典断言是枚举式（`help.` 前缀＋21 字段名单＋`card.*` 三键），**不会自动核到新键**——本轮须在 `test/client.test.mjs` 补一条**整表键集奇偶断言**（`Object.keys(zh)` 排序后与 `Object.keys(en)` 相等；变异验证：删任一侧一键即红），三对秒数键随之入册（R28 键集一一对应从枚举升格为整表核验）。
+**双语**：新字典键三对——`seconds.resolved`（「生效：{v}」／`Effective: {v}`）、`seconds.draft`（「草稿：{v}」／`Draft: {v}`）、`seconds.unit`（「秒」／`s`）。`{v}` 处替换为「数字 空格 单位」或占位 `—`。文案不得含退役短语（`test/client.test.mjs` 静态扫描与 dump 断言守着）。现有字典断言是枚举式（`help.` 前缀＋21 字段名单＋`card.*` 三键），**不会自动核到新键**——本轮须在 `test/client.test.mjs` 补一条**整表键集奇偶断言**（`Object.keys(zh)` 排序后与 `Object.keys(en)` 相等；变异验证：删任一侧一键即红，红＝测试失败），三对秒数键随之入册（R28 键集一一对应从枚举升格为整表核验）。
 
 **样式（与官方 `.hint` 同规格）**：`.dsafm_f_sec`＝普通块 `<p>`（非 flex——span 与「·」按内联文本流排布，词距与说明句一致）、`12px`／行高 1.5／`--dsw-alias-label-tertiary`（与官方 `fields.module.css` 的 `.hint` 完全同规格）、`margin:-12px 0 12px`——上边距抵消官方字段的 `12px` 底部内边距，读数行紧贴说明行（不隔行，视觉上是说明块的续行）；下边距把 `12px` 呼吸还给后继分隔线（与官方字段自身的底部节奏一致）。R30 的样式修正（2026-09-26 用户反馈）：初版 `display:flex;gap:12px;margin:-6px 0 0` 因 flex 间隙拉开「生效/·/草稿」词距、且与说明行隔出 6px 空档，已改为上述同规格续行形态（验证实例重取：`marginTop=-12px`）。Fragment 平铺会把读数行插进官方 `.field + .field` 相邻选择器之间（`reviewer.timeoutMs` 与 `reviewer.maxTokens` 之间的分隔线会失效），补一条 `.dsafm_f_sec + div:not(.dsafm_field)` 恢复后继官方字段的 `0.5px` 分隔线；自绘字段跟在读数行后时不补（现状本就无分隔线，R29 取证已接受）。草稿非法时草稿 span 加 `dsafm_sec_invalid`（`--dsw-alias-state-error-primary`，镜像官方 `.invalid` 与 `.hint` 的双色规则）；空串占位不变色（空不是非法，`fromDraft` 里空串合法）。
 
@@ -1771,7 +1771,7 @@ R46–R48 的实现按下表落位（主文档各节已随实现同步改写为�
 
 - 范围：R49（适配 `dsh@0.2.0-rc.1` 到功能等价）与 R50（版本区分与实例隔离）；依据＝0.2.0-rc.1 的 npm 发布事实（dist-tags `next` 指向 rc、全家桶同版号）、两实例 junction 共用同一插件目录的历史形态（2026-10-01 起由 R54 的部署分离取代）、0.2.0-rc.1 对本插件宿主面的逐包比对（tarball 对 0.1.7-rc.1 安装逐包 diff）。
 - 纪律与 §23 相同：**本节是未来设计**。实现前，主文档各节继续描述 0.1.7 现状；§24.5 列实现时需要同步改写的位置。R49/R50 的判据在实现与取证完成前一律视为未达成（requirements §4 判定口径）。
-- 0.2.0 预览版口径：适配目标版本钉**现行 rc**——R49 轮＝`0.2.0-rc.1`；`0.2.0-rc.2` 发布后按 R55 平移至 `0.2.0-rc.2`（逐包 diff 实证对本插件的内容增量为零：钉版平移、非二次适配——`dsh-typert-protocol` lib 逐字节相同，`dsh-llm` 唯一差异是 typert 清单 `MessageSourceMap` 的加法成员）。后续 rc 再发布时按同法重查再决定跟进。
+- 0.2.0 预览版口径：适配目标版本锁定**现行 rc**——R49 轮＝`0.2.0-rc.1`；`0.2.0-rc.2` 发布后按 R55 平移至 `0.2.0-rc.2`（逐包 diff 实证对本插件的内容增量为零：版本锁定平移、非二次适配——`dsh-typert-protocol` lib 逐字节相同，`dsh-llm` 唯一差异是 typert 清单 `MessageSourceMap` 的加法成员）。后续 rc 再发布时按同法重查再决定跟进。
 
 ### 24.1 版本区分与隔离拓扑（R50；requirements §3 问题 16/17/18 的答复落点）
 
@@ -1785,13 +1785,13 @@ R46–R48 的实现按下表落位（主文档各节已随实现同步改写为�
 | DSH_HOME | 两实例各自的 home（验证实例升级后原 home 封存） | 验证实例的独立新 home（独立 sessions/reviews/审计，绝不相混） |
 | profile 配置 | 两 home 的 patch 插件行 `config` 原样（R54 未动配置） | 新 home 的 profile patch 插件行 `config` 从 0.1.7 基线等价抄写（R50 判据④） |
 
-依据：junction 共用的历史形态（2026-10-01 起由 R54 部署分离取代）；部署分离现状（两实例安装面指向 v0.1.7 冻结件、开发树零实例引用）；dsh 部署手册「绝不让两个实例共用一个 DSH_HOME」「切版本＝改启动链指向另一份安装」；用户裁定（2026-10-01，「单仓单源、实例按 ref 取版」）。
+依据：junction 共用的历史形态（2026-10-01 起由 R54 部署分离取代）；部署分离现状（两实例安装面指向 v0.1.7 冻结件、开发树零实例引用）；dsh 部署手册「绝不让两个实例共用一个 DSH_HOME」「切版本＝改启动链指向另一份安装」；用户裁定「单仓单源、实例按 ref 取版」）。
 
-**决定 2（为什么不原地兼容双版本）**：插件包内只允许一套钉版依赖（`dsh-llm`/`dsh-typert-protocol` 只能钉一个版号），「一份目录同时服务 0.1.7 与 0.2.0 宿主」做不到：一套钉版只对一个宿主代做过行为验证，main 线的 dsh 系 peer 声明落在旧宿主上会被装载判定跳过（0.2.0 的装载判定只读 peerDependencies 的 dsh 系声明，`@deepseek-ai/dsh-app-boot@0.2.0-rc.1 lib/index.js:286-313`），0.1.7 实体落在新宿主上虽不被该机制拦下（一次性装置实证：无 dsh 系 peer 声明的包照常装载）但 API 漂移无验证；且 0.1.7 现网安装面＝冻结件（R54，冻结件不动）。所以版本区分以**目录**为界，不以运行时探测为界。
+**决定 2（为什么不原地兼容双版本）**：插件包内只允许一套锁定版本的依赖（`dsh-llm`/`dsh-typert-protocol` 只能锁定一个版号），「一份目录同时服务 0.1.7 与 0.2.0 宿主」做不到：一套锁定版本只对一个宿主代做过行为验证，main 线的 dsh 系 peer 声明落在旧宿主上会被装载判定跳过（0.2.0 的装载判定只读 peerDependencies 的 dsh 系声明，`@deepseek-ai/dsh-app-boot@0.2.0-rc.1 lib/index.js:286-313`），0.1.7 实体落在新宿主上虽不被该机制拦下（一次性装置实证：无 dsh 系 peer 声明的包照常装载）但 API 漂移无验证；且 0.1.7 现网安装面＝冻结件（R54，冻结件不动）。所以版本区分以**目录**为界，不以运行时探测为界。
 
 **决定 3（开发实例保护是先决条件；R54 后口径升位）**：原判据①以「junction 目标不变＋原目录零适配改动」的**目录不动**保护开发实例；R54 部署分离后升位为「开发实例 junction 目标（＝冻结件）不变＋冻结件目录零改动」——开发树（main）即适配工地，适配 diff 不再构成现网风险；冻结件的任何改动即红。主文档随 main（0.2.0 线）演进；0.1.7 线的 P1 修复在 `release/0.1.x` 上最小化同步（仅勾选行与对应事实条目）。
 
-**裁定（2026-10-01，§3 问题 16/17/18/19 的答复；用户应答确认，见 requirements §5 决策行）**：
+**裁定（§3 问题 16/17/18/19 的答复；用户应答确认，见 requirements §5 决策行）**：
 
 - **问题 16（0.2.0 验证实例归属）＝验证实例切 0.2.0**：独立安装（npm `next` 取 `0.2.0-rc.1`）＋独立新 home＋junction 适配期直投开发树；升级由用户另委 Agent 执行，任务包须写明「宿主升级后、插件适配就位前，本插件 bundle 被 peer 检查跳过＝预期中间态，不修」；适配开发会话默认放开发实例（0.1.7 宿主＋冻结件，工具完好）。原验证实例 home 封存；0.1.7 线活体取证借开发实例（现网即 0.1.7＋冻结件）。
 - **问题 17（目录形态与版本号）＝单仓单源、实例按 ref 取版**：tag `v0.1.7` 冻结已验证态，冻结件＝按 ref 检出的安装实体（R54 已执行）；0.2.0 适配在开发树 main 分支做（R54 后开发树零实例引用，适配开工不再威胁现网）；适配稳定后验证实例按 ref 安装；github 安装模式为适配完成后的后置验证（本轮全本地、不建远端）。包版本对齐宿主：0.1.7 线终版 `0.1.7`（已随 `3976c6f` 落账）、0.2.0 线自 `0.2.0` 起。belt-and-braces（单向，经一次性装置实测修正；版串随追跟轮平移，R55 起＝`0.2.0-rc.2`）：main 声明 dsh 系 peer＝现行宿主 rc——main ref 错装到旧宿主时 bundle 被 peer 检查跳过、插件整行不激活（fail-loud，一次性装置实证）；v0.1.7 冻结件未声明任何 dsh 系 peer，落在 0.2.0 宿主上**不会**被该机制拦下（同装置实证）——该方向的防错装由「实例安装面按 ref 取件」纪律本身承担，0.1.7 线冻结不为此改动（只修 P1）。
@@ -1806,7 +1806,7 @@ R46–R48 的实现按下表落位（主文档各节已随实现同步改写为�
 | `dsh-llm` 四导出＋`llm/adapters-updated` | 未变；模型目录注释口径收紧（GUI 入口可能强制目录成员） | 复测 `modelCatalog`/`modelEfforts` RPC：目录外模型引用是否仍可解析/展示 |
 | `snapshotEvents()`（dsh-session） | 签名扩展（无参兼容）；官方标注 deprecated（waiver 内使用） | 沿用＋在代码注释与本节登记 waiver；迁移等上游分页读法 |
 | `session/created`、`loader/volatile-update`、`permissionPresets` 可选读 | 均在；内置 `auto` 预设策略 `never→ask` | 子代理覆盖（R24）与预设判定回归复验；自定 `auto-approve` 条目不受影响 |
-| bundle 装载（dsh-app-boot） | 装载判定只读 dsh 系 peer 声明（`@deepseek-ai/dsh-app-boot@0.2.0-rc.1 lib/index.js:286-313`）；报告改为 `skippedBundles` 集中打印 | 依赖钉版升级且同步声明 peer（决定见 R49）；启动日志判据加「无 skipping 本包」 |
+| bundle 装载（dsh-app-boot） | 装载判定只读 dsh 系 peer 声明（`@deepseek-ai/dsh-app-boot@0.2.0-rc.1 lib/index.js:286-313`）；报告改为 `skippedBundles` 集中打印 | 依赖版本锁定升级且同步声明 peer（决定见 R49）；启动日志判据加「无 skipping 本包」 |
 | client 四挂点 | `conversation.approval.detail` 契约有增量（ui-approval slots.d.ts +23）；ui-primitives 大改（图标/令牌） | 四挂点 DOM 判据按 §4「0.1.7 适配」口径重取；CSS `--dsw-alias-*` 令牌逐个核对失效清单 |
 | `patchReload: "live"`（dsh-hmr 新家族成员） | 0.2.0 引入 `dsh-hmr` | 新实例按出厂默认配置，不声明 live；热载行为如需启用另行验证 |
 | 冷启动 URL 打印（源自 ISS-4） | `announceReady`/`loader.await` 段与 0.1.7 逐字相同（`@deepseek-ai/dsh-web-app@0.2.0-rc.1 lib/index.js:195-218` 两版一致），异常路径静默 catch 仍在——**上游未修** | 复验：一次性装置三轮冷启动 URL 均正常打印；验证实例新 home 重启后实测补记；作为已知宿主局限留在案（0.1.7 实例 ISS-4 现象与此同根，上游修复前不消） |
@@ -1822,7 +1822,7 @@ R46–R48 的实现按下表落位（主文档各节已随实现同步改写为�
 - `patchReload`：新 home 未声明 live，18:15 宿主重写 patch 后插件行逐键仍等价。
 - ISS-4（冷启动 URL）：验证实例新 home 18:14 冷启动 `current-url.txt` 正常重写（83 字节）——本条复验完成，问题清单（本机平面的跟踪档）已按验收判据删除 ISS-4；宿主静默 catch 局限留案不消。
 
-**R55 复验结果（2026-10-02 01:52–02:16，验证实例＝0.2.0-rc.2；总档留档本机平面）**：rc.1→rc.2 钉版平移后八缝逐项——waterfall 接管在位（answerer registered 配置逐键＝patch 行）；`dsh-llm` 四导出＋RPC 五端点读数与 r49 逐项一致（MessageSourceMap 加法成员下游表现＝审计行 auth=high、注入 668B、reason 有实文，行为面无回归）；`snapshotEvents()` 无参沿用；preset 三件照常（auto-approve isDefault）；bundle 装载 skipping=0（01:23 宿主先行段两插件双跳过＝peer 检查机制的活体重演，变异口径自然满足）；client 四挂点全取（r55 dump 13/13、座位/状态条/命令条/审查页签各有读数与截图，页签 46.4 s 与审计 46437 ms 吻合）；`patchReload` 未启用；冷启动 URL 83 字节正常。宿主侧新观察项（非本包）：rc.2 页面加载时 `dsh-client-locale` 引导早期 localeKey null 竞态致 `[client-store] subscriber failed` 控制台异常（r49 时代为 0）——功能不受影响、留档待上游。锚点偏差：R55「锚点路径不变」条款前提（安装目录仍 dsh-0.2.0）被宿主侧新目录升级证伪，`tools/_host-resolve.mjs` 按最小修改跟随真实安装目录（c34843a），全套 407/407 复绿。
+**R55 复验结果（2026-10-02 01:52–02:16，验证实例＝0.2.0-rc.2；总档留档本机平面）**：rc.1→rc.2 版本锁定平移后八缝逐项——waterfall 接管在位（answerer registered 配置逐键＝patch 行）；`dsh-llm` 四导出＋RPC 五端点读数与 r49 逐项一致（MessageSourceMap 加法成员下游表现＝审计行 auth=high、注入 668B、reason 有实文，行为面无回归）；`snapshotEvents()` 无参沿用；preset 三件照常（auto-approve isDefault）；bundle 装载 skipping=0（01:23 宿主先行段两插件双跳过＝peer 检查机制的活体重演，变异口径自然满足）；client 四挂点全取（r55 dump 13/13、座位/状态条/命令条/审查页签各有读数与截图，页签 46.4 s 与审计 46437 ms 吻合）；`patchReload` 未启用；冷启动 URL 83 字节正常。宿主侧新观察项（非本包）：rc.2 页面加载时 `dsh-client-locale` 引导早期 localeKey null 竞态致 `[client-store] subscriber failed` 控制台异常（r49 时代为 0）——功能不受影响、留档待上游。锚点偏差：R55「锚点路径不变」条款前提（安装目录仍 dsh-0.2.0）被宿主侧新目录升级证伪，`tools/_host-resolve.mjs` 按最小修改跟随真实安装目录（c34843a），全套 407/407 复绿。
 
 ### 24.3 与官方 `dsh-experimental-auto-review` 的边界
 
@@ -1842,7 +1842,7 @@ R49–R50 的实现按下表落位（全部在开发树 main 分支＝0.2.0 适�
 
 | 落点 | 改什么 |
 |---|---|
-| `package.json`（0.2.0 线） | `@deepseek-ai/dsh-llm`/`@deepseek-ai/dsh-typert-protocol` → `0.2.0-rc.1`（dependencies 与 peerDependencies 同版钉死——装载判定只读 peer 的 `@deepseek-ai/dsh*` 声明，`@deepseek-ai/dsh-app-boot@0.2.0-rc.1 lib/index.js:286-313`；belt-and-braces 由此成立）；peer `@deepseek-ai/cordis` → `~4.0.4`；`version` → `0.2.0`（问题 17 裁定：对齐宿主）；`node_modules` 重装 |
+| `package.json`（0.2.0 线） | `@deepseek-ai/dsh-llm`/`@deepseek-ai/dsh-typert-protocol` → `0.2.0-rc.1`（dependencies 与 peerDependencies 同版锁定——装载判定只读 peer 的 `@deepseek-ai/dsh*` 声明，`@deepseek-ai/dsh-app-boot@0.2.0-rc.1 lib/index.js:286-313`；belt-and-braces 由此成立）；peer `@deepseek-ai/cordis` → `~4.0.4`；`version` → `0.2.0`（问题 17 裁定：对齐宿主）；`node_modules` 重装 |
 | `tools/_host-hooks.mjs` / `_host-resolve.mjs` | 宿主树解析锚点指向 0.2.0 安装（或新目录自带树），`npm test` 全绿判据落这里 |
 | `lib/*.js`、`client.js` | 原则上零改动（缝隙稳定，逐包比对）；仅当 §24.2 复验清单某项实测不符时做最小修，并在该行注明依据 |
 | `lib/transcript.js` 注释 | `snapshotEvents` waiver 注记（deprecated 同步读法沿用，迁移等上游） |
@@ -1851,7 +1851,7 @@ R49–R50 的实现按下表落位（全部在开发树 main 分支＝0.2.0 适�
 | requirements/facts/design（0.2.0 线副本） | §4 勾选、逐包比对待复验项按实测改写、0.2.0-rc.1 发布事实与 junction 历史形态条目核销 |
 | 测试 | 单测全绿（0.2.0 树）；端到端四幕：加载即成功＋注入表、四挂点 DOM、allow 三段审计、R46 故障轮复演（`maxTokens=1` → 熔断打开 → 通道故障文案）；R50 侧：取证前后开发实例 junction 目标（＝冻结件）不变＋冻结件目录内容零改动（判据①升位口径）/冒烟三查 |
 
-**R55 追跟追加面（2026-10-02，rc.1→rc.2 钉版平移；判据＝requirements R55）**：`package.json` 四处 dsh 系声明平移＋`node_modules`/lockfile 重装（带出 dsh-brand/dsh-timeout/dsh-util-crypto/dsh-util-values 的 rc.2 传递件）；`test/settings-dom-dump.test.mjs` 等基线中的宿主 CSS 模块类哈希按 rc.2 实测追跟（改断言附实测依据）；`tools/_host-resolve.mjs` 注释档位；README 兼容性版串。锚点路径与 `version`（仍 `0.2.0`）不动；lib/client 零改动预期（rc.2 对本包增量为零，实测不符才最小修并注明依据）。宿主侧＝宿主目录升级＋验证实例重启，与插件平移同轮切换；单边先行期间 peer 跳过＝预期中间态不修。**执行注记（R55 轮回填）**：「安装目录仍 `dsh-0.2.0`」的前提被宿主侧实际升级方式证伪（新目录 `dsh-0.2.0-rc.2`＋注册表改指，01:23），锚点随之按最小修改跟随真实安装目录并在注释注明依据（c34843a）——锚点守卫（host-tree.test.mjs）在该变更前后红绿反转，即本条款的可失败验证；宿主先行段两插件双跳过＝peer 检查机制在真实实例的活体重演。
+**R55 追跟追加面（2026-10-02，rc.1→rc.2 版本锁定平移；判据＝requirements R55）**：`package.json` 四处 dsh 系声明平移＋`node_modules`/lockfile 重装（带出 dsh-brand/dsh-timeout/dsh-util-crypto/dsh-util-values 的 rc.2 传递件）；`test/settings-dom-dump.test.mjs` 等基线中的宿主 CSS 模块类哈希按 rc.2 实测追跟（改断言附实测依据）；`tools/_host-resolve.mjs` 注释档位；README 兼容性版串。锚点路径与 `version`（仍 `0.2.0`）不动；lib/client 零改动预期（rc.2 对本包增量为零，实测不符才最小修并注明依据）。宿主侧＝宿主目录升级＋验证实例重启，与插件平移同轮切换；单边先行期间 peer 跳过＝预期中间态不修。**执行注记（R55 轮回填）**：「安装目录仍 `dsh-0.2.0`」的前提被宿主侧实际升级方式证伪（新目录 `dsh-0.2.0-rc.2`＋注册表改指，01:23），锚点随之按最小修改跟随真实安装目录并在注释注明依据（c34843a）——锚点守卫（host-tree.test.mjs）在该变更前后红绿反转，即本条款的可失败验证；宿主先行段两插件双跳过＝peer 检查机制在真实实例的活体重演。
 
 ## 25. 规则墙默认清空批次（R51）
 
@@ -1894,7 +1894,7 @@ R52 一条需求四问（下文以「问 1–问 4」指称）；依据：R52 �
 
 | 取舍 | 选择 | 理由 |
 |---|---|---|
-| 问 1 验收里「全仓」的口径 | **全仓（含历史档案）error 清零**，无 `--skip-path` 豁免；处置三分法＝使用位按映射替换、元语言/引用位改行内代码（字面保真，引文保真原则以内联代码形态实现） | 用户裁定（2026-09-30 迟到作答「字面执行：改写全部」）：推翻 r48 P1 处置的「现行清零＋档案豁免」先行方案；行内代码处置使审查原文与证据保真与全仓清零并存。**需求侧已随本轮回写**（requirements R52 问 1 验收句、§5 决策行） |
+| 问 1 验收里「全仓」的口径 | **全仓（含历史档案）error 清零**，无 `--skip-path` 豁免；处置三分法＝使用位按映射替换、元语言/引用位改行内代码（字面保真，引文保真原则以内联代码形态实现） | 用户裁定（「字面执行：改写全部」）：推翻 r48 P1 处置的「现行清零＋档案豁免」先行方案；行内代码处置使审查原文与证据保真与全仓清零并存。**需求侧已随本轮回写**（requirements R52 问 1 验收句、§5 决策行） |
 | 问 1 项目词表形态 | 项目词表文件（三列制表符格式，terminology.md 第一节），仅登记用户已裁定条目：`硬拒→强制拒绝 error` | 词表条目须用户决定；其余行话（规则墙/收账等）r47 只裁定了治理机制、未裁定词义，不擅自登记 |
 | 问 1 元语言引用 | 点名「这个词」的位置改行内代码 `` `硬拒` ``（lint 对围栏与行内代码豁免） | 「进黑名单的那个词」是提及不是使用；改成「强制拒绝」会失真（黑名单里的词就是它）。防滥用：仅限「点名被禁词本身」的句子（术语条目、裁定行、任务名），普通叙述不得包代码逃检——r48 delta 审查复核 |
 | 问 1 warn 级欠账 | 不动 | r47 裁定只清 error（warn 需逐条人工判语境，981 处不在本轮膨胀） |
@@ -1909,7 +1909,7 @@ R52 一条需求四问（下文以「问 1–问 4」指称）；依据：R52 �
    - **元语言点名位改行内代码**（8 行，requirements 与 r47 轮次档案里的裁定与引用提及——引用裁定原文的句子包行内代码，不改写裁定内容——r48 P3 原判一处为使用位；实现轮按引文保真改判为点名位、另一处仍按使用位替换）。**引文保真**（r48 delta D1/D4）：凡引用改写前旧文的句子（如 §26.2.7 引「`gate.js` `硬拒` 路径…全部原样」），句内被禁词以行内代码保真，不得按使用位机械替换；
    - `.js`/`.mjs` 不在 lint 扫描面，替换后以 grep 复核；**轮次档案另做专项 grep**（r48 delta D4）——grep 面与 lint 同集不含档案，r47 报告六处的处置结果须单独 grep 验证：使用位一行零残留、点名位五行均为行内代码形态。
 2. **问 1 其余 error 级欠账清零（全仓：现行文档集＋历史档案；实现轮实测全仓基线 279 处，见决定 3 定稿运行；§26 写作时四账本基线 119 处）**，映射按 lint 内置建议执行：`台账`→记录表、`能力`→功能/支持、`兜底`→按语境（回退值/备用/安全网承接）、`硬xx` 族按语义（`硬约束`→强制约束、`硬杀`→强制终止、`硬依赖`→固定依赖、`硬契约`→固定契约）、`收口`→收尾、`闭环`→处理完成、`链路`→调用链、`落地`→实现、`卡点`→阻碍点、`拉通`→同步、`叙事`→描述、`xx门` 按语义（`结论串门`→结论越界、`单测守门`→单测验收）、`e2e` 散文出现→端到端。改写逐处读句改词，不做机械全替换；**本设计章与需求章在清偿过程中新写入的词一律以行内代码形式自我豁免**（设计文本点名被禁词是元语言使用，r48 P2）。
-3. **问 1 canonical 验收命令（完整输出与基线快照留档）**：术语 lint 脚本（`lint_terms.py`，以项目词表文件为 `--terms` 输入）对 repo 根起扫，无路径豁免——用户裁定 2026-09-30；`.js/.mjs/.txt` 等扩展名本就不在扫描面。验收＝canonical 命令 0 error（warning 允许残留；warn 计数随在册文档增删自然浮动，终态以提交前最后一次运行为准——r49 P3-3 口径）。**定稿运行（2026-09-30 修正轮，r49 报告 15 处术语清偿后）**：0 error / 1085 warn；全仓基线 279 处 error（含历史审查/修正/部署档案与证据区）经三类处置全清——使用位按映射替换、点名/引用位行内代码（保字面）、代码形态核对。变异验证（实现轮实测）：默认改回出厂清单 → `test/policy.test.mjs` R51①②③三红；去掉 deny 审计行 reason 赋值 → `test/gate.test.mjs` 路径 2 红；启动行回退硬编码 `v=2` → `test/index.test.mjs` 启动行断言红；任一处去反引号回退 → canonical lint 即报该行 error。
+3. **问 1 canonical 验收命令（完整输出与基线快照留档）**：术语 lint 脚本（`lint_terms.py`，以项目词表文件为 `--terms` 输入）对 repo 根起扫，无路径豁免——用户裁定；`.js/.mjs/.txt` 等扩展名本就不在扫描面。验收＝canonical 命令 0 error（warning 允许残留；warn 计数随在册文档增删自然浮动，终态以提交前最后一次运行为准——r49 P3-3 口径）。**定稿运行（2026-09-30 修正轮，r49 报告 15 处术语清偿后）**：0 error / 1085 warn；全仓基线 279 处 error（含历史审查/修正/部署档案与证据区）经三类处置全清——使用位按映射替换、点名/引用位行内代码（保字面）、代码形态核对。变异验证（实现轮实测）：默认改回出厂清单 → `test/policy.test.mjs` R51①②③三红；去掉 deny 审计行 reason 赋值 → `test/gate.test.mjs` 路径 2 红；启动行回退硬编码 `v=2` → `test/index.test.mjs` 启动行断言红；任一处去反引号回退 → canonical lint 即报该行 error。
 4. **问 2**：requirements R35 现行段（现 `:297`）整段改写——计数 8 条、定位 `lib/policy.js:30-41`、锚定口径改为「危险词前是非字母数字边界（引号、括号、`=`、`$(`、反引号等包裹形态都命中）」；`grep mkfs readme.md` 词内命中的现行表述保留；`design §22.5` 历史批次记录不动（档案）。
 5. **问 3**：`writeStartupLine` 模板串首段 `v=2` 改为 `v=${AUDIT_VERSION}`（导入自 `./audit.js`）。判据（r48 P8 钉死同源形态）：`test/index.test.mjs` 启动行用例**从 `lib/audit.js` 导入 `AUDIT_VERSION` 作期望值**，断言启动行含 `v=${AUDIT_VERSION}`——实现若仍硬编码 `v=2`，改常量为 4 时断言红（盯常量不盯字面量）；实现正确时常量怎么改两处同变。变异：启动行回退硬编码 `v=2` → 该断言红（改常量本身不构成变异——同源实现下两行同变，非脱钩缺陷；r49 P3-4 勘正口径）。验证实例重启后启动行 `v=3` 留档。文档同步（r48 P7）：design.md 与 README.md 的 `v=2` 样例行随实现改为 `v=3`——README 现状已与 `AUDIT_VERSION=3` 不符，属同批修正。
 6. **问 4**：gate deny 审计行补 `reason: pre.reason`。判据（r48 P5 补齐审计行级半边）：`test/gate.test.mjs` 路径 2 用例的 stub `pre.reason` 改为真实形态「键 "script" 命中模式 …」，断言 screen 审计行 `reason` **含「命中模式」子串**（不只判等值）；`test/policy.test.mjs` 既有 `screen()` deny reason 断言不变（规则层产物本来带 reason；r49 P3-5 修正：R35② 补两条 `/命中模式/` 断言，使规则层真实产物与 §25.2.4 措辞互恰）。变异：去掉 deny 审计对象的 reason 赋值 → gate 断言红。R51 判据⑤「deny 审计行 reason 按现行实现为空串」半句随实现改写为「reason 含命中键与模式」。验证实例实测：显式清单命中的审计行带 reason 留档。
