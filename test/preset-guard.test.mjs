@@ -144,6 +144,59 @@ test('复位路径：悬空默认档＋自定义档——只删悬空默认行�
   rmSync(dir, { recursive: true, force: true });
 });
 
+test('复位路径（再审查 N1 回归）：行内带值宇宙外键——条目级清理，手工内容不代删', async () => {
+  // 夹具 A：三标准档＋本包条目＋带值 4 空格 config 键（手工形态）、无默认行。
+  const rowA = [
+    '- id: permission',
+    "  name: '@deepseek-ai/dsh-permission-presets'",
+    '  config:',
+    '    presets:',
+    '      read-only:',
+    '        sandbox: read-only',
+    '        approval: ask',
+    '      auto-approve:',
+    '        sandbox: workspace-write',
+    '        approval: ask',
+    '      danger-full-access:',
+    '        sandbox: danger-full-access',
+    '        approval: never',
+    '    extraKnob: true',
+  ].join('\n');
+  const dirA = makeProfile({ bundles: ['dsh-base'], patch: `${TEMPLATE_HEADER}\n${rowA}\n` });
+  assert.deepEqual(await guardDefaultPreset({ profileDir: dirA }), { action: 'reset', reason: 'removed-tier-entry' }, '带值宇宙外键 ⇒ 保留行（不整行代删）');
+  const afterA = readFileSync(join(dirA, 'cordis.patch.yml'), 'utf8');
+  assert.doesNotMatch(afterA, /auto-approve/u, '本包条目仍必须清除');
+  assert.match(afterA, /extraKnob: true/u, '用户手工键不得被吞（N1 反例）');
+  assert.match(afterA, /- id: permission/u, '行保留');
+  rmSync(dirA, { recursive: true, force: true });
+  // 夹具 B：行内只剩本包条目＋带值键——presets 删空分支同样不得吞手工键。
+  const rowB = [
+    '- id: permission',
+    "  name: '@deepseek-ai/dsh-permission-presets'",
+    '  config:',
+    '    presets:',
+    '      auto-approve:',
+    '        sandbox: workspace-write',
+    '        approval: ask',
+    '    extraKnob: true',
+  ].join('\n');
+  const dirB = makeProfile({ bundles: ['dsh-base'], patch: `${rowB}\n` });
+  assert.equal((await guardDefaultPreset({ profileDir: dirB })).reason, 'removed-tier-entry', 'presets 删空但有宇宙外键 ⇒ 仍保留行');
+  const afterB = readFileSync(join(dirB, 'cordis.patch.yml'), 'utf8');
+  assert.doesNotMatch(afterB, /auto-approve/u);
+  assert.match(afterB, /extraKnob: true/u, '手工键保全');
+  assert.match(afterB, /- id: permission/u);
+  rmSync(dirB, { recursive: true, force: true });
+  // 夹具 C：6 空格带值键（presets 内的标量条目，同属宇宙外形态）——同口径保留行。
+  const rowC = rowA.replace('    extraKnob: true', '      extraKnob: true');
+  const dirC = makeProfile({ bundles: ['dsh-base'], patch: `${TEMPLATE_HEADER}\n${rowC}\n` });
+  assert.equal((await guardDefaultPreset({ profileDir: dirC })).reason, 'removed-tier-entry', '6 空格带值键 ⇒ 保留行');
+  const afterC = readFileSync(join(dirC, 'cordis.patch.yml'), 'utf8');
+  assert.doesNotMatch(afterC, /auto-approve/u);
+  assert.match(afterC, / {6}extraKnob: true/u, '手工键保全');
+  rmSync(dirC, { recursive: true, force: true });
+});
+
 test('复位路径：行内只剩本包条目（presets 删空风险）——整行删除', async () => {
   const bare = [
     '- id: permission',
