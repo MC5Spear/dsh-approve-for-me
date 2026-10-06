@@ -1,0 +1,86 @@
+{
+  "name": "dsh-approve-for-me",
+  "version": "0.2.0",
+  "description": "Automatic approval answerer for the DSH approval seam — the codex `--approve-for-me` equivalent: a read-only LLM reviewer decides each sandbox escalation, risky ones are rejected with the reason injected for the main model.",
+  "license": "MIT",
+  "author": "MC5Spear (https://github.com/MC5Spear)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MC5Spear/dsh-approve-for-me.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MC5Spear/dsh-approve-for-me/issues"
+  },
+  "homepage": "https://github.com/MC5Spear/dsh-approve-for-me#readme",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": "./client.js",
+    "./typert": "./typert.host.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "assets",
+    "client.js",
+    "typert.host.js",
+    "cordis.patch.yml",
+    "tools/permission-preset.mjs",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --import ./tools/_host-hooks.mjs --test \"test/*.test.mjs\"",
+    "test:offline": "node --test \"test/*.test.mjs\"",
+    "check": "node tools/check-syntax.mjs",
+    "check:public-surface": "node tools/check-public-surface.mjs",
+    "probe:llm": "node tools/probe-llm-tools.mjs",
+    "probe:reviewer": "node tools/probe-reviewer-live.mjs",
+    "probe:budget": "node tools/probe-budget.mjs",
+    "probe:rpc": "node tools/probe-rpc.mjs",
+    "probe:typert": "node --import ./tools/_host-hooks.mjs tools/check-typert-manifest.mjs"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "approval",
+    "approve-for-me",
+    "auto-approve",
+    "sandbox-escalation",
+    "llm-reviewer"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-llm": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.0-rc.2",
+    "@deepseek-ai/schemastery": "^3.18.4",
+    "zod": "^4.4.3"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4",
+    "@deepseek-ai/dsh-llm": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.0-rc.2"
+  }
+}

@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+    env:
+      # 宿主锚点：本包按 peer 精确钉版，锚点必须指向同版宿主安装树
+      DSAFM_HOST_MODULES: ${{ github.workspace }}\node_modules
+    steps:
+      - uses: actions/checkout@v4
+      - name: 公开面边界检查（结构 / 本机指纹 / 内部引用，三类判据零命中）
+        run: npm run check:public-surface
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: 安装本包依赖
+        run: npm ci --omit=dev --no-audit --no-fund
+      - name: 安装宿主锚点包（与 peer 钉版同版，不写回 lockfile）
+        run: npm install --no-save --no-package-lock --no-audit --no-fund @deepseek-ai/cordis@4.0.4 @deepseek-ai/dsh-llm@0.2.0-rc.2 @deepseek-ai/dsh-typert-protocol@0.2.0-rc.2 @deepseek-ai/schemastery@3.18.4
+      - name: 语法自检
+        run: npm run check
+      - name: typert 清单校验
+        run: npm run probe:typert
+      - name: 离线单测（不依赖宿主）
+        run: npm run test:offline
+      - name: 全量单测（含宿主接线）
+        run: npm test
+      - name: 负向对照——锚点指向「版本不对但可用」的树时，钉版守卫必须红
+        shell: pwsh
+        run: |
+          # 注意：不能指向「不存在的树」——那样钩子会回退到本地 node_modules（CI 里装的正是钉版），
+          # 守卫照样绿，负向对照就成了恒真断言。必须造一棵「能解析但版本不对」的树。
+          $wrong = Join-Path $env:RUNNER_TEMP 'wrong-host-tree'
+          npm install --prefix $wrong --no-audit --no-fund --no-package-lock zod @deepseek-ai/schemastery@3.18.4 @deepseek-ai/dsh-llm@0.2.0-rc.1 @deepseek-ai/dsh-typert-protocol@0.2.0-rc.1
+          if ($LASTEXITCODE -ne 0) { throw '负向对照准备失败：装不出错误版本的锚点树' }
+          $env:DSAFM_HOST_MODULES = Join-Path $wrong 'node_modules'
+          node --import ./tools/_host-hooks.mjs --test test/host-tree.test.mjs
+          if ($LASTEXITCODE -eq 0) {
+            throw '锚点守卫在错误版本锚点下没有变红——守卫失效，CI 形同虚设'
+          }
+          Write-Host '负向对照通过：错误版本锚点下守卫按预期变红'
+      - name: 负向对照——种下本机指纹时，边界检查器的退出码必须非零
+        shell: pwsh
+        run: |
+          # 「打印得好看」与「能让构建失败」是两件事。上面那次运行证明了前者，这里证明后者。
+          # 只在函数层断言（test/public-surface.test.mjs）不够——CLI 的退出码是另一条路径。
+          #
+          # 关键：CI 里检查器走 `git ls-files`（只列**跟踪**文件），与开发机上的遍历回退不同。
+          # 所以探针必须先 `git add` 进索引，否则它根本不会被枚举，这道对照就成了空的。
+          $probe = '.exitcode-probe.md'
+          # 指纹按字符拼接写，免得本工作流自己成为检查器的命中源（它在跟踪面里）。
+          # 两行分别钉「裸形态」（段符后直接行尾，无尾分隔符）与「常规形态」（尾分隔符＋目录名）。
+          $bare = '根在 D:' + [char]92 + 'P'
+          $fingerprint = 'D:' + [char]92 + 'P' + [char]92 + 'build-machine（本机指纹探针）'
+          Set-Content -LiteralPath $probe -Value ($bare, $fingerprint) -Encoding utf8
+          git add -- $probe
+          npm run check:public-surface
+          $code = $LASTEXITCODE
+          git rm --cached --force --quiet -- $probe
+          Remove-Item -LiteralPath $probe -Force
+          if ($code -eq 0) {
+            throw '边界检查器在种下本机指纹后仍返回 0——判据形同虚设'
+          }
+          Write-Host "负向对照通过：种下指纹后边界检查器退出码为 $code"
+
+  # 说明：
+  # - 「跳过不等于通过」：日志里若出现 skipped，先确认是环境缺失（宿主解析不到）还是真的没跑。
+  # - 需要真实实例的探针（浏览器驱动、实例 RPC）与端到端验证不在此工作流内，属手动验证。

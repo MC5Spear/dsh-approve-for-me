@@ -1,0 +1,247 @@
+# 设置表单 DOM 夹具（结构判据 + 毫秒字段秒数读数；离线回归用）
+
+- 采集：本插件设置详情页（loopback 实例）的页面 DOM 与计算样式导出；采集工具链随仓发布（`tools/browser-shot.mjs` 驱动取证、`tools/build-dom-dump.mjs` 汇编成档），本轮的步骤场景脚本属开发期工件、不随仓发布。CSS 收窄扫描（scoped 段，只读本包注入的 `style[data-plugin-css="dsh-approve-for-me"]`）并入同一脚本。
+- 入口路径：侧栏「插件」→ `dsh-approve-for-me` → 本包详情页；页面身份 `[data-plugin-detail="dsh-approve-for-me"]`。
+- 常驻断言：`test/settings-dom-dump.test.mjs` 读本文件逐项核对（变异验证：篡改本文件对应断言变红）。
+
+## 1. 详情页 DOM 文本（innerText，逐字；判据①：零命中「重置全部覆盖」与「当前生效值」）
+
+```text
+插件列表
+卸载
+dsh-approve-for-me
+v0.2.0
+
+dsh-approve-for-me
+
+Automatic approval answerer for the DSH approval seam — the codex `--approve-for-me` equivalent: a read-only LLM reviewer decides each sandbox escalation, risky ones are rejected with the reason injected for the main model.
+
+接管预设
+自动审批
+已选 1 个
+
+哪些权限预设下由本插件接管审批。
+
+预设不可判定处置
+未设置（跟随默认）
+跳过（不接管）（skip）
+视为已开启自动审批（review）
+
+读不到会话权限预设时的处置。
+
+逐次写跳过审计
+未设置（跟随默认）
+开启（true）
+关闭（false）
+
+预设不匹配的跳过是否每次都写审计。
+
+默认审查模型
+已覆盖
+恢复默认
+未设置
+zai/glm-5.3
+zai/glm-5.3-flash
+moonshotai/kimi-k3
+deepseek-official/deepseek-flash
+deepseek-official/deepseek-v4-pro
+跟随模型默认
+low
+high
+max
+
+全局默认的审查模型与档位。
+
+按主模型映射
+主模型
+审查模型
+档位
+操作
+添加一行
+
+主模型 → 审查模型的映射表。
+
+跟随主模型
+
+两级都没取到时是否用主模型自审。
+
+用户文案语言
+已覆盖
+恢复默认
+未设置（跟随默认）
+跟随界面（auto）
+中文（zh）
+英文（en）
+
+插件界面文案的语言档。
+
+Agent 提示语言
+已覆盖
+恢复默认
+未设置（跟随默认）
+中文（zh）
+英文（en）
+
+送给模型的文本语言。
+
+审查超时 (ms)
+已覆盖
+恢复默认
+
+单次审查的时限（毫秒）。
+
+生效：300 秒 · 草稿：300 秒
+
+输出上限 (token)
+
+审查输出的上限（token）。
+
+审查期间弹出人工卡片
+未设置（跟随默认）
+开启（true）
+关闭（false）
+
+审查进行中是否先弹出人工卡片。
+
+人工超时 (ms)
+
+转人工后的等待时限（毫秒）。
+
+生效：300 秒 · 草稿：300 秒
+
+人工计时起点
+未设置（跟随默认）
+从审批请求起算（request）
+从交人工起算（handoff）
+
+人工计时的起点。
+
+模式
+未设置（跟随默认）
+规则检查 + LLM 审查（rules）
+完全不接管（off）
+
+rules＝规则＋审查；off＝不接管。
+
+自动放行上限
+未设置（跟随默认）
+工作区内修改（workspace-write）
+完全访问（danger-full-access）
+
+自动放行的最宽权限。
+
+命令缺失处置
+未设置（跟随默认）
+直接拒绝（无证据不放行）（reject）
+继续审查（只带工具名与理由）（review）
+
+回查不到原始命令时的处置。
+
+审查未放行处置
+未设置（跟随默认）
+直接拒绝（reject）
+交人工（ask）
+
+审查未放行时的处置。
+
+会话页注入
+未设置（跟随默认）
+放行与拒绝都注入（all）
+只注入拒绝（reject）
+都不注入（off）
+
+会话页注入留痕的范围。
+
+注入字节上限
+
+单条注入文本的字节上限。
+
+接管工具名单（每行一个）
+
+接管的工具名单，每行一个。
+
+规则拒绝清单（每行一条正则）
+
+规则强制拒绝清单，每行一条正则；留空＝不启用规则强制检查，出厂参考清单见 README，抄写进配置即恢复。
+
+保存
+包含的组件
+共 1 个 · 1 运行中
+dsh-approve-for-me
+Automatic approval answerer for the DSH approval seam — the codex `--approve-for-me` equivalent: a read-only LLM reviewer decides each sandbox escalation, risky ones are rejected with the reason injected for the main model.
+approve-for-me
+运行中
+```
+
+## 2. 判据④：配置区容器计算样式（无自绘卡片外壳）
+
+`.dsafm_form` getComputedStyle：borderStyle=`none`、borderWidth=`0px`、borderRadius=`0px`、background=`rgba(0, 0, 0, 0)`（判据＝none/0 且 radius<12px）。
+
+## 3. 判据②：覆盖组与字段结构
+
+自绘覆盖组（`.dsafm_badges`＝Tag「已覆盖」＋文本按钮「恢复默认」）恰好 3 组：已覆盖 恢复默认｜已覆盖 恢复默认｜已覆盖 恢复默认（默认审查模型、用户文案语言、Agent 提示语言——与 profile patch 用户层键一一对应；数字字段「已覆盖/恢复默认」在官方 SettingsValueField 内部，见 §1 文本）。
+字段壳 `dsafm_field`＝17（自绘），数字字段 4 个走官方组件标记，合计 21＝21 字段。
+
+## 4. 判据⑤：帮助点击展开（aria 成对）
+
+帮助按钮 17 个，全部带 aria-controls 与 aria-label，初始 aria-expanded=false；点击 mode 字段后：aria-expanded=`true`、展开区在场=`true`、同屏展开区数量=1、展开文本首段＝「总开关：rules＝规则强制检查 + LLM 审查；off＝完全不管审批（等同于未安装）。」。
+
+## 5. 判据③＋暂存语义：保存门控与「只有保存才写」
+
+初始（无改动）：保存 disabled=`true`。
+点 language.ui「恢复默认」（只暂存）：控件值 `auto`、保存 disabled=`false`、该字段覆盖组消失（剩 2 组）。
+重开页面（不保存）：控件值回到 `zh`、覆盖组回 3 组、保存 disabled=`true`——暂存丢弃、写库没发生。
+再暂存＋点保存：控件值 `auto`、覆盖组 2 组、保存 disabled=`true`——unset 落库、覆盖消失。
+取证后复原（设回 zh＋保存）：控件值 `zh`、覆盖组 3 组——现场回到采集前（profile patch `language: {agent: en, ui: zh}` 复核过）。
+
+## 6. 判据⑥：交付 CSS 串失效令牌零命中（收窄到本包 style 元素）
+
+本包注入样式 8732 字符：`--dsw-alias-state-warning-primary`×0、`--dsw-alias-label-error`×0、`--dsw-alias-bg-layer-4`×0（页面级命中来自宿主/其它包样式，不属本包交付串）。
+关键规则原文：`.dsafm_form{display:flex;flex-direction:column;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary)}`；`.dsafm_save{appearance:none;border:1px solid transparent;border-radius:8px;padding:5px 14px;font-family:inherit;font-size:13px;line-height:1.5;cursor:pointer;background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3)}`；`.dsafm_helpbtn{display:inline-flex;align-items:center;justify-content:center;flex:none;width:24px;height:24px;padding:0;border:0;border-radius:6px;background:none;color:var(--dsw-alias-label-tertiary);cursor:pointer}`；`.dsafm_input{flex:1;min-width:0;width:100%;height:34px;padding:0 12px;border:.5px solid var(--dsw-alias-border-l4);border-radius:8px;background:var(--dsw-alias-bg-layer-3);font-family:inherit;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-primary)}`。
+
+## 7. 控件清单（input/select/textarea，按文档序）
+
+| # | tag | type | id | value |
+|---|-----|------|----|-------|
+| 0 | select | select-one | approve-for-me-ctl-trigger-unknown | skip |
+| 1 | select | select-one | approve-for-me-ctl-trigger-auditEverySkip | false |
+| 2 | select | select-one | approve-for-me-ctl-reviewer-model | zai/glm-5.3-flash |
+| 3 | select | select-one | （无） | high |
+| 4 | input | checkbox | approve-for-me-ctl-reviewer-followParent | on（checked=true） |
+| 5 | select | select-one | approve-for-me-ctl-language-ui | zh |
+| 6 | select | select-one | approve-for-me-ctl-language-agent | en |
+| 7 | input | text | approve-for-me-ctl-reviewer-timeoutMs | 300000 |
+| 8 | input | text | approve-for-me-ctl-reviewer-maxTokens | 0 |
+| 9 | select | select-one | approve-for-me-ctl-ui-humanCardDuringReview | true |
+| 10 | input | text | approve-for-me-ctl-human-timeoutMs | 300000 |
+| 11 | select | select-one | approve-for-me-ctl-human-timeoutFrom | request |
+| 12 | select | select-one | approve-for-me-ctl-mode | rules |
+| 13 | select | select-one | approve-for-me-ctl-allowEscalationTo | danger-full-access |
+| 14 | select | select-one | approve-for-me-ctl-unknownSubject | reject |
+| 15 | select | select-one | approve-for-me-ctl-fallback | reject |
+| 16 | select | select-one | approve-for-me-ctl-ui-inject | all |
+| 17 | input | text | approve-for-me-ctl-ui-injectMaxBytes | 2048 |
+| 18 | textarea | textarea | approve-for-me-ctl-tools | （空） |
+| 19 | textarea | textarea | approve-for-me-ctl-denyPatterns | （空） |
+
+接管预设为多选 picker（button + aria-expanded），不计入本表。
+
+## 8. dsafm 类清单（容器内去重；退役类零残留）
+
+dsafm_form / dsafm_field / dsafm_f_head / dsafm_labelgroup / dsafm_f_label / dsafm_helpbtn / dsafm_stack / dsafm_input.dsafm_picker / dsafm_picker_text / dsafm_picker_meta / dsafm_chevron / dsafm_f_hint / dsafm_input / dsafm_badges / dsafm_reset / dsafm_ctl / dsafm_input.dsafm_model / dsafm_input.dsafm_effort / dsafm_map / dsafm_map_head / dsafm_button.dsafm_map_add / dsafm_inlinecheck / dsafm_check / dsafm_f_sec / dsafm_sec_resolved / dsafm_sec_draft / dsafm_input.dsafm_area / dsafm_footer / dsafm_save
+
+退役类零残留：无 dsafm_row、dsafm_label、dsafm_section、dsafm_divider、dsafm_actions、dsafm_help、dsafm_map_block。`dsafm_chevron` 在场属下拉 picker 箭头。
+
+## 9. 失败登录计数
+
+- 采集前 `BadPasswordAttempts=未读`，采集后 `=未读`（本轮无头 Edge 启动次数见 开发期图证台账（不随仓发布） 台账；窗口阈值 10/10min，纪律 ≤5 次/10min）。
+
+## 10. R30 换算读数（.dsafm_f_sec，干净页＝无暂存）
+
+读数行 2 行（恰两个 ms 字段各一行；字节/令牌字段不做换算）：
+
+- `approve-for-me-sec-reviewer-timeoutMs`：`生效：300 秒 · 草稿：300 秒`（生效＝`生效：300 秒`、草稿＝`草稿：300 秒`、draftInvalid=false）；行样式 fontSize=`12px`、color=`rgb(129, 133, 140)`、marginTop=`-12px`；后继节点 class=`_field_bjqpo_3`、borderTopWidth=`1px`（官方字段恢复 0.5px 分隔线，自绘字段后无分隔线）。
+- `approve-for-me-sec-human-timeoutMs`：`生效：300 秒 · 草稿：300 秒`（生效＝`生效：300 秒`、草稿＝`草稿：300 秒`、draftInvalid=false）；行样式 fontSize=`12px`、color=`rgb(129, 133, 140)`、marginTop=`-12px`；后继节点 class=`dsafm_field`、borderTopWidth=`0px`（官方字段恢复 0.5px 分隔线，自绘字段后无分隔线）。
+
+判据①：生效值读数与控件值一致（§7 控件表同 id 行）；初始草稿＝生效值文本。实时性（键入即换算、占位、非法、保存重开、en 档单位）见 `开发期读数档（不随仓发布）`（`开发期采集脚本（不随仓发布）` 取证）。
+

@@ -1,0 +1,20 @@
+# dsh-approve-for-me bundle patch: one host row over the web profile.
+# The row name resolves from the profile's own node_modules where
+# `dsh plugin --profile web add <path>` installed this package.
+#
+# The answerer is prepended to the `approval/request` waterfall, so it decides
+# first; a request it does not take over is delegated with `next()` to the
+# browser approval UI, which keeps the human in the loop.
+#
+# Override the row's configuration in the profile's own cordis.patch.yml (the
+# profile layer replaces the whole row) or via the settings page — since 0.1.7
+# both paths land in the profile patch's `config:` block (settings.yaml is no
+# longer read; the `approve-for-me` row id IS the settings namespace):
+#   - id: approve-for-me
+#     config:
+#       fallback: ask
+#       reviewer:
+#         model: deepseek-official/deepseek-v4-pro
+- insert:
+    - id: approve-for-me
+      name: dsh-approve-for-me
