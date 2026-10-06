@@ -236,6 +236,20 @@ test('复位路径：手工损坏形态（注释＋[]＋行）不产出双占位
   rmSync(dir, { recursive: true, force: true });
 });
 
+test('复位路径（再审查 r59-N1 回归）：CRLF＋悬空默认档——整行删除必须触发', async () => {
+  // 严格串比较判 `presets:` 行时，CRLF 文件恒判宇宙外 ⇒ 整行删除永不触发（行滞留）。
+  // 该组合必须钉住：悬空默认档的行删除是「恢复继承」声明口径的一部分。
+  const crlf = SETTINGS_AP.split('\n').join('\r\n');
+  const dir = makeProfile({ bundles: ['dsh-base'], patch: crlf });
+  const result = await guardDefaultPreset({ profileDir: dir });
+  assert.deepEqual(result, { action: 'reset', reason: 'removed-user-override' }, 'CRLF 上整行删除路径同样必须触发');
+  const after = readFileSync(join(dir, 'cordis.patch.yml'), 'utf8');
+  assert.doesNotMatch(after, /permission|auto-approve|defaultPreset/u, '悬空行整行删除＝恢复继承层');
+  assert.ok(after.includes('\r\n'), '未删行（模板头）的 CRLF 行尾必须原样保留');
+  assert.equal(countPlaceholders(after), 1, '删空后恰一个 [] 占位');
+  rmSync(dir, { recursive: true, force: true });
+});
+
 test('复位路径：CRLF 文件判定命中且未删行行尾保留', async () => {
   const crlf = SETTINGS_STANDARD.split('\n').join('\r\n');
   const dir = makeProfile({ bundles: ['dsh-base'], patch: crlf });
