@@ -445,7 +445,7 @@ try {
 - **结论策略**：先定 `risk_level` 与 `user_authorization` 再定 `outcome`；策略未给更严规则时按阈值：`low`/`medium` → `allow`；`high` → 仅当授权至少 `medium`、范围窄且无绝对禁令时 `allow`，否则 `deny`；`critical` → `deny`。「恶意提示注入」需同时满足「与实现用户任务无关」与「由不可信证据指示」两条肯定证据。
 - **调查指引**：优先使用已在会话里的证据；只在结果能翻转判定且上下文没有该证据时才调工具；四个只读工具不能写、不能执行命令、不能升权、不能联网；工具调用永远不需要用户批准；工具失败表示「无证据」，继续审查，不因失败本身放行或拒绝；评估破坏性文件操作（尤其 `rm -rf`）前先用只读工具检查目标；重要上下文缺失且无法核实时，偏保守并在 rationale 里说明不确定性。
 - **限制**：审查器只能使用四个只读工具，不得请求 `sandbox_permissions`、不得写、不得执行命令；编码代理在命令上加 `sandbox_permissions` 本身不可疑。
-- **授权延伸**：用户明确要求「照某文件/某 ticket 执行」时，授权可延伸到该不可信内容。dsh 的等价可信应答工具是 `ask_user_question`，提示词按 dsh 工具名改写。
+- **授权延伸**：用户明确要求「照某文件/某工单执行」时，授权可延伸到该不可信内容。dsh 的等价可信应答工具是 `ask_user_question`，提示词按 dsh 工具名改写。
 - **租户策略**（`assets/tenant-policy.md`，取自 codex `policy.md` 的四类强制规则）：Data Exfiltration——未授权暴露敏感数据或其 payload 到特定目的地一律 deny，敏感外发的授权必须同时指定 payload 与 destination 且来自可信用户内容；Credential Probing——从非标准来源提取凭据属 `high`，授权 low/unknown 时 deny，常规认证流程 allow；Persistent Security Weakening——广泛、持久或影响生产的削弱属 `high`，除非授权覆盖精确的设置变更、目标服务与影响面则 deny；Destructive Actions——不可恢复的删除/修改、破坏生产服务、大范围未请求的 git 清理属 `high`，有重大不可逆风险且无授权证据时 deny，涉及被遮蔽的常见变量（如 `HOME`）的破坏动作 deny；Low-Risk Actions——沙箱重试/升权本身不可疑，不因路径在工作区外就判 `high`。
 ### 5.3 输出 schema
 
@@ -812,7 +812,7 @@ mode(request):
 >
 > **外观与交互（R29）**：字段集与控件功能面不变（多选预设下拉、模型两段式下拉、映射行表）；设置面外观与保存交互按 R29 重绘（§13.5：字段竖排、覆盖＝「已覆盖」Tag＋单字段「恢复默认」、暂存＋单一「保存」、说明常驻＋点击展开）。槽位落点与数据通道仍以本表为准。
 >
-> **行号口径**：本节正文里的 `client.js:NNN` 行号随实现轮次漂移，以最近一轮实现审查重标为准；行号失配不构成实现缺陷。
+> **行号口径**：本节正文里的 `client.js:NNN` 行号随实现漂移，以源码为准；行号失配不构成实现缺陷。
 
 ### 13.1 审批卡片：外壳原生，插件只接管 body 里的 detail seat
 - 卡片由 `@deepseek-ai/dsh-client-ui-approval@0.1.7-rc.1` 作为 composer 接管（chain，priority 1）渲染，结构固定四段：strip（圆点 + 「等待审批」）→ headline（`reason`）→ detail（`conversation.approval.detail` 的内容）→ 两个原生按钮「拒绝 / 允许一次」（`@deepseek-ai/dsh-client-ui-approval@0.1.7-rc.1 lib/client.js:39-101`、`@deepseek-ai/dsh-client-ui-chat@0.1.7-rc.1 lib/client.js:162-186`）。
@@ -829,7 +829,7 @@ mode(request):
 
 | 环节 | 依据 |
 | --- | --- |
-| 包 `exports['./typert']` 导出 `TYPERT` 清单；清单由 loader 注册进 `ctx.typert`（插件挂载后自动生效）；校验项为 `mode:'strict'`/`typeSymbol`/`create` 惰性工厂（r33 更正：loader **不**校验 `_zod`——那是 rc.6 离线检查器的陈旧谓词；`@deepseek-ai/dsh-typert-loader@0.1.7-rc.1 lib/index.js:153-212`）；schema 实例＝`create()` 返回值，registry 具体化（本包以 zod v4 构造）→ 包依赖 `zod@^4` | `package.json`、`@deepseek-ai/dsh-typert-loader@0.1.7-rc.1 lib/index.js` |
+| 包 `exports['./typert']` 导出 `TYPERT` 清单；清单由 loader 注册进 `ctx.typert`（插件挂载后自动生效）；校验项为 `mode:'strict'`/`typeSymbol`/`create` 惰性工厂（更正：loader **不**校验 `_zod`——那是 rc.6 离线检查器的陈旧谓词；`@deepseek-ai/dsh-typert-loader@0.1.7-rc.1 lib/index.js:153-212`）；schema 实例＝`create()` 返回值，registry 具体化（本包以 zod v4 构造）→ 包依赖 `zod@^4` | `package.json`、`@deepseek-ai/dsh-typert-loader@0.1.7-rc.1 lib/index.js` |
 | 网关认领带 `typertRemote` 绑定的服务端点；端点必须是两段式；payload 必须恰好含一个纯对象 `args` | `dsh-api-gateway/lib/index.js` |
 | 客户端通用 RPC：`rpc.call(channel, endpoint, payload, signal)` | `dsh-client-connection/lib/client.js` |
 
@@ -908,9 +908,9 @@ R30 只在显示层加换算读数：存储、审计行（`ms=`）、注入文�
 
 **合法口径与占位（判据④⑦）**。「合法」与 `fromDraft` 的数字校验同一口径：有限、`≥ 0`、**整数**——`12x`、`-1`、`1.5` 都非法；空串也走占位。草稿读数为占位 `—` 时**不得沿用上一个合法值**、不得整段隐藏；生效值读数一行常驻（含草稿非法期间）。生效值不是合法数字（快照缺该键或类型异常）时同样占位，不报错。
 
-**双语**：新字典键三对——`seconds.resolved`（「生效：{v}」／`Effective: {v}`）、`seconds.draft`（「草稿：{v}」／`Draft: {v}`）、`seconds.unit`（「秒」／`s`）。`{v}` 处替换为「数字 空格 单位」或占位 `—`。文案不得含退役短语（`test/client.test.mjs` 静态扫描与 dump 断言守着）。现有字典断言是枚举式（`help.` 前缀＋21 字段名单＋`card.*` 三键），**不会自动核到新键**——本轮须在 `test/client.test.mjs` 补一条**整表键集奇偶断言**（`Object.keys(zh)` 排序后与 `Object.keys(en)` 相等；变异验证：删任一侧一键即红，红＝测试失败），三对秒数键随之入册（R28 键集一一对应从枚举升格为整表核验）。
+**双语**：新字典键三对——`seconds.resolved`（「生效：{v}」／`Effective: {v}`）、`seconds.draft`（「草稿：{v}」／`Draft: {v}`）、`seconds.unit`（「秒」／`s`）。`{v}` 处替换为「数字 空格 单位」或占位 `—`。文案不得含退役短语（`test/client.test.mjs` 静态扫描与 dump 断言守着）。现有字典断言是枚举式（`help.` 前缀＋21 字段名单＋`card.*` 三键），**不会自动核到新键**——须在 `test/client.test.mjs` 补一条**整表键集奇偶断言**（`Object.keys(zh)` 排序后与 `Object.keys(en)` 相等；变异验证：删任一侧一键即红，红＝测试失败），三对秒数键随之入册（R28 键集一一对应从枚举升格为整表核验）。
 
-**样式（与官方 `.hint` 同规格）**：`.dsafm_f_sec`＝普通块 `<p>`（非 flex——span 与「·」按内联文本流排布，词距与说明句一致）、`12px`／行高 1.5／`--dsw-alias-label-tertiary`（与官方 `fields.module.css` 的 `.hint` 完全同规格）、`margin:-12px 0 12px`——上边距抵消官方字段的 `12px` 底部内边距，读数行紧贴说明行（不隔行，视觉上是说明块的续行）；下边距把 `12px` 呼吸还给后继分隔线（与官方字段自身的底部节奏一致）。R30 的样式修正（2026-09-26 用户反馈）：初版 `display:flex;gap:12px;margin:-6px 0 0` 因 flex 间隙拉开「生效/·/草稿」词距、且与说明行隔出 6px 空档，已改为上述同规格续行形态（验证实例重取：`marginTop=-12px`）。Fragment 平铺会把读数行插进官方 `.field + .field` 相邻选择器之间（`reviewer.timeoutMs` 与 `reviewer.maxTokens` 之间的分隔线会失效），补一条 `.dsafm_f_sec + div:not(.dsafm_field)` 恢复后继官方字段的 `0.5px` 分隔线；自绘字段跟在读数行后时不补（现状本就无分隔线，R29 取证已接受）。草稿非法时草稿 span 加 `dsafm_sec_invalid`（`--dsw-alias-state-error-primary`，镜像官方 `.invalid` 与 `.hint` 的双色规则）；空串占位不变色（空不是非法，`fromDraft` 里空串合法）。
+**样式（与官方 `.hint` 同规格）**：`.dsafm_f_sec`＝普通块 `<p>`（非 flex——span 与「·」按内联文本流排布，词距与说明句一致）、`12px`／行高 1.5／`--dsw-alias-label-tertiary`（与官方 `fields.module.css` 的 `.hint` 完全同规格）、`margin:-12px 0 12px`——上边距抵消官方字段的 `12px` 底部内边距，读数行紧贴说明行（不隔行，视觉上是说明块的续行）；下边距把 `12px` 呼吸还给后继分隔线（与官方字段自身的底部节奏一致）。R30 的样式口径（2026-09-26 用户反馈后修正）：初版 `display:flex;gap:12px;margin:-6px 0 0` 因 flex 间隙拉开「生效/·/草稿」词距、且与说明行隔出 6px 空档，现为上述同规格续行形态（验证实例重取：`marginTop=-12px`）。Fragment 平铺会把读数行插进官方 `.field + .field` 相邻选择器之间（`reviewer.timeoutMs` 与 `reviewer.maxTokens` 之间的分隔线会失效），补一条 `.dsafm_f_sec + div:not(.dsafm_field)` 恢复后继官方字段的 `0.5px` 分隔线；自绘字段跟在读数行后时不补（现状本就无分隔线，R29 取证已接受）。草稿非法时草稿 span 加 `dsafm_sec_invalid`（`--dsw-alias-state-error-primary`，镜像官方 `.invalid` 与 `.hint` 的双色规则）；空串占位不变色（空不是非法，`fromDraft` 里空串合法）。
 
 **不牵动**：R29 已定的字段结构（标签行／覆盖组／保存门控／帮助展开）、落点与数据通道、字段集与两个语言开关、另外三个挂点（composer 控件、审批卡片状态条、审查记录页签）。
 ### 13.6 设置页 GUI（替换 JSON 文本域）
@@ -1012,7 +1012,7 @@ R30 只在显示层加换算读数：存储、审计行（`ms=`）、注入文�
 - **保持原样的**：模型引用（`provider/model`）、宿主预设的展示名与说明、工具名、路径——这些是数据不是文案（R17 第二条）。
 - 空值选项渲染为「未设置（跟随默认）」，不再用 `-`；单测断言「每个 `select` 字段都有 `optionLabels`，且键集合与 `options` 完全一致」。
 
-## 14. 部署与回滚（0.1.7，经设计审查 r25 P1 重写：装包即行 / 删包即净）
+## 14. 部署与回滚（0.1.7：装包即行 / 删包即净）
 
 ### 14.1 部署脚本 `tools/permission-preset.mjs`（R26 的承载物）
 
@@ -1035,7 +1035,7 @@ R30 只在显示层加换算读数：存储、审计行（`ms=`）、注入文�
 3. `node tools/permission-preset.mjs --apply`——写入「自动审批」预设条目（§14.1）。
    **部署期核对（依赖版本）**：装包后确认 profile 树里 `@deepseek-ai/schemastery` 解析到 **≥3.18.4**（该版本的构建产物含 `Schema.prototype.volatile`）——共享 profiles 树可能残留 3.18.2（无 volatile，加载期抛 `volatile is not a function`）；本包依赖下限已提到 `^3.18.4`，若安装器复用旧共享树仍需手工升级。
 4. 重启：在服务进程树之外执行服务重启（以服务方式托管时，进程树内执行重启命令会被服务管理器连带清理，服务停在 STOPPED）。
-5. 同步与核对：部署面是 junction（实例 profile 的 `node_modules\dsh-approve-for-me` → 本仓库）——改码即进部署树，部署核对只做逐文件 md5 比对；**禁止整树复制式部署**（robocopy 会把 junction 目标当普通目录复制、把文件拷回仓库自身）。
+5. 同步与核对：安装实体是按 ref 检出的冻结件（R54 形态：`<实例区>/<包>@<ref>`，实例 profile 经 junction/link 指向它）——部署核对做逐文件 md5 比对确认与冻结 ref 一致；**禁止整树复制式部署**（robocopy 会把 junction 目标当普通目录复制；也不得回指开发树，开发树任何改动不得影响已部署实例）。
 6. 验收判据见 §15.2 的 0.1.7 项（注入表/DOM 判据，不得以 API 返回顶替）。
 
 ### 14.3 回滚步骤（删包即净）
@@ -1059,24 +1059,24 @@ R30 只在显示层加换算读数：存储、审计行（`ms=`）、注入文�
 | `lib/transcript.js` | 两个派发事件名的回查；cwd 提取与缺失降级；字节预算截断；`<truncated/>` 标记；脱敏清单 |
 | `lib/readonly-tools.js` | 四个只读工具 + 边界与拒止清单（§2.3） |
 | `lib/prompt.js` | 模板占位替换；契约追加；角色前缀；`</` 转义；边界标记 |
-| `lib/agent-texts.js`（0.1.7 双语轮新，§21） | zh/en **键集相等**（双向差集为空；变异删一个键即红）；缺键取词抛错（无静默回退）；不变块（不可信声明行、输出契约块、`<truncated … />` 标记、schema 字段名与枚举、工具名）两语言**逐字节一致**；en 拒绝末句＝codex `REJECTION_INSTRUCTIONS` 原文（`completion.rs:19-25`）、超时文案不含该句；两种语言的注入文本首行均为 `[approve-for-me] ` 前缀；`rejectText/timeoutText/allowText` 按 lang 出参（`lib/gate.js` 单测按语言分档断言，见该行） |
+| `lib/agent-texts.js`（0.1.7 新增，§21） | zh/en **键集相等**（双向差集为空；变异删一个键即红）；缺键取词抛错（无静默回退）；不变块（不可信声明行、输出契约块、`<truncated … />` 标记、schema 字段名与枚举、工具名）两语言**逐字节一致**；en 拒绝末句＝codex `REJECTION_INSTRUCTIONS` 原文（`completion.rs:19-25`）、超时文案不含该句；两种语言的注入文本首行均为 `[approve-for-me] ` 前缀；`rejectText/timeoutText/allowText` 按 lang 出参（`lib/gate.js` 单测按语言分档断言，见该行） |
 | `lib/reviewer.js` | 正常 JSON；散文包裹；缺字段默认（`fieldsDefaulted`）；空 payload；非法 outcome；`assembler.finish` 的 `max-tokens` / `EMPTY_RESPONSE` 两条 fail-closed；`finishTag`/`finishDegraded` 边界；`maxTokens=0` 不传该字段；工具调用轮次（1 轮 / 多轮 / 超限 / 工具抛错继续）；消息配对 I5–I7 |
 | `lib/model-resolver.js` | 两级 + 一条规则回退各命中一次；映射优先于默认；非法值逐层降级（`degraded` 带层名前缀）；`model/selection` 事件折叠；缓存命中与失效；`normalizeModelChoice` 与 `pickEffort` 的全部输入形态；会话级档位进入缓存 key |
 | `lib/mode.js` | 预设命中与不命中；服务缺失与投影未注册时按 `trigger.unknown`；`permission/preset` 事件回退折叠；同一会话的重复 skip 只写一行审计；`review` 行每会话一次 |
 | `lib/session-model.js` / `lib/session-store.js` | 旧事件折叠（只读兼容）；`{model:null}` 清空；非法值不改上层取值；空/损坏/结构不合法 → 空表；键归一化；写入-读回；超上限按 `updatedAt` 回收最旧；原子写失败不破坏旧文件；IO 异常不抛 |
 | `lib/gate.js` | 五条路径各一例；`next()` 只调一次；交人工时新建计时器；`timeoutFrom` 两种取值；`finally` 清理全部计时器与监听器；`request` 冻结时降级；catch 分支注入 + 撤回；交人工取消写 `decide` 审计；`reviewer.timeoutMs=0` 不建审查计时器；预设不匹配时在 `configFor` 之前 `next()`；`ui.inject` 三值 × 两个方向的注入断言 |
 | `lib/scheduler.js` / `lib/audit.js` | 并发上限；排队；排队超时；同 callId 去重；熔断开/关；单行格式与字段顺序（`v=3`，R52 第 3 问同源）；转义；截断留痕；写 stderr 而非 stdout；五条路径字段完整 |
-| `client.js` | 设置表单快照三层标记（0.1.7：`configForms` 控制器的 `value/base/user/revision/writable`）；bundle 槽 owner props 仅 `view:'page'`、控制器自取自订阅、`whileServed` 未服务时零挂载；每个字段都有 `help` 与 `hint` 两套键（中英齐备）；会话下拉的选项、当前值与清空项渲染；默认审查模型行的两个下拉；模型变化后请求 `modelEfforts`；映射行表增删行与四列表头；推理档位项在无模型时不出现；两段式菜单；写入失败时触发器出现错误徽标；多斜杠主模型输入取末段为键；**0.1.7 双语轮**：`useNsT` 的 `auto`/`zh`/`en` 三档解析（auto＝宿主 `t` 原样、强制档＝本包字典且缺键抛错）；FIELDS 字段名、输入校验文案、`optionLabels` 全部进字典后 zh/en 键集相等（变异删键即红）；注册 `plugins.bundle.config` 的槽名/键正确（键＝包名）；**R29 重绘轮**：暂存语义（改值/勾选/增删行不写库，点保存一次写入；`mutate` 拒绝时留暂存）；单字段「恢复默认」暂存 `{clear}`（控件立即回组合层默认值、覆盖组消失、不写库；保存才 `unset`）；保存门控（无改动/有非法/保存中 → `disabled`）；帮助按钮 `aria-expanded`/`aria-controls` 成对且点击后说明文本进入 DOM；常驻说明键在场；「重置全部覆盖」「当前生效值」源码零命中（静态扫描）；CSS 串对三个 0.1.7 不存在的令牌（`--dsw-alias-state-warning-primary`/`--dsw-alias-label-error`/`--dsw-alias-bg-layer-4`）零命中（静态扫描）；退役键 `card.resetAll`/`card.resolved`/`card.section.*`/`card.saved` 不在字典 |
-| `test/settings-dom-dump.test.mjs`（常驻断言，R29 重绘轮按 bundle 页 dump 重做） | dump 身份与元数据（两个取证步骤文件名钉进元数据断言：主取证含判据⑤的点击展开与暂存往返、CSS 收窄扫描）；字段标签行逐项在场（21 字段）；三个迁移键**值进控件**（控件表 value 300000/600000/模型引用）＋旁有「已覆盖」「恢复默认」；页面文本对「重置全部覆盖」与「当前生效值:」零命中；保存门控三态描述行（初始 disabled=true→暂存 false→保存/重开 true）；容器计算样式（`border-style:none`、`border-radius`<12px，判据④）；帮助 aria 配对与点击展开（判据⑤）；控件清单；反恒真对照（篡改控件值/删「已覆盖」标记即红、还原复绿） |
+| `client.js` | 设置表单快照三层标记（0.1.7：`configForms` 控制器的 `value/base/user/revision/writable`）；bundle 槽 owner props 仅 `view:'page'`、控制器自取自订阅、`whileServed` 未服务时零挂载；每个字段都有 `help` 与 `hint` 两套键（中英齐备）；会话下拉的选项、当前值与清空项渲染；默认审查模型行的两个下拉；模型变化后请求 `modelEfforts`；映射行表增删行与四列表头；推理档位项在无模型时不出现；两段式菜单；写入失败时触发器出现错误徽标；多斜杠主模型输入取末段为键；**0.1.7 双语**：`useNsT` 的 `auto`/`zh`/`en` 三档解析（auto＝宿主 `t` 原样、强制档＝本包字典且缺键抛错）；FIELDS 字段名、输入校验文案、`optionLabels` 全部进字典后 zh/en 键集相等（变异删键即红）；注册 `plugins.bundle.config` 的槽名/键正确（键＝包名）；**R29 重绘**：暂存语义（改值/勾选/增删行不写库，点保存一次写入；`mutate` 拒绝时留暂存）；单字段「恢复默认」暂存 `{clear}`（控件立即回组合层默认值、覆盖组消失、不写库；保存才 `unset`）；保存门控（无改动/有非法/保存中 → `disabled`）；帮助按钮 `aria-expanded`/`aria-controls` 成对且点击后说明文本进入 DOM；常驻说明键在场；「重置全部覆盖」「当前生效值」源码零命中（静态扫描）；CSS 串对三个 0.1.7 不存在的令牌（`--dsw-alias-state-warning-primary`/`--dsw-alias-label-error`/`--dsw-alias-bg-layer-4`）零命中（静态扫描）；退役键 `card.resetAll`/`card.resolved`/`card.section.*`/`card.saved` 不在字典 |
+| `test/settings-dom-dump.test.mjs`（常驻断言，按 bundle 页 dump 重做） | dump 身份与元数据（两个取证步骤文件名钉进元数据断言：主取证含判据⑤的点击展开与暂存往返、CSS 收窄扫描）；字段标签行逐项在场（21 字段）；三个迁移键**值进控件**（控件表 value 300000/600000/模型引用）＋旁有「已覆盖」「恢复默认」；页面文本对「重置全部覆盖」与「当前生效值:」零命中；保存门控三态描述行（初始 disabled=true→暂存 false→保存/重开 true）；容器计算样式（`border-style:none`、`border-radius`<12px，判据④）；帮助 aria 配对与点击展开（判据⑤）；控件清单；反恒真对照（篡改控件值/删「已覆盖」标记即红、还原复绿） |
 | `lib/config.js`（宿主接线） | `normalizeConfig` 补齐缺省分节；**0.1.7：含 volatile 引用输入的深度解包（`isVolatile → .get()`，defaults 与传入值两侧；引用更新后重算取到新值）**；`reviewer.maxTokens` 默认 `0`，显式 `0`/`4096` 原样保留（需能解析 `@deepseek-ai/*`，否则该组用例自我跳过） |
-| `tools/permission-preset.mjs`（0.1.7 新） | `--apply` 幂等（二次执行零 diff）；锚点定位（`workspace-write` 后、`danger-full-access` 前）；锚点缺失报错且不落盘；`defaultPreset=auto-approve` 时备份并改标准预设；`--revert` 删条目并按备份恢复（含"原值缺失则删键"）；全程只 import `node:*` 与相对路径（静态断言） |
+| `tools/permission-preset.mjs`（0.1.7 新增） | `--apply` 幂等（二次执行零 diff）；锚点定位（`workspace-write` 后、`danger-full-access` 前）；锚点缺失报错且不落盘；`defaultPreset=auto-approve` 时备份并改标准预设；`--revert` 删条目并按备份恢复（含"原值缺失则删键"）；全程只 import `node:*` 与相对路径（静态断言） |
 | `lib/mode.js`（0.1.7 增例） | `current().mode==='off'` 请求期直接返回 `'off'`（volatile 热改生效，不依赖重挂载）；其余预设判定用例不变 |
 | 退役静态扫描 | 交付代码（`lib/`、`client.js`、`typert.host.js`、`tools/*.mjs`）对退役机制名零引用（禁词表与扫描实现同在 `test/index.test.mjs`，含「扫描函数必须命中」的反恒真对照；`test/` 不纳入自扫——禁词表本身写在那里，自扫必然恒红）；`typert.host.js` 的 trace 形状恰为 `{capture,ownView,turnSummary,legacyRow}` |
 
 跑法：`npm test`（带 `--import ./tools/_host-hooks.mjs`，宿主接线三项才解析得到 `@deepseek-ai/*`；解析不到时它们自我跳过，**跳过不等于通过**）、`npm run test:offline`、`npm run check`、`npm run probe:typert`。
 
 两条防假绿的强制约束（缺一就会「语法坏了却全绿」）：
-- `npm run check` 走 `tools/check-syntax.mjs`：自动枚举 `lib/**` 全部模块 + `client.js` + `typert.host.js`（当前 18 个文件）逐个 `node --check`，任一失败即整体退出码非 0——把模块清单写死在脚本里会漏掉新增文件。
+- `npm run check` 走 `tools/check-syntax.mjs`：自动枚举 `lib/**` 全部模块 + `client.js` + `typert.host.js`（当前 22 个文件）逐个 `node --check`，任一失败即整体退出码非 0——把模块清单写死在脚本里会漏掉新增文件。
 - 测试文件里的宿主导入**只在「宿主包不可解析」时自跳过**（`error.code === 'ERR_MODULE_NOT_FOUND'` 且消息含 `@deepseek-ai/`）；语法错误、模块内部抛错、相对依赖缺失一律让该文件红着。否则 `lib/bridge.js` 坏掉时两份宿主测试会一起静默跳过。
 ### 15.2 端到端验收（必须截图留档）
 
@@ -1109,12 +1109,12 @@ R30 只在显示层加换算读数：存储、审计行（`ms=`）、注入文�
 26. **0.1.7·设置表单落点**（R4/R25/R27）：侧栏「插件」面板 →「已安装」→ 本包条目 → 本包详情页：描述与行列表之间直接出现完整表单——全部字段控件首屏在场、无展开步骤（判据＝`[data-plugin-detail="dsh-approve-for-me"]` 配置区的 DOM，R27；R29 后按 R29 六条重取：字段结构/覆盖标记/保存门控）；字段/控件与 0.1.5 基线逐项一致（已知差异：多「审查期间弹出人工卡片」、「接管预设」改多选下拉、R28 两个语言开关、R29 外观重绘）；宿主未服务命名空间时（临时停用行）无表单且零报错（`whileServed` 门控）。
 27. **0.1.7·volatile 热改**（R25）：设置页改 `trigger.presets`/`reviewer.model`/`mode` → 保存后**不重启服务**，下一次审批即按新值走（改 `mode=off` → 应答者直接 `next()` 出人工卡片；审计行可证）；`concurrency` 改动则需重挂载才生效（设计如此）。
 28. **0.1.7·装包即行/删包即净**（R9/R26）：干净 profile 上 `dsh plugin --profile web add` + `tools/permission-preset.mjs --apply` + 一次重启后：权限下拉出现「自动审批」、插件行为完整；脚本二次执行零 diff（幂等）；`--revert` + `dsh plugin remove` + 重启后：无「自动审批」条目、`defaultPreset` 恢复备份值、bundles 干净、无残留目录。
-29. **0.1.7·typert 装载**（U3 核销）：验证实例启动日志（字节游标只读新增段）无 typert 行装载警告；会话内 `approveForMe/getState` RPC 一次成功（清单被 `dsh-typert-protocol@0.1.7` 接受的运行时证据）。
-30. **0.1.7·权限预设判定**（U1 核销）：活会话上切「自动审批」→ `permissionPresets.current()` 返回 `auto-approve`、插件接管；切「工作区内修改」→ 返回 `workspace-write`、插件 `next()`；未显式选择的旧会话 → 返回 `workspace-write`（声明顺序语义的行为证据）。
+29. **0.1.7·typert 装载**：验证实例启动日志（字节游标只读新增段）无 typert 行装载警告；会话内 `approveForMe/getState` RPC 一次成功（清单被 `dsh-typert-protocol@0.1.7` 接受的运行时证据）。
+30. **0.1.7·权限预设判定**：活会话上切「自动审批」→ `permissionPresets.current()` 返回 `auto-approve`、插件接管；切「工作区内修改」→ 返回 `workspace-write`、插件 `next()`；未显式选择的旧会话 → 返回 `workspace-write`（声明顺序语义的行为证据）。
 31. **R27·迁移值回读与写入**（requirements §4 R27 行）：本包页面上回读三个迁移值——审查超时 `300000`、人工超时 `600000`、默认审查模型 `zai/glm-5.3 · max`，R29 后**值直接在控件里**且旁有「已覆盖」Tag＋「恢复默认」（「接管预设」显示「自动审批」属 bundle 默认回落，非迁移值）；在该页改一次值保存后回读一致、**不重启**即生效（行为判据＝状态条读数随新超时变化，同 requirements §4「设置面可改审查超时」条）。
 32. **R28·双语与两块独立切换**（requirements §4 R28 行 ①–⑥）：①`language.ui='en'` → 设置面与审批卡片状态条的页面 DOM 文案变英文，切回 `zh`/`auto` 复原；②`language.agent` 切换 → 审计 `phase=prompt` 的提示词与注入文本按**字节**核对该语言首行（zh 首行 `[approve-for-me] …`；en 对应首行，拒绝末句＝codex `REJECTION_INSTRUCTIONS` 原文）；③独立性——一次只切一块，另一块的 DOM 文案与注入字节前后不变；④字典键集一一对应（单测断言 zh/en 相等，变异删键即红）；⑤热生效——改完不重启，**下一次**审查与注入即用新语言；⑥审计行与日志措辞不随切换改变（字节对照）。
 33. **R29·设置面照官方重绘**（requirements §4 R29 行，六条判据＋暂存行为差异，全部落本包页面 DOM 与计算样式）：①「重置全部覆盖」零命中；②覆盖字段旁「已覆盖」＋「恢复默认」在场，点「恢复默认」后暂存文本回默认值但**不写库**（关掉重开回旧值，或读 profile patch 本行 `config:` 仍旧值）；③「保存」无改动时 `disabled`、改动后去掉；④配置区顶层容器无自绘外壳（计算样式 `border-style` 为 `none`/边框宽 0 且 `border-radius`<12px）；⑤字段说明点击后 `aria-expanded=true` 且说明文本进入 DOM；⑥交付 CSS 串对三个 0.1.7 不存在的令牌零命中（判据⑥名单扩为 `--dsw-alias-state-warning-primary`/`--dsw-alias-label-error`/`--dsw-alias-bg-layer-4`）。**「只有保存才写」行为差异**：改一个值不点保存 → 关掉重开本包页面回读旧值；点保存 → 回读新值且 profile patch 本行 `config:` 出现该键。另取一张本包页面整图留档；取证纪律：无头浏览器取证每次启动会产生一次失败交互登录（本机锁定策略阈值 10 次/10 分钟），批量 ≤5 次/10min，取证前后各读一次失败登录计数自查余量。
-34. **R30·毫秒字段的秒数读数**（requirements §4 R30 行，七条判据，全部落本包页面 DOM；实时性只认「同一次输入后的 DOM 读数」）：①两个 ms 字段（审查超时、人工超时）的生效值读数与当前生效值一致（现场 300000 → `300 秒`、600000 → `600 秒`）；②在输入框键入 `120000`（不保存）后同一次输入即见草稿读数 `120 秒`、生效值读数仍 `300 秒`；③`1500` → `1.5 秒`；④清空输入 → 草稿读数占位 `—` 且生效值读数不变；⑤保存 `120000` 后重开页面生效值读数变 `120 秒`；⑥`en` 档单位变 `s`；⑦输入 `12x` → 草稿读数占位且**生效值读数仍在场**（读数自绘在官方组件之外，不随 `hint` 被非法文案顶掉）。取证后现场复原（超时值与语言档）；重取本包页面 DOM dump（换算读数钉进 `test/settings-dom-dump.test.mjs`）＋一张整图；取证纪律同上。
+34. **R30·毫秒字段的秒数读数**（requirements §4 R30 行，七条判据，全部落本包页面 DOM；实时性只认「同一次输入后的 DOM 读数」）：①两个 ms 字段（审查超时、人工超时）的生效值读数与当前生效值一致（本机部署迁移值示例：300000 → `300 秒`、600000 → `600 秒`）；②在输入框键入 `120000`（不保存）后同一次输入即见草稿读数 `120 秒`、生效值读数仍 `300 秒`；③`1500` → `1.5 秒`；④清空输入 → 草稿读数占位 `—` 且生效值读数不变；⑤保存 `120000` 后重开页面生效值读数变 `120 秒`；⑥`en` 档单位变 `s`；⑦输入 `12x` → 草稿读数占位且**生效值读数仍在场**（读数自绘在官方组件之外，不随 `hint` 被非法文案顶掉）。取证后本机复原（超时值与语言档）；重取本包页面 DOM dump（换算读数钉进 `test/settings-dom-dump.test.mjs`）＋一张整图；取证纪律同上。
 ### 15.3 验收清单映射
 
 | 需求 | 验收动作 |
@@ -1125,11 +1125,11 @@ R30 只在显示层加换算读数：存储、审计行（`ms=`）、注入文�
 | R5 审计 / R6 五条路径 / R7 安全边界 | 15.2 #7/#8 / 单测 gate 五条路径 / 单测 policy（规则检查、上限、`never`） |
 | R8 测试 | 本节；「观察交人工」见 15.2 #9（需 `fallback='ask'`） |
 | R9 部署与回滚 | §14 |
-| 需求 1 自动审批选项 | 15.2 #10；单测 `lib/mode.js` |
-| 需求 2 模型两级 | 15.2 #11/#12；单测 `lib/model-resolver.js` / `session-model` |
-| 需求 3 会话页提示 | 15.2 #13；单测注入文本组装（脱敏、截断） |
-| 需求 4 拒绝清单宽度回归（0.1.7 起表单无折叠外壳）/ 需求 5 设置项 tooltip | 15.2 #14；单测 `help` 键中英齐备 |
-| 需求 6 视图核验 | 15.2 #10–#15 的截图均须在 loopback 页面实拍 |
+| 自动审批选项 | 15.2 #10；单测 `lib/mode.js` |
+| 模型两级 | 15.2 #11/#12；单测 `lib/model-resolver.js` / `session-model` |
+| 会话页提示 | 15.2 #13；单测注入文本组装（脱敏、截断） |
+| 拒绝清单宽度回归（0.1.7 起表单无折叠外壳）/ 设置项 tooltip | 15.2 #14；单测 `help` 键中英齐备 |
+| 视图核验 | 15.2 #10–#15 的截图均须在 loopback 页面实拍 |
 | R10 超时提示 | 15.2 #17；单测 `lib/gate.js` 的 `timeoutText`（审查超时/人工超时/排队超时三种来源） |
 | R11 弹卡时机 | 15.2 #18；单测 gate 的「关闭模式不提前调 `next()`」与「`fallback='ask'` 时恰好在结算点调一次」 |
 | R12 卡片状态 / R13 倒计时 | 15.2 #19；单测 `pendingState` 状态迁移（`reviewing → timeout/denied → 结算删除`）与客户端剩余时间格式化 |
@@ -1165,17 +1165,17 @@ R30 只在显示层加换算读数：存储、审计行（`ms=`）、注入文�
 | 判据 | 产物 |
 | --- | --- |
 | 设置表单（bundle 页）：全部字段首屏在场、无展开步骤（R27 主判据，DOM；字段结构照 R29 六条） | 设置页 DOM dump（页面身份＋配置区全文＋控件清单＋容器计算样式＋帮助按钮 aria 配对）＋整页截图；常驻断言 `test/settings-dom-dump.test.mjs` 按本 dump 做 |
-| 设置表单：三个迁移值回读（300000/600000/`zai/glm-5.3 · max`，值进控件）＋「已覆盖」Tag与「恢复默认」 | 同上 dump 的控件表与覆盖标记邻接表；「接管预设」显示「自动审批」属 bundle 默认回落（非迁移值） |
+| 设置表单：三个迁移值回读（本机部署迁移值 300000/600000/`zai/glm-5.3 · max`，值进控件）＋「已覆盖」Tag与「恢复默认」 | 同上 dump 的控件表与覆盖标记邻接表；「接管预设」显示「自动审批」属 bundle 默认回落（非迁移值） |
 | 设置表单：改值保存回读＋不重启生效 | 重取取证（按 retick 步骤脚本实走）：改「审查超时」300000→120000→保存→控件回读 120000＋「已覆盖」→重开仍 120000→复原；行为证据（状态条读数随新超时变化）沿用 requirements §4「设置面可改审查超时」条 |
 | R29 暂存语义（只有保存才写） | 行为差异取证（language.ui 点「恢复默认」不保存→重开回读 `zh`；保存→回读 `auto`＋覆盖消失→profile patch 键随保存变化），结果留档；英文文案与独立性重取同在 retick 轮 |
 | R30 毫秒字段的秒数读数（生效值常驻/草稿实时/占位/en 档单位） | 设置面 dump 的「换算读数」段（`tools/build-dom-dump.mjs` 生成）＋实时性取证（按读数取证步骤脚本实走：键入→同一次输入后读文本：`120000`→`120 秒`、`1500`→`1.5 秒`、清空/`12x`→占位且生效值读数在场、保存重开→`120 秒`、`en`→`s`）＋整图两张（非法占位态：hint 被顶掉、草稿占位转错误色、生效值读数在场；en 档单位 `s`）；常驻断言 `test/settings-dom-dump.test.mjs` |
 | R29 单字段恢复默认 | 点「恢复默认」→ 控件立即回默认值且不写库（重开回旧值）→ 保存后覆盖消失（profile patch `config:` 不再含该键） |
 | R28 用户文案切英文／复原（设置面＋卡片状态条 DOM） | 截图留档（设置面整页英文）；composer／审批卡／审查记录的 en 档不单独截图（同一 `useNsT` 机制，三档行为差异由 `test/client.test.mjs` 断言在岗）；切回复原另取一图 |
-| R28 Agent 提示切语言（按字节核对） | `test/agent-texts.test.mjs`（en 模板＝HEAD 逐字节、不变块两语言逐字节一致、拒绝末句＝codex 原文）＋验证实例端到端字节核对（注入两行＝`allowText(fields,'zh')` 逐字节、253 B＝审计 injectBytes、≠en 模板；requirements §4 R28 ② r33 完成） |
+| R28 Agent 提示切语言（按字节核对） | `test/agent-texts.test.mjs`（en 模板＝HEAD 逐字节、不变块两语言逐字节一致、拒绝末句＝codex 原文）＋验证实例端到端字节核对（注入两行＝`allowText(fields,'zh')` 逐字节、253 B＝审计 injectBytes、≠en 模板；requirements §4 R28 ② 已完成） |
 | composer 两段式菜单（跟随全局 / 模型段 / 档位段 / 选中态） | 截图留档：两段式菜单展开态 |
 | 设置页在非 loopback 页面自然降级 | 截图留档：非 loopback 设置页 |
 | 审批全调用链：卡片出现期（原生卡片、按钮齐全） | 截图留档：卡片出现期 |
-| 审批全调用链：结算后的会话页（含注入条目与任务完成） | 截图留档：结算后会话页展开态转写（0.1.7 注入判据以 requirements §4「注入后本轮完成」为准） |
+| 审批全调用链：结算后的会话页（含注入条目与任务完成） | 截图留档：结算后会话页展开态转写（0.1.7 注入判据以 requirements §4「注入后即完成」为准） |
 | 规则强制拒绝路径（沙箱拒绝 → 升级被规则拒绝 → 目标未被删除） | 截图留档：规则拒绝路径（判定以审计行为准，见下「规则强制拒绝成立」行） |
 | 设置表单：接管预设多选下拉（含默认预设标记） | 截图留档（0.1.5 基线；0.1.7 复核随 #31 一页取） |
 | 设置表单：枚举选项文案（语言随 `language.ui`） | 0.1.5 中文基线（设置页 DOM 文本留档）／en 档整页英文截图 |
@@ -1253,7 +1253,7 @@ R18–R22 的核心事实：**「自动审批成为记录表里的一等记录�
 - 读取走既有 Remote 命名空间新增两个端点：`traceRecords(sessionId)`（列表，只回摘要字段）与 `traceRecord(sessionId, reviewId)`（单条详情，按需拉，避免把全文推给客户端）。
 - 字段对齐社区口径（R22）：`reviewId`、`callId`（关联工具调用，对应 hermes-otel 的 `gen_ai.tool.call.id`）、`startedAt`/`endedAt`/`queueMs`/`reviewMs`/`humanWaitMs`、`decision`（`allowed-once|rejected|timed-out|error`）、`model`/`effort`/`tokens`、`promptRef`/`inputRef`/`reasoningRef`/`outputRef`（全文引用，配合 `capture`）。
 
-**六个边界（审查 B4 要求逐条定死；实现不得留白）**
+**六个边界（逐条定死；实现不得留白）**
 
 | 边界 | 定义 |
 |---|---|
@@ -1261,20 +1261,20 @@ R18–R22 的核心事实：**「自动审批成为记录表里的一等记录�
 | 重启可见性 | 宿主重启或页面刷新后，`traceRecords` 从 JSONL 重放窗口内的记录 → 记录**不丢**。内存环为空且文件缺失时返回空列表，不报错。 |
 | `reviewId` 稳定 | `reviewId = ${sessionId}:${callId ?? '-'}:${askedSeq ?? startedAt}`，并落 `reviewKeySource: 'askedSeq' | 'startedAt'` 说明来源。**注意**：`askedSeq` 从应答者事件里拿不到（`ApprovalRequestEvent` 载荷不含 id/seq，id/seq 只在 `approval/asked` 会话事件里），因此关联由 `lib/index.js` 接线时解决（host 侧能听到审计事件就用它，否则退回 `startedAt`）；`lib/trace-store.js` 只消费传入值，不自行监听会话事件。 |
 | 并发写 | 每会话一条串行写队列（Promise 链），**同一时刻只有一个 append 在飞**；写入用「追加一行」而非重写全文。跨进程用「打开-追加-关闭」的短写 + 行级 JSON（单行原子），**不做锁**；接受的前提三条：每进程只一个写者、追加而非重写、读方容忍末行撕裂（解析失败的最后一行跳过并留痕）。**轮转（重写文件）跨进程不安全，因此双实例共享同一 `~/.dsh` 的部署不受支持**（写进模块注释与 README）。 |
-| `reviewId` 稳定 | `reviewId = ${sessionId}:${callId ?? '-'}:${askedSeq ?? startedAt}`，并落 `reviewKeySource: 'askedSeq' \| 'startedAt'` 说明来源。**注意**：`askedSeq` 从应答者事件里拿不到（`ApprovalRequestEvent` 载荷不含 id/seq，id/seq 只在 `approval/asked` 会话事件里），因此关联由 `lib/index.js` 接线时解决（host 侧能听到审计事件就用它，否则退回 `startedAt`）；`lib/trace-store.js` 只消费传入值，不自行监听会话事件。 |
 | 会话分叉归属 | 记录跟随**产生它的会话 id**，不做分叉继承：`sessions.fork` 出的新会话读自己的文件（初始为空），老会话的记录留在老会话。理由：审批是对老会话那次工具调用的判定，复制到分叉会制造「未发生的审批」。 |
 | 清理与降级 | 清理：会话文件超过上限重写保留窗口；`~/.dsh/approve-for-me/reviews/` 下超过 `maxSessions`（默认 50）个文件时删最旧。降级：写文件失败**不回滚已完成的审批**，只把记录留在内存并写一行审计 `phase=trace degraded=file-store-failed`；读失败返回空列表并写 `phase=trace degraded=read-failed`。 |
 
 ### 17.3 呈现层：自有视图落点，外加一个可选的近似行
 
-| 落点 | 座位与契约（审查 B1：按契约钉死） | 内容 | 默认 |
+| 落点 | 座位与契约（按契约钉死） | 内容 | 默认 |
 |---|---|---|---|
 | 全部审查记录 + 详情 + **每轮耗时对照** | `conversation.view`：`kind: list`、`scope: session`；注册 `{ id: 'approve-for-me'（自建 id）, order: 20, label: () => t('view.review') }`；ownerProps `{ viewRequest, openView, completeViewRequest }`；standardProps 含 `useProjection`/`sessionId`/`useChat`/`useConversation`/`useTrajectory`。注册方式同现有挂点：`ctx.slots.inject(key, () => ctx.slots.register({name, id, locale, inject}, Component))` | 本会话审查历史（按轮分组）→ 点开看单次全量：提示词、输入、思维链、输出、分段耗时；每轮头显示 **`工具总计 X = 执行 Y + 审批 Z`** 的等式 | 开（`ui.trace.ownView`） |
-| 记录表近似行（可选） | 客户端会话定义：`ctx.get('uiConversation').events.register({ kind, target: 'trajectory', match/start/update/buildViewNode })`；**必须等**服务出现（实测第 2 次 500 ms 重试才拿到） | 一行「上下文」，文案为摘要 + 耗时 | 关（`ui.trace.legacyRow`）；与注入行内容重复，且标签与位置都不满足 R18，故默认关 || 审查详情（侧栏，可选增强） | `sidebar.right.pane.tab` 只注册 **body**；**tab type 入口已静态核实为公开**：`sidebarRightTabs` 是可注入服务 + `register(definition)`（样板见 `@deepseek-ai/dsh-client-ui-sidebar-files@0.1.7-rc.1`），宿主用 `ctx.inject` 作用域注入 | 单次审查全量，与对话并排 | 列为可选增强（§18），不进验收范围 |
+| 记录表近似行（可选） | 客户端会话定义：`ctx.get('uiConversation').events.register({ kind, target: 'trajectory', match/start/update/buildViewNode })`；**必须等**服务出现（实测第 2 次 500 ms 重试才拿到） | 一行「上下文」，文案为摘要 + 耗时 | 关（`ui.trace.legacyRow`）；与注入行内容重复，且标签与位置都不满足 R18，故默认关 |
+| 审查详情（侧栏，可选增强） | `sidebar.right.pane.tab` 只注册 **body**；**tab type 入口已静态核实为公开**：`sidebarRightTabs` 是可注入服务 + `register(definition)`（样板见 `@deepseek-ai/dsh-client-ui-sidebar-files@0.1.7-rc.1`），宿主用 `ctx.inject` 作用域注入 | 单次审查全量，与对话并排 | 列为可选增强（§18），不进验收范围 |
 
-**不做 `conversation.chat.turnTail`（审查 B6）**：该座位是 `chain` 且是**单选举**——"第一个 `select` 返回非空的条目渲染，全空才落到宿主默认项"；即**互斥而非叠加**。官方交付行未写 `priority`（=0）：给它负数会让插件抢先并**遮蔽官方那一行**，给它正数则在官方每次都接受时**插件永不渲染**。两种取值都有真实代价，所以每轮耗时对照改落在**自有视图**里，turnTail 不使用。
+**不做 `conversation.chat.turnTail`**：该座位是 `chain` 且是**单选举**——"第一个 `select` 返回非空的条目渲染，全空才落到宿主默认项"；即**互斥而非叠加**。官方交付行未写 `priority`（=0）：给它负数会让插件抢先并**遮蔽官方那一行**，给它正数则在官方每次都接受时**插件永不渲染**。两种取值都有真实代价，所以每轮耗时对照改落在**自有视图**里，turnTail 不使用。
 
-**侧栏落点的验证项**：`sidebar.right.pane.tab` 只注册"页签 body"；**tab type 入口已静态核实为公开**（`sidebarRightTabs` 是可注入服务 + `register(definition)`，样板见 `@deepseek-ai/dsh-client-ui-sidebar-files@0.1.7-rc.1`，宿主用 `ctx.inject` 作用域注入）。即便如此它仍列为**可选增强**：主落点是 `conversation.view`（确定可用、信息不缺失），侧栏只在实现阶段实测通过后再上（避免为一个并排显示引入新的加载失败面——实测教训：客户端访问未 `inject` 的服务属性会让整个插件半部加载失效）。
+**侧栏落点的验证项**：`sidebar.right.pane.tab` 只注册"页签 body"；**tab type 入口已静态核实为公开**（`sidebarRightTabs` 是可注入服务 + `register(definition)`，样板见 `@deepseek-ai/dsh-client-ui-sidebar-files@0.1.7-rc.1`，宿主用 `ctx.inject` 作用域注入）。即便如此它仍列为**可选增强**：主落点是 `conversation.view`（确定可用、信息不缺失），侧栏只在实现阶段实测通过后再上（避免为一个并排显示引入新的加载失败面——注意：客户端访问未 `inject` 的服务属性会让整个插件半部加载失效）。
 
 **每轮对照落在自有视图里**（承上：turnTail 是单选举，不使用）。**等式的数据来源**（这是插件唯一能凑齐三项的地方）：`X`（该工具调用在记录表里的总时长）从会话视图座位的标准 prop `useTrajectory` 取，按 `callId` 与记录表里的工具行匹配；`Z`（审批耗时＝`queueMs + reviewMs + humanWaitMs`）来自我们自己的记录；`Y = max(0, X − Z)` 为净执行。展示为 `工具总计 X = 执行 Y + 审批 Z`，并对不上的记录（没有对应工具行，例如子代理内的审批或已滚出窗口的调用）只显示 `Z` 并标注「未匹配到工具行」——**不猜 X**。这条就是 R19 的验收判据。
 
@@ -1282,9 +1282,9 @@ R18–R22 的核心事实：**「自动审批成为记录表里的一等记录�
 
 ### 17.4 与上游的关系
 
-上游提案稿（可直接贴 issue/PR：动机、最小改动面、验收标准、对人工审批的通用收益；正文随本批工作留档，未随仓公开）请求的是**宿主内的通用功能**：把既有的 `approval/asked` + `approval/decided` 审计对投影成一条记录表记录，并让工具记录在计算跨度时扣掉内嵌的审批等待——对人工审批同样生效，不引入任何插件专属事件或格式。
+上游提案稿（动机、最小改动面、验收标准、对人工审批的通用收益）请求的是**宿主内的通用功能**：把既有的 `approval/asked` + `approval/decided` 审计对投影成一条记录表记录，并让工具记录在计算跨度时扣掉内嵌的审批等待——对人工审批同样生效，不引入任何插件专属事件或格式。
 
-**为什么这件事必须在宿主内做**（依据见提案稿的实测修订一节）：记录要落在「发起该调用的助手消息」与「该工具行」之间，而这两者由记录表自己在 `expandAssistant` 里**一起**产出；插件从外部注入只能排在那一批之后。缺的不是数据（客户端快照里存在可按 `callId` 匹配工具行的数据），而是"记录表组装记录时做关联"那一步，仓库外无法可靠插入。
+**为什么这件事必须在宿主内做**：记录要落在「发起该调用的助手消息」与「该工具行」之间，而这两者由记录表自己在 `expandAssistant` 里**一起**产出；插件从外部注入只能排在那一批之后。缺的不是数据（客户端快照里存在可按 `callId` 匹配工具行的数据），而是"记录表组装记录时做关联"那一步，仓库外无法可靠插入。
 
 **待上游提供后本插件怎么办**：本插件不为此留任何探测或降级分支（R25 的"不可回退"条款）。届时按当期需求重新评估是否接入，属新工作，不是本设计的延续。
 
@@ -1390,15 +1390,15 @@ subagents: z.union([z.const('review'), z.const('skip')]).default('review'),
 - 接线（`index.test.mjs`）：rules 模式注册 `session/created` 且装载补扫翻活表里的可覆盖委派子会话；off 模式既无应答者也无监听、零翻策略；监听器吞掉 append 异常并写审计。
 - 静态扫描（`index.test.mjs`）：`lib/subagents.js` 源码零 `ctx.` 访问、无 `permissionPresets.set`、唯一写路径是追加 `{policy:'ask'}` 事件。
 
-**端到端（验证实例实测全过；审计日志 L1936-L1954）**
+**端到端（验证实例实测全过；审计日志摘录见下）**
 
 | # | 动作 | 期望 | 实测 |
 |---|---|---|---|
-| E1 | `auto-approve` 根会话派子代理写工作区外标记文件 | 子会话日志出现 `approval/policy {policy:'ask'}`；审计出现覆盖行 → LLM 审查 → `decide allowed-once`；子代理回报注入文案 | ✅ L1936 翻策略行、L1937 接管行、L1938-L1943 两次审查放行（async_run 建目录 + write），标记文件落盘，子会话 seq=2 为我方 `ask`（无 source） |
-| E2 | 同上，命令命中 denyPatterns（`Remove-Item -Recurse -Force C:\Users\...`） | 规则层强制拒绝 → `decision=rejected inject=yes`；子代理收到拒绝原因 | ✅ L1945/L1946 翻策略+接管、L1947 `action=deny source=rule decision=rejected inject=yes injectBytes=344`；子代理工具结果为「the user rejected escalating...」 |
-| E3 | 根会话切 `workspace-write`（settings 热改）再派子代理 | 子代理无 `ask` 追加、skip 审计行、升权 never 短路拒绝（现状） | ✅ L1948 skip 行（reason 写明 workspace-write 不在名单）；子会话仅 seq=1 never；标记 0 文件 |
-| E4 | `trigger.subagents='skip'` 后重复 E1 场景 | 与 E3 同（skip 开关负路径） | ✅ L1950 skip 行（reason=`trigger.subagents=skip，不介入子代理审批`）；子会话未被翻；标记 0 文件 |
-| E5 | 主会话（非委派）升权 | 审计与改动前同构（预设名措辞、无 subagent 字样）、`withdraw=ok`——主路径零回归 | ✅ L1951 reason=`权限预设「auto-approve」命中，本次审批由插件接管`、L1954 `allowed-once withdraw=ok`，标记 1 文件 |
+| E1 | `auto-approve` 根会话派子代理写工作区外标记文件 | 子会话日志出现 `approval/policy {policy:'ask'}`；审计出现覆盖行 → LLM 审查 → `decide allowed-once`；子代理回报注入文案 | ✅ 翻策略行、接管行相继出现，两次审查放行（async_run 建目录 + write），标记文件落盘，子会话 seq=2 为我方 `ask`（无 source） |
+| E2 | 同上，命令命中 denyPatterns（`Remove-Item -Recurse -Force C:\Users\...`） | 规则层强制拒绝 → `decision=rejected inject=yes`；子代理收到拒绝原因 | ✅ 翻策略+接管相继出现、`action=deny source=rule decision=rejected inject=yes injectBytes=344`；子代理工具结果为「the user rejected escalating...」 |
+| E3 | 根会话切 `workspace-write`（settings 热改）再派子代理 | 子代理无 `ask` 追加、skip 审计行、升权 never 短路拒绝 | ✅ skip 行（reason 写明 workspace-write 不在名单）；子会话仅 seq=1 never；标记 0 文件 |
+| E4 | `trigger.subagents='skip'` 后重复 E1 场景 | 与 E3 同（skip 开关负路径） | ✅ skip 行（reason=`trigger.subagents=skip，不介入子代理审批`）；子会话未被翻；标记 0 文件 |
+| E5 | 主会话（非委派）升权 | 审计与改动前同构（预设名措辞、无 subagent 字样）、`withdraw=ok`——主路径零回归 | ✅ reason=`权限预设「auto-approve」命中，本次审批由插件接管`、`allowed-once withdraw=ok`，标记 1 文件 |
 
 **实测附注**：① stderr 审计行格式没有 `preset` 字段位（R5 固定字段序），覆盖/跳过的判定依据写在 `reason` 里（`根会话权限预设「…」命中/不在接管名单`、`trigger.subagents=skip`），R24 验收文本中的 `preset=subagent` 按此口径理解为 reason 措辞；② 验证实例的 settings 外部编辑为**热加载**（E3/E4 靠它切换），但解析失败时服务保持最后良好状态（实测吞过一个丢失的 flow 逗号）；③ 子代理模型（deepseek-v4-flash）对「先说预期结果」的提示词配合度最好——直接下命令时它可能反问或漏带 `sandbox_permissions`。
 
@@ -1420,10 +1420,10 @@ subagents: z.union([z.const('review'), z.const('skip')]).default('review'),
 - **默认档裁定（`language.agent='en'`）**：两侧现状语言相反（系统提示与工具说明英文、注入文本中文），任何单选都改动一侧，取舍依据：
   1. **审查判定调用链零改动**：en 档下审查器系统提示词、只读工具说明与现状逐字相同（codex Guardian 蓝本），判定语义零翻译风险；选 zh 则判定核心的提示词整体换语言，风险落在安全调用链上。
   2. **审查器会话语言统一**：现状是「英文提示词 + 中文工具结果文案」混合喂给审查器；en 档把整条审查会话统一成英文，与 codex 行为一致。
-  3. **注入文本是模板化短文**（放行/拒绝/超时/通道故障四套，结构固定、无判定语义），翻译风险低；其证据重取本轮本就在范围内。
+  3. **注入文本是模板化短文**（放行/拒绝/超时/通道故障四套，结构固定、无判定语义），翻译风险低；其证据重取本就在范围内。
   4. **代价（写进重取范围）**：默认档下注入文本由中文变英文——requirements §4 全部按字节核对的注入证据（含 `injectBytes` 数字）须按 en 默认档重取后方可作为通过依据（requirements §4 抬头条款）。
 - **切换语义**：两块各自独立——切其中一块，另一块的文本一字不变（判据③）。热生效：改完不重启，**下一次**审查与注入即用新语言（`language.agent` 经 volatile 在每次请求现算，§6.1-2；`language.ui` 经表单快照订阅即时重画）；已在飞的那一次不回溯。
-- **不在两块之内**（措辞不随切换改变）：stderr 审计行与日志（否则按字节核对的证据全部失效，判据⑥）；随包 `README.md`；profile patch 注释。页顶的插件标题与描述由宿主页面按包清单渲染（显示 `package.json` 的英文 description），不随本包开关；为其提供 `locale/{zh,en}.json` 属可选增强，本轮不做（shipped 包无此先例、装载格式未核）。
+- **不在两块之内**（措辞不随切换改变）：stderr 审计行与日志（否则按字节核对的证据全部失效，判据⑥）；随包 `README.md`；profile patch 注释。页顶的插件标题与描述由宿主页面按包清单渲染（显示 `package.json` 的英文 description），不随本包开关；为其提供 `locale/{zh,en}.json` 属可选增强，暂不做（shipped 包无此先例、装载格式未核）。
 
 ### 21.2 Agent 文案字典（`lib/agent-texts.js`）
 
@@ -1452,7 +1452,7 @@ subagents: z.union([z.const('review'), z.const('skip')]).default('review'),
 
 ### 22.0 范围、依据与共同纪律
 
-- 来源：requirements R31–R45（`docs/requirements.md` §2），立项前四路只读审查轮的 15 条现状登记（行号指当时的树；本机平面留档）。本批次不改变既有正确路径的语义，只补复用边界、资源上界、脱敏出口、回调防御与直接用例。
+- 来源：requirements R31–R45（`docs/requirements.md` §2），立项前只读审查登记的 15 条问题清单（问题清单的源码行号为登记时读数，现行行号以源码为准）。本批次不改变既有正确路径的语义，只补复用边界、资源上界、脱敏出口、回调防御与直接用例。
 - 分组：复用与容量（R31、R41）｜只读工具的资源与拒止（R32、R33）｜脱敏出口（R34）｜规则强制层的抗绕过（R35）｜热改接线（R36）｜数值边界（R37）｜回调防御（R38）｜迟到结论（R39）｜跳过审计（R40）｜配置合并（R42）｜测试真实性与直接用例（R43–R45）。
 - 共同纪律：上限一律写成具名常量并注释量级依据（先例 `WALK_MAX_DIRS`、`CACHE_MAX_ENTRIES`，`lib/model-resolver.js:255`）；防御失败一律按 fail-closed 结算（拒止/拒绝/降级），不得吞成成功；本节先写可失败判据，测试按 §22.16 的映射落位；端到端取证只在验证实例。
 
@@ -1547,7 +1547,7 @@ subagents: z.union([z.const('review'), z.const('skip')]).default('review'),
 3. **三条 redact 消费路径的一致性**：工具结果（本条改为现读）、注入（`rt.redact` 现读，`lib/index.js:162`）、审查记录落盘（traceStore 的 redact 闭包现读）——改后三条路径在同一时点之后行为一致，一条测试同时断言三路。
 4. schema 侧不补 volatile 标记：数组字段的 volatile 解包语义未经验证，不做假设；数组更新可能经插件整体重载生效，本条接线保证两种途径下行为一致（重载后新值同样经 setRedactPatterns 进入）。注释写明。
 
-判据：①setter 生效：单测直接调 `setToolTimeoutMs`/`setRedactPatterns` 后断言 `run` 用新值；②接线生效（**r45 审查 P3-2 改口**：原措辞「装配级替身捕获＋三路行为断言」在 index 装配面无 tools/reviewer 观测缝的情况下无法落实，按实际落位改口为组合形态，可失败性不弱化）——静态扫描钉接线在位与顺序（`rt.review` 内紧随 setLang 现设两值，删任一行即红），setter 行为由①覆盖，注入一路的现读由 R34④ 逃逸用例兼守（改 `context.redactPatterns` 后下一次注入即用新清单）；trace 落盘一路与工具结果一路共用同一接线点（`rt.review` 现设 + `index.js` provider 闭包现读），不再单设装配级行为用例；③非法值（负数、非数组）不改变现值。变异：去掉 setter 生效分支 → ①红；去掉 `rt.review` 现设接线（`lib/index.js:62-64`）→ ②的静态扫描红＋R34④ 注入用例红。
+判据：①setter 生效：单测直接调 `setToolTimeoutMs`/`setRedactPatterns` 后断言 `run` 用新值；②接线生效（按实际落位定为组合形态，可失败性不弱化）——静态扫描钉接线在位与顺序（`rt.review` 内紧随 setLang 现设两值，删任一行即红），setter 行为由①覆盖，注入一路的现读由 R34④ 逃逸用例兼守（改 `context.redactPatterns` 后下一次注入即用新清单）；trace 落盘一路与工具结果一路共用同一接线点（`rt.review` 现设 + `index.js` provider 闭包现读），不再单设装配级行为用例；③非法值（负数、非数组）不改变现值。变异：去掉 setter 生效分支 → ①红；去掉 `rt.review` 现设接线（`lib/index.js:62-64`）→ ②的静态扫描红＋R34④ 注入用例红。
 
 ### 22.7 数值边界（R37）
 
@@ -1585,7 +1585,7 @@ subagents: z.union([z.const('review'), z.const('skip')]).default('review'),
 3. 迟到流不改写已结算结果、不再注入：gate 竞速已离开，迟到 finish 的副作用全集＝一行 review 审计（带 `late=yes`，`lib/reviewer.js:329-368`）＋一次 onReview 落 trace 记录（`:347-366`）＋一次 scheduler.record 熔断计数（`lib/index.js:85`）——三者均只留痕，不改已结算结果（R39 原文同列）。迟到行 ms＝`-`：计时起点已随 decide 行清除（§22.11 决定 1 ②）。并发位不悬置：scheduler 的 finally release 照常（迟到流自然结束即释放，`lib/scheduler.js:147-149`）。
 4. 守卫断言「一次性」：迟到 review 行恰一行、抢先路径 decide 行恰一行、注入恰一次（抢先路径的）。
 
-判据：审查时长＞审查超时（llm 替身可控延迟）→ decide 行 source=llm 恰一行（审查超时以 error 判定走 review 路、超时语义看注入文案；仅人工超时才是 source=timeout——r45 复审观察①改口）、注入恰一次（抢先路径的超时文案）；迟到 review 行带 `late=yes`；`scheduler.state().inFlight === 0`；后续审查立即可执行。变异：去掉抢先路径的 abort → 迟到判据失效红；late 恒 no → 断言红。
+判据：审查时长＞审查超时（llm 替身可控延迟）→ decide 行 source=llm 恰一行（审查超时以 error 判定走 review 路、超时语义看注入文案；仅人工超时才是 source=timeout）、注入恰一次（抢先路径的超时文案）；迟到 review 行带 `late=yes`；`scheduler.state().inFlight === 0`；后续审查立即可执行。变异：去掉抢先路径的 abort → 迟到判据失效红；late 恒 no → 断言红。
 
 ### 22.10 三类跳过路径的审计行（R40）
 
@@ -1595,7 +1595,7 @@ subagents: z.union([z.const('review'), z.const('skip')]).default('review'),
 
 1. 落点在 gate 的 skip 分支补一行：`rt.audit({ id, phase: 'screen', action: 'skip', source: 'policy', reason: pre.why, ...pre.fields })`。不放 screen 内：screen 是纯函数（无 audit 依赖），gate 已持有 id 与 rt.audit。
 2. reason 取 screen 现有 why 原文（`mode=off`、`tool "…" is outside…`、`not a sandbox escalation`）——含上下文，比裸 token 可查。
-3. **去重策略**：复用 mode.auditSkip 的同因首行模式——键 `skip|${sessionId}|${why}`，同一会话同因只写一行；`trigger.auditEverySkip === true` 时全量。不新增配置键。**去重记忆的宿主＝mode 闭包**：createMode 已有同款 Set 与 auditEverySkip 旁路（`lib/mode.js:118-136`），mode 新增判定通道（实现名 `gateSkip(sessionId, why)`——首见登记并返回真；设计初稿记 `shouldAuditGateSkip`，r45 审查 P3-4 对齐为实现名），gate 的 skip 分支经注入的 mode 实例调用后决定是否写行。gate 自身不放 Set：onApprovalRequest 逐请求调用，函数内 Set 失效；模块级 Set 逃出 §22.11 的治理清单。该 Set 计入 §22.11 决定 2 的容量上限。
+3. **去重策略**：复用 mode.auditSkip 的同因首行模式——键 `skip|${sessionId}|${why}`，同一会话同因只写一行；`trigger.auditEverySkip === true` 时全量。不新增配置键。**去重记忆的宿主＝mode 闭包**：createMode 已有同款 Set 与 auditEverySkip 旁路（`lib/mode.js:118-136`），mode 新增判定通道（实现名 `gateSkip(sessionId, why)`——首见登记并返回真），gate 的 skip 分支经注入的 mode 实例调用后决定是否写行。gate 自身不放 Set：onApprovalRequest 逐请求调用，函数内 Set 失效；模块级 Set 逃出 §22.11 的治理清单。该 Set 计入 §22.11 决定 2 的容量上限。
 4. 两层跳过行不重叠：mode 判定层的跳过（预设未命中）已有 auditSkip；本条补的是「预设命中但 screen 判定跳过」。
 
 判据：①非升权请求 → screen skip 行出现且 reason 含 `not a sandbox escalation`；②mode=off 与工具过滤同口径；③同因首行：第二次同类 skip 不写，`auditEverySkip=true` 时每次都写。变异：去掉补行 → ①②红；去掉去重 → ③红。
@@ -1733,8 +1733,8 @@ subagents: z.union([z.const('review'), z.const('skip')]).default('review'),
 决定：
 
 1. **error 与 deny 同权**（§3 问题 15 的答复）：`record` 收 `error` 亦计数（`consecutive` 递增、`window` 记 `true`）。不设各自阈值——熔断保护的是「审查通道不再产出可信结论」，无论模型坏还是判定严，熔断打开后的行为一致（拒绝新审查＋冷却）；观测口径上 `decision` 字段仍区分两类，`queue-overflow` 不是审查结论、不计数（并发高峰≠通道故障），`breaker-open` 期间零审查、自身不计数。
-2. **abort 型 error 的计数口径**（实现审查 r46 P2-1 修正）：gate 他路先结算（人工先答、卡片关闭、请求取消、人工超时竞速获胜、回调抛错）会 `reviewAbort.abort()` 在飞审查流，落 `decision='error'`——这不是通道故障（审查没得出结论是因为结论已不再需要），计入熔断会让健康通道被人工响应速度误开 10 分钟冷却。口径：gate 对这类中止传共享标记 `REVIEW_SUPERSEDED`（Symbol，`lib/gate.js` 导出）；审查计时器路径保持 `new Error(REVIEW_TIMEOUT_ABORT_MESSAGE)`（`'approve-for-me: review timeout'`，超时计入是本节主场景——慢通道也是不可信通道）。reviewer 的 catch 分支分类：`signal.aborted` 且中止 reason 不是超时标记 → verdict 打 `superseded: true`、degraded 记 `'superseded'`（review 审计行可见跳过原因）、reason 写明「gate 他路先结算，非通道故障」；超时标记中止与非中止的有机错误照旧计数。
-3. **record 的接线位**（实现审查 r46 P3-1/P3-4 修正）：record 在 `scheduler.run` 的**任务体内**结算，不在共享结果的 await 点——dedupe 同 key 双投递共享在飞任务时任务只执行一次，record 恰落一次；`value.superseded === true` 跳过。调度失败（`result.ok !== true`）不经任务体，结构性不计数。
+2. **abort 型 error 的计数口径**：gate 他路先结算（人工先答、卡片关闭、请求取消、人工超时竞速获胜、回调抛错）会 `reviewAbort.abort()` 在飞审查流，落 `decision='error'`——这不是通道故障（审查没得出结论是因为结论已不再需要），计入熔断会让健康通道被人工响应速度误开 10 分钟冷却。口径：gate 对这类中止传共享标记 `REVIEW_SUPERSEDED`（Symbol，`lib/gate.js` 导出）；审查计时器路径保持 `new Error(REVIEW_TIMEOUT_ABORT_MESSAGE)`（`'approve-for-me: review timeout'`，超时计入是本节主场景——慢通道也是不可信通道）。reviewer 的 catch 分支分类：`signal.aborted` 且中止 reason 不是超时标记 → verdict 打 `superseded: true`、degraded 记 `'superseded'`（review 审计行可见跳过原因）、reason 写明「gate 他路先结算，非通道故障」；超时标记中止与非中止的有机错误照旧计数。
+3. **record 的接线位**：record 在 `scheduler.run` 的**任务体内**结算，不在共享结果的 await 点——dedupe 同 key 双投递共享在飞任务时任务只执行一次，record 恰落一次；`value.superseded === true` 跳过。调度失败（`result.ok !== true`）不经任务体，结构性不计数。
 4. **熔断打开后的注入随 R46**：`breaker-open` 走通道故障模板，reason 写明冷却语义（`审查未执行：breaker-open（冷却中，拒绝密集或故障密集）`），主模型得到「稍后重试或报告用户」的指引而不是绕过禁令。
 5. **参数不动**：`consecutiveDenials=3`、`windowSize=50`、`windowDenials=10`、`cooldownMs=600000` 现值保留（§12 #8 的行为描述在实现时同步改写）。
 
@@ -1755,7 +1755,7 @@ R46–R48 的实现按下表落位（主文档各节已随实现同步改写为�
 |---|---|
 | `lib/agent-texts.js` | 新增 `gate.error.body`（zh/en）；键集相等断言自动扩展 |
 | `lib/gate.js` | `first.kind==='review'` 非 allow 分支按 timedOut/deny/error 三分选模板（现 `:311-331`）；catch 逃逸分支注入改走新模板（现 `:462-492`）；他路先结算的 `reviewAbort.abort()` 改传 `REVIEW_SUPERSEDED` 标记、计时器中止统一用 `REVIEW_TIMEOUT_ABORT_MESSAGE`（§23.3 决定 2） |
-| `lib/reviewer.js` | 流循环外包尝试循环＋`retryableOutcome` 谓词导出；review 行 reason 带尝试进度；trace details 聚合各次 finish（full 档）；catch 分支按中止来源分类 `superseded`（§23.3 决定 2）；full 档跨尝试的思维链拼界加 `attempt` 分隔（r46 P3-2）；attempts 条目不再落空对象（r46 P3-3） |
+| `lib/reviewer.js` | 流循环外包尝试循环＋`retryableOutcome` 谓词导出；review 行 reason 带尝试进度；trace details 聚合各次 finish（full 档）；catch 分支按中止来源分类 `superseded`（§23.3 决定 2）；full 档跨尝试的思维链拼界加 `attempt` 分隔；attempts 条目不落空对象 |
 | `lib/scheduler.js` | `record` 收 error（现 `:75-85`，`:76` 早退） |
 | `lib/index.js` | 调度失败 verdict 的 reason 措辞（`breaker-open` 加冷却说明）；record 移进 `scheduler.run` 任务体＋`superseded` 跳过（§23.3 决定 3，dedupe 单次计数） |
 | design 主文档 | §4.6 路径 3 注入列与「内部错误」段、§4.5 伪代码 error 分支、§7.1「不做自动重试」句与超时唯一性句、§12 #1/#3/#8、§21.2「三套模板」计数与「内部错误沿用拒绝模板」句 |
@@ -1770,14 +1770,14 @@ R46–R48 的实现按下表落位（主文档各节已随实现同步改写为�
 ### 24.0 范围、依据与共同纪律
 
 - 范围：R49（适配 `dsh@0.2.0-rc.1` 到功能等价）与 R50（版本区分与实例隔离）；依据＝0.2.0-rc.1 的 npm 发布事实（dist-tags `next` 指向 rc、全家桶同版号）、两实例 junction 共用同一插件目录的历史形态（2026-10-01 起由 R54 的部署分离取代）、0.2.0-rc.1 对本插件宿主面的逐包比对（tarball 对 0.1.7-rc.1 安装逐包 diff）。
-- 纪律与 §23 相同：**本节是未来设计**。实现前，主文档各节继续描述 0.1.7 现状；§24.5 列实现时需要同步改写的位置。R49/R50 的判据在实现与取证完成前一律视为未达成（requirements §4 判定口径）。
-- 0.2.0 预览版口径：适配目标版本锁定**现行 rc**——R49 轮＝`0.2.0-rc.1`；`0.2.0-rc.2` 发布后按 R55 平移至 `0.2.0-rc.2`（逐包 diff 实证对本插件的内容增量为零：版本锁定平移、非二次适配——`dsh-typert-protocol` lib 逐字节相同，`dsh-llm` 唯一差异是 typert 清单 `MessageSourceMap` 的加法成员）。后续 rc 再发布时按同法重查再决定跟进。
+- 纪律与 §23 相同：**本节为 0.2.0 适配线的设计基准**（R49/R50 已实现并验收，见 requirements §4 的对应验收小节）；主文档其余各节描述 0.1.7 线现状；§24.5 列随实现同步改写的位置。R49/R50 的达成判定以 requirements §4 判定口径为准。
+- 0.2.0 预览版口径：适配目标版本锁定**现行 rc**——R49 起为 `0.2.0-rc.1`；`0.2.0-rc.2` 发布后按 R55 平移至 `0.2.0-rc.2`（逐包 diff 实证对本插件的内容增量为零：版本锁定平移、非二次适配——`dsh-typert-protocol` lib 逐字节相同，`dsh-llm` 唯一差异是 typert 清单 `MessageSourceMap` 的加法成员）。后续 rc 再发布时按同法重查再决定跟进。
 
 ### 24.1 版本区分与隔离拓扑（R50；requirements §3 问题 16/17/18 的答复落点）
 
 **决定 1（拓扑）**：0.2.0 适配不共享 0.1.7 线的任何在用资产。目标形态：
 
-| 资产 | 0.1.7 线（现网） | 0.2.0 线（适配轮） |
+| 资产 | 0.1.7 线（本机部署） | 0.2.0 线（适配线） |
 |---|---|---|
 | 插件目录 | 开发树（本仓库）的 master 停在 tag `v0.1.7`（P1 修复经 `release/0.1.x` 临时工作区、打新 tag）；开发树零实例引用 | 开发树本身（master 于 `v0.1.7` 之后转 main，即 0.2.0 适配线）——适配全部在开发树做 |
 | 安装面 | 两实例安装实体＝冻结件（按 ref `v0.1.7` 检出的安装实体，R54 已切换并验证；适配期间冻结件零改动） | 验证实例新 home 的 junction 适配期直投开发树；稳定后按 ref（`main` 或 `v0.2.0`）安装 |
@@ -1787,52 +1787,52 @@ R46–R48 的实现按下表落位（主文档各节已随实现同步改写为�
 
 依据：junction 共用的历史形态（2026-10-01 起由 R54 部署分离取代）；部署分离现状（两实例安装面指向 v0.1.7 冻结件、开发树零实例引用）；dsh 部署手册「绝不让两个实例共用一个 DSH_HOME」「切版本＝改启动链指向另一份安装」；用户裁定「单仓单源、实例按 ref 取版」）。
 
-**决定 2（为什么不原地兼容双版本）**：插件包内只允许一套锁定版本的依赖（`dsh-llm`/`dsh-typert-protocol` 只能锁定一个版号），「一份目录同时服务 0.1.7 与 0.2.0 宿主」做不到：一套锁定版本只对一个宿主代做过行为验证，main 线的 dsh 系 peer 声明落在旧宿主上会被装载判定跳过（0.2.0 的装载判定只读 peerDependencies 的 dsh 系声明，`@deepseek-ai/dsh-app-boot@0.2.0-rc.1 lib/index.js:286-313`），0.1.7 实体落在新宿主上虽不被该机制拦下（一次性装置实证：无 dsh 系 peer 声明的包照常装载）但 API 漂移无验证；且 0.1.7 现网安装面＝冻结件（R54，冻结件不动）。所以版本区分以**目录**为界，不以运行时探测为界。
+**决定 2（为什么不原地兼容双版本）**：插件包内只允许一套锁定版本的依赖（`dsh-llm`/`dsh-typert-protocol` 只能锁定一个版号），「一份目录同时服务 0.1.7 与 0.2.0 宿主」做不到：一套锁定版本只对一个宿主代做过行为验证，main 线的 dsh 系 peer 声明落在旧宿主上会被装载判定跳过（0.2.0 的装载判定只读 peerDependencies 的 dsh 系声明，`@deepseek-ai/dsh-app-boot@0.2.0-rc.1 lib/index.js:286-313`），0.1.7 实体落在新宿主上虽不被该机制拦下（一次性装置实证：无 dsh 系 peer 声明的包照常装载）但 API 漂移无验证；且 0.1.7 已部署安装面＝冻结件（R54，冻结件不动）。所以版本区分以**目录**为界，不以运行时探测为界。
 
-**决定 3（开发实例保护是先决条件；R54 后口径升位）**：原判据①以「junction 目标不变＋原目录零适配改动」的**目录不动**保护开发实例；R54 部署分离后升位为「开发实例 junction 目标（＝冻结件）不变＋冻结件目录零改动」——开发树（main）即适配工地，适配 diff 不再构成现网风险；冻结件的任何改动即红。主文档随 main（0.2.0 线）演进；0.1.7 线的 P1 修复在 `release/0.1.x` 上最小化同步（仅勾选行与对应事实条目）。
+**决定 3（开发实例保护是先决条件；R54 后口径升位）**：原判据①以「junction 目标不变＋原目录零适配改动」的**目录不动**保护开发实例；R54 部署分离后升位为「开发实例 junction 目标（＝冻结件）不变＋冻结件目录零改动」——开发树（main）即适配工地，适配 diff 不再构成已部署实例风险；冻结件的任何改动即红。主文档随 main（0.2.0 线）演进；0.1.7 线的 P1 修复在 `release/0.1.x` 上最小化同步（仅勾选行与对应事实条目）。
 
 **裁定（§3 问题 16/17/18/19 的答复；用户应答确认，见 requirements §5 决策行）**：
 
-- **问题 16（0.2.0 验证实例归属）＝验证实例切 0.2.0**：独立安装（npm `next` 取 `0.2.0-rc.1`）＋独立新 home＋junction 适配期直投开发树；升级由用户另委 Agent 执行，任务包须写明「宿主升级后、插件适配就位前，本插件 bundle 被 peer 检查跳过＝预期中间态，不修」；适配开发会话默认放开发实例（0.1.7 宿主＋冻结件，工具完好）。原验证实例 home 封存；0.1.7 线活体取证借开发实例（现网即 0.1.7＋冻结件）。
-- **问题 17（目录形态与版本号）＝单仓单源、实例按 ref 取版**：tag `v0.1.7` 冻结已验证态，冻结件＝按 ref 检出的安装实体（R54 已执行）；0.2.0 适配在开发树 main 分支做（R54 后开发树零实例引用，适配开工不再威胁现网）；适配稳定后验证实例按 ref 安装；github 安装模式为适配完成后的后置验证（本轮全本地、不建远端）。包版本对齐宿主：0.1.7 线终版 `0.1.7`（已随 `3976c6f` 落账）、0.2.0 线自 `0.2.0` 起。belt-and-braces（单向，经一次性装置实测修正；版串随追跟轮平移，R55 起＝`0.2.0-rc.2`）：main 声明 dsh 系 peer＝现行宿主 rc——main ref 错装到旧宿主时 bundle 被 peer 检查跳过、插件整行不激活（fail-loud，一次性装置实证）；v0.1.7 冻结件未声明任何 dsh 系 peer，落在 0.2.0 宿主上**不会**被该机制拦下（同装置实证）——该方向的防错装由「实例安装面按 ref 取件」纪律本身承担，0.1.7 线冻结不为此改动（只修 P1）。
-- **问题 18（并行期合并策略）＝0.1.7 线冻结只修 P1**：P1 修复在 `release/0.1.x` 临时工作区做、打新 tag、开发实例冻结件按新 ref 重建切换；单向 cherry-pick 至 0.2.0 线；0.2.0 侧通用缺陷仅 P1 回移（junction 共用的连坐风险已由 R54 解除，回移从严的理由改为现网稳定性保守）。
+- **问题 16（0.2.0 验证实例归属）＝验证实例切 0.2.0**：独立安装（npm `next` 取 `0.2.0-rc.1`）＋独立新 home＋junction 适配期直投开发树；升级由用户另委 Agent 执行，任务包须写明「宿主升级后、插件适配就位前，本插件 bundle 被 peer 检查跳过＝预期中间态，不修」；适配开发会话默认放开发实例（0.1.7 宿主＋冻结件，工具完好）。原验证实例 home 封存；0.1.7 线活体取证借开发实例（本机部署即 0.1.7＋冻结件）。
+- **问题 17（目录形态与版本号）＝单仓单源、实例按 ref 取版**：tag `v0.1.7` 冻结已验证态，冻结件＝按 ref 检出的安装实体（R54 已执行）；0.2.0 适配在开发树 main 分支做（R54 后开发树零实例引用，适配开工不再威胁已部署实例）；适配稳定后验证实例按 ref 安装；github 安装模式为适配完成后的后置验证（全本地、暂不建远端）。包版本对齐宿主：0.1.7 线终版 `0.1.7`、0.2.0 线自 `0.2.0` 起。双保险（单向，经一次性装置实测修正；版串随追跟轮平移，R55 起＝`0.2.0-rc.2`）：main 声明 dsh 系 peer＝现行宿主 rc——main ref 错装到旧宿主时 bundle 被 peer 检查跳过、插件整行不激活（fail-loud，一次性装置实证）；v0.1.7 冻结件未声明任何 dsh 系 peer，落在 0.2.0 宿主上**不会**被该机制拦下（同装置实证）——该方向的防错装由「实例安装面按 ref 取件」纪律本身承担，0.1.7 线冻结不为此改动（只修 P1）。
+- **问题 18（并行期合并策略）＝0.1.7 线冻结只修 P1**：P1 修复在 `release/0.1.x` 临时工作区做、打新 tag、开发实例冻结件按新 ref 重建切换；单向 cherry-pick 至 0.2.0 线；0.2.0 侧通用缺陷仅 P1 回移（junction 共用的连坐风险已由 R54 解除，回移从严的理由改为部署稳定性保守）。
 - **问题 19**＝维持 §24.3 口径（默认不启用官方 auto-review；评估另开独立实例、不双开）。
 
 ### 24.2 0.2.0 宿主面复验清单（R49；依据逐包 diff 比对，其中 ⑤ 的跳过条件已按装载判定的实测修正）
 
 | 缝 | 0.2.0-rc.1 状态（逐包 diff） | 动作 |
 |---|---|---|
-| `approval/request` waterfall（dsh-user-approval） | lib 运行时零变更，仅类型声明增可选 `displayReason` | 接管行为复验；`displayReason` 为可选增量，本轮不消费 |
+| `approval/request` waterfall（dsh-user-approval） | lib 运行时零变更，仅类型声明增可选 `displayReason` | 接管行为复验；`displayReason` 为可选增量，暂不消费 |
 | `dsh-llm` 四导出＋`llm/adapters-updated` | 未变；模型目录注释口径收紧（GUI 入口可能强制目录成员） | 复测 `modelCatalog`/`modelEfforts` RPC：目录外模型引用是否仍可解析/展示 |
 | `snapshotEvents()`（dsh-session） | 签名扩展（无参兼容）；官方标注 deprecated（waiver 内使用） | 沿用＋在代码注释与本节登记 waiver；迁移等上游分页读法 |
 | `session/created`、`loader/volatile-update`、`permissionPresets` 可选读 | 均在；内置 `auto` 预设策略 `never→ask` | 子代理覆盖（R24）与预设判定回归复验；自定 `auto-approve` 条目不受影响 |
 | bundle 装载（dsh-app-boot） | 装载判定只读 dsh 系 peer 声明（`@deepseek-ai/dsh-app-boot@0.2.0-rc.1 lib/index.js:286-313`）；报告改为 `skippedBundles` 集中打印 | 依赖版本锁定升级且同步声明 peer（决定见 R49）；启动日志判据加「无 skipping 本包」 |
 | client 四挂点 | `conversation.approval.detail` 契约有增量（ui-approval slots.d.ts +23）；ui-primitives 大改（图标/令牌） | 四挂点 DOM 判据按 §4「0.1.7 适配」口径重取；CSS `--dsw-alias-*` 令牌逐个核对失效清单 |
 | `patchReload: "live"`（dsh-hmr 新家族成员） | 0.2.0 引入 `dsh-hmr` | 新实例按出厂默认配置，不声明 live；热载行为如需启用另行验证 |
-| 冷启动 URL 打印（源自 ISS-4） | `announceReady`/`loader.await` 段与 0.1.7 逐字相同（`@deepseek-ai/dsh-web-app@0.2.0-rc.1 lib/index.js:195-218` 两版一致），异常路径静默 catch 仍在——**上游未修** | 复验：一次性装置三轮冷启动 URL 均正常打印；验证实例新 home 重启后实测补记；作为已知宿主局限留在案（0.1.7 实例 ISS-4 现象与此同根，上游修复前不消） |
+| 冷启动 URL 打印（源自冷启动 URL 缺陷） | `announceReady`/`loader.await` 段与 0.1.7 逐字相同（`@deepseek-ai/dsh-web-app@0.2.0-rc.1 lib/index.js:195-218` 两版一致），异常路径静默 catch 仍在——**上游未修** | 复验：一次性装置三轮冷启动 URL 均正常打印；验证实例新 home 重启后实测补记；作为已知宿主局限留在案（0.1.7 实例的冷启动 URL 现象与此同根，上游修复前不消） |
 
-**复验结果（2026-10-01 18:14–18:35，验证实例＝0.2.0-rc.1 新 home 实测；总档留档本机平面）**：
+**复验结果（2026-10-01，验证实例＝0.2.0-rc.1 新 home 实测）**：
 
 - `approval/request` waterfall：接管在位——重启后启动行 `answerer registered`，真实会话 screen→review（41.0 s，审查器带 `read_file` 读回核验）→decide `allowed-once` 全链，`withdraw=ok`（卡先弹后撤）；`displayReason` 未消费如计划。
 - `dsh-llm` 四导出＋RPC：`modelCatalog`/`modelEfforts` 全绿——目录含 zai 双模型＋moonshotai＋deepseek-official，`modelEfforts(zai/glm-5.3-flash)=low/high/max`；目录外模型引用照常解析（设置面目录 picker 实测）。
 - `snapshotEvents()`：无参沿用，GUI 会话与 CLI 通道的证据采集（tool 段 `read_file bytes=97`）均正常产出；waiver 注记维持。
 - `session/created`、`loader/volatile-update`、`permissionPresets`：presetCatalog 4 预设、`auto-approve` isDefault=true 且 configured 命中；新会话默认预设＝自动审批（composer 座位随即出现）。
 - bundle 装载：新增日志段 skipping=0、did-not-activate=0（5 次启动全部注册成功）；变异口径（peer 退回 0.1.7 → skipping＋无 answerer）此前已在一次性装置实证。
-- client 四挂点：全部重取（R49③）——设置卡 29 步链全绿＋DOM 档 `r49-bundle-config-dump.txt`（CSS 8732 字符、失效令牌 0；宿主 CSS 模块类哈希随版变化已登记）；composer 座位、审批卡状态条/命令条、审查记录页签各有截图与读数；`--dsw-alias-*` 失效清单零命中。
+- client 四挂点：全部重取（R49③）——设置卡 29 步链全绿＋DOM dump 档（CSS 8732 字符、失效令牌 0；宿主 CSS 模块类哈希随版变化已登记）；composer 座位、审批卡状态条/命令条、审查记录页签各有截图与读数；`--dsw-alias-*` 失效清单零命中。
 - `patchReload`：新 home 未声明 live，18:15 宿主重写 patch 后插件行逐键仍等价。
-- ISS-4（冷启动 URL）：验证实例新 home 18:14 冷启动 `current-url.txt` 正常重写（83 字节）——本条复验完成，问题清单（本机平面的跟踪档）已按验收判据删除 ISS-4；宿主静默 catch 局限留案不消。
+- 冷启动 URL：验证实例新 home 冷启动 `current-url.txt` 正常重写（83 字节）——本条复验完成，问题清单已按验收判据删该项；宿主静默 catch 局限留案不消。
 
-**R55 复验结果（2026-10-02 01:52–02:16，验证实例＝0.2.0-rc.2；总档留档本机平面）**：rc.1→rc.2 版本锁定平移后八缝逐项——waterfall 接管在位（answerer registered 配置逐键＝patch 行）；`dsh-llm` 四导出＋RPC 五端点读数与 r49 逐项一致（MessageSourceMap 加法成员下游表现＝审计行 auth=high、注入 668B、reason 有实文，行为面无回归）；`snapshotEvents()` 无参沿用；preset 三件照常（auto-approve isDefault）；bundle 装载 skipping=0（01:23 宿主先行段两插件双跳过＝peer 检查机制的活体重演，变异口径自然满足）；client 四挂点全取（r55 dump 13/13、座位/状态条/命令条/审查页签各有读数与截图，页签 46.4 s 与审计 46437 ms 吻合）；`patchReload` 未启用；冷启动 URL 83 字节正常。宿主侧新观察项（非本包）：rc.2 页面加载时 `dsh-client-locale` 引导早期 localeKey null 竞态致 `[client-store] subscriber failed` 控制台异常（r49 时代为 0）——功能不受影响、留档待上游。锚点偏差：R55「锚点路径不变」条款前提（安装目录仍 dsh-0.2.0）被宿主侧新目录升级证伪，`tools/_host-resolve.mjs` 按最小修改跟随真实安装目录（c34843a），全套 407/407 复绿。
+**R55 复验结果（2026-10-02，验证实例＝0.2.0-rc.2）**：rc.1→rc.2 版本锁定平移后八缝逐项——waterfall 接管在位（answerer registered 配置逐键＝patch 行）；`dsh-llm` 四导出＋RPC 五端点读数与 rc.1 判据逐项一致（MessageSourceMap 加法成员下游表现＝审计行 auth=high、注入 668B、reason 有实文，行为面无回归）；`snapshotEvents()` 无参沿用；preset 三件照常（auto-approve isDefault）；bundle 装载 skipping=0（01:23 宿主先行段两插件双跳过＝peer 检查机制的活体重演，变异口径自然满足）；client 四挂点全取（dump 常驻断言 13/13、座位/状态条/命令条/审查页签各有读数与截图，页签 46.4 s 与审计 46437 ms 吻合）；`patchReload` 未启用；冷启动 URL 83 字节正常。宿主侧新观察项（非本包）：rc.2 页面加载时 `dsh-client-locale` 引导早期 localeKey null 竞态致 `[client-store] subscriber failed` 控制台异常（rc.1 时代为 0）——功能不受影响、留档待上游。锚点偏差：R55「锚点路径不变」条款前提（安装目录仍 dsh-0.2.0）被宿主侧新目录升级证伪，`tools/_host-resolve.mjs` 按最小修改跟随真实安装目录，全套 407/407 复绿。
 
 ### 24.3 与官方 `dsh-experimental-auto-review` 的边界
 
 - 职责重叠但机制不冲突：官方包绑内置 `auto` 预设（`danger-full-access+ask`）、挂工具预执行监听器、用当前 agent 模型、无审查记录持久化；本插件绑自定 `auto-approve` 预设、挂 approval waterfall、专职审查模型、JSONL 审查记录（0.2.0 逐包比对⑦）。
-- 0.2.0 实例默认不启用官方包（app-boot 的 OPTIONAL_BUNDLES 默认关闭）；是否评估官方包是独立事项（requirements §3 问题 19），不并入本轮。
+- 0.2.0 实例默认不启用官方包（app-boot 的 OPTIONAL_BUNDLES 默认关闭）；是否评估官方包是独立事项（requirements §3 问题 19），不并入本条。
 - 同一会话双开＝一次调用两次模型审查（token/延迟翻倍），除非用户明确要求，不做双开配置。
 
 ### 24.4 与既有需求的边界
 
-- **R25/R27**：分别是 0.1.5→0.1.6 与 0.1.5→0.1.7 的适配轮；R49 是同一形态在 0.2.0 上的对应物，判据复用 §4「0.1.7 适配」小节的口径、在 0.2.0 实例重取。
+- **R25/R27**：分别是 0.1.5→0.1.6 与 0.1.5→0.1.7 的适配批次；R49 是同一形态在 0.2.0 上的对应物，判据复用 §4「0.1.7 适配」小节的口径、在 0.2.0 实例重取。
 - **R46–R48**：行为等价在 0.2.0 实例复演（R49 判据④），0.1.7 线的代码与证据不动。
 - **R33**：拒止清单按 `DSH_HOME` 现读（`lib/readonly-tools.js` 的 `dshHome`）——0.2.0 独立 home 自然落进拒止范围，新增拒止路径的用例以新 home 值断言。
 
@@ -1842,7 +1842,7 @@ R49–R50 的实现按下表落位（全部在开发树 main 分支＝0.2.0 适�
 
 | 落点 | 改什么 |
 |---|---|
-| `package.json`（0.2.0 线） | `@deepseek-ai/dsh-llm`/`@deepseek-ai/dsh-typert-protocol` → `0.2.0-rc.1`（dependencies 与 peerDependencies 同版锁定——装载判定只读 peer 的 `@deepseek-ai/dsh*` 声明，`@deepseek-ai/dsh-app-boot@0.2.0-rc.1 lib/index.js:286-313`；belt-and-braces 由此成立）；peer `@deepseek-ai/cordis` → `~4.0.4`；`version` → `0.2.0`（问题 17 裁定：对齐宿主）；`node_modules` 重装 |
+| `package.json`（0.2.0 线） | `@deepseek-ai/dsh-llm`/`@deepseek-ai/dsh-typert-protocol` → `0.2.0-rc.1`（dependencies 与 peerDependencies 同版锁定——装载判定只读 peer 的 `@deepseek-ai/dsh*` 声明，`@deepseek-ai/dsh-app-boot@0.2.0-rc.1 lib/index.js:286-313`；双保险由此成立）；peer `@deepseek-ai/cordis` → `~4.0.4`；`version` → `0.2.0`（问题 17 裁定：对齐宿主）；`node_modules` 重装 |
 | `tools/_host-hooks.mjs` / `_host-resolve.mjs` | 宿主树解析锚点指向 0.2.0 安装（或新目录自带树），`npm test` 全绿判据落这里 |
 | `lib/*.js`、`client.js` | 原则上零改动（缝隙稳定，逐包比对）；仅当 §24.2 复验清单某项实测不符时做最小修，并在该行注明依据 |
 | `lib/transcript.js` 注释 | `snapshotEvents` waiver 注记（deprecated 同步读法沿用，迁移等上游） |
@@ -1851,13 +1851,13 @@ R49–R50 的实现按下表落位（全部在开发树 main 分支＝0.2.0 适�
 | requirements/facts/design（0.2.0 线副本） | §4 勾选、逐包比对待复验项按实测改写、0.2.0-rc.1 发布事实与 junction 历史形态条目核销 |
 | 测试 | 单测全绿（0.2.0 树）；端到端四幕：加载即成功＋注入表、四挂点 DOM、allow 三段审计、R46 故障轮复演（`maxTokens=1` → 熔断打开 → 通道故障文案）；R50 侧：取证前后开发实例 junction 目标（＝冻结件）不变＋冻结件目录内容零改动（判据①升位口径）/冒烟三查 |
 
-**R55 追跟追加面（2026-10-02，rc.1→rc.2 版本锁定平移；判据＝requirements R55）**：`package.json` 四处 dsh 系声明平移＋`node_modules`/lockfile 重装（带出 dsh-brand/dsh-timeout/dsh-util-crypto/dsh-util-values 的 rc.2 传递件）；`test/settings-dom-dump.test.mjs` 等基线中的宿主 CSS 模块类哈希按 rc.2 实测追跟（改断言附实测依据）；`tools/_host-resolve.mjs` 注释档位；README 兼容性版串。锚点路径与 `version`（仍 `0.2.0`）不动；lib/client 零改动预期（rc.2 对本包增量为零，实测不符才最小修并注明依据）。宿主侧＝宿主目录升级＋验证实例重启，与插件平移同轮切换；单边先行期间 peer 跳过＝预期中间态不修。**执行注记（R55 轮回填）**：「安装目录仍 `dsh-0.2.0`」的前提被宿主侧实际升级方式证伪（新目录 `dsh-0.2.0-rc.2`＋注册表改指，01:23），锚点随之按最小修改跟随真实安装目录并在注释注明依据（c34843a）——锚点守卫（host-tree.test.mjs）在该变更前后红绿反转，即本条款的可失败验证；宿主先行段两插件双跳过＝peer 检查机制在真实实例的活体重演。
+**R55 追跟追加面（2026-10-02，rc.1→rc.2 版本锁定平移；判据＝requirements R55）**：`package.json` 四处 dsh 系声明平移＋`node_modules`/lockfile 重装（带出 dsh-brand/dsh-timeout/dsh-util-crypto/dsh-util-values 的 rc.2 传递件）；`test/settings-dom-dump.test.mjs` 等基线中的宿主 CSS 模块类哈希按 rc.2 实测追跟（改断言附实测依据）；`tools/_host-resolve.mjs` 注释档位；README 兼容性版串。锚点路径与 `version`（仍 `0.2.0`）不动；lib/client 零改动预期（rc.2 对本包增量为零，实测不符才最小修并注明依据）。宿主侧＝宿主目录升级＋验证实例重启，与插件平移同窗切换；单边先行期间 peer 跳过＝预期中间态不修。**执行注记（R55 回填）**：「安装目录仍 `dsh-0.2.0`」的前提被宿主侧实际升级方式证伪（新目录 `dsh-0.2.0-rc.2`＋注册表改指，01:23），锚点随之按最小修改跟随真实安装目录并在注释注明依据——锚点守卫（host-tree.test.mjs）在该变更前后红绿反转，即本条款的可失败验证；宿主先行段两插件双跳过＝peer 检查机制在真实实例的活体重演。
 
 ## 25. 规则墙默认清空批次（R51）
 
 ### 25.0 范围、依据与共同纪律
 
-R51 一条需求；立项轮只落文档（需求、事实、本设计）。依据：R51 与两条实测——出厂 `denyPatterns` 曾把提交说明文本误判为命令、两次拒绝（用户 21 分钟后才提交成功）；codex guardian 链无关键词/正则预筛（`codex-rs/core/assets/guardian/policy_template.md:31-34,48`）。跨实例事实（junction 共用时期）：本仓库目录为两实例共享，`lib/config.js` 默认值改动在两实例各自下次插件重载/进程重启后同时生效——两实例均未显式配置 `denyPatterns`，生效后两实例规则墙同时空置；这是本轮目的，不是副作用（R51 判据④）。
+R51 一条需求；立项时只落文档（需求、事实、本设计）。依据：R51 与两条实测——出厂 `denyPatterns` 曾把提交说明文本误判为命令、两次拒绝（用户 21 分钟后才提交成功）；codex guardian 链无关键词/正则预筛（`codex-rs/core/assets/guardian/policy_template.md:31-34,48`）。跨实例事实（junction 共用时期，2026-10-01 起由 R54 部署分离取代）：当时本仓库目录为两实例共享，`lib/config.js` 默认值改动在两实例各自下次插件重载/进程重启后同时生效——两实例均未显式配置 `denyPatterns`，生效后两实例规则墙同时空置；这是本条目的，不是副作用（R51 判据④）。
 
 ### 25.1 关键取舍
 
@@ -1872,21 +1872,21 @@ R51 一条需求；立项轮只落文档（需求、事实、本设计）。依�
 
 1. **schema 默认值**：`denyPatterns: z.array(z.string()).default([...DEFAULT_DENY_PATTERNS])` 改为 `.default([])`（`lib/config.js:35`）；常量本体（`lib/policy.js:30-41`，现行 8 条）原样导出。volatile 语义与卡片可编辑集（§6.1）不变。
 2. **规则路径不动**：`lib/policy.js` 主体全量过检与锚定、`lib/gate.js:238-251` 强制拒绝路径的判定与注入文案（含 REJECTION_INSTRUCTIONS 末句）全部原样——只在清单非空时起作用；deny 审计行随 R52 第 4 问补 reason（§26.2.6），不属「路径行为」变化。
-3. **实现轮文档口径**（单版本直接改写，不留注）：§3.4「安全网」句改为「防模型被骗由 §3.4 同构机制承担；规则强制检查为用户显式配置的可选黑名单（§25）」；§16 对照表补行「规则强制预筛｜codex 无（见 §25.2 取舍表）｜本插件＝用户可选黑名单（R51）」；requirements R7 第 1/2 条承担者改写、§22.5 误伤面判据随测试翻转、requirements §5「默认自动放行上限」行理由末半句「安全改由规则拒绝清单 + LLM 审查承担」、本文件 §6.1 schema 展示行（`.default([...DEFAULT_DENY_PATTERNS])` → `.default([])`）；设置卡 `denyPatterns` 字段帮助文案与 README 补「留空＝不启用规则强制检查；出厂参考清单见 README（抄写进配置即恢复）」。
+3. **实现时文档口径**（单版本直接改写，不留注）：§3.4「安全网」句改为「防模型被骗由 §3.4 同构机制承担；规则强制检查为用户显式配置的可选黑名单（§25）」；§16 对照表补行「规则强制预筛｜codex 无（见 §25.2 取舍表）｜本插件＝用户可选黑名单（R51）」；requirements R7 第 1/2 条承担者改写、§22.5 误伤面判据随测试翻转、requirements §5「默认自动放行上限」行理由末半句「安全改由规则拒绝清单 + LLM 审查承担」、本文件 §6.1 schema 展示行（`.default([...DEFAULT_DENY_PATTERNS])` → `.default([])`）；设置卡 `denyPatterns` 字段帮助文案与 README 补「留空＝不启用规则强制检查；出厂参考清单见 README（抄写进配置即恢复）」。
 4. **测试落位**：判据①默认空置断言＋恢复段、②提交说明误判场景、③翻转钉住 → `test/policy.test.mjs`（`baseConfig` 现为显式展开 `[...DEFAULT_DENY_PATTERNS]`，既有命中用例天然构成「显式配置行为不变」回归，判据④）；判据⑤ → `test/policy.test.mjs`（`screen()` deny 返回的 reason 含命中键与模式）＋`test/gate.test.mjs`（既有 deny 用例改显式清单注入，断注入文本包含该 reason；审计行断言扩含 reason——R52 第 4 问，见 §26.2.6）。变异：默认改回出厂清单 → ②红；删 deny 路径 → ①恢复段与 ⑤红。
 5. **端到端**：验证实例两幕——默认配置下同型提交说明 `screen action=review` 审计行；显式写回清单后同命令 `action=deny source=rule`。证据按 R51 段落留档。
 
 ### 25.3 与既有需求的边界
 
 - **R35**：扫描面、锚定、主体全量过检语义全部保持，仅默认清单来源变化。requirements R35 判据③（既有命中用例回归保持）由 R51 判据④承接、不翻转；翻转对象是本文件 §22.5 的误伤面判据（`grep mkfs readme.md` → deny 预期误伤钉住 → 默认进审查、显式配置 deny），翻转关系由 R51 判据③显式钉住。
-- **R7**：第 1/2 条的规则清单表述随实现轮改写（R51 段第三条），升权上限与 fail-closed 姿态不动。
-- **R46–R48 / R49–R50**：互不影响；R46–R48 已收账，R49–R50 在 0.2.0 线独立目录进行，本轮改动全部落 0.1.7 线原目录。
+- **R7**：第 1/2 条的规则清单表述随实现改写（R51 段第三条），升权上限与 fail-closed 姿态不动。
+- **R46–R48 / R49–R50**：互不影响；R46–R48 已收账，R49–R50 在 0.2.0 线独立目录进行，本批改动全部落 0.1.7 线原目录。
 
 ## 26. 问题清单清偿批次（R52）
 
 ### 26.0 范围、依据与共同纪律
 
-R52 一条需求四问（下文以「问 1–问 4」指称）；依据：R52 段（问 1 引用户裁定「术语 `硬拒` 进黑名单」、问 4 引实测排障阻碍点——规则强制拒绝的审计行 reason 恒为空串，命中键与模式只进注入文本不进日志，排障时对不上号）、项目术语表机制（术语表首节）。与 §25 同批实施，但设计独立成章：§25 已随立项轮过审，本章为 r48 设计审查对象。全部改动落 0.1.7 线原目录。
+R52 一条需求四问（下文以「问 1–问 4」指称）；依据：R52 段（问 1 引用户裁定「术语 `硬拒` 进黑名单」、问 4 引实测排障阻碍点——规则强制拒绝的审计行 reason 恒为空串，命中键与模式只进注入文本不进日志，排障时对不上号）、项目术语表机制（术语表首节）。与 §25 同批实施，但设计独立成章。全部改动落 0.1.7 线原目录。
 
 共同纪律：问 3/问 4 是代码改动，判据可失败（变异能红）；问 1/问 2 是文档清偿，判据＝工具输出（lint_terms / grep）与行号复核；四问都不动 0.2.0 线、不动 DSH 宿主自身。
 
@@ -1894,10 +1894,10 @@ R52 一条需求四问（下文以「问 1–问 4」指称）；依据：R52 �
 
 | 取舍 | 选择 | 理由 |
 |---|---|---|
-| 问 1 验收里「全仓」的口径 | **全仓（含历史档案）error 清零**，无 `--skip-path` 豁免；处置三分法＝使用位按映射替换、元语言/引用位改行内代码（字面保真，引文保真原则以内联代码形态实现） | 用户裁定（「字面执行：改写全部」）：推翻 r48 P1 处置的「现行清零＋档案豁免」先行方案；行内代码处置使审查原文与证据保真与全仓清零并存。**需求侧已随本轮回写**（requirements R52 问 1 验收句、§5 决策行） |
-| 问 1 项目词表形态 | 项目词表文件（三列制表符格式，terminology.md 第一节），仅登记用户已裁定条目：`硬拒→强制拒绝 error` | 词表条目须用户决定；其余行话（规则墙/收账等）r47 只裁定了治理机制、未裁定词义，不擅自登记 |
-| 问 1 元语言引用 | 点名「这个词」的位置改行内代码 `` `硬拒` ``（lint 对围栏与行内代码豁免） | 「进黑名单的那个词」是提及不是使用；改成「强制拒绝」会失真（黑名单里的词就是它）。防滥用：仅限「点名被禁词本身」的句子（术语条目、裁定行、任务名），普通叙述不得包代码逃检——r48 delta 审查复核 |
-| 问 1 warn 级欠账 | 不动 | r47 裁定只清 error（warn 需逐条人工判语境，981 处不在本轮膨胀） |
+| 问 1 验收里「全仓」的口径 | **全仓（含历史档案）error 清零**，无 `--skip-path` 豁免；处置三分法＝使用位按映射替换、元语言/引用位改行内代码（字面保真，引文保真原则以内联代码形态实现） | 用户裁定（「字面执行：改写全部」）：全仓清零不设豁免；行内代码处置使审查原文与证据保真与全仓清零并存。**需求侧已同步回写**（requirements R52 问 1 验收句、§5 决策行） |
+| 问 1 项目词表形态 | 项目词表文件（三列制表符格式，terminology.md 第一节），仅登记用户已裁定条目：`硬拒→强制拒绝 error` | 词表条目须用户决定；其余行话（规则墙/收账等）只裁定了治理机制、未裁定词义，不擅自登记 |
+| 问 1 元语言引用 | 点名「这个词」的位置改行内代码 `` `硬拒` ``（lint 对围栏与行内代码豁免） | 「进黑名单的那个词」是提及不是使用；改成「强制拒绝」会失真（黑名单里的词就是它）。防滥用：仅限「点名被禁词本身」的句子（术语条目、裁定行、任务名），普通叙述不得包代码逃检 |
+| 问 1 warn 级欠账 | 不动 | 裁定只清 error（warn 需逐条人工判语境，981 处不随本批膨胀） |
 | 问 2 改写深度 | R35 现行段整段按现行代码重述 | 过期不止「七条／`:29-36`」计数——该段的锚定描述（行首或 ``; & |`` 与空白）也是 R35 实现前的旧口径，现行是非字母数字边界（§22.5），一并改写 |
 | 问 3 接线位 | `lib/index.js` 导入 `AUDIT_VERSION`（`lib/audit.js:11`）替换 `writeStartupLine` 里硬编码的 `v=2`（`lib/index.js:414`） | 常量已是权威单点；启动行只是消费者 |
 | 问 4 接线位 | `lib/gate.js` deny 审计对象加 `reason: pre.reason`（现 `:241-249` 只展开 `pre.fields`） | `reason` 字段本就存在（R52 非目标：审计版本不递增）；`REASON_MAX_CHARS` 截断与脱敏走 audit.js 现行管线，deny 分支零新代码路径 |
@@ -1905,40 +1905,40 @@ R52 一条需求四问（下文以「问 1–问 4」指称）；依据：R52 �
 ### 26.2 设计决定
 
 1. **问 1 词表与替换清单**：建项目词表文件（注释行说明用途与裁定来源；数据行 `硬拒<TAB>强制拒绝<TAB>error`）。`硬拒` 全仓处置共 21 处（grep 复核为判据），按三类处置：
-   - **使用位直接替换**（13 处，含 client.js:224 设置卡提示 `规则硬拒绝清单`、test/index.test.mjs:475 注释、事实登记档两处、requirements 与 design 的现行段若干处——其中两处随 P4 改写、一处属判据②的使用位替换——r48 delta D3 勘正，非联动消除）；
-   - **元语言点名位改行内代码**（8 行，requirements 与 r47 轮次档案里的裁定与引用提及——引用裁定原文的句子包行内代码，不改写裁定内容——r48 P3 原判一处为使用位；实现轮按引文保真改判为点名位、另一处仍按使用位替换）。**引文保真**（r48 delta D1/D4）：凡引用改写前旧文的句子（如 §26.2.7 引「`gate.js` `硬拒` 路径…全部原样」），句内被禁词以行内代码保真，不得按使用位机械替换；
-   - `.js`/`.mjs` 不在 lint 扫描面，替换后以 grep 复核；**轮次档案另做专项 grep**（r48 delta D4）——grep 面与 lint 同集不含档案，r47 报告六处的处置结果须单独 grep 验证：使用位一行零残留、点名位五行均为行内代码形态。
-2. **问 1 其余 error 级欠账清零（全仓：现行文档集＋历史档案；实现轮实测全仓基线 279 处，见决定 3 定稿运行；§26 写作时四账本基线 119 处）**，映射按 lint 内置建议执行：`台账`→记录表、`能力`→功能/支持、`兜底`→按语境（回退值/备用/安全网承接）、`硬xx` 族按语义（`硬约束`→强制约束、`硬杀`→强制终止、`硬依赖`→固定依赖、`硬契约`→固定契约）、`收口`→收尾、`闭环`→处理完成、`链路`→调用链、`落地`→实现、`卡点`→阻碍点、`拉通`→同步、`叙事`→描述、`xx门` 按语义（`结论串门`→结论越界、`单测守门`→单测验收）、`e2e` 散文出现→端到端。改写逐处读句改词，不做机械全替换；**本设计章与需求章在清偿过程中新写入的词一律以行内代码形式自我豁免**（设计文本点名被禁词是元语言使用，r48 P2）。
-3. **问 1 canonical 验收命令（完整输出与基线快照留档）**：术语 lint 脚本（`lint_terms.py`，以项目词表文件为 `--terms` 输入）对 repo 根起扫，无路径豁免——用户裁定；`.js/.mjs/.txt` 等扩展名本就不在扫描面。验收＝canonical 命令 0 error（warning 允许残留；warn 计数随在册文档增删自然浮动，终态以提交前最后一次运行为准——r49 P3-3 口径）。**定稿运行（2026-09-30 修正轮，r49 报告 15 处术语清偿后）**：0 error / 1085 warn；全仓基线 279 处 error（含历史审查/修正/部署档案与证据区）经三类处置全清——使用位按映射替换、点名/引用位行内代码（保字面）、代码形态核对。变异验证（实现轮实测）：默认改回出厂清单 → `test/policy.test.mjs` R51①②③三红；去掉 deny 审计行 reason 赋值 → `test/gate.test.mjs` 路径 2 红；启动行回退硬编码 `v=2` → `test/index.test.mjs` 启动行断言红；任一处去反引号回退 → canonical lint 即报该行 error。
+   - **使用位直接替换**（13 处，含 client.js:224 设置卡提示 `规则硬拒绝清单`、test/index.test.mjs:475 注释、事实登记档两处、requirements 与 design 的现行段若干处——其中两处随问 4 联动改写、一处属判据②的使用位替换，非联动消除）；
+   - **元语言点名位改行内代码**（8 行，requirements 与历史档案里的裁定与引用提及——引用裁定原文的句子包行内代码，不改写裁定内容）。**引文保真**：凡引用改写前旧文的句子（如 §26.2.7 引「`gate.js` `硬拒` 路径…全部原样」），句内被禁词以行内代码保真，不得按使用位机械替换；
+   - `.js`/`.mjs` 不在 lint 扫描面，替换后以 grep 复核；**历史档案另做专项 grep**（grep 面与 lint 同集不含档案）：使用位一行零残留、点名位五行均为行内代码形态。
+2. **问 1 其余 error 级欠账清零（全仓：现行文档集＋历史档案；全仓基线 279 处，见决定 3）**，映射按 lint 内置建议执行：`台账`→记录表、`能力`→功能/支持、`兜底`→按语境（回退值/备用/安全网承接）、`硬xx` 族按语义（`硬约束`→强制约束、`硬杀`→强制终止、`硬依赖`→固定依赖、`硬契约`→固定契约）、`收口`→收尾、`闭环`→处理完成、`链路`→调用链、`落地`→实现、`卡点`→阻碍点、`拉通`→同步、`叙事`→描述、`xx门` 按语义（`结论串门`→结论越界、`单测守门`→单测验收）、`e2e` 散文出现→端到端。改写逐处读句改词，不做机械全替换；**本设计章与需求章在清偿过程中新写入的词一律以行内代码形式自我豁免**（设计文本点名被禁词是元语言使用）。
+3. **问 1 标准验收命令（完整输出与基线快照留档）**：术语 lint 脚本（`lint_terms.py`，以项目词表文件为 `--terms` 输入）对 repo 根起扫，无路径豁免——用户裁定；`.js/.mjs/.txt` 等扩展名本就不在扫描面。验收＝标准命令 0 error（warning 允许残留；warn 计数随在册文档增删自然浮动，终态以提交前最后一次运行为准）。**定稿运行（2026-09-30，15 处术语清偿后）**：0 error / 1085 warn；全仓基线 279 处 error（含历史审查/修正/部署档案与证据区）经三类处置全清——使用位按映射替换、点名/引用位行内代码（保字面）、代码形态核对。变异验证（实测）：默认改回出厂清单 → `test/policy.test.mjs` R51①②③三红；去掉 deny 审计行 reason 赋值 → `test/gate.test.mjs` 路径 2 红；启动行回退硬编码 `v=2` → `test/index.test.mjs` 启动行断言红；任一处去反引号回退 → 标准 lint 即报该行 error。
 4. **问 2**：requirements R35 现行段（现 `:297`）整段改写——计数 8 条、定位 `lib/policy.js:30-41`、锚定口径改为「危险词前是非字母数字边界（引号、括号、`=`、`$(`、反引号等包裹形态都命中）」；`grep mkfs readme.md` 词内命中的现行表述保留；`design §22.5` 历史批次记录不动（档案）。
-5. **问 3**：`writeStartupLine` 模板串首段 `v=2` 改为 `v=${AUDIT_VERSION}`（导入自 `./audit.js`）。判据（r48 P8 钉死同源形态）：`test/index.test.mjs` 启动行用例**从 `lib/audit.js` 导入 `AUDIT_VERSION` 作期望值**，断言启动行含 `v=${AUDIT_VERSION}`——实现若仍硬编码 `v=2`，改常量为 4 时断言红（盯常量不盯字面量）；实现正确时常量怎么改两处同变。变异：启动行回退硬编码 `v=2` → 该断言红（改常量本身不构成变异——同源实现下两行同变，非脱钩缺陷；r49 P3-4 勘正口径）。验证实例重启后启动行 `v=3` 留档。文档同步（r48 P7）：design.md 与 README.md 的 `v=2` 样例行随实现改为 `v=3`——README 现状已与 `AUDIT_VERSION=3` 不符，属同批修正。
-6. **问 4**：gate deny 审计行补 `reason: pre.reason`。判据（r48 P5 补齐审计行级半边）：`test/gate.test.mjs` 路径 2 用例的 stub `pre.reason` 改为真实形态「键 "script" 命中模式 …」，断言 screen 审计行 `reason` **含「命中模式」子串**（不只判等值）；`test/policy.test.mjs` 既有 `screen()` deny reason 断言不变（规则层产物本来带 reason；r49 P3-5 修正：R35② 补两条 `/命中模式/` 断言，使规则层真实产物与 §25.2.4 措辞互恰）。变异：去掉 deny 审计对象的 reason 赋值 → gate 断言红。R51 判据⑤「deny 审计行 reason 按现行实现为空串」半句随实现改写为「reason 含命中键与模式」。验证实例实测：显式清单命中的审计行带 reason 留档。
-7. **R51 判据⑤ 与问 4 的联动（r48 P4 扩为三处同批改写）**：两者同批实现，requirements R51 段的⑤在问 4 实现时直接写成终态（deny 审计行带 reason），不出现「先记空串再改」的中间版本（单版本原则）。与问 4 互斥的「原样」表述三处一并同批改写（下引改写前旧文，句内被禁词以行内代码保真）：requirements R51 段第 2 条「`lib/gate.js` `硬拒` 路径…全部原样」半句改为「`lib/gate.js` 强制拒绝路径的判定与注入文案原样（deny 审计行随 R52 问 4 补 reason）」；本文件 §25.2.2「`lib/gate.js:238-251` `硬拒` …全部原样」同改；§25.2.4「审计行断言只断四字段——deny 审计行 reason 现行为空串，gate.js 原样不动」改为「审计行断言扩含 reason（问 4）」。需求侧半句的修订出处＝r48 P4 处置（2026-09-30 用户应答超时按审查建议先行，异议即回滚）。
+5. **问 3**：`writeStartupLine` 模板串首段 `v=2` 改为 `v=${AUDIT_VERSION}`（导入自 `./audit.js`）。判据（同源形态）：`test/index.test.mjs` 启动行用例**从 `lib/audit.js` 导入 `AUDIT_VERSION` 作期望值**，断言启动行含 `v=${AUDIT_VERSION}`——实现若仍硬编码 `v=2`，改常量为 4 时断言红（盯常量不盯字面量）；实现正确时常量怎么改两处同变。变异：启动行回退硬编码 `v=2` → 该断言红（改常量本身不构成变异——同源实现下两行同变，非脱钩缺陷）。验证实例重启后启动行 `v=3` 留档。文档同步：design.md 与 README.md 的 `v=2` 样例行随实现改为 `v=3`——README 现状已与 `AUDIT_VERSION=3` 不符，属同批修正。
+6. **问 4**：gate deny 审计行补 `reason: pre.reason`。判据（补齐审计行级半边）：`test/gate.test.mjs` 路径 2 用例的 stub `pre.reason` 改为真实形态「键 "script" 命中模式 …」，断言 screen 审计行 `reason` **含「命中模式」子串**（不只判等值）；`test/policy.test.mjs` 既有 `screen()` deny reason 断言不变（规则层产物本来带 reason；R35② 补两条 `/命中模式/` 断言，使规则层真实产物与 §25.2.4 措辞互恰）。变异：去掉 deny 审计对象的 reason 赋值 → gate 断言红。R51 判据⑤「deny 审计行 reason 按现行实现为空串」半句随实现改写为「reason 含命中键与模式」。验证实例实测：显式清单命中的审计行带 reason 留档。
+7. **R51 判据⑤ 与问 4 的联动（三处同批改写）**：两者同批实现，requirements R51 段的⑤在问 4 实现时直接写成终态（deny 审计行带 reason），不出现「先记空串再改」的中间版本（单版本原则）。与问 4 互斥的「原样」表述三处一并同批改写（下引改写前旧文，句内被禁词以行内代码保真）：requirements R51 段第 2 条「`lib/gate.js` `硬拒` 路径…全部原样」半句改为「`lib/gate.js` 强制拒绝路径的判定与注入文案原样（deny 审计行随 R52 问 4 补 reason）」；本文件 §25.2.2「`lib/gate.js:238-251` `硬拒` …全部原样」同改；§25.2.4「审计行断言只断四字段——deny 审计行 reason 现行为空串，gate.js 原样不动」改为「审计行断言扩含 reason（问 4）」。
 
 ### 26.3 与既有需求的边界
 
 - **R38/R44（审计管线）**：问 4 只给既有字段赋值，不新增字段、不改管线形状；脱敏与截断照走现行通道（audit.js 现行实现），审计版本不递增。
 - **R10/R46（注入文案）**：deny 注入文本本就含 `pre.reason`（`rejectText`），问 4 只让审计行追平注入文本的信息量，文案零改动。
 - **R35**：问 2 是引用改写不是语义改动；R51 判据③承接的误伤面翻转由 §25 承担，问 2 不碰判据。
-- **0.2.0 线（R49/R50）**：本轮全部改动落 0.1.7 线原目录；`docs/` 下 0.2.0 相关文档（如有）不在 lint 现行文档集。
+- **0.2.0 线（R49/R50）**：本批全部改动落 0.1.7 线原目录；`docs/` 下 0.2.0 相关文档（如有）不在 lint 现行文档集。
 
 ### 26.4 测试与验收落位
 
 | 问 | 落位 | 判据 |
 |---|---|---|
-| 问 1 | 项目词表文件＋全仓文档改写（含历史档案） | canonical 命令（决定 3）0 error（基线 279 处→0，完整输出与基线快照留档）；grep `硬拒` 复核＝使用位 0 残留、点名位全部行内代码（量化用临时文件不入库） |
+| 问 1 | 项目词表文件＋全仓文档改写（含历史档案） | 标准命令（决定 3）0 error（基线 279 处→0，完整输出与基线快照留档）；grep `硬拒` 复核＝使用位 0 残留、点名位全部行内代码（量化用临时文件不入库） |
 | 问 2 | requirements R35 现行段改写 | 行号与计数和 `lib/policy.js:30-41` 逐项对得上（审查复核） |
 | 问 3 | `lib/index.js`＋`test/index.test.mjs`＋三处文档样例 | 启动行 v 与 `AUDIT_VERSION` 同源断言（期望值由测试导入常量）；变异改常量 → 红；验证实例重启启动行 `v=3` |
 | 问 4 | `lib/gate.js`＋`test/gate.test.mjs` | deny 审计行 reason 含「命中模式」断言；变异去 reason 赋值 → 红；验证实例显式清单命中审计行带 reason |
 
-## 27. ISS-1 修复（R53）：设置面 schema 的序列化往返契约
+## 27. 设置表单修复（R53）：设置面 schema 的序列化往返契约
 
 ### 27.1 根因（双候选均实证，同一修复面）
 
 - **宿主调用链**：`settings.describe` → `schema.toJSON()` 信封 → 客户端镜像（可能再序列化一次）→ `new Schema(信封)` 重组 → `validate(draft)`（`@deepseek-ai/dsh-client-ui-settings@0.1.7-rc.1/lib/client.js` 的 `decode()`，:1245-1255；`validate` 语义＝不抛即有效，:942-949）。`decode()` 返回 undefined → `draft.value` 保持 undefined → 表单整片全空。
-- **候选一（ISS-1 自述机制，实测复现）**：`z.transform` 节点的回调在信封**第二次序列化**时丢失——一次 `toJSON` 回调尚在（函数源串），重组后再 `toJSON` 连键都没有；两跳重组的 schema 校验**任何**值都抛 `callback is not a function`。
-- **候选二（验收方独立发现，实测复现）**：`Config()` 直出取值带 volatile 引用（`mode`、`human.timeoutMs` 等序列化成 `{}`），校验抛 `$.mode expected "rules" | "off" but got {}`——验收报告 §5.1 观察到的原文即此形。该候选属宿主取值材料化路径，0.1.7 线插件侧无从单方面修复，但它与候选一共享同一判据面：只要信封无 transform、取值走解包产物，两条都不触发（ISS-1② 单测同时钉住）。
-- **时间线**：transform 随 R37 引入（R31–R45 批次，`28200a3`，2026-09-28）；r29 dump（2026-09-26）有值、2026-10-01 用户实测全空——与窗口吻合。
+- **候选一（自述机制，实测复现）**：`z.transform` 节点的回调在信封**第二次序列化**时丢失——一次 `toJSON` 回调尚在（函数源串），重组后再 `toJSON` 连键都没有；两跳重组的 schema 校验**任何**值都抛 `callback is not a function`。
+- **候选二（验收方独立发现，实测复现）**：`Config()` 直出取值带 volatile 引用（`mode`、`human.timeoutMs` 等序列化成 `{}`），校验抛 `$.mode expected "rules" | "off" but got {}`——用户实测观察到的原文即此形。该候选属宿主取值材料化路径，0.1.7 线插件侧无从单方面修复，但它与候选一共享同一判据面：只要信封无 transform、取值走解包产物，两条都不触发（判据②单测同时钉住）。
+- **时间线**：transform 随 R37 引入（2026-09-28）；此前 DOM dump（2026-09-26）控件有值、2026-10-01 用户实测全空——与引入窗口吻合。
 
 ### 27.2 修复设计（取舍表）
 
@@ -1946,18 +1946,18 @@ R52 一条需求四问（下文以「问 1–问 4」指称）；依据：R52 �
 |---|---|---|
 | 修信封还是修宿主 rehydrate | 修插件侧信封（全树去 transform） | 宿主 `dsh-client-ui-settings` 的序列化往返是官方设置通道契约（R27 口径「走官方机制」）；插件侧 schema 必须自证可往返 |
 | 非有限数拒止放哪层 | 装载路径 `normalizeConfig` 显式 `Number.isFinite` | R37 口径「超限＝加载失败、报错可见」不变；min/max 对 NaN 比较恒 false，schema 层本来就挡不住非有限数；界外（-0.1/2.1）仍由 schema 拒——两层各司其职 |
-| 表单还能不能防「整片全空」回潮 | 常驻断言补「控件取值逐项等于生效值」 | ISS-1 教训：结构断言（标签行/覆盖组/门控）抓不到取值整片为空；值核对对 decode 失败零容忍 |
-| 开发实例何时恢复 | 用户桌面侧重启后自动恢复 | 部署分离前两实例 junction 共目录，修复落库后开发实例侧热重载/下次重启即载新代码；本轮不动开发实例（R50 纪律） |
+| 表单还能不能防「整片全空」回潮 | 常驻断言补「控件取值逐项等于生效值」 | 注意：结构断言（标签行/覆盖组/门控）抓不到取值整片为空；值核对对 decode 失败零容忍 |
+| 开发实例何时恢复 | 用户桌面侧重启后自动恢复 | 部署分离前两实例 junction 共目录，修复落库后开发实例侧热重载/下次重启即载新代码；本批不动开发实例（R50 纪律） |
 
 ### 27.3 实现与判据落位
 
-- `lib/config.js`：temperature 直陈 `z.number().min(0).max(2).default(0).volatile()`（注释写明 ISS-1 口径）；`normalizeConfig` 尾部 `Number.isFinite` 检查（不满足即 throw，报错可见）。
-- `test/config.test.mjs`：ISS-1①（一跳/两跳信封零 transform 节点零 callback 键——变异 transform 回潮即红）＋ISS-1②（真实 describe 取值含空分节，一跳/两跳重组 schema 校验通过）＋R37③ 移位形态（界外 schema 拒、非有限装载拒，变异摘检查即红）。
-- `test/settings-dom-dump.test.mjs`：判据档随 r53 现场重取；新增「控件取值逐项等于生效值」用例（CTL_PATHS 映射逐控件核对 `normalizeConfig` 产物；变异篡改 dump 值即红）；失败登录计数、seconds、覆盖组数值随 r53 现场更新。
-- 验证实例端到端：重启（重启脚本带 `-NoBrowser`）→ `tools/browser-shot.mjs --script <r29 bundle 配置取证步骤脚本>` → `tools/build-dom-dump.mjs` 生成 r53 档——20 控件全部带值（reviewer.model=zai/glm-5.3-flash、timeoutMs=300000、language zh/en…）、覆盖组 3、读数行 300 秒×2、暂存往返语义不变；失败登录计数采集后＝1（阈值内）。
+- `lib/config.js`：temperature 直陈 `z.number().min(0).max(2).default(0).volatile()`（注释写明本条口径）；`normalizeConfig` 尾部 `Number.isFinite` 检查（不满足即 throw，报错可见）。
+- `test/config.test.mjs`：判据①（一跳/两跳信封零 transform 节点零 callback 键——变异 transform 回潮即红）＋判据②（真实 describe 取值含空分节，一跳/两跳重组 schema 校验通过）＋R37③ 移位形态（界外 schema 拒、非有限装载拒，变异摘检查即红）。
+- `test/settings-dom-dump.test.mjs`：判据档随修复现场重取；新增「控件取值逐项等于生效值」用例（CTL_PATHS 映射逐控件核对 `normalizeConfig` 产物；变异篡改 dump 值即红）；失败登录计数、seconds、覆盖组数值随该次现场更新。
+- 验证实例端到端：重启（重启脚本带 `-NoBrowser`）→ `tools/browser-shot.mjs --script <bundle 配置取证步骤脚本>` → `tools/build-dom-dump.mjs` 生成新档——20 控件全部带值（reviewer.model=zai/glm-5.3-flash、timeoutMs=300000、language zh/en…）、覆盖组 3、读数行 300 秒×2、暂存往返语义不变；失败登录计数采集后＝1（阈值内）。
 
 ### 27.4 与既有需求的边界
 
 - **R37**：口径不变（「超限＝加载失败、报错可见」、边界直接用例在盘）；只移了非有限数的承担层（schema transform → 装载路径），§22.7 的判据行继续成立。
-- **R27/R29**：字段面、落点、暂存语义、官方形态判据全部不变；r53 档是同一判据族在修复后代码上的重取（requirements §4 两行的 R53 重取注记）。
+- **R27/R29**：字段面、落点、暂存语义、官方形态判据全部不变；新档是同一判据族在修复后代码上的重取（requirements §4 两行的 R53 重取注记）。
 - **R25（适配）**：修复只碰插件侧 schema 与装载路径，不碰宿主文件（R20 口径维持）。
