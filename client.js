@@ -110,6 +110,7 @@ window.__ModuleLoader__.load({
 			"card.presets.default": "默认",
 			"card.presets.none": "至少选一个预设，否则插件不会接管任何审批",
 			"card.presets.missing": "配置中存在但当前预设表里没有：",
+			"card.presets.missing.remedy": "该预设由插件安装包自带（bundle patch），插件停用或宿主版本不兼容时预设表会缺它：重新启用插件并重启宿主即恢复；若已卸载且配置仍选着 auto-approve，请改选标准档位（或重装）。",
 			"card.presets.unavailable": "读不到预设目录；请用 settings.yaml 编辑，或确认权限预设服务已挂载。",
 			"card.bool.on": "开启（true）",
 			"card.bool.off": "关闭（false）",
@@ -282,6 +283,7 @@ window.__ModuleLoader__.load({
 			"card.presets.default": "default",
 			"card.presets.none": "Keep at least one preset, or the plugin takes over no approval at all",
 			"card.presets.missing": "Configured but absent from the current preset table:",
+			"card.presets.missing.remedy": "This preset ships with the plugin package (bundle patch); the preset table misses it while the plugin is disabled or the host version is incompatible: re-enable the plugin and restart the host to restore it; if the plugin was uninstalled and the config still selects auto-approve, pick a standard tier instead (or reinstall).",
 			"card.presets.unavailable": "The preset catalog is unavailable; edit settings.yaml instead, or check that the permission preset service is mounted.",
 			"card.bool.on": "On (true)",
 			"card.bool.off": "Off (false)",
@@ -1211,6 +1213,8 @@ window.__ModuleLoader__.load({
 					missing.length === 0
 						? null
 						: jsxRuntime.jsx("div", { className: "dsafm_hint", children: `${t("card.presets.missing")}${missing.join("、")}` }),
+					// R57：缺失态附补救指引（设计 §28.6）——指引服务于缺失态，不是常驻文案。
+					missing.length === 0 ? null : jsxRuntime.jsx("div", { className: "dsafm_hint", children: t("card.presets.missing.remedy") }),
 				],
 			});
 		}

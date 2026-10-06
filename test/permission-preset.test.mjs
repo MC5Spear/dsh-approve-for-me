@@ -250,11 +250,20 @@ test('带引号的 defaultPreset: "auto-approve"：--apply 禁令与 --revert �
   assert.match(after, /defaultPreset: workspace-write/);
 });
 
-test('脚本是零依赖的：import 只有 node: 前缀（删光 node_modules 也能跑）', () => {
-  const source = readFileSync(SCRIPT, 'utf8');
-  const imports = [...source.matchAll(/^import\s+[^;]+?from\s+'([^']+)';/gm)].map((match) => match[1]);
-  assert.ok(imports.length > 0, '至少应有一条 import（防正则失配造成恒真）');
-  for (const specifier of imports) {
-    assert.match(specifier, /^node:/, `禁止非 node: 依赖：${specifier}`);
+test('脚本与共享内核是零依赖的：import 只有 node: 前缀或包内相对路径（删光 node_modules 也能跑）', () => {
+  // R57 起实现住在 lib/permission-preset.js、CLI 是薄封装（设计 §28.2/§28.3）——判据不变
+  // （零 npm 依赖），机械面扩为：两个文件的 import 只允许 node: 前缀或指向包内内核的相对路径。
+  const CORE = join(dirname(fileURLToPath(import.meta.url)), '..', 'lib', 'permission-preset.js');
+  const RELATIVE_CORE = '../lib/permission-preset.js';
+  for (const file of [SCRIPT, CORE]) {
+    const source = readFileSync(file, 'utf8');
+    const imports = [...source.matchAll(/^import\s+[^;]+?from\s+'([^']+)';/gm)].map((match) => match[1]);
+    assert.ok(imports.length > 0, `${file} 至少应有一条 import（防正则失配造成恒真）`);
+    for (const specifier of imports) {
+      assert.ok(
+        /^node:/.test(specifier) || (file === SCRIPT && specifier === RELATIVE_CORE),
+        `禁止非 node: 依赖：${specifier}（${file}）`,
+      );
+    }
   }
 });

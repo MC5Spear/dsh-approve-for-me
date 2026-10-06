@@ -1148,6 +1148,8 @@ test('接管预设：多选下拉的选项来自宿主目录，勾选暂存、�
   assert.equal(trigger.props.id, 'approve-for-me-ctl-trigger-presets', '字段外壳的控件 id 应挂在触发器上');
   assert.match(JSON.stringify(trigger.props.children), /自动审批/);
   assert.doesNotMatch(JSON.stringify(trigger.props.children), /dsafm_map_parent/, '不应退化成文本输入');
+  // R57：预设无缺失时补救指引行不得出现（指引服务于缺失态，不是常驻文案——设计 §28.6）。
+  assert.doesNotMatch(JSON.stringify(tree), /card\.presets\.missing\.remedy/, 'missing 为空时指引行不应渲染');
   assert.equal(findByClass(tree, 'dsafm_save').props.disabled, true, '无改动时保存应 disabled');
 
   // 展开面板：每个预设一行复选框，默认预设带标记。
@@ -1198,6 +1200,8 @@ test('接管预设：目录不可用时提示改用 settings.yaml，并把未知
   assert.match(text, /card\.presets\.unavailable/);
   assert.match(text, /card\.presets\.missing/);
   assert.match(text, /ghost/);
+  // R57：缺失态附补救指引（设计 §28.6）——missing 行与指引行成对出现，指引不出现即红。
+  assert.match(text, /card\.presets\.missing\.remedy/, '缺失态必须渲染补救指引行');
 });
 
 test('设置项文案：每个 select/bool 字段的选项都有中文标签键（R17）', async () => {

@@ -619,3 +619,75 @@ test('R48⑦ 真接线：dedupe 同 key 双投递共享在飞任务，record 恰
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+test('R57§28.3-2 真接线：默认预设悬空防护 disposer——先于禁用早退注册，卸载判定时手术', async (t) => {
+  const { mkdirSync, mkdtempSync, rmSync, readFileSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const host = await loadHost();
+  if (host === undefined) {
+    t.skip('宿主包不可解析（离线环境）');
+    return;
+  }
+  const previousHome = process.env.DSH_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'afm-r57-guard-'));
+  process.env.DSH_HOME = home;
+  // profile fixture：manifest 数组已不含本包（＝removeBundle 落盘后、reload 卸载中）；
+  // patch 带设置界面写出的 permission 覆盖行（presets＋defaultPreset: auto-approve），
+  // 形态＝宿主真实写路径产出（模板注释＋行块，无独立 `[]` 占位）。
+  const profileDir = join(home, 'profiles', 'web');
+  mkdirSync(profileDir, { recursive: true });
+  writeFileSync(join(profileDir, 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['dsh-base'] } } }), 'utf8');
+  writeFileSync(join(profileDir, 'cordis.patch.yml'), [
+    '# Your patch layer for this dsh profile.',
+    '- id: permission',
+    "  name: '@deepseek-ai/dsh-permission-presets'",
+    '  config:',
+    '    presets:',
+    '      auto-approve:',
+    '        sandbox: workspace-write',
+    '    defaultPreset: auto-approve',
+  ].join('\n') + '\n', 'utf8');
+  const written = [];
+  const original = process.stderr.write;
+  process.stderr.write = (chunk) => { written.push(String(chunk)); return true; };
+  /**
+   * effect 捕获型 ctx：不立即执行 disposer，登记进数组（真实 cordis 在 dispose 时逆序执行）。
+   * @param {object} [services] - ctx.get 服务表。
+   * @returns {object} ctx 与 disposers。
+   */
+  const guardCtx = (services) => {
+    const disposers = [];
+    const ctx = {
+      effect: (fn) => { disposers.push(fn()); return () => {}; },
+      on: () => () => {},
+      get: (name) => services[name],
+      llm: { listProviders: () => [] },
+    };
+    return { ctx, disposers };
+  };
+  try {
+    // 1) mode=off 早退形态下防护也必须注册（config-disabled 部署被移除时同样悬空）。
+    const offEnv = guardCtx({ profileContext: { dir: profileDir } });
+    host.apply(offEnv.ctx, { mode: 'off' });
+    assert.equal(offEnv.disposers.length, 1, 'mode=off 早退前必须已注册防护 disposer');
+    // 2) 正常形态同样恰好一个防护 disposer（不随其他接线重复注册）。
+    const env = guardCtx({ profileContext: { dir: profileDir }, sessions: { list: () => [] }, permissionPresets: {} });
+    host.apply(env.ctx, { mode: 'rules', enabled: true });
+    assert.equal(env.disposers.length, 1, '防护 disposer 恰一个');
+    // 3) 执行 disposer＝卸载时点：覆盖行整行删除（悬空源与被拖入的 presets 残值一起）。
+    await env.disposers[0]();
+    const after = readFileSync(join(profileDir, 'cordis.patch.yml'), 'utf8');
+    assert.doesNotMatch(after, /permission|auto-approve|defaultPreset/u, '覆盖行必须整行删除');
+    assert.doesNotMatch(after, /^- /mu, '不得残留条目行');
+    // 可解析性：删空后恰好一个顶层数组占位（宿主 parsePatchList 拒绝 null 与双序列）。
+    assert.equal((after.match(/^\[\]\s*$/gmu) ?? []).length, 1, '手术后文档必须恰含一个 [] 占位');
+    assert.match(after, /# Your patch layer/u, '模板头保留');
+    assert.match(written.join(''), /默认预设悬空防护/u, '复位动作落一行审计');
+  } finally {
+    process.stderr.write = original;
+    if (previousHome === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = previousHome;
+    rmSync(home, { recursive: true, force: true });
+  }
+});

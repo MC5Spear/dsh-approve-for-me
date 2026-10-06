@@ -16,23 +16,24 @@ import { join } from 'node:path';
 const root = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/u, '$1');
 
 /**
- * 递归收集某目录下的 `.js` 文件（相对仓库根）。
+ * 递归收集某目录下指定后缀的文件（相对仓库根）。
  * 递归而非只查一层：`lib/` 当前是扁平的，但新增子目录不该悄悄逃过自检。
  * @param {string} relative - 相对仓库根的目录。
+ * @param {string} ext - 文件后缀（如 '.js'/'.mjs'）。
  * @returns {string[]} 相对路径数组。
  */
-function collect(relative) {
+function collect(relative, ext) {
   const out = [];
   for (const entry of readdirSync(join(root, relative), { withFileTypes: true })) {
     const next = `${relative}/${entry.name}`;
-    if (entry.isDirectory()) out.push(...collect(next));
-    else if (entry.name.endsWith('.js')) out.push(next);
+    if (entry.isDirectory()) out.push(...collect(next, ext));
+    else if (entry.name.endsWith(ext)) out.push(next);
   }
   return out;
 }
 
 const roots = ['client.js', 'typert.host.js'];
-const targets = [...new Set(['lib/index.js', ...collect('lib'), ...roots])].sort();
+const targets = [...new Set(['lib/index.js', ...collect('lib', '.js'), ...roots])].sort();
 
 let failed = 0;
 for (const target of targets) {

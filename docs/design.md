@@ -1016,7 +1016,9 @@ R30 只在显示层加换算读数：存储、审计行（`ms=`）、注入文�
 
 ### 14.1 部署脚本 `tools/permission-preset.mjs`（R26 的承载物）
 
-**为什么必须插件自带脚本**：`permission` 行由 `dsh-base` 提供，第三方 bundle patch 在层序上不可能命中它（`dsh-base` 排在 bundles 里第三方包之前，`@deepseek-ai/dsh-app-boot@0.1.7-rc.1 lib/index.js:468-526` 的层序组装）；预设条目若只能靠部署方手写 profile patch，就违反"装上就出现、卸下就消失"；而 `dsh plugin remove` 是**另一个进程**，插件的 `apply` 与 disposer 都不执行——回收同样只能由脚本完成。因此：
+> R57 起（§28）：本节立项理由基于 0.1.7 时期的层序认知——彼时判定第三方 bundle 层命中不了 permission 行。0.2.0 起第三方 bundle 层可命中该行（§28.2 组合语义＋§28.8-3 实证），预设注入主路径改为随包 bundle patch；本节降位为**存量部署**（0.2.0 及此前写过 profile 层重述）的手工回收参考与 R26 行为规范。
+
+**为什么必须插件自带脚本（0.1.7 立项理由，历史口径）**：`permission` 行由 `dsh-base` 提供，第三方 bundle patch 在层序上不可能命中它（`dsh-base` 排在 bundles 里第三方包之前，`@deepseek-ai/dsh-app-boot@0.1.7-rc.1 lib/index.js:468-526` 的层序组装）；预设条目若只能靠部署方手写 profile patch，就违反"装上就出现、卸下就消失"；而 `dsh plugin remove` 是**另一个进程**，插件的 `apply` 与 disposer 都不执行——回收同样只能由脚本完成。因此：
 
 - **零依赖**：只 `import 'node:fs'`/`'node:path'`（R26 不可裁剪；不得引 YAML 库）。
 - **`--apply`（幂等）**：锚点式文本编辑 `<home>/profiles/<profile>/cordis.patch.yml` 的 `permission` 行 `presets` 块——
@@ -1030,6 +1032,8 @@ R30 只在显示层加换算读数：存储、审计行（`ms=`）、注入文�
 
 ### 14.2 部署步骤（装包即行）
 
+> R57 起（§28）本节手工步骤降位：预设注入改由本包 `cordis.patch.yml` 的 bundle patch 承载——装包重启即得（无批准回合、无手工命令）；本节步骤＝`link:`/克隆通道的依赖自装说明与**存量部署**（0.2.0 及此前写过 profile 层重述）的回收参考。
+
 1. `dsh plugin --profile web add <仓库路径>`——`dsh-plugin-manager` 自己安装并原子维护 `dsh.profile.bundles`（本包有 `dsh.bundle.patch`，作为 profile layer 挂载；无 `dsh.bundle` 才会装成普通依赖并警告）。
 2. **迁移 `.imported` 分节（一次性）**：0.1.7 升级时 `importLegacyDocument` 跑了一遍，但当时本插件行不在 bundles 里，`approve-for-me` 分节不会落进 profile patch（导入写路径要求挂载行在场——找不到行或行无可热改字段的分节只留在改名档里不被消费）；部署时把旧一次性导入档（`DSH_HOME` 下的 `settings.yaml.imported`）该分节的 4 键（`reviewer.model` 对象、`reviewer.timeoutMs: 300000`、`human.timeoutMs: 600000`、`ui.trace.capture: full`——全部在 volatile 名单内，§6.1）手工并入 profile patch 本行 `config:` 块，防止用户既有选择丢失。其余分节不动。
 3. `node tools/permission-preset.mjs --apply`——写入「自动审批」预设条目（§14.1）。
@@ -1040,11 +1044,13 @@ R30 只在显示层加换算读数：存储、审计行（`ms=`）、注入文�
 
 ### 14.3 回滚步骤（删包即净）
 
-1. `node tools/permission-preset.mjs --revert`——**先于** `dsh plugin remove` 执行（后者是另一进程，不会触发插件的任何清理逻辑）。
+> R57 起（§28）卸载＝宿主正常移除即零残留（bundle 层随包消失，§28.4）；`--revert` 降位为**存量部署**（profile 层写过重述）与手删包目录场景的残值回收（README 回滚节明示；服务实例另见 §28.3-2 的默认预设补救句）；本节步骤＝备用路径的实操说明。
+
+1. `node tools/permission-preset.mjs --revert`——**先于** `dsh plugin remove` 执行（存量部署的 profile 层重述只有本脚本回收；新机制部署（bundle patch 承载）无需本步，见 §28——本节是备用路径，按手工先行）。
 2. `dsh plugin --profile web remove dsh-approve-for-me` → 重启（同 §14.2-4）。
 3. 核对无残留：权限下拉无「自动审批」、`permission` 行 `presets`/`defaultPreset` 与部署前一致（备份恢复）、`dsh.profile.bundles` 干净、`node_modules\dsh-approve-for-me` 已删。
 4. `$DSH_HOME/approve-for-me/`（session-models.json、reviews、permission-grant.json）删除插件后不再被读取，可手工删除。
-5. 插件不修改任何 dsh 包文件；删目录 + `--revert` 即完全回滚。
+5. 新机制部署（bundle patch 承载）不写宿主文件（§28.9 承诺口径）；存量部署按本节步骤收尾后即完全回滚。
 
 ### 14.4 依赖
 - 运行时依赖：`@deepseek-ai/schemastery`（配置 schema）、`zod@^4`（`./typert` 清单要求）、`@deepseek-ai/dsh-typert-protocol`（`TypertRemoteService` 基类与 `typertRemote` 绑定）。peer：`@deepseek-ai/cordis`。
@@ -1961,3 +1967,134 @@ R52 一条需求四问（下文以「问 1–问 4」指称）；依据：R52 �
 - **R37**：口径不变（「超限＝加载失败、报错可见」、边界直接用例在盘）；只移了非有限数的承担层（schema transform → 装载路径），§22.7 的判据行继续成立。
 - **R27/R29**：字段面、落点、暂存语义、官方形态判据全部不变；新档是同一判据族在修复后代码上的重取（requirements §4 两行的 R53 重取注记）。
 - **R25（适配）**：修复只碰插件侧 schema 与装载路径，不碰宿主文件（R20 口径维持）。
+
+## 28. 安装同步配置批次（R57）：bundle patch 承载权限预设（随包装卸、零残留）
+
+### 28.0 范围、依据与裁决链
+
+- 依据：R57 五条不可裁剪项＋判据①–⑤（requirements §2 R57 段，2026-10-07 修订稿）。本节机制经三次用户裁定演进，链条如下（原文见 §5 决策行，均不重议）：
+  1. 初裁（2026-10-06）：npm 生命周期脚本（`postinstall`＝init-row＋apply、`preuninstall`＝revert）＋ pnpm `allowBuilds` 显式批准。
+  2. 实测推翻卸载侧（本批端到端实验，§28.8-1）：pnpm 对依赖包**从不执行任何卸载脚本**（批准名单内亦然），preuninstall 在宿主全通道等于死代码；按纪律提交用户裁决，未自行降格判据②。
+  3. 终裁（2026-10-07）：用户硬性要求「绝不能卸载插件以后还遗留内容」——方案空间重开，裁决＝**bundle patch 承载**：预设行随包声明、随包消失，安装零写入 profile 层、卸载架构级零残留；生命周期钩子整套移除。同批追加要求「卸载时处于自动审批权限的会话不得不可用」——经源码核实：会话层由宿主 `derive()` 回落语义免费保证（§28.3-1），默认预设悬空防护采「disposer 读 manifest 判定」方案（§28.3-2，用户选定）。
+- 范围：本包 `cordis.patch.yml` 增补 permission 行重述；`package.json` 摘除生命周期脚本声明；`hooks/` 删除；lib 卸载防护（defaultPreset 复位）；设置卡补救指引文案改写；`tools/permission-preset.mjs` 与 `lib/permission-preset.js` 头注按新机制改写（钩子字样退役，语义不动）；README/CHANGELOG/承诺口径改写；发布面守护断言反转。
+- 非目标（R57 段不变）：`registerAuto` 通道（否决依据经 0.2.0-rc.2 源码复核成立：槽位是保留名 `auto`＋规格冻结 `danger-full-access+ask`＋单槽互斥，`@deepseek-ai/dsh-permission-presets@0.2.0-rc.2` lib/index.js:52-61、258-268、402-403，与 §5「自动审批的形态」行冲突）；向宿主请求通用预设注册 API（另行上游提案）；`link:`/克隆通道自动化；触发机制与宿主预设解耦。
+
+### 28.1 关键取舍
+
+| 取舍 | 选择 | 理由 |
+|---|---|---|
+| 预设注入通道 | 本包 `cordis.patch.yml`（`dsh.bundle.patch` 已声明的同一文件）内加 `- id: permission` 行重述（四档） | patch 语义＝后层按 id 对前层行**逐字段整值替换**（`@deepseek-ai/dsh-app-boot@0.2.0-rc.2` lib/index.js:61-110；`config` 整体替换不深合并）；层序＝`dsh.profile.bundles` 数组顺序（同文件 :921-925），启用＝追加数组末尾（`@deepseek-ai/dsh-plugin-manager@0.2.0-rc.2` lib/index.js:1994）、dsh-base 在出厂模板与 profile 初始化语义下恒为首位（dsh-app-boot lib/index.js:530-534、543；手改数组可反转——§28.7-2 另覆盖）——宿主通道安装即保证本包层在 dsh-base 层之后、重述必然生效。装卸两侧零额外动作：装＝包落 node_modules、其 patch 层自动参与组合；卸＝数组除名＋摘包、层随之消失（dsh-plugin-manager lib/index.js:1844-1863，全程不触碰 profile 的 `cordis.patch.yml`）。**零残留是构造性事实，不是流程约定** |
+| 与手工脚本的关系 | `tools/permission-preset.mjs`＋内核 `lib/permission-preset.js` 保留，定位降为**遗留残留清理**（R54 及此前部署写进 profile 层的重述回收）＋供 §28.3-2 复用 `detectProfileDir` | 0.2.0 及之前经 `--init-row`/`--apply` 写进 profile 层的重述在卸载后滞留（正是终裁要消灭的那类残留）；CLI 是它们的回收通道。R26 语义与既有测试全数不改判 |
+| 生命周期钩子 | 整套移除：`hooks/` 两文件、`package.json` 的 `scripts.postinstall`/`scripts.preuninstall`、check-syntax 的 hooks 扩展、install-hooks 测试；发布面守护**反转**为「禁止声明生命周期脚本」（§28.6） | pnpm 不执行依赖卸载脚本（§28.8-1）→ preuninstall 是死代码；postinstall 的全部职责被 bundle patch 取代，且后者无批准回合、无失败分支、无非 profile 探测需求。保留＝同时维护两条注入路径且其中一条半残 |
+| profile 层已写重述的存量部署 | 不自动迁移（profile 层最后应用，会盖住 bundle 层重述——这是宿主的用户覆盖语义，dsh-app-boot lib/index.js:558、1025-1030）；README 提供一条 `--revert` 回收命令供用户自行回到纯 bundle 形态 | 自动改写用户 patch 层＝越权。存量重述本身含四档（与 bundle 重述等价），不清理无功能损失；差别只在卸载时需 `--revert` 收尾——README 明示 |
+| 默认预设悬空防护 | disposer 读 profile manifest 判定：数组已不含本包，才把 `defaultPreset` 指向 `auto-approve` 的 profile 覆盖行整行删除（文件手术，§28.3-2） | 详见 §28.3-2（含设置写回路的关键事实、覆盖矩阵与 README 补救句） |
+| 设置卡补救指引 | `card.presets.missing.remedy` 键保留，文案按新机制改写（成因＝bundle 层缺席：插件停用／宿主兼容跳过／配置遗留），不再是「批准构建脚本后重装」 | 指引必须与现实机制一致；渲染门控不变（missing 非空才出现） |
+
+### 28.2 机制形状与组合语义
+
+- `cordis.patch.yml` 两个条目（既有 `- insert: approve-for-me` 行不动，追加）：
+
+```yaml
+- id: permission
+  name: '@deepseek-ai/dsh-permission-presets'
+  config:
+    presets:
+      read-only:            { sandbox: read-only,          approval: ask }
+      workspace-write:      { sandbox: workspace-write,    approval: ask }
+      auto-approve:         { sandbox: workspace-write,    approval: ask, name: 自动审批, description: …… }
+      danger-full-access:   { sandbox: danger-full-access, approval: never }
+```
+
+  （实际文件用展开写法；此处紧凑示意。）
+- **`name` 断言**：上游若换插件包名，宿主按 name 不匹配告警跳过（dsh-app-boot lib/index.js:100-103）；上游若删 permission 行，id 未命中同样告警跳过（:95-99）——两种漂移都是告警级退化，不炸 boot。
+- **条目序约束**：宿主 `derive()` 无显式选择时按**声明顺序**取第一个 knob 匹配档（dsh-permission-presets lib/index.js:304）；auto-approve 与 workspace-write 取值全同，故 auto-approve 必须排在 workspace-write 之后——若排前，所有未显式选择的旧会话会派生为 auto-approve（首中匹配），`trigger.presets` 判定全面接管＝事实上的静默开启（§14.1 序约束分析同口径）。
+- **不写 `defaultPreset` 键**：它是 volatile 字段、宿主 settings 承载（dsh-permission-presets lib/index.js:158）；R26 禁令本就禁止插件档当默认。
+- 组合实证（宿主 `composeEntries` 直驱三场景，§28.8-3）：安装序（base→本包）＝四档且序正确、approve-for-me 行在场；卸载序（仅 base）＝三档；手改序（本包在 base 前）＝三档（base 胜出，本包 override 未命中=warn 跳过）——全 PASS。
+- **装后生效**：与插件本体同通道（bundle 层装载）。宿主装后走 `reload()` 热应用（dsh-plugin-manager lib/index.js:1794-1803）；预设表是否随 reload 免重启到达下拉以实测为准（§28.8-4），README 默认「重启宿主」口径，实测热装载生效再改。
+
+### 28.3 卸载防护（终裁追加要求的落位）
+
+#### 28.3-1 会话层：宿主 `derive()` 回落语义免费保证，零代码
+
+会话档位是持久事件（`permission/preset` 进会话投影，dsh-permission-presets lib/index.js:85-105、188-201）。卸载后表里没有 `auto-approve` 时宿主如此结算（:295-306）：存储档名 `specOf` 解析不到 → 回落到**第一个「沙箱＋审批策略」逐字匹配的档**。本包 auto-approve 的两个 knob 与 workspace-write **完全相同**（这是重述的写法约束，测试钉住）→ 会话自动呈现并表现为「工作区内修改」，不抛错不卡死——抛错路径只针对保留名 `auto`（:373-376），本包档名不是它。`pinInitialPermission` 对 stale 档名同样走 derive（:385-386），会话发布不受影响。
+
+#### 28.3-2 默认预设（settings 的 `permissionPresets.defaultPreset`）：disposer 读 manifest 判定的防护
+
+- **为什么要防**：宿主设置界面把「默认预设＝`auto-approve`」持久化进 profile patch 的 permission 行 config 覆盖。卸载后该覆盖滞留两重后果：覆盖仍指向已删档 → PP 构造器 `this.resolve(defaultPreset)` 抛 `unknown preset`（dsh-permission-presets lib/index.js:178-181）→ 整行装载失败 → 每个会话查投影都抛「projection is not registered」（:277-280）→ 全部会话不可用；且覆盖行还携带四档 presets（见下）——重述本身也作为残值滞留用户层。
+- **关键事实（决定防护形态）**：设置写回路的 `strip(raw, form)` 以**当时生效的活动配置**为基（dsh-config-editor lib/index.js:77-79 的 `raw＝entry.options.config`；dsh-settings lib/index.js:508-534）——写入的覆盖行＝`{presets: 当时生效的档表（含本包四档）, defaultPreset: 所选值}`。因此 (a) 悬空值只可能源自该覆盖行（无覆盖时易变值回落推断默认＝首档 read-only）；(b) 设置服务通道的 `unset defaultPreset` 清不净——`next＝strip(raw)` 恒含四档 presets，等值清除分支（dsh-config-editor lib/index.js:99-104，next 深等于 inherited 才删行）不会触发，API 路径必留 presets 残值；(c) **删除整个覆盖行＝恢复继承层（dsh-base 三档）＝必要且充分**，且不依赖任何服务/光纤的销毁顺序。
+- **触发点**：本包 `apply()` 新增一个 effect 作用域（既有 apply 无 disposer——纯监听器注册；新增作用域置于**配置禁用早退之前**，config-disabled 形态下摘除防护也要在岗），disposer 内执行防护。
+- **判定**：
+  - profile 定位＝宿主运行态事实：`ctx.get('profileContext')?.dir`（dsh-app-boot lib/index.js:2065-2071 同源用法，profileContext 由 loader 提供且带 `.dir`）——不做文件系统走查，junction/link 形（含 R54 冻结件部署）也无盲区；
+  - 数组判定＝读 `<profile.dir>/package.json` 的 `dsh.profile.bundles`，**不含本包名**才动作。依据：宿主 removeBundle/停用＝`selectBundle(name, false)` 落盘数组**先于** `reload()` 触发的 disposer（dsh-plugin-manager lib/index.js:1852-1853 的顺序）；普通关停、升级、热重载时数组仍含本包 → 不动作（不会把用户的默认档选择在每次重启时抹掉）。
+- **动作**：锚点式文本手术（纪律与 `lib/permission-preset.js` 同源：不解析 YAML、不猜结构、原子写同目录临时文件＋rename、BOM 保留）——定位 profile patch（`<profile.dir>/cordis.patch.yml`）内 `- id: permission` 覆盖行块，其 `defaultPreset` 值恰为 `auto-approve`（裸名/引号两形态）时**整行删除**（含被设置写回路拖入的 presets 残值）；行不存在或值非本包预设＝无悬空源，跳过。
+- **失败语义**：best-effort——disposer 内全链 try/catch＋审计（`reset` 或失败性 `skip` 落一行，良性跳过静默——关停/升级/重载是常态）；manifest/patch 不可读、锚点不命中、写失败等一切异常只降级为跳过，绝不阻断卸载/停用。
+- **接受面（设计明示）**：手术条件以「覆盖行的 defaultPreset 指向本包预设」为准整行删除——若用户曾在该行手工加过其他非易变自定义（理论上可经配置编辑器做到），会一并丢弃（等价「撤销那次设置写入」）；README 卸载节一句说明。
+- **覆盖矩阵**：
+
+| 卸载路径 | disposer 是否带着「数组已除名」运行 | 结果 |
+|---|---|---|
+| 交互宿主：移除/停用（reload 热卸载） | 是（selectBundle 先落盘） | 覆盖行整行删除（零残值） |
+| 服务宿主：先停机再 remove | 否（停机时数组仍含本包；remove 在独立进程，本包代码此后不再运行） | README 一句补救：卸载前把默认预设切回标准档 |
+| 手删包目录 / kill -9 | disposer 不运行 | 同上 README 补救句（手删另有 boot 的 skippedBundles 告警，dsh-app-boot lib/index.js:928-945） |
+| 非 profile 环境 / profileContext 缺席 | — | `dir` 缺失即跳过（防护只在 profile 内动作） |
+
+### 28.4 通道矩阵（新机制下全部通道同形）
+
+| 通道 | 安装侧 | 卸载侧 | 退化路径 |
+|---|---|---|---|
+| registry（`pnpm add <name>/<tgz>`，宿主 installBundle） | 零动作：无构建脚本、无批准回合；层自动参与组合，重启（或热装载，§28.8-4）后下拉四档 | `remove` → 层消失 → 三档；会话层 derive 回落（§28.3-1） | 停用 bundle＝同卸载语义（`selectBundle(false)`） |
+| `github:`（git 源） | 同 registry（声明在包内，通道无关） | 同上 | 同上 |
+| GUI 安装对话框 | 同 registry（同一安装引擎） | 同上 | 同上 |
+| `link:`/克隆目录 | 同 registry（`dsh.bundle.patch` 随包走，link 通道照常组合） | 摘链＋除名 → 层消失 | 同上 |
+| 绕过卸载（手删包目录） | — | 层消失但 bundles 数组仍含本包 → boot 跳过并告警 | §28.3-2 README 补救句 |
+
+- 「不批准＝半配置态」的旧退化路径**整体消失**：本包不再有构建脚本，pnpm 无从拦截，安装恒完整。事故（2026-10-06 全新部署 GUI 半配置态）的成因面被连根移除。
+
+### 28.5 设置卡补救指引（`card.presets.missing` 升级，文案按新机制）
+
+- `card.presets.missing` 文案不动（前导＋缺失 id 清单）；`card.presets.missing.remedy` 改写为：成因＝「该预设由插件安装包的 bundle patch 提供，插件停用或宿主版本不兼容时预设表会缺它」＋两条出路（重新启用插件/重启宿主；若已卸载且配置仍选着 auto-approve，改选标准档或重装）。英文档同义。
+- 渲染门控不变：missing 非空才出现该行；字典纪律不变（缺键即抛、zh/en 奇偶、文案不含本机路径与内部编号）。
+
+### 28.6 发布面与守护反转
+
+- `package.json` `files` 白名单**摘除** `hooks`；`cordis.patch.yml` 已在白名单。`npm pack` 产物核验：`cordis.patch.yml`（含 permission 重述）在场、`hooks/` 缺席（判据⑤）。
+- `tools/check-syntax.mjs` 收集面回退到 hooks 扩展之前的形态（`lib/**/*.js`＋两入口）。
+- 守护测试（进新 `test/bundle-patch.test.mjs`）：`scripts` **不得**声明任何 npm 生命周期键（`postinstall`/`preuninstall`/`prepack` 等——出现即红）；`files` 必须含 `cordis.patch.yml`、`lib`、`tools/permission-preset.mjs`。方向＝防止钩子通道回潮（它是被实测否决的路径）。
+
+### 28.7 风险清单
+
+1. **冻结重述遮蔽上游**（与 profile 层重述同族，本方案全面更优）：`config` 整体替换，dsh-base 未来改 permission 行（加键/改档位/换包名）会被旧版重述遮蔽至本包发新版。差异：(a) 重述**随本包版本化**——升级插件即同步、卸载即解除遮蔽回到上游真身（profile 层重述则滞留用户磁盘，卸载后仍遮蔽）；(b) 漂移是**告警级**不是静默错配——peers 钉版不满足时 bundle 被 boot 跳过并报因（dsh-app-boot lib/index.js:928-945）、上游换包名→name 断言告警跳过（:100-103）、上游删行→id 未命中告警跳过（:95-99）。
+2. **层序被手改反转**：用户手工把 bundles 数组里本包挪到 dsh-base 之前 → 三档胜出（§28.8-3 场景三实测）＋本包 override 未命中告警。显式用户行为，README 一句。
+3. **默认预设悬空的未覆盖路径**：§28.3-2 覆盖矩阵后两行（先停后卸、手删/kill）靠 README；这是包内代码的可达性边界（卸载后本包代码不再运行），非流程疏漏。
+4. **插件自有数据目录**（`<DSH_HOME>/approve-for-me/`：reviews、session-models）属用户数据，按惯例可留（与机制无关）。
+
+### 28.8 实测记录（本批已完成的实验事实；端到端全链在验收轮补齐）
+
+1. **pnpm 不执行依赖卸载脚本**（pnpm 12.8.1 实测）：批准名单内（裸名＋版本键均 `true`）执行 `pnpm remove` → 零钩子输出、包摘除、profile patch 残留在场。文档佐证：pnpm 审批面只覆盖安装期 build scripts（`preinstall`/`install`/`postinstall` 族），remove 通道无脚本语义。→ preuninstall 死代码的实测依据。
+2. **pnpm 12 安装侧批准语义**（钩子通道时代的副产物，留档）：未裁决＝`ERR_PNPM_IGNORED_BUILDS` 硬性失败（宿主 installBundle 失败路径回读 pendingBuilds）；`file:` 依赖的裁决键带版本形（`name@file:…`）而宿主 `approveBuilds` 只写裸名 → pnpm 12 下宿主批准回合可能不解锁安装（上游兼容观察，非本包问题）。bundle patch 通道无构建脚本，全部绕开。
+3. **组合证明**（宿主 `composeEntries` 直驱，dsh-base 真 patch＋本包新 patch）：安装序四档 PASS；卸载序三档 PASS；手改序三档＋override 未命中=warn 跳过 PASS。
+4. **装后生效通道**（验收轮）：scratch 宿主实例上装包→观察 reload 热装载是否免重启到达下拉；不能则 README 维持重启口径。
+
+### 28.9 与既有需求的边界
+
+- **R26**：CLI（`tools/permission-preset.mjs`）与内核语义原样保留（遗留清理通道），`test/permission-preset.test.mjs` 全数不改判；其定位从「部署必经」降为「存量残留回收」。
+- **R20 与承诺口径**：初裁稿拟收窄的「运行时代码不改宿主文件」口径**作废**——新机制下正常运行与装卸全程不写 profile 层；**唯一例外**＝§28.3-2 防护在「覆盖行的默认档恰指向 auto-approve 且本包正被移除/停用」时对该覆盖行的整行删除（该写入本身就是清理、移除悬空源，且仅此一种情形发生）。README 四处承诺句（英文摘要、风险节 bullet 6、轨迹集成节、回滚节尾；以 `grep` 全量清点为准）按此口径改写（「不修改宿主任何文件，装卸均可逆」，例外场景随 §28.3-2 补救句一并写明）；「删除插件目录即完全回滚」在 bundle patch 机制下为真（层随包目录消失，宿主重启后回到基线——补「重启宿主」限定词）。
+- **R16**：fail-loud missing 提示保留原语义；指引行按 §28.5 改写。
+- **版本与 CHANGELOG**：CHANGELOG 补 R57 条目（要点：预设改由 bundle patch 随包提供、装卸零写入零残留、钩子方案及其否决过程一句带过、默认预设防护、存量部署 `--revert` 回收指引、承诺口径改写），以 `0.3.0` 未发布段为标题；`package.json` 升 `0.3.0` 为**提案**（验收报告提交用户裁定，通过后同批改 `version`——0.2.0 状态下发布行为变更＝语义化违约，升档与发布同窗）。
+- **§14（部署与回滚）**：§14.1 立项理由段补历史注记（0.1.7 层序认知）、§14.2/§14.3 头部指针注记按新机制改写（主路径＝装包重启即得；手工命令＝存量残留回收与 `link:` 通道说明）；既有步骤本体不动。
+
+### 28.10 测试与验收落位
+
+| 判据 | 测试/取证 | 可失败性（变异） |
+|---|---|---|
+| ① 装完即配 | 端到端实验（scratch profile＋宿主通道装 tarball，**无批准回合**）→ profile `cordis.patch.yml` 字节不变（零写入断言）＋组合四档（§28.8-3 同款取证）＋重启后下拉四项含「自动审批」、无 unknown preset 警告 | 变异＝patch 摘掉 permission 重述 → 组合三档、断言红 |
+| ② 卸载零残留 | 端到端实验（宿主 remove）→ profile `cordis.patch.yml` 字节不变（从未写入；前提＝默认档未指向 auto-approve——指向时设置界面已写出的覆盖行会由 §28.3-2 防护整行删除，字节变化本身即防护在岗证据，断言改为「手术后行内无 defaultPreset/auto-approve 残留」）＋组合三档；会话档位回落＝单测钉住「auto-approve knobs 与 workspace-write 逐字段等同」（derive 回落的前提）；defaultPreset 防护＝lib 单测条件矩阵＋disposer 接线测试 | 摘掉 knobs 等同约束 → 单测红；防护条件反转 → 条件矩阵红 |
+| ③ 非 profile 零副作用 | 声明面守护：`scripts` 无任何生命周期键（本仓 `npm install`/CI 因此无事可跑）；全套 `npm test`＋`test:offline`＋`check`＋`check:public-surface`＋lint 0 error | 变异＝向 `scripts` 引入任一生命周期键 → 守护断言红 |
+| ④ 文档口径 | README/CHANGELOG 按上文改写＋`check:public-surface` 全绿；CHANGELOG 含 R57 条目（`0.3.0` 未发布段）＋验收报告含版本升档提案 | 检查器既有变异用例在岗 |
+| ⑤ 发布面 | `npm pack` 产物：`cordis.patch.yml`（含重述）在场、`hooks/` 缺席；守护测试同 §28.6 | 摘 `files` 的 `cordis.patch.yml` → 守护红 |
+
+- 新 `test/bundle-patch.test.mjs`：YAML 形状（`approve-for-me` insert 行在场；permission 重述含 name 断言、四键且序为 read-only→workspace-write→auto-approve→danger-full-access、三标准档取值与既有 `--init-row` 模板逐字一致、auto-approve knobs 与 workspace-write 逐字段等同、无 `defaultPreset` 键）＋发布面守护（§28.6）。
+- lib 防护纯函数单测＋`index.test.mjs` disposer 接线（fake ctx：数组含/不含 × defaultPreset 值分支 × 写失败 best-effort）。
+- `client.test.mjs`：既有 remedy 用例改按新文案断言（missing 在场→指引在场；missing 空→指引缺席）。
+- 既有 `test/permission-preset.test.mjs`：不改判（遗留清理通道的回归证据）。
+- `test/install-hooks.test.mjs`：删除（其对象已移除；守护职责由 `bundle-patch.test.mjs` 反向承接）。

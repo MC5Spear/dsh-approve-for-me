@@ -8,7 +8,7 @@
 
 给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）做的自动审批插件：需要审批的沙箱升权请求，先由 LLM 审查器逐次判断——判定安全就直接放行，判定危险就直接拒绝并把理由交回主模型。等价于 codex 的 `--approve-for-me`。
 
-> **English summary.** `dsh-approve-for-me` is a third-party plugin for DeepSeek Harness that takes over sandbox-escalation approval requests and decides them with an LLM reviewer instead of a human click. Safe requests are auto-allowed (`allowed-once`), dangerous ones are rejected with the reason injected back into the main model. Failures — timeout, error, unparseable output, unavailable model — are **fail-closed** (reject). The reviewer may call read-only tools (`read_file` / `list_dir` / `glob` / `grep`) implemented in-process with `node:fs`; they never trigger approvals, never write, never touch the network. The plugin modifies no host files: installing and removing it are reversible by deleting the package directory. **Read the risk section below before enabling it.**
+> **English summary.** `dsh-approve-for-me` is a third-party plugin for DeepSeek Harness that takes over sandbox-escalation approval requests and decides them with an LLM reviewer instead of a human click. Safe requests are auto-allowed (`allowed-once`), dangerous ones are rejected with the reason injected back into the main model. Failures — timeout, error, unparseable output, unavailable model — are **fail-closed** (reject). The reviewer may call read-only tools (`read_file` / `list_dir` / `glob` / `grep`) implemented in-process with `node:fs`; they never trigger approvals, never write, never touch the network. The plugin ships its permission tier inside its own bundle patch: installing writes nothing to the profile layer (no lifecycle scripts run), and removing the package removes the tier — restart the host to see the baseline. Normal operation modifies no host files; the single exception is an uninstall-time guard that deletes the default-preset override row the host settings UI wrote, when it points at this plugin's now-removed tier. **Read the risk section below before enabling it.**
 
 ---
 
@@ -26,7 +26,7 @@
 3. **失败姿态是 fail-closed**：审查超时、调用失败、输出不可解析、模型不可用 → 一律**拒绝**，并注入理由。默认不会因为「审不了」就放行。
 4. **规则强制检查（`denyPatterns`）不可被推翻**：命中即拒绝，LLM 与人工都不能改判；但它出厂为空，需要你显式配置（见下「出厂参考清单」）。
 5. 建议的启用方式：先在非生产环境试跑；把 `denyPatterns` 抄进配置恢复确定性拦截；按需收窄 `allowEscalationTo`、`tools`、`trigger.presets`；需要人工备用通道时用 `fallback: 'ask'`。
-6. **本插件不修改宿主任何文件**，不打源码补丁——删除插件目录即完全回滚（见「回滚」）。
+6. **本插件的「自动审批」预设档随包自带**（包内 `cordis.patch.yml`），装卸全程**不写 profile 层**、无生命周期脚本、不触发宿主构建审批——卸载即档位消失，重启宿主回到基线（见「回滚」）。运行期不修改宿主任何文件；唯一例外＝卸载防护会在「设置里默认预设恰指向本包预设、且本包正被移除/停用」时，删掉那条由宿主设置界面写出的默认预设覆盖（该删除本身即清理，见「回滚」）。
 
 **行为一览**
 
@@ -52,19 +52,11 @@
 
 ```powershell
 dsh plugin --profile web add github:MC5Spear/dsh-approve-for-me
-
-# 干净 profile 才需要：先把 permission 行整行重述进 profile patch
-#   （该行由 dsh-base 提供；patch 按行覆盖整份 config，所以要加预设必须先重述它。
-#     已有该段的部署会幂等跳过。）
-node <安装目录>/tools/permission-preset.mjs --init-row
-
-# 写入「自动审批」预设条目（幂等；--revert 回收）
-node <安装目录>/tools/permission-preset.mjs --apply
 ```
 
-`<安装目录>` 指目标 profile 的 `node_modules\dsh-approve-for-me`。
+就这一步。重启宿主后权限选择器里多出「自动审批」档：预设档随包自带的 bundle patch（包内 `cordis.patch.yml` 重述 permission 行并加第四档）随装载合成，**安装全程不写 profile 层、不跑任何生命周期脚本、不触发宿主构建审批**；卸载（`dsh plugin … remove`）后档位即消失。0.2.x 时代的两条手工命令（`--init-row` / `--apply`）已退役——它们往 profile 层写重述，新机制不需要。
 
-`dsh plugin` 把参数原样转发给 pnpm，pnpm 原生支持 git 源形态：`github:<owner>/<repo>`，也可用 `#<tag>` 用标签锁定（如 `github:MC5Spear/dsh-approve-for-me#v0.2.0`）。本包纯 JS、无构建步，不涉及宿主对 git 源插件 `prepare` 脚本的 allowBuilds 提示。
+`dsh plugin` 把参数原样转发给 pnpm，pnpm 原生支持 git 源形态：`github:<owner>/<repo>`，也可用 `#<tag>` 用标签锁定（如 `github:MC5Spear/dsh-approve-for-me#v0.2.0`）。本包纯 JS、零生命周期脚本（`postinstall` / `preuninstall` 均不声明），任何源形态都不会弹宿主的构建审批提示。
 
 **GUI 形态**：设置页「插件」面板的安装对话框里粘贴同一 spec 即可（与 CLI 同一安装引擎；对话框先 inspect 再安装，pnpm 输出折叠可见）。
 
@@ -79,23 +71,9 @@ npm install --omit=dev            # 包目录必须能自己解析依赖（见�
 
 # 把包装进目标 profile：会同时写入 dependencies 与 dsh.profile.bundles
 dsh plugin --profile web add <克隆目录的绝对路径>
-
-node <克隆目录>/tools/permission-preset.mjs --init-row
-node <克隆目录>/tools/permission-preset.mjs --apply
 ```
 
-### 手工通道（等价）
-
-```powershell
-# 1) 包目录以 junction（Windows）或符号链接进 profile 的 node_modules
-# 2) 清单登记：dependencies 里加 "link:<克隆目录>"（缺它插件不会出现在侧栏「插件」面板），
-#    dsh.profile.bundles 里加包名 dsh-approve-for-me
-# 3) profile 的 cordis.patch.yml 里给本行写 config（可选，见「配置」）
-# 4) node <克隆目录>/tools/permission-preset.mjs --init-row
-# 5) node <克隆目录>/tools/permission-preset.mjs --apply
-```
-
-克隆通道与手工通道落盘结果一致（`dependencies` / `bundles` / `node_modules` 链接逐字段相同）；主路径的差别只在 `dependencies` 里记录的是 `github:` 源而非 `link:` 本地路径。
+克隆通道与主路径的差别只在 `dependencies` 里记录的是 `link:` 本地路径而非 `github:` 源——预设档同样由包内 bundle patch 提供，无需任何手工步骤。
 
 **包目录必须能自己解析依赖**：链接模式下 Node 按真实路径解析，克隆目录里要先 `npm install --omit=dev`。`@deepseek-ai/schemastery` 必须 ≥ 3.18.4——插件用 `.volatile()` 声明可热改字段，低于该版本整行会被设置接口跳过。
 
@@ -297,7 +275,7 @@ Select-String -Path <宿主 stderr 日志> -Pattern '\[approve-for-me\]'
 
 ## 轨迹集成：只做插件自有视图
 
-「自动审批成为记录表里的一等记录」这件事，**核心功能在内置视图里，插件改不了**。本插件因此**不修改宿主任何文件**，轨迹集成只有自有视图这一条路：
+「自动审批成为记录表里的一等记录」这件事，**核心功能在内置视图里，插件改不了**。本插件运行期因此**不修改宿主任何文件**（唯一例外＝停用/卸载防护删除悬空的默认预设覆盖行，见「回滚」），轨迹集成只有自有视图这一条路：
 
 | 功能 | 插件给到什么 |
 |---|---|
@@ -334,15 +312,20 @@ LLM 探针从 `$DSH_HOME/.credentials.yaml` 的 `refs.DEEPSEEK_API_KEY` 读取�
 
 ## 回滚
 
-四步（已实测演练一遍）：
+**新机制（0.3.0 起）下卸载零残留，一条命令**：
 
-1. **回收部署方配置里的插件语义条目**：`node <克隆目录>/tools/permission-preset.mjs --revert`——从 profile 的 `cordis.patch.yml` 里删掉 `permission` 行的「自动审批」预设条目，并按备份恢复 `defaultPreset`。这一步必须手工触发：`dsh plugin remove` 是另一个进程，插件的 `apply` 与 disposer 都不会执行。
-   **注意备份值**：若备份值恰是本次删掉的条目名（旧部署留下的那种），脚本会改口输出「备份值 auto-approve 正是本次删除的条目名，改恢复为 workspace-write」——写回一个已不存在的预设名会让整行在下次启动时注册失败（`permission: unknown preset "auto-approve"`）。核对时按**后一种**措辞判断预期。
-2. 摘除包：`dsh plugin --profile web remove dsh-approve-for-me`；**junction / 符号链接方式**下等价于删掉 `node_modules/dsh-approve-for-me` 这个链接（只删链接、不动仓库）＋ 从 `dsh.profile.bundles` 与 `dependencies` 里删掉包名。
-3. 删掉 profile patch 里本行的 `config` 覆盖块（删除后该行回落 bundle 默认）。
-4. 重启宿主 → 权限选择器回到基线（不再有「自动审批」项）、注入表里不再有本插件的 `client.js`。插件自己的数据落在 `$DSH_HOME/approve-for-me/`（`session-models.json`、`reviews/*.jsonl`），按需删除；它们不属于部署方配置。
+```powershell
+dsh plugin --profile web remove dsh-approve-for-me
+```
 
-插件**不修改任何 dsh 包**（也不打源码补丁），因此删除插件目录即完全回滚。
+预设档随包自带的 bundle patch 走——卸载后层即消失，profile 的 `cordis.patch.yml` 全程未被写过、`dsh.profile.bundles` 与 `node_modules` 由宿主清干净；重启宿主，权限选择器回到基线三档。已实测演练（干净 profile 装卸一轮：patch 字节不变、组合层从四档回到三档、宿主装载无告警）。
+
+两点补充：
+
+1. **默认预设悬空防护**：若你曾在宿主设置里把「默认预设」选成**自动审批**，该选择由宿主设置界面写进 profile 层的 permission 覆盖行——插件的卸载防护会在**交互宿主上移除/停用本包时**自动删掉这条覆盖（否则卸载后整行装载失败、所有会话不可用；该行内若有手工加过的其他非易变自定义，也会随行一并丢弃——等价于撤销那次设置写入）。两条路径防护代码不可达，需一句手工补救：**服务实例先停机再 remove、直接手删包目录、或进程被 kill -9**——这几种情况下，卸载前先在设置里把默认预设切回任一标准档（read-only / workspace-write / danger-full-access）即可；忘了切的话，删掉 profile `cordis.patch.yml` 里 `- id: permission` 那一整行（若存在）同样恢复。
+2. **旧机制残留**（0.2.0 及更早装的）：那时的 `--init-row` / `--apply` 往 profile 层写过 permission 行重述。升级到 0.3.0 后它仍在（用户层优先于包层），可运行 `node <安装目录>/tools/permission-preset.mjs --revert` 回收——脚本保留作存量清理通道，新部署不再需要。
+
+插件自己的数据落在 `$DSH_HOME/approve-for-me/`（`session-models.json`、`reviews/*.jsonl`），卸载不会删它，按需手工清理；它们不属于部署方配置。
 
 ## 许可
 

@@ -1,4 +1,5 @@
-# dsh-approve-for-me bundle patch: one host row over the web profile.
+# dsh-approve-for-me bundle patch: one host row over the web profile,
+# plus the permission-preset row restated with the extra「自动审批」tier.
 # The row name resolves from the profile's own node_modules where
 # `dsh plugin --profile web add <path>` installed this package.
 #
@@ -15,6 +16,33 @@
 #       fallback: ask
 #       reviewer:
 #         model: deepseek-official/deepseek-v4-pro
+#
+# The `permission` row below is a whole-row restatement of the row dsh-base
+# inserts (patch semantics: a later bundle layer replaces an earlier row's
+# fields by id, no deep merge). The three standard tiers are byte-equal to
+# dsh-base's; `auto-approve` is added between workspace-write and
+# danger-full-access. Because this patch ships inside the package, installing
+# it adds the tier and uninstalling removes it — the profile's own patch layer
+# is never touched. `derive` picks the first matching tier in declaration
+# order, so auto-approve must stay after the workspace-write it equals.
 - insert:
     - id: approve-for-me
       name: dsh-approve-for-me
+- id: permission
+  name: '@deepseek-ai/dsh-permission-presets'
+  config:
+    presets:
+      read-only:
+        sandbox: read-only
+        approval: ask
+      workspace-write:
+        sandbox: workspace-write
+        approval: ask
+      auto-approve:
+        sandbox: workspace-write
+        approval: ask
+        name: 自动审批
+        description: 与「工作区内修改」相同的沙箱与审批策略，升权请求先由 LLM 审查器自动判定。
+      danger-full-access:
+        sandbox: danger-full-access
+        approval: never
