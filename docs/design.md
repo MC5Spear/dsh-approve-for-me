@@ -2020,21 +2020,24 @@ R52 一条需求四问（下文以「问 1–问 4」指称）；依据：R52 �
 
 #### 28.3-2 默认预设（settings 的 `permissionPresets.defaultPreset`）：disposer 读 manifest 判定的防护
 
-- **为什么要防**：宿主设置界面把「默认预设＝`auto-approve`」持久化进 profile patch 的 permission 行 config 覆盖。卸载后该覆盖滞留两重后果：覆盖仍指向已删档 → PP 构造器 `this.resolve(defaultPreset)` 抛 `unknown preset`（dsh-permission-presets lib/index.js:178-181）→ 整行装载失败 → 每个会话查投影都抛「projection is not registered」（:277-280）→ 全部会话不可用；且覆盖行还携带四档 presets（见下）——重述本身也作为残值滞留用户层。
-- **关键事实（决定防护形态）**：设置写回路的 `strip(raw, form)` 以**当时生效的活动配置**为基（dsh-config-editor lib/index.js:77-79 的 `raw＝entry.options.config`；dsh-settings lib/index.js:508-534）——写入的覆盖行＝`{presets: 当时生效的档表（含本包四档）, defaultPreset: 所选值}`。因此 (a) 悬空值只可能源自该覆盖行（无覆盖时易变值回落推断默认＝首档 read-only）；(b) 设置服务通道的 `unset defaultPreset` 清不净——`next＝strip(raw)` 恒含四档 presets，等值清除分支（dsh-config-editor lib/index.js:99-104，next 深等于 inherited 才删行）不会触发，API 路径必留 presets 残值；(c) **删除整个覆盖行＝恢复继承层（dsh-base 三档）＝必要且充分**，且不依赖任何服务/光纤的销毁顺序。
+- **为什么要防**：宿主设置界面把默认预设选择持久化进 profile patch 的 permission 行 config 覆盖。卸载后该覆盖滞留两类后果：(a) 默认档指向已删的 `auto-approve` → PP 构造器 `this.resolve(defaultPreset)` 抛 `unknown preset`（dsh-permission-presets lib/index.js:178-181）→ 整行装载失败 → 每个会话查投影都抛「projection is not registered」（:277-280）→ 全部会话不可用；(b) **即便默认档已切回标准档**，被设置写回路拖入的四档 presets 仍滞留覆盖——卸载后下拉仍显示本包档名（盲审反例：默认 workspace-write/read-only 时组合仍四档）。
+- **关键事实（决定防护形态）**：设置写回路的 `strip(raw, form)` 以**当时生效的活动配置**为基（dsh-config-editor lib/index.js:77-79 的 `raw＝entry.options.config`；dsh-settings lib/index.js:508-534）——写入的覆盖行＝`{presets: 当时生效的档表（含本包四档）, defaultPreset: 所选值}`，**无论默认档选的是谁**。因此悬空值只可能源自该覆盖行（无覆盖时易变值回落推断默认）；且设置服务通道的 `unset defaultPreset` 清不净——`next＝strip(raw)` 恒含档表，等值清除分支（dsh-config-editor lib/index.js:99-104，next 深等于 inherited 才删行）不会触发，API 路径必留残值——文件手术必要且充分，且不依赖任何服务/光纤的销毁顺序。
 - **触发点**：本包 `apply()` 新增一个 effect 作用域（既有 apply 无 disposer——纯监听器注册；新增作用域置于**配置禁用早退之前**，config-disabled 形态下摘除防护也要在岗），disposer 内执行防护。
 - **判定**：
   - profile 定位＝宿主运行态事实：`ctx.get('profileContext')?.dir`（dsh-app-boot lib/index.js:2065-2071 同源用法，profileContext 由 loader 提供且带 `.dir`）——不做文件系统走查，junction/link 形（含 R54 冻结件部署）也无盲区；
-  - 数组判定＝读 `<profile.dir>/package.json` 的 `dsh.profile.bundles`，**不含本包名**才动作。依据：宿主 removeBundle/停用＝`selectBundle(name, false)` 落盘数组**先于** `reload()` 触发的 disposer（dsh-plugin-manager lib/index.js:1852-1853 的顺序）；普通关停、升级、热重载时数组仍含本包 → 不动作（不会把用户的默认档选择在每次重启时抹掉）。
-- **动作**：锚点式文本手术（纪律与 `lib/permission-preset.js` 同源：不解析 YAML、不猜结构、原子写同目录临时文件＋rename、BOM 保留）——定位 profile patch（`<profile.dir>/cordis.patch.yml`）内 `- id: permission` 覆盖行块，其 `defaultPreset` 值恰为 `auto-approve`（裸名/引号两形态）时**整行删除**（含被设置写回路拖入的 presets 残值）；行不存在或值非本包预设＝无悬空源，跳过。
+  - 数组判定＝读 `<profile.dir>/package.json` 的 `dsh.profile.bundles`，**不含本包名**才动作。依据：宿主 removeBundle/停用＝`selectBundle(name, false)` 落盘数组**先于** `reload()` 触发的 disposer（dsh-plugin-manager lib/index.js:1852-1853 的顺序）；普通关停、升级、热重载时数组仍含本包 → 不动作（不会把用户的配置在每次重启时抹掉）。
+- **动作（贡献级手术，盲审修订）**：锚点式文本手术（纪律与 `lib/permission-preset.js` 同源：不解析 YAML、不猜结构、原子写同目录临时文件＋rename、BOM 保留、删空补 `[]` 占位）——只删**本包的贡献**，保全用户的有效选择与自定义：
+  1. 删覆盖行 presets 里的 `auto-approve:` 条目块（若有）；
+  2. 删指向 `auto-approve` 的 `defaultPreset` 行（若有；悬空源，裸名/引号两形态）；
+  3. 行去留按**编辑后形态**判定：presets 被删空（空档表会让 PP 构造器按无匹配档抛错）→ 整行删除；「无 defaultPreset（悬空行已移除＝用户没有仍有效的默认选择）且 config 键只剩 presets、条目全为三标准档」＝纯设置拖入形态 → 整行删除＝恢复继承层；用户仍保留有效默认档（如已切回 workspace-write）或行内有自定义条目 → **保留行**（等价于「本包从未存在时宿主设置写出的形态」——外来档名已清、用户选择无损）。
 - **失败语义**：best-effort——disposer 内全链 try/catch＋审计（`reset` 或失败性 `skip` 落一行，良性跳过静默——关停/升级/重载是常态）；manifest/patch 不可读、锚点不命中、写失败等一切异常只降级为跳过，绝不阻断卸载/停用。
-- **接受面（设计明示）**：手术条件以「覆盖行的 defaultPreset 指向本包预设」为准整行删除——若用户曾在该行手工加过其他非易变自定义（理论上可经配置编辑器做到），会一并丢弃（等价「撤销那次设置写入」）；README 卸载节一句说明。
+- **接受面（设计明示）**：条目级清理保全用户自定义条目与有效默认选择；整行删除仅发生在「无有效默认选择且行内无本包宇宙外内容」时（纯设置拖入形态）。README 卸载节说明。
 - **覆盖矩阵**：
 
 | 卸载路径 | disposer 是否带着「数组已除名」运行 | 结果 |
 |---|---|---|
-| 交互宿主：移除/停用（reload 热卸载） | 是（selectBundle 先落盘） | 覆盖行整行删除（零残值） |
-| 服务宿主：先停机再 remove | 否（停机时数组仍含本包；remove 在独立进程，本包代码此后不再运行） | README 一句补救：卸载前把默认预设切回标准档 |
+| 交互宿主：移除/停用（reload 热卸载） | 是（selectBundle 先落盘） | 贡献级手术：本包条目＋悬空默认行清除，按形态整行删除或保留行（零外来残留） |
+| 服务宿主：先停机再 remove | 否（停机时数组仍含本包；remove 在独立进程，本包代码此后不再运行） | README 补救：停机后、remove 前跑 `--restore-inherit`（包还在、CLI 可用）；已卸载则重装再跑或手删该行 |
 | 手删包目录 / kill -9 | disposer 不运行 | 同上 README 补救句（手删另有 boot 的 skippedBundles 告警，dsh-app-boot lib/index.js:928-945） |
 | 非 profile 环境 / profileContext 缺席 | — | `dir` 缺失即跳过（防护只在 profile 内动作） |
 
@@ -2059,7 +2062,7 @@ R52 一条需求四问（下文以「问 1–问 4」指称）；依据：R52 �
 
 - `package.json` `files` 白名单**摘除** `hooks`；`cordis.patch.yml` 已在白名单。`npm pack` 产物核验：`cordis.patch.yml`（含 permission 重述）在场、`hooks/` 缺席（判据⑤）。
 - `tools/check-syntax.mjs` 收集面回退到 hooks 扩展之前的形态（`lib/**/*.js`＋两入口）。
-- 守护测试（进新 `test/bundle-patch.test.mjs`）：`scripts` **不得**声明任何 npm 生命周期键（`postinstall`/`preuninstall`/`prepack` 等——出现即红）；`files` 必须含 `cordis.patch.yml`、`lib`、`tools/permission-preset.mjs`。方向＝防止钩子通道回潮（它是被实测否决的路径）。
+- 守护测试（进新 `test/bundle-patch.test.mjs`）：`scripts` **不得**命中生命周期脚本规则——禁任何以 `pre`/`post` 开头的键（覆盖 npm 文档全部生命周期键与 `npm run <script>` 的影子钩子如 `pretest`）加裸事件键 `install`/`uninstall`/`publish`（盲审修订：人工十键名单曾漏 `prepublish`/`preprepare`/`postprepare` 致变异假绿，改为规则判全＋全键矩阵用例）；`files` 必须含 `cordis.patch.yml`、`lib`、`tools/permission-preset.mjs`。方向＝防止钩子通道回潮（它是被实测否决的路径）。
 
 ### 28.7 风险清单
 
@@ -2077,8 +2080,8 @@ R52 一条需求四问（下文以「问 1–问 4」指称）；依据：R52 �
 
 ### 28.9 与既有需求的边界
 
-- **R26**：CLI（`tools/permission-preset.mjs`）与内核语义原样保留（遗留清理通道），`test/permission-preset.test.mjs` 全数不改判；其定位从「部署必经」降为「存量残留回收」。
-- **R20 与承诺口径**：初裁稿拟收窄的「运行时代码不改宿主文件」口径**作废**——新机制下正常运行与装卸全程不写 profile 层；**唯一例外**＝§28.3-2 防护在「覆盖行的默认档恰指向 auto-approve 且本包正被移除/停用」时对该覆盖行的整行删除（该写入本身就是清理、移除悬空源，且仅此一种情形发生）。README 四处承诺句（英文摘要、风险节 bullet 6、轨迹集成节、回滚节尾；以 `grep` 全量清点为准）按此口径改写（「不修改宿主任何文件，装卸均可逆」，例外场景随 §28.3-2 补救句一并写明）；「删除插件目录即完全回滚」在 bundle patch 机制下为真（层随包目录消失，宿主重启后回到基线——补「重启宿主」限定词）。
+- **R26**：CLI（`tools/permission-preset.mjs`）与内核语义原样保留（遗留清理通道），`test/permission-preset.test.mjs` 既有用例不改判；其定位从「部署必经」降为「存量残留回收」。**盲审修订**：`--revert` 只删条目、保留整行重述（R26 语义），升级后它会遮蔽包内四档——新增 `--restore-inherit`（删 permission 覆盖行整行＝回纯 bundle 继承；保全校验：行内出现宇宙外键/取值即拒绝代删；幂等；`--init-row` 指纹注释块一并回收，模板往返零字节差），作为存量部署升级后的回收主通道。
+- **R20 与承诺口径**：初裁稿拟收窄的「运行时代码不改宿主文件」口径**作废**——新机制下正常运行与装卸全程不写 profile 层；**唯一例外**＝§28.3-2 防护在「覆盖行含本包贡献（auto-approve 条目或悬空默认档）且本包正被移除/停用」时对该覆盖行的贡献级手术（该写入本身就是清理、移除残留，且仅此一种情形发生）。README 四处承诺句（英文摘要、风险节 bullet 6、轨迹集成节、回滚节尾；以 `grep` 全量清点为准）按此口径改写（「不修改宿主任何文件，装卸均可逆」，例外场景随 §28.3-2 补救句一并写明）；「删除插件目录即完全回滚」在 bundle patch 机制下为真（层随包目录消失，宿主重启后回到基线——补「重启宿主」限定词）。
 - **R16**：fail-loud missing 提示保留原语义；指引行按 §28.5 改写。
 - **版本与 CHANGELOG**：CHANGELOG 补 R57 条目（要点：预设改由 bundle patch 随包提供、装卸零写入零残留、钩子方案及其否决过程一句带过、默认预设防护、存量部署 `--revert` 回收指引、承诺口径改写），以 `0.3.0` 未发布段为标题；`package.json` 升 `0.3.0` 为**提案**（验收报告提交用户裁定，通过后同批改 `version`——0.2.0 状态下发布行为变更＝语义化违约，升档与发布同窗）。
 - **§14（部署与回滚）**：§14.1 立项理由段补历史注记（0.1.7 层序认知）、§14.2/§14.3 头部指针注记按新机制改写（主路径＝装包重启即得；手工命令＝存量残留回收与 `link:` 通道说明）；既有步骤本体不动。
@@ -2088,13 +2091,14 @@ R52 一条需求四问（下文以「问 1–问 4」指称）；依据：R52 �
 | 判据 | 测试/取证 | 可失败性（变异） |
 |---|---|---|
 | ① 装完即配 | 端到端实验（scratch profile＋宿主通道装 tarball，**无批准回合**）→ profile `cordis.patch.yml` 字节不变（零写入断言）＋组合四档（§28.8-3 同款取证）＋重启后下拉四项含「自动审批」、无 unknown preset 警告 | 变异＝patch 摘掉 permission 重述 → 组合三档、断言红 |
-| ② 卸载零残留 | 端到端实验（宿主 remove）→ profile `cordis.patch.yml` 字节不变（从未写入；前提＝默认档未指向 auto-approve——指向时设置界面已写出的覆盖行会由 §28.3-2 防护整行删除，字节变化本身即防护在岗证据，断言改为「手术后行内无 defaultPreset/auto-approve 残留」）＋组合三档；会话档位回落＝单测钉住「auto-approve knobs 与 workspace-write 逐字段等同」（derive 回落的前提）；defaultPreset 防护＝lib 单测条件矩阵＋disposer 接线测试 | 摘掉 knobs 等同约束 → 单测红；防护条件反转 → 条件矩阵红 |
-| ③ 非 profile 零副作用 | 声明面守护：`scripts` 无任何生命周期键（本仓 `npm install`/CI 因此无事可跑）；全套 `npm test`＋`test:offline`＋`check`＋`check:public-surface`＋lint 0 error | 变异＝向 `scripts` 引入任一生命周期键 → 守护断言红 |
+| ② 卸载零残留 | 端到端实验（宿主 remove）→ profile `cordis.patch.yml` 字节不变（从未写入）＋组合三档；**盲审修订**：设置写出的覆盖行（含被拖入的四档）由 §28.3-2 贡献级手术清理——默认档指向 auto-approve 时整行删除（恢复继承）、默认档已切标准档时条目级清理（行保留、用户选择保全），断言＝「手术后组合三档＋行内无 auto-approve 残留」（真 composeEntries 探针覆盖三种默认档形态）；会话档位回落＝单测钉住「auto-approve knobs 与 workspace-write 逐字段等同」（derive 回落的前提）；防护＝lib 单测条件矩阵＋disposer 接线测试 | 摘掉 knobs 等同约束 → 单测红；防护条件反转 → 条件矩阵红；默认档切标准漏清 → 探针/矩阵红 |
+| ②′ 存量回收回纯 bundle（盲审反例） | `--restore-inherit`：删 permission 覆盖行整行＋initRow 指纹注释块＝零字节差回模板基线；叠加安装态 bundle 后组合四档（遮蔽解除）；行内宇宙外键/取值拒绝代删且零落盘；幂等 | 变异＝不删重述 → 组合仍三档红；不校验宇宙 → 拒绝用例红 |
+| ③ 非 profile 零副作用 | 声明面守护：`scripts` 不命中生命周期规则（pre/post 前缀＋裸事件键 install/uninstall/publish，§28.6；全键矩阵用例在岗）；全套 `npm test`＋`test:offline`＋`check`＋`check:public-surface`＋lint 0 error | 变异＝向 `scripts` 引入任一生命周期键（含名单外新增键）→ 守护断言红 |
 | ④ 文档口径 | README/CHANGELOG 按上文改写＋`check:public-surface` 全绿；CHANGELOG 含 R57 条目（`0.3.0` 未发布段）＋验收报告含版本升档提案 | 检查器既有变异用例在岗 |
 | ⑤ 发布面 | `npm pack` 产物：`cordis.patch.yml`（含重述）在场、`hooks/` 缺席；守护测试同 §28.6 | 摘 `files` 的 `cordis.patch.yml` → 守护红 |
 
 - 新 `test/bundle-patch.test.mjs`：YAML 形状（`approve-for-me` insert 行在场；permission 重述含 name 断言、四键且序为 read-only→workspace-write→auto-approve→danger-full-access、三标准档取值与既有 `--init-row` 模板逐字一致、auto-approve knobs 与 workspace-write 逐字段等同、无 `defaultPreset` 键）＋发布面守护（§28.6）。
 - lib 防护纯函数单测＋`index.test.mjs` disposer 接线（fake ctx：数组含/不含 × defaultPreset 值分支 × 写失败 best-effort）。
 - `client.test.mjs`：既有 remedy 用例改按新文案断言（missing 在场→指引在场；missing 空→指引缺席）。
-- 既有 `test/permission-preset.test.mjs`：不改判（遗留清理通道的回归证据）。
+- 既有 `test/permission-preset.test.mjs`：既有用例不改判（R26 遗留通道的回归证据）；新增 `--restore-inherit` 合同用例（判据②′：模板往返零字节差、设置形态整行回收、宇宙外拒绝、幂等）。
 - `test/install-hooks.test.mjs`：删除（其对象已移除；守护职责由 `bundle-patch.test.mjs` 反向承接）。

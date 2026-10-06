@@ -267,3 +267,113 @@ test('脚本与共享内核是零依赖的：import 只有 node: 前缀或包内
     }
   }
 });
+
+/**
+ * 造 0.2.x 存量部署的完整生命周期形态：官方模板（注释＋[]）→ --init-row → --apply。
+ * @param {string} home - 临时 home。
+ * @returns {string} initRow+apply 后的 patch 全文。
+ */
+function legacyDeployed(home) {
+  const profileDir = join(home, 'profiles', 'web');
+  writeFileSync(join(profileDir, 'cordis.patch.yml'), '# legacy template\n[]\n', 'utf8');
+  assert.equal(run(home, '--init-row').status, 0);
+  assert.equal(run(home, '--apply').status, 0);
+  return patchOf(home);
+}
+
+test('--restore-inherit（盲审反例）：存量部署 revert 后重述遮蔽包内四档——restore 回纯 bundle、零字节差', () => {
+  const home = makeHome(patchText(''));
+  const deployed = legacyDeployed(home);
+  assert.equal(run(home, '--revert').status, 0);
+  const afterRevert = patchOf(home);
+  assert.equal(afterRevert.includes('- id: permission'), true, '盲审反例前提：--revert 保留整行重述（R26 语义）');
+
+  assert.equal(run(home, '--restore-inherit').status, 0);
+  const restored = patchOf(home);
+  assert.equal(restored, '# legacy template\n[]\n', '模板→initRow→apply→revert→restore 零字节差往返（纯 bundle 继承）');
+  assert.equal(restored.includes('permission'), false, '覆盖行必须消失');
+  // 反向钉住遮蔽危害：restore 前 permission 重述在场＝组合三档；restore 后＝组合四档由探针
+  // （review-r57-blind-probe）用真 composeEntries 证明，这里钉文件位面。
+  assert.equal(deployed.includes('- id: permission'), true);
+});
+
+test('--restore-inherit：设置写出的四档覆盖（含 auto-approve 条目与默认档）直接整行回收', () => {
+  const home = makeHome([
+    '# header',
+    '- id: permission',
+    "  name: '@deepseek-ai/dsh-permission-presets'",
+    '  config:',
+    '    presets:',
+    '      read-only:',
+    '        sandbox: read-only',
+    '        approval: ask',
+    '      auto-approve:',
+    '        sandbox: workspace-write',
+    '        approval: ask',
+    '      danger-full-access:',
+    '        sandbox: danger-full-access',
+    '        approval: never',
+    '    defaultPreset: workspace-write',
+    '',
+  ].join('\n'));
+  assert.equal(run(home, '--restore-inherit').status, 0);
+  const after = patchOf(home);
+  assert.doesNotMatch(after, /permission|auto-approve|defaultPreset/u, '整行回收＝纯继承');
+  assert.match(after, /# header/u, '其余内容原样');
+  assert.match(after, /^\[\]\s*$/mu, '删空后恰一个占位');
+});
+
+test('--restore-inherit：保全校验——行内含不认识的键/取值时拒绝代删且不落盘', () => {
+  // 自定义预设 id。
+  const customTier = makeHome([
+    '- id: permission',
+    "  name: '@deepseek-ai/dsh-permission-presets'",
+    '  config:',
+    '    presets:',
+    '      read-only:',
+    '        sandbox: read-only',
+    '        approval: ask',
+    '      my-tier:',
+    '        sandbox: read-only',
+    '        approval: never',
+    '',
+  ].join('\n'));
+  const before = patchOf(customTier);
+  const result = run(customTier, '--restore-inherit');
+  assert.notEqual(result.status, 0, '含自定义档必须拒绝代删');
+  assert.equal(patchOf(customTier), before, '失败零落盘');
+  // 自定义 config 键。
+  const customKey = makeHome([
+    '- id: permission',
+    "  name: '@deepseek-ai/dsh-permission-presets'",
+    '  config:',
+    '    presets:',
+    '      read-only:',
+    '        sandbox: read-only',
+    '        approval: ask',
+    '    extraKnob: true',
+    '',
+  ].join('\n'));
+  assert.notEqual(run(customKey, '--restore-inherit').status, 0, '含未知 config 键必须拒绝代删');
+  assert.match(patchOf(customKey), /extraKnob: true/u, '原内容一字不动');
+  // defaultPreset 取值在四档宇宙外。
+  const customDefault = makeHome(patchText('    defaultPreset: my-tier'));
+  assert.notEqual(run(customDefault, '--restore-inherit').status, 0, '默认档取值未知必须拒绝代删');
+  assert.match(patchOf(customDefault), /defaultPreset: my-tier/u);
+});
+
+test('--restore-inherit：幂等——行不存在时零 diff、exit 0', () => {
+  const home = makeHome('# clean\n[]\n');
+  assert.equal(run(home, '--restore-inherit').status, 0);
+  assert.equal(patchOf(home), '# clean\n[]\n', '零动作零 diff');
+  // 含其他行但无 permission 覆盖时同样零 diff。
+  const noPermission = [
+    '# test profile patch',
+    '- id: webserver',
+    "  name: '@deepseek-ai/dsh-host-webserver'",
+    '',
+  ].join('\n');
+  const home2 = makeHome(noPermission);
+  assert.equal(run(home2, '--restore-inherit').status, 0, '无覆盖行＝无需动作（幂等）');
+  assert.equal(patchOf(home2), noPermission, '零 diff');
+});

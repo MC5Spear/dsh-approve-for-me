@@ -23,23 +23,30 @@
  *   --revert  删除 `auto-approve:` 条目块；`defaultPreset` 按备份恢复（备份记录 `null`
  *             则删除该键）；备份值等于本条条目名时折算为标准预设（否则指向已删预设会让
  *             设置注册失败）；无备份但现值仍是 `auto-approve` 时同样折算；随后删除备份文件。
- *             新机制部署想回到纯 bundle 形态时，用它回收 profile 层的存量重述。
+ *             **保留 permission 行的整行重述**（R26 语义）——它本身不是残留问题，但升级到
+ *             bundle patch 机制后会遮蔽包内四档（组合仍三档、自动审批档缺失，盲审反例）。
+ *   --restore-inherit
+ *             删除 permission 覆盖行**整行**＝回到纯 bundle 继承（包内四档直接生效，用户层
+ *             不再遮蔽）。0.2.x 存量部署升级到新机制后的回收主通道：`--revert`（若用过
+ *             --apply 先收回条目与默认档）之后跑这一条，或直接跑它（行内含 auto-approve
+ *             条目也一并回收）。保全校验：行内出现不认识的 config 键/预设 id/默认档取值
+ *             （可能是手工自定义）一律拒绝代删并提示手工处理；幂等（行不存在＝零动作）。
  *
  * 锚点缺失（找不到 permission 行 / presets 块 / 两个邻接条目）一律报错退出、不落盘。
  * 写回：UTF-8 无 BOM（原文件带 BOM 则保留）、原子写（同目录临时文件 + rename）。
  *
- * 用法：node tools/permission-preset.mjs [--init-row|--apply|--revert] [--home <dir>] [--profile <name>]
+ * 用法：node tools/permission-preset.mjs [--init-row|--apply|--revert|--restore-inherit] [--home <dir>] [--profile <name>]
  * @module dsh-approve-for-me/tools/permission-preset
  */
 import { join } from 'node:path';
-import { applyPreset, initRow, revertPreset } from '../lib/permission-preset.js';
+import { applyPreset, initRow, restoreInheritRow, revertPreset } from '../lib/permission-preset.js';
 
 /** 命令行参数解析；同时给多个模式视为用法错误。 */
 function parseArgs(argv) {
 	const args = { mode: '', home: '', profile: 'web' };
 	for (let index = 0; index < argv.length; index += 1) {
 		const token = argv[index];
-		if (token === '--apply' || token === '--revert' || token === '--init-row') args.mode = token;
+		if (token === '--apply' || token === '--revert' || token === '--init-row' || token === '--restore-inherit') args.mode = token;
 		else if (token === '--home') args.home = argv[(index += 1)] ?? '';
 		else if (token === '--profile') args.profile = argv[(index += 1)] ?? 'web';
 		else {
@@ -48,7 +55,7 @@ function parseArgs(argv) {
 		}
 	}
 	if (args.mode === '') {
-		process.stderr.write('用法：node tools/permission-preset.mjs --init-row|--apply|--revert [--home <dir>] [--profile <name>]\n');
+		process.stderr.write('用法：node tools/permission-preset.mjs --init-row|--apply|--revert|--restore-inherit [--home <dir>] [--profile <name>]\n');
 		process.exit(2);
 	}
 	if (args.home === '') args.home = process.env.DSH_HOME ?? join(process.env.USERPROFILE ?? process.env.HOME ?? '', '.dsh');
@@ -62,6 +69,7 @@ try {
 	const backupFile = join(args.home, 'approve-for-me', 'permission-grant.json');
 	if (args.mode === '--apply') applyPreset(patchFile, backupFile);
 	else if (args.mode === '--init-row') initRow(patchFile);
+	else if (args.mode === '--restore-inherit') restoreInheritRow(patchFile);
 	else revertPreset(patchFile, backupFile);
 } catch (error) {
 	process.stderr.write(`[permission-preset] 失败（未落盘）：${error instanceof Error ? error.message : String(error)}\n`);

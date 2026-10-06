@@ -17,11 +17,32 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const patchText = readFileSync(join(root, 'cordis.patch.yml'), 'utf8');
 const patchLines = patchText.split('\n');
 
-/** npm 生命周期脚本键全集（出现任何一个即红——R57 生命周期脚本禁令）。 */
-const LIFECYCLE_SCRIPT_KEYS = [
+/**
+ * npm 生命周期脚本禁令的**规则**（R57 禁令；盲审修订：人工名单会漏键，改为按规则判全）。
+ *
+ * npm 会在生命周期事件前后执行同名前后缀脚本，且 `npm run <script>` 也会执行 `pre<script>` /
+ * `post<script>` 影子钩子（pretest 会在 npm test 时跑）。因此规则不靠枚举：
+ *   1. 禁止任何以 `pre` / `post` 开头的 scripts 键——覆盖 npm 文档全部生命周期键
+ *      （preinstall/install/postinstall、prepublish/prepublishOnly/prepack/postpack、
+ *      prepare/preprepare/postprepare、preuninstall/uninstall/postuninstall、publish/postpublish）
+ *      及对仓库自有脚本的影子钩子（如 pretest）；
+ *   2. 禁止裸键 install / uninstall / publish（不以 pre/post 开头的生命周期事件名）。
+ * 仓库自有脚本名（test、check、probe:* 等）均不以 pre/post 开头，不受影响。
+ * @param {string} key - scripts 键名。
+ * @returns {boolean} true＝命中禁令（红）。
+ */
+function isBannedScriptKey(key) {
+  return /^(pre|post)/u.test(key) || ['install', 'uninstall', 'publish'].includes(key);
+}
+
+/** npm 文档生命周期键全集＋影子钩子样例（矩阵用：规则必须逐一命中，防名单漏键回潮）。 */
+const LIFECYCLE_MUTANTS = [
   'preinstall', 'install', 'postinstall',
   'preuninstall', 'uninstall', 'postuninstall',
-  'prepare', 'prepublishOnly', 'prepack', 'postpack',
+  'prepare', 'preprepare', 'postprepare',
+  'prepublish', 'prepublishOnly', 'prepack', 'postpack',
+  'publish', 'postpublish',
+  'pretest', 'postcheck', // npm run 影子钩子（对自有脚本的自动前后缀执行）
 ];
 
 /**
@@ -123,8 +144,20 @@ test('bundle patch：重述不写 defaultPreset（R26 禁令）', () => {
 test('发布面守护：package.json 禁止生命周期脚本（R57 禁令，防钩子通道回潮）', () => {
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
   const scripts = Object.keys(pkg.scripts ?? {});
-  const lifecycle = scripts.filter((key) => LIFECYCLE_SCRIPT_KEYS.includes(key));
-  assert.deepEqual(lifecycle, [], `scripts 不得声明生命周期键（实测否决的通道）：${lifecycle.join(', ')}`);
+  const lifecycle = scripts.filter(isBannedScriptKey);
+  assert.deepEqual(lifecycle, [], `scripts 不得声明生命周期键或影子钩子（实测否决的通道）：${lifecycle.join(', ')}`);
+});
+
+test('发布面守护：生命周期禁令按规则判全——npm 全集键与影子钩子逐一命中，自有脚本名不误伤', () => {
+  // 盲审反例：旧十键名单漏 prepublish/preprepare/postprepare，注入后 7/7 假绿。
+  // 规则化后任何 pre*/post* 与裸事件键都必须被拦下——新增任何生命周期键无需改本名单即红。
+  for (const key of LIFECYCLE_MUTANTS) {
+    assert.equal(isBannedScriptKey(key), true, `规则必须拦截生命周期键：${key}`);
+  }
+  // 仓库自有脚本名（及常见无害键）不得误伤——误伤会让守护失去可信度。
+  for (const key of ['test', 'test:offline', 'check', 'check:public-surface', 'probe:typert', 'probe:llm', 'lint']) {
+    assert.equal(isBannedScriptKey(key), false, `规则不得误伤自有脚本名：${key}`);
+  }
 });
 
 test('发布面守护：files 白名单与 hooks 缺席', () => {

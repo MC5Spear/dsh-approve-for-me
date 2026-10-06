@@ -620,7 +620,7 @@ test('R48⑦ 真接线：dedupe 同 key 双投递共享在飞任务，record 恰
   }
 });
 
-test('R57§28.3-2 真接线：默认预设悬空防护 disposer——先于禁用早退注册，卸载判定时手术', async (t) => {
+test('R57§28.3-2 真接线：预设残留防护 disposer——先于禁用早退注册，卸载判定时手术', async (t) => {
   const { mkdirSync, mkdtempSync, rmSync, readFileSync, writeFileSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
@@ -683,7 +683,7 @@ test('R57§28.3-2 真接线：默认预设悬空防护 disposer——先于禁�
     // 可解析性：删空后恰好一个顶层数组占位（宿主 parsePatchList 拒绝 null 与双序列）。
     assert.equal((after.match(/^\[\]\s*$/gmu) ?? []).length, 1, '手术后文档必须恰含一个 [] 占位');
     assert.match(after, /# Your patch layer/u, '模板头保留');
-    assert.match(written.join(''), /默认预设悬空防护/u, '复位动作落一行审计');
+    assert.match(written.join(''), /预设残留防护/u, '复位动作落一行审计');
   } finally {
     process.stderr.write = original;
     if (previousHome === undefined) delete process.env.DSH_HOME;
