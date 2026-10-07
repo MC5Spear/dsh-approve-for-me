@@ -751,4 +751,12 @@ test('复位路径（修正窗③ r65-F3）：整行删除一并回收本包 --i
   assert.ok(!after.includes('--init-row 写入'), '指纹注释块一并回收（r65-F3）');
   assert.deepEqual((await import('yaml')).parse(after), []);
   rmSync(dir, { recursive: true, force: true });
+  // r65 复验 N1：CRLF 文件上指纹比对按剥 \r 后的行判定（guard 的行缓存带 \r 尾）。
+  const crlf = `# hdr\n\n${marker}\n${WINDOW3_ROW}`.replace(/\n/gu, '\r\n');
+  const dirCrlf = makeProfile({ bundles: ['dsh-base'], patch: crlf });
+  assert.equal((await guardDefaultPreset({ profileDir: dirCrlf })).reason, 'removed-user-override');
+  const afterCrlf = readFileSync(join(dirCrlf, 'cordis.patch.yml'), 'utf8');
+  assert.ok(!afterCrlf.includes('--init-row 写入'), 'CRLF 文件的指纹注释块同样回收（r65-N1）');
+  assert.deepEqual((await import('yaml')).parse(afterCrlf), []);
+  rmSync(dirCrlf, { recursive: true, force: true });
 });
