@@ -672,3 +672,83 @@ test('复位路径（修正窗③）：解析器缺席的降级环境——skip 
   assert.equal(readFileSync(join(dir, 'cordis.patch.yml'), 'utf8'), SETTINGS_AP, '降级时零字节改动');
   rmSync(dir, { recursive: true, force: true });
 });
+
+test('复位路径（修正窗③ r65-F1）：顶层整体缩进的块序列——整行删除后不得追加出双节点非法 YAML', async () => {
+  // 缩进顶层序列是合法 YAML（宿主照常装载）。旧占位判定只认列 0 `- ` 行，对它误补
+  // 列 0 `[]` → 「块序列＋流序列」同文档双节点 → 产出不可解析（r65 复审反例）。
+  const indentedRow = WINDOW3_ROW.split('\n').map((line) => (line === '' ? line : `  ${line}`)).join('\n');
+  const dir = makeProfile({ bundles: ['dsh-base'], patch: `# hdr\n${indentedRow}\n` });
+  assert.deepEqual(await guardDefaultPreset({ profileDir: dir }), { action: 'reset', reason: 'removed-user-override' });
+  const after = readFileSync(join(dir, 'cordis.patch.yml'), 'utf8');
+  assert.match(after, /^\[\]$/mu, '空文档补回占位');
+  assert.deepEqual((await import('yaml')).parse(after), [], '产出必须可解析且是空数组文档（不再是双节点、permission 行已删）');
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('复位路径（修正窗③ r65-F1）：缩进序列的条目级清理——行还在＝文档有条目，绝不追加 []', async () => {
+  const indentedRow = WINDOW3_ROW
+    .replace('defaultPreset: auto-approve', 'defaultPreset: workspace-write')
+    .split('\n').map((line) => (line === '' ? line : `  ${line}`)).join('\n');
+  const other = ['  - id: other', '    config:', '      keep: true', ''].join('\n');
+  const dir = makeProfile({ bundles: ['dsh-base'], patch: `# hdr\n${indentedRow}\n${other}` });
+  assert.equal((await guardDefaultPreset({ profileDir: dir })).reason, 'removed-tier-entry', '有效默认选择在 ⇒ 保留行');
+  const after = readFileSync(join(dir, 'cordis.patch.yml'), 'utf8');
+  const YAML = await import('yaml');
+  const parsed = YAML.parse(after);
+  assert.equal(parsed.length, 2, '两条目都在');
+  assert.deepEqual(parsed[1], { id: 'other', config: { keep: true } }, '无关行逐值保全');
+  assert.equal(parsed[0].config.presets['auto-approve'], undefined, '本包条目已清');
+  assert.doesNotMatch(after, /^\[\]/mu, '文档有条目时绝不追加 []（r65-F1）');
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('复位路径（修正窗③ r65-F2）：写回归一尾随与 EOL——LF 收 []\\n、CRLF 收 []\\r\\n', async () => {
+  const indentedRow = WINDOW3_ROW.split('\n').map((line) => (line === '' ? line : `  ${line}`)).join('\n');
+  const dirA = makeProfile({ bundles: ['dsh-base'], patch: `# hdr\n${indentedRow}\n` });
+  await guardDefaultPreset({ profileDir: dirA });
+  const afterA = readFileSync(join(dirA, 'cordis.patch.yml'), 'utf8');
+  assert.ok(afterA.endsWith('\n[]\n'), `LF 文件应以 []\\n 收尾（实际 ${JSON.stringify(afterA.slice(-8))}）`);
+  rmSync(dirA, { recursive: true, force: true });
+  const crlf = `# hdr\n${indentedRow}\n`.replace(/\n/gu, '\r\n');
+  const dirB = makeProfile({ bundles: ['dsh-base'], patch: crlf });
+  await guardDefaultPreset({ profileDir: dirB });
+  const afterB = readFileSync(join(dirB, 'cordis.patch.yml'), 'utf8');
+  assert.ok(afterB.endsWith('\r\n[]\r\n'), `CRLF 文件的占位行必须带 \\r（实际 ${JSON.stringify(afterB.slice(-10))}）`);
+  rmSync(dirB, { recursive: true, force: true });
+});
+
+test('复位路径（修正窗③ r65）：presets 空占位的 flow 形态（{} / []）——行子树内 flow 拒绝、零落盘', async () => {
+  // 裸形态（`presets: {}` 无块子项）可解析，但属行子树内的 flow 集合——与兄弟键共行语义，
+  // 行级手术无法隔离，按 flow-style 拒绝；带块子项的混合形态（`presets: {}` 后跟缩进档键）
+  // 本身就是解析错误，按 parse-errors 拒绝（r65 探针核对）。两种形态都拒绝且零字节改动。
+  for (const empty of ['{}', '[]']) {
+    const patch = [
+      '- id: permission',
+      "  name: '@deepseek-ai/dsh-permission-presets'",
+      '  config:',
+      `    presets: ${empty}`,
+      '    defaultPreset: auto-approve',
+      '',
+    ].join('\n');
+    const dir = makeProfile({ bundles: ['dsh-base'], patch });
+    assert.deepEqual(await guardDefaultPreset({ profileDir: dir }), { action: 'skip', reason: 'patch-refused:flow-style' }, `presets: ${empty} 裸形态按 flow 拒绝`);
+    assert.equal(readFileSync(join(dir, 'cordis.patch.yml'), 'utf8'), patch, '拒绝时零落盘');
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('复位路径（修正窗③ r65-F3）：整行删除一并回收本包 --init-row 指纹注释块', async () => {
+  // 指纹注释是本包 --init-row 的贡献，不是用户注释——guard 整行删除时与 restore-inherit
+  // 同口径一并回收（逐字节全等才认，绝不猜用户注释）。
+  const marker = [
+    '# permission 行整行重述（由 dsh-approve-for-me 的 --init-row 写入）。',
+    '# 来源：@deepseek-ai/dsh-base 的 cordis.patch.yml 同名行——patch 按行覆盖**整份** config，',
+    '# 所以要往这一行加预设，就必须先把它的完整内容重述一遍；三档取值与 base 逐字一致。',
+  ].join('\n');
+  const dir = makeProfile({ bundles: ['dsh-base'], patch: `# hdr\n\n${marker}\n${WINDOW3_ROW}` });
+  assert.deepEqual(await guardDefaultPreset({ profileDir: dir }), { action: 'reset', reason: 'removed-user-override' });
+  const after = readFileSync(join(dir, 'cordis.patch.yml'), 'utf8');
+  assert.ok(!after.includes('--init-row 写入'), '指纹注释块一并回收（r65-F3）');
+  assert.deepEqual((await import('yaml')).parse(after), []);
+  rmSync(dir, { recursive: true, force: true });
+});

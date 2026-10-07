@@ -606,3 +606,15 @@ test('--restore-inherit（修正窗③）：解析器缺席的降级环境——
   assert.match(r.error, /解析器不可用[\s\S]*零落盘/u, '报错必须说明原因与出路');
   assert.ok(r.bytes, '降级拒绝时零落盘');
 });
+
+test('--restore-inherit（修正窗③ r65-F1）：顶层整体缩进的块序列——占位判定不得追加出双节点非法 YAML', async () => {
+  // 缩进顶层序列是合法 YAML；旧占位判定只认列 0 `- ` 行，删行后误补列 0 `[]` →
+  // 同文档双节点 → 产出不可解析（r65 复审反例，restore 路同修）。
+  const indented = WINDOW3_ROW.split('\n').map((line) => (line === '' ? line : `  ${line}`)).join('\n');
+  const home = makeHome(`# hdr\n${indented}\n`);
+  const r = await restoreInProcess(home, `# hdr\n${indented}\n`);
+  assert.equal(r.error, '', '缩进序列在已知子集内，应正常回收');
+  const after = patchOf(home);
+  assert.deepEqual((await import('yaml')).parse(after), [], '产出必须可解析且是空数组文档（不再是双节点）');
+  assert.match(after, /^\[\]$/mu, '空文档补回占位');
+});
