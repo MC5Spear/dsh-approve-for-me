@@ -1552,7 +1552,7 @@ test('审查视图：空会话只显示提示，空列表显示空文案', async
   assert.match(JSON.stringify(tree), /共 0 条/);
 });
 
-test('审查视图：列表展示摘要与 Z，点开后按 callId 匹配台账出等式，匹配不上只显示 Z', async () => {
+test('审查视图：列表展示摘要与 Z，点开后按 callId 匹配记录表得出等式，匹配不上只显示 Z', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({

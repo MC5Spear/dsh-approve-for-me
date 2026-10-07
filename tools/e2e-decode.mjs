@@ -1,4 +1,4 @@
-// R24 E2E 会话日志解码：打印 header、approval/policy、permission/preset、subagent 事件、工具调用概览。
+// R24 端到端会话日志解码：打印 header、approval/policy、permission/preset、subagent 事件、工具调用概览。
 // 用法：node tools/e2e-decode.mjs <会话目录或日志文件绝对路径>
 import { readSessionLog } from './session-log.mjs';
 import { readdirSync, statSync } from 'node:fs';

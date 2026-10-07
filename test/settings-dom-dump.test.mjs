@@ -223,7 +223,7 @@ test('ISS-1 判据：控件取值逐项等于生效值（profile 用户层＋默
 });
 
 test('R49 纪律：失败登录计数在阈值内留档', () => {
-  assert.match(dump, /采集前 `BadPasswordAttempts=未读`，采集后 `=未读`/u, '失败登录计数应留档（R49 轮：Get-LocalUser 的 BadPasswordAttempts 非提升与提升查询均返回 null，如实留档未读；无头 Edge 启动次数以 shots-manifest 台账为准）');
+  assert.match(dump, /采集前 `BadPasswordAttempts=未读`，采集后 `=未读`/u, '失败登录计数应留档（R49 轮：Get-LocalUser 的 BadPasswordAttempts 非提升与提升查询均返回 null，如实留档未读；无头 Edge 启动次数以 shots-manifest 记录表为准）');
 });
 
 test('R30 §10：毫秒字段换算读数常驻（生效值＝控件值、样式与分隔线恢复）', () => {

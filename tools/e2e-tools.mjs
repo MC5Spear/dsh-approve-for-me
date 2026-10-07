@@ -1,4 +1,4 @@
-// dump tool/call + tool/result 详情（E2 诊断用）。
+// dump tool/call + tool/result 详情（端到端诊断用）。
 // 用法：node tools/e2e-tools.mjs <会话目录>
 import { readSessionLog } from './session-log.mjs';
 import { readdirSync, statSync } from 'node:fs';
