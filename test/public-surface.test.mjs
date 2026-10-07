@@ -1,12 +1,12 @@
 /**
  * 边界检查器的变异用例：**种下违规必须报红**。
  *
- * 「检查器全绿」与「公开面干净」是两件事。一个恒绿的检查器会让 CI 形同虚设，
+ * 「检查器全绿」与「公开范围干净」是两件事。一个恒绿的检查器会让 CI 形同虚设，
  * 而这类失效是静默的——没有任何读数会提示你。本用例因此不去验「当前树干净」，
  * 而是逐条喂进**已知违规样本**，要求对应判据把它们抓出来；再喂进**已知合法样本**，
  * 要求它们不被误报（误报会逼着后来者放宽判据，那才是真正的失守路径）。
  *
- * 样本一律按片段拼装：本文件自己也在受检面内，字面写出禁用形态会让它变成违规样本
+ * 样本一律按片段拼装：本文件自己也在受检范围内，字面写出禁用形态会让它变成违规样本
  * （这个坑在写本用例时就踩过一次——用 `write` 直接落盘会被自己的检查器判红）。
  */
 import assert from 'node:assert/strict';
@@ -29,7 +29,7 @@ import {
 const BS = String.fromCharCode(92);
 /** 把片段拼成一个字符串。 */
 const j = (...parts) => parts.join('');
-/** 本机例外那一行（拼装，免得本文件自己被「源码直写本机平面字面」判据判红）。 */
+/** 本机例外那一行（拼装，免得本文件自己被「源码直写本机侧字面」判据判红）。 */
 const LOCAL_LINE = j('.', 'local/');
 
 /** 每条判据一个已知违规样本：判据 id → 样本文本（可多行，一行一个形态）。 */
@@ -95,7 +95,7 @@ test('反例：合法形态不得误报（本机路径的邻居、需求编号�
     j('安装到 ', 'D:', BS, 'Program Files', BS, 'node'), // 盘符相邻但目录名不是本机开发根
     j('主机 DESKTOP', '-', 'workstation'), // 有短横线但无数字，不是本机主机名形态
     j('编码 ', 'UTF', '-8', ' 与 ', 'ISO', '-8859-1'),
-    j('见 R', '29', ' 的设置面重绘与 §', '4.2', ' 判定口径'), // 需求条目编号与小节引用，合法
+    j('见 R', '29', ' 的设置界面重绘与 §', '4.2', ' 判定口径'), // 需求条目编号与小节引用，合法
     j('见 ', 'docs', '/requirements.md', ' 与 ', 'docs', '/design.md'), // 随仓公开的文档，合法
     'npm run check:public-surface',
     j('实例 URL 由配置给出，源码不写端口'),
@@ -134,7 +134,7 @@ test('结构变异：`.gitignore` 少了本机例外那一条，结构判据必�
   }
 });
 
-test('结构变异：源码直接写本机平面字面必须报红，配置加载器与判据自身豁免', () => {
+test('结构变异：源码直接写本机侧字面必须报红，配置加载器与判据自身豁免', () => {
   const root = mkdtempSync(join(tmpdir(), 'dsafm-surface-'));
   try {
     writeFileSync(join(root, '.gitignore'), `${LOCAL_LINE}\n`, 'utf8');
@@ -142,9 +142,9 @@ test('结构变异：源码直接写本机平面字面必须报红，配置加�
     const literal = j('const p = "', '.', 'local/config.mjs', '";');
     writeFileSync(join(root, 'tools', 'rogue.mjs'), literal, 'utf8');
     const hits = checkStructure(root, ['tools/rogue.mjs']);
-    assert.ok(hits.some((v) => v.file === 'tools/rogue.mjs'), '源码直写本机平面字面没被报出来');
+    assert.ok(hits.some((v) => v.file === 'tools/rogue.mjs'), '源码直写本机侧字面没被报出来');
 
-    // 豁免件：配置加载器允许承载该字面（它是公开面通向本机平面的唯一入口）。
+    // 豁免件：配置加载器允许承载该字面（它是公开范围通向本机侧的唯一入口）。
     writeFileSync(join(root, 'tools', 'local-config.mjs'), literal, 'utf8');
     const exempt = checkStructure(root, ['tools/local-config.mjs']);
     assert.equal(exempt.length, 0, `配置加载器被误报：${JSON.stringify(exempt)}`);
@@ -153,21 +153,21 @@ test('结构变异：源码直接写本机平面字面必须报红，配置加�
   }
 });
 
-test('变异：跟踪面落在本机平面里的路径必须报红', () => {
+test('变异：跟踪文件落进本机侧的路径必须报红', () => {
   const root = mkdtempSync(join(tmpdir(), 'dsafm-surface-'));
   try {
     writeFileSync(join(root, '.gitignore'), `${LOCAL_LINE}\n`, 'utf8');
     const hits = checkStructure(root, [j('.', 'local/docs/facts', '.md')]);
-    assert.ok(hits.some((v) => v.label.includes('本机平面')), '跟踪到本机平面的文件没被报出来');
+    assert.ok(hits.some((v) => v.label.includes('本机侧')), '跟踪到本机侧的文件没被报出来');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test('变异：豁免件带着本机指纹还在跟踪面里时，「发布前待办」必须报出来', () => {
+test('变异：豁免件带着本机指纹还在公开层里时，「发布前待办」必须报出来', () => {
   // 这条防线是被实测事故逼出来的：临时工单被豁免，而它当时是被跟踪的，
   // 正文里带着 12 处本机指纹——按原实现，那些永远不会出现在任何读数里。
-  // 豁免于是从「让判据对准发布面」变成了「盖住泄漏的盖子」。
+  // 豁免于是从「让判据对准发布范围」变成了「盖住泄漏的盖子」。
   //
   // 该工单已归档、豁免已撤，所以这里**临时注入**一条豁免来测机制本身：
   // 否则机制会因为没有活条目而永远返回空，测试也就随之恒真。
@@ -181,7 +181,7 @@ test('变异：豁免件带着本机指纹还在跟踪面里时，「发布前�
     assert.equal(pending[0].file, probe);
     assert.ok(pending[0].hits > 0, '命中了本机指纹却没计入待办');
 
-    // 正向对照：文件移出跟踪面后待办必须消失——否则这一段是恒红的假警报，很快会被无视。
+    // 正向对照：文件移出公开层后待办必须消失——否则这一段是恒红的假警报，很快会被无视。
     rmSync(join(root, probe));
     assert.deepEqual(auditExempt(root), [], '文件不在树里时待办仍在报');
   } finally {
@@ -200,14 +200,14 @@ test('反例：判据自身的豁免不进待办（它的规则表就是那些�
   );
 });
 
-test('反例：临时工单归档后不得再被豁免（重新放回跟踪面必须硬红，而不是一段提示）', () => {
+test('反例：临时工单归档后不得再被豁免（重新放回公开层必须硬红，而不是一段提示）', () => {
   const root = mkdtempSync(join(tmpdir(), 'dsafm-surface-'));
   try {
     writeFileSync(join(root, '.gitignore'), `${LOCAL_LINE}\n`, 'utf8');
     writeFileSync(join(root, 'OPENSOURCE-PREP.md'), j('部署在 ', 'D:', BS, 'P', BS, 'x'), 'utf8');
     const violations = runCheck(root).violations;
     const hits = violations.filter((v) => v.file === 'OPENSOURCE-PREP.md');
-    assert.ok(hits.length > 0, '归档的临时工单被放回跟踪面却没报红——豁免撤销失效了');
+    assert.ok(hits.length > 0, '归档的临时工单被放回公开层却没报红——豁免撤销失效了');
     assert.equal(auditExempt(root).length, 0, '它已不在豁免清单里，不该出现在「发布前待办」中');
   } finally {
     rmSync(root, { recursive: true, force: true });

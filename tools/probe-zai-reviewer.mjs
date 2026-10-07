@@ -1,5 +1,5 @@
 /**
- * zai 审查链路对照探针：复现 `lib/reviewer.js` 的请求形状，直连 zai 的 OpenAI 兼容端点。
+ * zai 审查调用链对照探针：复现 `lib/reviewer.js` 的请求形状，直连 zai 的 OpenAI 兼容端点。
  *
  * 目的：判定审计行 `reason="empty payload"`（`lib/reviewer.js` 的 `parseAssessment`）到底是
  * 模型/provider 返回空内容，还是插件侧的消息组装问题。请求形状与 reviewer 一致：

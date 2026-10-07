@@ -428,7 +428,7 @@ window.__ModuleLoader__.load({
 
 		/** 注入样式；同一 tagId 只插入一次，避免重复挂载时样式叠加。 */
 		const CSS = [
-			// R29：设置面照官方设置表单重绘（规格来源见 docs/design.md；0.1.7 令牌表不存在的别名零命中，判据⑥）。
+			// R29：设置界面照官方设置表单重绘（规格来源见 docs/design.md；0.1.7 令牌表不存在的别名零命中，判据⑥）。
 			// 外壳：无卡片边框/圆角/底色，只做纵向布局（判据④按计算样式核）。
 			".dsafm_form{display:flex;flex-direction:column;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary)}",
 			".dsafm_readonly{margin:0 0 12px;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary)}",
@@ -718,7 +718,7 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 把毫秒时长格式化成短文本：一秒内用整数毫秒，否则秒带一位小数（与台账「21.3 s」口径一致）。
+		 * 把毫秒时长格式化成短文本：一秒内用整数毫秒，否则秒带一位小数（与记录表「21.3 s」口径一致）。
 		 * @param {unknown} ms - 毫秒数。
 		 * @returns {string} 文本；不可用时 `-`。
 		 */
@@ -785,13 +785,13 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 在台账快照里按 `callId` 找该工具调用的总时长 X（毫秒）。
+		 * 在记录表快照里按 `callId` 找该工具调用的总时长 X（毫秒）。
 		 *
 		 * 口径复刻宿主 `dsh-client-ui-trajectory` 的 `durationSeconds(node.time, node.callTime)`：
 		 * 结算行 = `time − callTime`、下限 0；`callTime` 缺失（窗口截断）或调用在飞时**没有总时长**，
 		 * 返回 `null`（绝不猜 X，设计 §17.3）。根调用（`kind: 'tool-result'` 节点）与 PTC 子调用
 		 * （`subCalls` 里的结算行，审批的 `callId` 多为 `…:ptc:N` 子调用）都在扫描范围。
-		 * @param {object | null | undefined} snapshot - `useTrajectory` 选择器返回的台账快照。
+		 * @param {object | null | undefined} snapshot - `useTrajectory` 选择器返回的记录表快照。
 		 * @param {string | null | undefined} callId - 审批请求的 `callId`。
 		 * @returns {number | null} 总时长毫秒；匹配不上或时间戳不可用时 `null`。
 		 */
@@ -897,7 +897,7 @@ window.__ModuleLoader__.load({
 				if (typeof props.rpcCall !== "function") return undefined;
 				aliveRef.current = true;
 				refreshState();
-				// 兜底轮询：投影不可用（旧宿主 / 未注册）时才靠它；间隔 10 s，正常路径不吃这个延迟。
+				// 回退轮询：投影不可用（旧宿主 / 未注册）时才靠它；间隔 10 s，正常路径不吃这个延迟。
 				const poll = setInterval(refreshState, 10000);
 				Promise.resolve()
 					.then(() => props.rpcCall("approveForMe/modelCatalog", {}))
@@ -1103,7 +1103,7 @@ window.__ModuleLoader__.load({
 		 *
 		 * 触发器是一个按钮，点开是复选框面板：选项来自宿主预设目录 `approveForMe/presetCatalog`，
 		 * 展示名优先用宿主给的 `label`（部署可能已给中文名），并标出默认预设。
-		 * R29：勾选只暂存（`onChange` 上抛新数组），由设置面的「保存」一次写入，不走选中即写。
+		 * R29：勾选只暂存（`onChange` 上抛新数组），由设置界面的「保存」一次写入，不走选中即写。
 		 * @param {object} props - `selected`（暂存显示数组）、`onChange`、`writable`、`rpcCall` 与 `t`。
 		 * @returns {object} React 元素。
 		 */
@@ -1230,7 +1230,7 @@ window.__ModuleLoader__.load({
 		 */
 		function ApprovalDetail(props) {
 			const { callId, t } = props;
-			// 会话 id 与 composer 下拉同一条通道；宿主也传标准 `sessionId` prop，作为兜底（设计「审批卡片：外壳原生，插件只接管 body 里的 detail seat」）。
+			// 会话 id 与 composer 下拉同一条通道；宿主也传标准 `sessionId` prop，作为备用（设计「审批卡片：外壳原生，插件只接管 body 里的 detail seat」）。
 			const sessionId = react.useMemo(() => {
 				const fromSessions = typeof props.sessionIdOf === "function" ? props.sessionIdOf(props.sessionId) : "";
 				if (typeof fromSessions === "string" && fromSessions.length > 0) return fromSessions;
@@ -1323,8 +1323,8 @@ window.__ModuleLoader__.load({
 		 * 会话视图「审查记录」（设计 §17.3 呈现层第一落点）：本会话全部自动审批记录 + 单次详情 + 每轮耗时对照。
 		 *
 		 * 列表走 `approveForMe/traceRecords`（只回摘要字段），点开一条再按需拉 `approveForMe/traceRecord` 全文；
-		 * X（工具调用在台账里的总时长）从标准 prop `useTrajectory` 取、按 `callId` 匹配工具行
-		 * （匹配不上只显示 Z 并标注「未匹配到工具行」，整段 try/catch 兜底，绝不猜 X）。
+		 * X（工具调用在记录表里的总时长）从标准 prop `useTrajectory` 取、按 `callId` 匹配工具行
+		 * （匹配不上只显示 Z 并标注「未匹配到工具行」，整段 try/catch 承接，绝不猜 X）。
 		 * 会话 id 为空时只显示「请先打开一个会话」，不渲染内容。
 		 * @param {object} props - 注入的 `rpcCall`/`sessionIdOf`/`subscribeSessions`、标准 props（`t`/`useTrajectory`）
 		 *   与 owner props（`viewRequest`/`completeViewRequest`）。
@@ -1379,7 +1379,7 @@ window.__ModuleLoader__.load({
 					.catch(() => setError(t("view.loadFailed")));
 			};
 
-			// 换会话即重置并首拉；顺带读一次 `ownView` 档（关了就只显示说明行）；10 s 兜底轮询让新记录露出来。
+			// 换会话即重置并首拉；顺带读一次 `ownView` 档（关了就只显示说明行）；10 s 回退轮询让新记录露出来。
 			react.useEffect(() => {
 				if (typeof sessionId !== "string" || sessionId.length === 0) {
 					loadedRef.current = "";
@@ -1434,7 +1434,7 @@ window.__ModuleLoader__.load({
 				return undefined;
 			}, [viewRequest]);
 
-			// 台账快照整只取出（选择器必须返回稳定引用，否则 useSyncExternalStore 会循环重渲染）。
+			// 记录表快照整只取出（选择器必须返回稳定引用，否则 useSyncExternalStore 会循环重渲染）。
 			// `useTrajectory` 可能不存在（旧宿主 / 未挂轨迹插件）：恒定 noop 占位保证 hooks 顺序稳定
 			// （与 composer 的 `useProjection` 同一手法）。
 			const trajectoryHook = typeof props.useTrajectory === "function" ? props.useTrajectory : () => undefined;
@@ -1598,9 +1598,9 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 台账近似行的会话定义（设计 §17.3 第二落点，默认关）。
+		 * 记录表近似行的会话定义（设计 §17.3 第二落点，默认关）。
 		 *
-		 * `approval/asked` 开一个上下文、`approval/decided` 收口（同一 `id` 配对），收口后产出一行
+		 * `approval/asked` 开一个上下文、`approval/decided` 收尾（同一 `id` 配对），收尾后产出一行
 		 * `kind: 'context'` 节点，文案含工具名、判定与耗时（两条审计事件的时间戳差，实测正确）。
 		 * 位置与时长条由内置视图决定（落在工具行之下、无时长条），本定义控制不了。
 		 * @param {(key: string) => string} translate - 绑定到本命名空间的翻译函数。
@@ -1633,7 +1633,7 @@ window.__ModuleLoader__.load({
 					const state = context.state;
 					const asked = state?.asked;
 					const decided = state?.decided;
-					// 只收口了才成行（耗时需要两条事件的时间戳）。
+					// 只收尾了才成行（耗时需要两条事件的时间戳）。
 					if (asked === undefined || decided === undefined) return null;
 					const toolName = typeof asked.data?.toolName === "string" && asked.data.toolName.length > 0 ? asked.data.toolName : "-";
 					const outcome = typeof decided.data?.outcome === "string" && decided.data.outcome.length > 0 ? decided.data.outcome : "-";
@@ -1669,9 +1669,9 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 注册台账近似行（可选，默认关）：`getState.trace.legacyRow === true` 时才等 `uiConversation` 服务并注册定义。
+		 * 注册记录表近似行（可选，默认关）：`getState.trace.legacyRow === true` 时才等 `uiConversation` 服务并注册定义。
 		 *
-		 * 两条硬约束（违反会让整个客户端半部加载失败）：
+		 * 两条强制约束（违反会让整个客户端半部加载失败）：
 		 * - `uiConversation` 在插件 `apply` 时还没注册——用**全局** `setTimeout` 轮询（500 ms，最多 20 次），拿到再注册；
 		 * - 整个流程任何异常只写诊断对象 `window.__dsafmProbe`，绝不外抛；`legacyRow` 缺字段按关处理，不猜。
 		 * @param {object} ctx - 客户端根上下文。
@@ -1697,7 +1697,7 @@ window.__ModuleLoader__.load({
 				try {
 					if (typeof window !== "undefined") window.__dsafmProbe = probe;
 				} catch {
-					// 诊断通道失败没有下一级兜底，吞掉。
+					// 诊断通道失败没有下一级承接，吞掉。
 				}
 			};
 			// 卸载时停轮询并撤注册（`events.register` 返回幂等 disposer）。
@@ -2538,7 +2538,7 @@ window.__ModuleLoader__.load({
 					: uiLangOf();
 				return lang === "auto" ? fallback : (key) => localT(lang, key);
 			};
-			/** 非组件路径取词（台账近似行等）：无订阅，按当前快照现取。 */
+			/** 非组件路径取词（记录表近似行等）：无订阅，按当前快照现取。 */
 			const nsT = (key) => {
 				const lang = uiLangOf();
 				return lang === "auto" ? translate(key) : localT(lang, key);
@@ -2659,7 +2659,7 @@ window.__ModuleLoader__.load({
 				),
 			);
 
-			// 台账近似行（可选，默认关；设计 §17.3）：内部自兜底，任何失败只写 window.__dsafmProbe，不影响上面四个挂点。
+			// 记录表近似行（可选，默认关；设计 §17.3）：内部自回退，任何失败只写 window.__dsafmProbe，不影响上面四个挂点。
 			registerLegacyRow(ctx, call, sessionIdOf, (key) => {
 				// 近似行按当前语言档现取；结局闭集探测未命中时回退原值（auto 档键名回显的同一语义）。
 				try {

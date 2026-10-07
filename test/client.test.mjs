@@ -89,7 +89,7 @@ const primitivesStub = {
   Menu: function Menu(props) {
     return { type: 'Menu', props };
   },
-  // R29：设置面的三个新基元——官方数字字段、胶囊 Tag、信息图标（Tooltip/问号图标已退役）。
+  // R29：设置界面的三个新基元——官方数字字段、胶囊 Tag、信息图标（Tooltip/问号图标已退役）。
   SettingsValueField: function SettingsValueField(props) {
     return { type: 'SettingsValueField', props };
   },
@@ -380,7 +380,7 @@ test('设置卡数据源：configForms 以行 id 取控制器，whileServed 门�
   const env = makeCtx();
   client.apply(env.ctx);
   const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
-  // 注入面是 thunk：渲染器解析条目时才求值，故测试显式调用一次。
+  // 注入槽是 thunk：渲染器解析条目时才求值，故测试显式调用一次。
   const injectedProps = card.options.inject();
   assert.deepEqual(env.formGets, ['approve-for-me'], '控制器以行 id（命名空间）获取，不是槽位键');
   assert.equal(injectedProps.scope, env.scope, '注入的 scope 是 configForms.get 的返回值');
@@ -420,7 +420,7 @@ test('设置表单首屏：字段竖排、覆盖组在场、保存置灰、无�
   // 无折叠：一次渲染即字段与保存控件全在场。
   assert.equal(serialized.includes('dsafm_head'), false, '折叠头已移除，不应再有 dsafm_head');
   assert.equal(serialized.includes('dsafm_card'), false, '折叠外壳已移除，不应再有 dsafm_card');
-  // R29 判据①：退役键在渲染树里零命中（删除重置按钮/分区标题/生效值行后这些断言守门）。
+  // R29 判据①：退役键在渲染树里零命中（删除重置按钮/分区标题/生效值行后这些断言把关）。
   assert.equal(serialized.includes('card.resetAll'), false, '不应再有「重置全部覆盖」');
   assert.equal(serialized.includes('card.section.'), false, '不应再有分区标题');
   assert.equal(serialized.includes('card.resolved'), false, '不应再有「当前生效值」灰字行');
@@ -492,7 +492,7 @@ test('帮助点击展开：aria-expanded/aria-controls 成对，文本进入 DOM
   assert.equal(buttons.length, 17, `自绘字段的帮助按钮应 17 个（21 字段－4 个官方数字字段），实际 ${buttons.length}`);
   const iconNodes = findAllNodes(first, (node) => node.type === primitivesStub.IconInfoOutlineRegular);
   assert.equal(iconNodes.length, 17, '帮助按钮图标统一用官方 IconInfoOutlineRegular');
-  assert.equal(JSON.stringify(first).includes('Tooltip'), false, '设置面不应再用 Tooltip');
+  assert.equal(JSON.stringify(first).includes('Tooltip'), false, '设置界面不应再用 Tooltip');
   for (const button of buttons) {
     assert.equal(button.props['aria-expanded'], false, '初始未展开');
     assert.ok(button.props['aria-controls'], '帮助按钮必须带 aria-controls');
@@ -1321,11 +1321,11 @@ test('composer 下拉：权限预设一变就立即重拉（R21，不再等轮�
     hookIndex = 0;
     assert.equal(findNode(render(dropdown.component, props), primitivesStub.Menu), undefined, '预设变化后应立刻隐藏控件');
 
-    // 兜底轮询仍然存在（10 s），且能被清理。
+    // 回退轮询仍然存在（10 s），且能被清理。
     const poll = timers.find((entry) => entry.ms === 10000);
-    assert.ok(poll, '应保留 10 s 兜底轮询');
+    assert.ok(poll, '应保留 10 s 回退轮询');
     cleanupEffects();
-    assert.equal(poll.cleared, true, '清理副作用时应清掉兜底轮询');
+    assert.equal(poll.cleared, true, '清理副作用时应清掉回退轮询');
   } finally {
     globalThis.setInterval = realSetInterval;
     globalThis.clearInterval = realClearInterval;
@@ -1509,7 +1509,7 @@ const TRACE_DETAILS = {
   's1:call_A:1': { ...TRACE_ROWS[0], humanWaitMs: 400, prompt: 'PROMPT-A', output: 'OUTPUT-A' },
   's1:call_B:2': { ...TRACE_ROWS[1], humanWaitMs: 0 },
 };
-/** 台账快照：call_A 有结算工具行（X=5000ms），call_B 故意没有。 */
+/** 记录表快照：call_A 有结算工具行（X=5000ms），call_B 故意没有。 */
 const TRAJECTORY_SNAPSHOT = {
   eventNodes: [
     { kind: 'user', seq: 1, time: 1_700_000_000_000, content: [] },
@@ -1906,7 +1906,7 @@ test('毫秒字段秒数读数：生效值常驻、草稿随输入实时换算�
   const typed = await afterEdit('120000');
   assert.equal(secSpan(typed, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_draft').props.children, '草稿：120 秒', '键入 120000 未保存即出现 120 秒');
   assert.equal(secSpan(typed, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_resolved').props.children, '生效：300 秒', '生效值读数不随草稿变化');
-  // 判据③＋格式边界：整数不带小数点；非整数一位小数（1501 四舍五入到 1.5；999 到 1.0）；0 照数字面。
+  // 判据③＋格式边界：整数不带小数点；非整数一位小数（1501 四舍五入到 1.5；999 到 1.0）；0 按字面显示。
   const oneFive = await afterEdit('1500');
   assert.equal(secSpan(oneFive, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_draft').props.children, '草稿：1.5 秒', '1500 → 1.5 秒');
   const odd = await afterEdit('1501');
@@ -1914,7 +1914,7 @@ test('毫秒字段秒数读数：生效值常驻、草稿随输入实时换算�
   const sub = await afterEdit('999');
   assert.equal(secSpan(sub, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_draft').props.children, '草稿：1.0 秒', '999 → 1.0 秒（非整数秒一位小数）');
   const zero = await afterEdit('0');
-  assert.equal(secSpan(zero, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_draft').props.children, '草稿：0 秒', '0 照数字面显示 0 秒');
+  assert.equal(secSpan(zero, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_draft').props.children, '草稿：0 秒', '0 按字面显示 0 秒');
   // 判据⑥：en 档单位 s（同一暂存文本，读数跟随语言）。
   const enProps = { t: (key) => dicts.en[key] ?? key, scope: env.scope, ...card.options.inject() };
   hookIndex = 0;
@@ -2144,7 +2144,7 @@ test('近似行：legacyRow 开启时等 uiConversation 并注册定义；缺字
   assert.equal(definition.match({ type: 'user/message', seq: 7, data: {} }), null);
   assert.equal(definition.match({ type: 'approval/decided', seq: 8, time: 9, data: { id: '' } }), null, '无 id 的事件不认');
 
-  // 收口后才成行：文案含工具名、判定与耗时；节点是 context 形状、target=trajectory。
+  // 收尾后才成行：文案含工具名、判定与耗时；节点是 context 形状、target=trajectory。
   const midState = definition.start({}, { event: asked });
   assert.equal(definition.buildViewNode({ state: midState }), null, '只有 asked 没有 decided 时不成行');
   const state = definition.update({ state: midState }, { event: decided });

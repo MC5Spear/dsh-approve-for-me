@@ -2,7 +2,7 @@
 /**
  * 公开范围边界检查器（常驻，进 CI）。
  *
- * 本仓采用「单仓双平面」：本目录即公开仓，机器事实、语料与证据全部归拢到不被跟踪的
+ * 本仓采用「单仓双层」：本目录即公开仓，机器事实、语料与证据全部归拢到不被跟踪的
  * `.local/`。本检查器守住那条边界，判据三类：
  *
  *   结构  —— `.gitignore` 里有且仅有 `.local/` 这一条本机例外；没有跟踪文件落在
@@ -75,8 +75,8 @@ export const INTERNAL_REFS = [
  * 混在一起报，真待办会被定义性噪声淹掉。
  *
  * 临时工单 `OPENSOURCE-PREP.md` 曾在此列（它完工前合法地躺在仓里）。现已归档进
- * `.local/docs/`，**豁免随之撤销**——留着豁免只会让「有人再把它放回跟踪面」变成静默通过；
- * 撤掉之后，它一旦重新出现就是 60 处硬红，而不是一段可以忽略的提示。
+ * `.local/docs/`，**豁免随之撤销**——留着豁免只会让「有人再把它放回公开层」变成静默通过；
+ * 撤掉之后，它一旦重新出现就是 60 处直接判红，而不是一段可以忽略的提示。
  */
 export const EXEMPT = new Map([
   ['tools/check-public-surface.mjs', { reason: '判据自身必然承载禁用形态（规则表即正则源码）', audit: false }],
@@ -98,14 +98,14 @@ const MAX_SCAN_BYTES = 4 * 1024 * 1024;
 /**
  * 列出应当受检的文件（仓库相对路径，正斜杠）。
  *
- * 首选 `git ls-files`——它以「跟踪面」为准，正是本检查器的判据对象。
+ * 首选 `git ls-files`——它以「公开层（git 跟踪）」为准，正是本检查器的判据对象。
  * 本机 git 可能因目录属主与当前用户不一致而拒绝工作（`dubious ownership`），
  * 故失败时退一步带 `safe.directory=*` 重试（只影响这次只读列举）。
  * 两者都不可用时遍历文件系统（排除 .git/node_modules/.tmp 与 `.local*`）。
  *
  * **用哪条路径必须报出来**：两条路径的集合不完全相同（遍历会把「未跟踪且未被忽略」
  * 的文件也算进来），读数含义随之不同。本机实测 node 里 spawn git 会被沙箱拦（EPERM），
- * 因此本地跑常常走的是遍历兜底——不报出来的话，「按跟踪面扫」这句话就无从核查。
+ * 因此本地跑常常走的是遍历回退——不报出来的话，「按公开层扫」这句话就无从核查。
  * @param {string} root - 仓库根。
  * @returns {{files: string[], source: string}} 相对路径列表与枚举路径说明。
  */
@@ -114,10 +114,10 @@ export function enumerateTracked(root = ROOT) {
     .map((s) => s.split(sep).join('/'));
   const git = (args) => execFileSync('git', args, { cwd: root, maxBuffer: 64 * 1024 * 1024 });
   try {
-    return { files: parse(git(['ls-files', '-z'])), source: 'git ls-files（跟踪面）' };
+    return { files: parse(git(['ls-files', '-z'])), source: 'git ls-files（公开层）' };
   } catch {
     try {
-      return { files: parse(git(['-c', 'safe.directory=*', 'ls-files', '-z'])), source: 'git ls-files -c safe.directory=*（跟踪面）' };
+      return { files: parse(git(['-c', 'safe.directory=*', 'ls-files', '-z'])), source: 'git ls-files -c safe.directory=*（公开层）' };
     } catch {
       return { files: walk(root).sort(), source: '文件系统遍历（git 不可用；含未跟踪但未被忽略的文件）' };
     }
@@ -134,10 +134,10 @@ export function trackedFiles(root = ROOT) {
 }
 
 /**
- * 遍历目录（enumerateTracked 的兜底路径）。
+ * 遍历目录（enumerateTracked 的回退路径）。
  *
  * 跳过 `.local` **及其一切变体**（`.local.bak` 之类）：本机侧是唯一例外目录，
- * 它的临时改名不该把整片本机内容灌进受检面——实测踩过：改名演练时检查器把
+ * 它的临时改名不该把整片本机内容灌进受检范围——实测踩过：改名演练时检查器把
  * `.local.bak` 当成公开范围扫，报出 11k 处「违规」。
  */
 function walk(root, dir = root, out = []) {
@@ -267,14 +267,14 @@ export function runCheck(root = ROOT) {
 /**
  * 豁免件的「发布前待办」审计。
  *
- * 豁免的本意是让判据对准**发布面**（临时工单在完工前合法地躺在仓里，不该让整条判据变红）。
+ * 豁免的本意是让判据对准**发布范围**（临时工单在完工前合法地躺在仓里，不该让整条判据变红）。
  * 但豁免有个危险副作用：**被豁免的文件只要还被 git 跟踪，就会随仓发布**——豁免于是成了
  * 一颗盖住泄漏的盖子。实测踩到过：`OPENSOURCE-PREP.md`（临时工单）被豁免，而它当时是被
  * 跟踪的，正文里带着 60 处命中、其中 12 处是本机指纹（开发根、用户目录、宿主安装目录、
  * 两个实例端口、服务名、部署脚本名）——按原实现，这些永远不会出现在任何读数里。
  *
- * 所以豁免件每次运行都要把命中数报出来，且**与主判据分开陈述**：主判据说的是「发布面干净」，
- * 这一段说的是「发布面之外还躺着什么」。文件已移出跟踪面（读不到）＝待办已清。
+ * 所以豁免件每次运行都要把命中数报出来，且**与主判据分开陈述**：主判据说的是「发布范围干净」，
+ * 这一段说的是「发布范围之外还躺着什么」。文件已移出公开层（读不到）＝待办已清。
  * @param {string} root - 仓库根。
  * @returns {Array<{file: string, reason: string, hits: number}>} 待办列表。
  */
@@ -320,10 +320,10 @@ function main() {
     }
   }
 
-  // 发布前待办：豁免件仍在跟踪面里就一定会随仓发布。这一段的读数**不参与退出码**——
-  // 它说的是另一件事（发布面之外还躺着什么），混进主判据会让「发布面干净」这句话失焦。
+  // 发布前待办：豁免件仍在公开层里就一定会随仓发布。这一段的读数**不参与退出码**——
+  // 它说的是另一件事（发布范围之外还躺着什么），混进主判据会让「发布范围干净」这句话失焦。
   if (pending.length > 0) {
-    console.log('\n⚠ 发布前待办：以下豁免件仍在跟踪面内，发布时会随仓一起公开——');
+    console.log('\n⚠ 发布前待办：以下豁免件仍在公开层内，发布时会随仓一起公开——');
     for (const item of pending) {
       console.log(`  ${item.file}：${item.hits} 处命中（豁免理由：${item.reason}）`);
     }

@@ -101,7 +101,7 @@ test('预设不可判定且 trigger.unknown=review 时接管，audit preset=unkn
   assert.equal(audits[0].action, 'review');
 });
 
-test('trigger.unknown 取值非法：按 skip 兜底并写一行 invalid-config', () => {
+test('trigger.unknown 取值非法：按 skip 回退并写一行 invalid-config', () => {
   const { mode, audits } = harness({
     config: { trigger: { presets: ['auto-approve'], unknown: 'nope' } },
   });
@@ -157,7 +157,7 @@ test('resolveActivation：服务缺失/投影未注册时按 trigger.unknown 折
   assert.equal(unknownReview.resolved, false);
 });
 
-test('resolveActivation：服务读不到时用事件折叠兜底，而不是直接判「不接管」', () => {
+test('resolveActivation：服务读不到时用事件折叠回退，而不是直接判「不接管」', () => {
   const result = resolveActivation(
     { permissionPresets: () => ({ defaultPreset: 'workspace-write' }), trigger: { presets: ['auto-approve'], unknown: 'skip' } },
     session({ presets: ['auto-approve'] }),

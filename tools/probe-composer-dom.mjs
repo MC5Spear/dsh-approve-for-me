@@ -169,7 +169,7 @@ try {
 
   const shot = await send('Page.captureScreenshot', { format: 'png' });
   if (shot.result?.data !== undefined) {
-    // 截图落点：PROBE_SHOT 显式指定 > 配置的 outputDir > 兜底相对目录 shots。
+    // 截图落点：PROBE_SHOT 显式指定 > 配置的 outputDir > 回退相对目录 shots。
     const out = process.env.PROBE_SHOT ?? join((await outputDir()) ?? 'shots', 'probe-composer-dom.png');
     mkdirSync(join(out, '..'), { recursive: true });
     writeFileSync(out, Buffer.from(shot.result.data, 'base64'));

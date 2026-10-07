@@ -223,7 +223,7 @@ globalThis.__dsafm = {
  */
 async function run() {
   const opts = await options();
-  // --cdp <port>：附加模式（2026-09-28，r46 e2e）——沙箱会拦 node 直接 spawn Edge，
+  // --cdp <port>：附加模式（2026-09-28，r46 端到端）——沙箱会拦 node 直接 spawn Edge，
   // 由 pwsh 侧先把 headless Edge 拉起来，本工具只连接现成 CDP 端口（不建 profile）。
   let child = null;
   let profile = '';
@@ -490,12 +490,12 @@ async function run() {
     if (opts.result !== '') writeFileSync(opts.result, JSON.stringify(results, null, 2), 'utf8');
     process.stdout.write(failed.length === 0 ? 'RESULT: PASS — 全部步骤成功\n' : `RESULT: PARTIAL — ${failed.length} 步失败\n`);
   } finally {
-    // 先请浏览器自己退出（CDP Browser.close 会带走整棵进程树），再做兜底清理：
+    // 先请浏览器自己退出（CDP Browser.close 会带走整棵进程树），再做回退清理：
     // 只 kill 根进程在 Windows 上会留下一堆 renderer/gpu 孤儿（实测 35 个）。
     try {
       await session?.send('Browser.close', {}, 5000);
     } catch {
-      // 连接可能已断；继续兜底。
+      // 连接可能已断；继续回退清理。
     }
     session?.close();
     await sleep(1200);
@@ -524,7 +524,7 @@ async function run() {
 await main();
 
 /**
- * 主流程加看门狗：CDP 或页面任何一步挂死都必须退出，绝不留住 headless Edge
+ * 主流程加看护计时：CDP 或页面任何一步挂死都必须退出，绝不留住 headless Edge
  * （上一个版本的探针在 `Page.navigate` 上挂死，留下了 55 个孤儿进程）。
  * @returns {Promise<void>} 无返回。
  */

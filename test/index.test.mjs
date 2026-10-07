@@ -90,7 +90,7 @@ test('apply 注册 prepend 应答者并写一行启动审计', async (t) => {
     t.skip('宿主包不可解析（离线环境）');
     return;
   }
-  // inject 声明（0.1.7）：不再依赖设置服务；漏一个都是加载期硬失败（纪律 3）。
+  // inject 声明（0.1.7）：不再依赖设置服务；漏一个都是加载期直接失败（纪律 3）。
   assert.deepEqual(host.inject, ['approval', 'llm', 'sessions']);
   const written = [];
   const original = process.stderr.write;
@@ -208,7 +208,7 @@ test('R24 接线：rules 模式挂 session/created 监听且装载补扫翻可�
   assert.equal(wiringOff.appendCalls.length, 0, 'off 模式不该发生任何翻策略');
 });
 
-test('R24 接线：监听器兜底吞掉 append 异常，不外抛（双保险的外层）', async (t) => {
+test('R24 接线：监听器回退吞掉 append 异常，不外抛（双保险的外层）', async (t) => {
   const host = await loadHost();
   if (host === undefined) {
     t.skip('宿主包不可解析（离线环境）');
@@ -285,7 +285,7 @@ test('normalizeConfig 深度解包 volatile 引用（要求 schemastery ≥3.18.
 /**
  * 构造一次「应答者逃逸异常」请求：`request.agent.session.id` 的 getter 抛错。
  * gate.js 在 `try` 之外读取该字段（`const sessionId = request?.agent?.session?.id`），
- * 异常因此穿透 I2 兜底、直达 index.js 应答者最外层 catch——即 `gate.escape.body` 注入路径。
+ * 异常因此穿透 I2 承接层、直达 index.js 应答者最外层 catch——即 `gate.escape.body` 注入路径。
  * （不能改 `crypto.randomUUID` 造逃逸：注入消息工厂 `createUserMessage` 内部也用它。）
  * @param {object[]} injected - 收集注入消息的数组。
  * @returns {object} 审批请求。
@@ -344,7 +344,7 @@ test('逃逸异常注入文本按 language.agent 切换：zh 中文整句、en �
   // doesNotMatch 双红；若 language.agent 不再驱动注入语言（两档同文），两首行断言其一必红。
 });
 
-test('退役静态扫描：源码零补丁档位/旧宿主面残留（设计 §17.0 判据）', async () => {
+test('退役静态扫描：源码零补丁档位/旧宿主侧残留（设计 §17.0 判据）', async () => {
   const { readFileSync, readdirSync } = await import('node:fs');
   const { join, dirname } = await import('node:path');
   const { fileURLToPath } = await import('node:url');

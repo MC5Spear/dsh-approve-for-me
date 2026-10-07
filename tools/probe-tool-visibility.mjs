@@ -1,11 +1,11 @@
 /**
- * 探针：工具目录的**可见性规则**——宿主平面的行插件能不能读到别的行注册的工具？
+ * 探针：工具目录的**可见性规则**——宿主侧的行插件能不能读到别的行注册的工具？
  *
  * 为什么需要它：设置页要列出"部署里所有工具"，而设置页与会话无关；这条承重假设成立与否
  * 决定了"无会话读工具目录"是否可能。
  * 初版结论（`agentPresets.standingKeyFor` → `ctx.tools.schemas`）已被动态插件实测推翻，
  * 但动态插件的 `tools` 是受限门面（`dsh-cordis-host-runner/lib/index.js:582-583` 把两个方法
- * 钉死在沙箱自己的 scope 上），所以**动态探针证明不了宿主平面插件的可见性**。
+ * 钉死在沙箱自己的 scope 上），所以**动态探针证明不了宿主侧插件的可见性**。
  *
  * 本探针在**离线但真实**的宿主结构上回答三个问题：
  *   1. 不传 scope 的 `schemas()`——也就是"全局视图"——能不能看到别的行注册的工具？
@@ -64,7 +64,7 @@ context.provide('systemPrompt', fakeSystemPrompt());
 /** 根（无 scope）视角：模拟"插件自身上下文"。 */
 const rootTools = new ToolRuntime(context, {});
 
-/** 两个不同的 scope：模拟"两个平面的插件行"。 */
+/** 两个不同的 scope：模拟"两个层的插件行"。 */
 const planeA = createScope(context, { plane: 'host' });
 const planeB = createScope(context, { plane: 'preset' });
 
@@ -77,9 +77,9 @@ const hasEscalation = (schemas) => schemas
   .map((entry) => entry.name)
   .sort();
 
-// 行 1 挂在宿主平面：注册一个带提权参数的工具。
+// 行 1 挂在宿主侧：注册一个带提权参数的工具。
 const disposerHost = context.tools.register(tool('probe_host_cmd', true));
-// 行 2 挂在预设平面：注册一个不带提权参数的工具。
+// 行 2 挂在预设层：注册一个不带提权参数的工具。
 const disposerPreset = planeB.ctx.tools.register(tool('probe_preset_cmd', false));
 
 console.log('--- 读数 ---');
@@ -129,7 +129,7 @@ const presetSeesAgentTools = presetViewAfter.includes('probe_agent_cmd');
 console.log('');
 console.log('--- 判定 ---');
 console.log(`① 无参 schemas() 能看到别的行注册的全局工具 : ${globalSeesRowTools ? '能' : '不能'}`);
-console.log(`② 预设平面注册的工具对全局视图不可见       : ${!rootView.includes('probe_preset_cmd') ? '是（有隔离）' : '否（全局可见）'}`);
+console.log(`② 预设层注册的工具对全局视图不可见       : ${!rootView.includes('probe_preset_cmd') ? '是（有隔离）' : '否（全局可见）'}`);
 console.log(`③ 跨 Context 共享同一注册表               : ${Array.isArray(singleton) && singleton.includes('probe_host_cmd') ? '是' : '否'}`);
 console.log(`④ agent scope 注册的工具对全局视图不可见   : ${agentToolsStayInScope ? '是（必须按 scope 读）' : '否'}`);
 console.log(`⑤ 父 scope（预设）能看到子 scope（agent）的工具 : ${presetSeesAgentTools ? '能（沿 scope 链解析）' : '不能'}`);

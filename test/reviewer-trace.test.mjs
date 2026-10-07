@@ -292,7 +292,7 @@ test('index 接线：record 收到 sessionId/callId/toolName，配置签名变�
     assert.equal(first[0].decision, 'error');
     assert.equal(first[0].model, 'deepseek-official/probe-model');
     assert.equal(first[0].effort, 'low');
-    assert.equal(first[0].reviewKeySource, 'startedAt', 'askedSeq 拿不到时由 startedAt 兜底');
+    assert.equal(first[0].reviewKeySource, 'startedAt', 'askedSeq 拿不到时由 startedAt 回退');
     assert.equal(Number.isFinite(first[0].startedAt), true);
     assert.equal(Number.isFinite(first[0].reviewMs), true);
     assert.equal(first[0].prompt, undefined, 'capture=summary（默认档）不落详情全文');

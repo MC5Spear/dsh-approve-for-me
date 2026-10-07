@@ -550,7 +550,7 @@ test('排队超时（R10）：审查层标记 timedOut 与真实环节，注入�
   assert.doesNotMatch(state.injections[0], /审查超时/u);
 });
 
-test('超时文案缺环节信息时按审查超时兜底（老调用方的兼容路径）', async () => {
+test('超时文案缺环节信息时按审查超时回退（老调用方的兼容路径）', async () => {
   const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 1234 } }));
   rt.review = async () => ({ decision: 'error', reason: '审查未执行：queue-timeout', toolCalls: 0, timedOut: true, fields: {} });
   await onApprovalRequest(request(), next, rt);
@@ -758,7 +758,7 @@ test('P3-1（r45 修正）：逃逸 catch 分支的注入抛错不外逃，error
   rt.inject = () => {
     throw new Error('inject exploded in catch branch');
   };
-  // 修复前：catch 分支的裸 rt.inject 把异常抛出 onApprovalRequest（I2 只剩 answerer 外层兜底、
+  // 修复前：catch 分支的裸 rt.inject 把异常抛出 onApprovalRequest（I2 只剩 answerer 外层承接、
   // 且「审查器内部错误」error 行被跳过）；修复后：fail-closed 照常、审计行照写。
   const outcome = await onApprovalRequest(request(), next, rt);
   assert.equal(outcome, 'rejected');

@@ -95,7 +95,7 @@ test('核验器本身能失败：0.1.5 时代的图标名在 0.1.7 宿主里确�
   }
 });
 
-test('client.js 图标引用收敛：设置面帮助图标走宿主基元，其余内联（R29）', () => {
+test('client.js 图标引用收敛：设置界面帮助图标走宿主基元，其余内联（R29）', () => {
   const source = stripComments(readFileSync(CLIENT, 'utf8'));
   // R29：字段帮助按钮统一用官方 IconInfoOutlineRegular（12px），不再自造问号图标；
   // 多选触发器的下箭头仍内联 SVG（宿主无 ChevronDownOutline14，旧名是 2026-09-24 崩溃元凶）。

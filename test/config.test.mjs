@@ -82,8 +82,8 @@ test('R42③ 输出契约显式化：normalizeConfig 的 JSDoc 写明输入/输�
   assert.match(source, /输入契约|先过 schema|schema/u, '注释应写明输入契约（是否要求先过 schema）');
 });
 
-// ── ISS-1：设置面 decode 往返（客户端设置通道的序列化契约） ────────────────
-// 宿主链路：settings.describe → schema.toJSON() 信封 →（客户端镜像可能再序列化一次）→
+// ── ISS-1：设置界面 decode 往返（客户端设置通道的序列化契约） ────────────────
+// 宿主调用链：settings.describe → schema.toJSON() 信封 →（客户端镜像可能再序列化一次）→
 // new Schema(信封) 重组 → validate(draft)。transform 节点的 JS 回调在第二次序列化时丢失
 // （callback=undefined），重组后校验任何值都抛 `callback is not a function`、decode() 返回
 // undefined、表单整片全空——所以 Config 全树禁止 transform（修复口径，design §27）。

@@ -174,7 +174,7 @@ test('R34② 先遮后截次序：跨界秘密整段先遮、再进长度截断'
   const { lines, write } = collector();
   const audit = createAudit(() => ({ enabled: true, redactPatterns: ['password=s3cretpw'] }), { write, now: () => 0 });
   audit({ id: 'r2', phase: 'screen', action: 'deny', reason: `${'A'.repeat(195)}password=s3cretpw` });
-  // 遮蔽标记本身也可能被 200 字符截断切掉——判据只看泄漏面：行内不得再出现秘密的任何前缀。
+  // 遮蔽标记本身也可能被 200 字符截断切掉——判据只看泄漏范围：行内不得再出现秘密的任何前缀。
   assert.doesNotMatch(lines[0], /password|s3c/u, '先遮后截：秘密整段替换后才截断');
   assert.match(lines[0], /truncated=true/);
 });

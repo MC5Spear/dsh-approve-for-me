@@ -18,7 +18,7 @@ jobs:
       DSAFM_HOST_MODULES: ${{ github.workspace }}\node_modules
     steps:
       - uses: actions/checkout@v4
-      - name: 公开面边界检查（结构 / 本机指纹 / 内部引用，三类判据零命中）
+      - name: 公开范围边界检查（结构 / 本机指纹 / 内部引用，三类判据零命中）
         run: npm run check:public-surface
       - uses: actions/setup-node@v4
         with:
@@ -59,7 +59,7 @@ jobs:
           # 关键：CI 里检查器走 `git ls-files`（只列**跟踪**文件），与开发机上的遍历回退不同。
           # 所以探针必须先 `git add` 进索引，否则它根本不会被枚举，这道对照就成了空的。
           $probe = '.exitcode-probe.md'
-          # 指纹按字符拼接写，免得本工作流自己成为检查器的命中源（它在跟踪面里）。
+          # 指纹按字符拼接写，免得本工作流自己成为检查器的命中源（它在公开层里）。
           # 两行分别钉「裸形态」（段符后直接行尾，无尾分隔符）与「常规形态」（尾分隔符＋目录名）。
           $bare = '根在 D:' + [char]92 + 'P'
           $fingerprint = 'D:' + [char]92 + 'P' + [char]92 + 'build-machine（本机指纹探针）'

@@ -316,7 +316,7 @@ test('R32② 候选文件数截断：超过 200 个候选时说明截断为前 2
   const result = await tools.run('grep', { pattern: 'needle', path: root });
   assert.match(result.text, /候选文件截断为前 200 个/);
   assert.match(result.text, /f001\.txt/);
-  // NTFS 的 readdir 按名序：前 200 个候选是 f000–f199，f2xx 不在扫描面内。
+  // NTFS 的 readdir 按名序：前 200 个候选是 f000–f199，f2xx 不在扫描范围内。
   assert.doesNotMatch(result.text, /f2\d\d\.txt/);
 });
 

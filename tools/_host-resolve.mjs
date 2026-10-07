@@ -45,7 +45,7 @@ let anchorPromise;
  * 真的算一次锚点。
  *
  * 候选顺序：本机配置的 `hostModules`（首选）→ 宿主 profile 树 → npm 全局树。
- * 全部不可读时返回 undefined——调用方退回 Node 默认解析，不做任何兜底猜测。
+ * 全部不可读时返回 undefined——调用方退回 Node 默认解析，不做任何回退猜测。
  * @returns {Promise<{provisional: boolean, url?: string}>} 结果；配置尚在加载中时带 provisional 标记。
  */
 async function computeAnchor() {

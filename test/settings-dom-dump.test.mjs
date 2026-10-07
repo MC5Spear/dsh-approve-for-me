@@ -1,5 +1,5 @@
 /**
- * 回归测试：设置面 DOM dump 留档（夹具 test/fixtures/settings-dom-dump.txt）。
+ * 回归测试：设置界面 DOM dump 留档（夹具 test/fixtures/settings-dom-dump.txt）。
  *
  * 判定口径（requirements §4）：0.1.7 上宣称成立的条目必须以真实实例实测为准；
  * 可用性判据是本包详情页的页面 DOM 与计算样式（注入表命中不算）。
@@ -203,7 +203,7 @@ test('ISS-1 判据：控件取值逐项等于生效值（profile 用户层＋默
   assert.equal(rows.length, 19, `控件表解析行数应为 19（实得 ${rows.length}），围栏或表头漂移会让后续断言漏项`);
   for (const [, tag, suffix, cell] of rows) {
     const path = CTL_PATHS[suffix];
-    assert.ok(path, `未知控件 id：${suffix}（CTL_PATHS 需同步 client.js 的字段面）`);
+    assert.ok(path, `未知控件 id：${suffix}（CTL_PATHS 需同步 client.js 的字段集合）`);
     let expected = at(path);
     if (/^on（checked=(true|false)）$/u.test(cell)) {
       // checkbox 显示 on（checked=true）。
@@ -253,5 +253,5 @@ test('反恒真对照：匹配器能命中（正向）、表单无幽灵字段�
   assert.ok(hasLine('接管预设'), '正向对照失败：匹配器连在场字段都找不到');
   // 反向：这些从未是 config 字段，出现在表单上反而说明漂移。
   assert.equal(hasLine('系统提示词'), false, '「系统提示词」不是 config 字段，表单出现即为漂移');
-  assert.equal(dump.includes('Tooltip'), false, '设置面不应再出现 Tooltip（帮助改为内联展开）');
+  assert.equal(dump.includes('Tooltip'), false, '设置界面不应再出现 Tooltip（帮助改为内联展开）');
 });

@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * R57（设计 §28.2/§28.6/§28.10）：bundle patch 形状守护＋发布面守护。
+ * R57（设计 §28.2/§28.6/§28.10）：bundle patch 形状守护＋发布范围守护。
  *
  * 预设注入主路径＝本包 cordis.patch.yml 的 permission 行四档重述（随包装卸）；
  * 生命周期脚本是被实测否决的路径（pnpm 不执行依赖卸载脚本），禁止回潮。
@@ -141,14 +141,14 @@ test('bundle patch：重述不写 defaultPreset（R26 禁令）', () => {
   }
 });
 
-test('发布面守护：package.json 禁止生命周期脚本（R57 禁令，防钩子通道回潮）', () => {
+test('发布范围守护：package.json 禁止生命周期脚本（R57 禁令，防钩子通道回潮）', () => {
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
   const scripts = Object.keys(pkg.scripts ?? {});
   const lifecycle = scripts.filter(isBannedScriptKey);
   assert.deepEqual(lifecycle, [], `scripts 不得声明生命周期键或影子钩子（实测否决的通道）：${lifecycle.join(', ')}`);
 });
 
-test('发布面守护：生命周期禁令按规则判全——npm 全集键与影子钩子逐一命中，自有脚本名不误伤', () => {
+test('发布范围守护：生命周期禁令按规则判全——npm 全集键与影子钩子逐一命中，自有脚本名不误伤', () => {
   // 盲审反例：旧十键名单漏 prepublish/preprepare/postprepare，注入后 7/7 假绿。
   // 规则化后任何 pre*/post* 与裸事件键都必须被拦下——新增任何生命周期键无需改本名单即红。
   for (const key of LIFECYCLE_MUTANTS) {
@@ -160,7 +160,7 @@ test('发布面守护：生命周期禁令按规则判全——npm 全集键与�
   }
 });
 
-test('发布面守护：files 白名单与 hooks 缺席', () => {
+test('发布范围守护：files 白名单与 hooks 缺席', () => {
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
   const files = pkg.files ?? [];
   for (const entry of ['cordis.patch.yml', 'lib', 'tools/permission-preset.mjs']) {

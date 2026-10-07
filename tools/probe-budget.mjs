@@ -1,12 +1,12 @@
 /**
  * dsh-approve-for-me — 审查输出预算探针：采集 `max_tokens` × 档位对正文/思考 token 的影响。
  *
- * 目的：证实「审查请求带 `maxTokens` 小硬帽 + 高档位」是否会让正文为空。
+ * 目的：证实「审查请求带 `maxTokens` 小强制上限 + 高档位」是否会让正文为空。
  * 做法：对 DeepSeek 的 OpenAI 兼容接口发同一条极短审查提示，只改 `max_tokens` 与思考档位，
  * 记录 `finish_reason`、正文长度、思考长度与用量。不打印任何凭据。
  *
  * 用法：node tools/probe-budget.mjs [--model deepseek-flash] [--max 512,2048,none] [--effort max,low]
- * 退出码：0 = 至少跑通一次组合（含部分失败）；2 = 无凭据或网络不可达（未验证）。
+ * 退出码：0 = 至少一组组合验证通过（含部分失败）；2 = 无凭据或网络不可达（未验证）。
  */
 import { readCredentialRef, credentialsFile } from './credentials.mjs';
 

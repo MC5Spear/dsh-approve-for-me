@@ -12,7 +12,7 @@
 
 ## 1b. 非目标（本次不做）
 
-- **不采用官方 `auto` 预设的语义**，不调用 `permissionPresets.registerAuto`，不做逐调用准入检查（依据同 §1：`auto` 固定无沙箱＋`never`，`never` 在 waterfall 之前短路；用户已裁定不采用）。
+- **不采用官方 `auto` 预设的语义**，不调用 `permissionPresets.registerAuto`，不做逐调用准入检查（依据同 §1：`auto` 固定无沙箱＋`never`，`never` 在 waterfall 之前短路；用户已决定不采用）。
 - **不修改宿主任何文件**：不生成也不应用源码补丁，不提供"打补丁档 / 不打补丁档"的切换（R20）。
 - **不提供"兼容 0.1.5"的分支或双份实现**：本插件只服务 0.1.7 及以后（R25）。
 - **不为记录表缺口造插件侧替代品**：不往会话日志写插件自定义事件类型——持久化读路径对不在已知事件类型清单里的类型一律拒绝，而 `Session.append()` 不提供 `ignorable` 标记（`@deepseek-ai/dsh-session@0.1.7-rc.1` 的 `append` 封装与 `@deepseek-ai/dsh-session-persistence@0.1.7-rc.1` 的校验）；也不覆盖宿主的记录表视图（宿主记录表只渲染 user／steering／assistant／context／compaction／tool-result 六种节点，其它种类被静默跳过）。
@@ -155,15 +155,15 @@
 - **已知语义（接受）**：停止覆盖（改 `skip` 或禁用插件）**不撤销**已写入子会话日志的 `ask` 事件；此后子代理升权将落给下一个应答者（无应答者则 fail-closed），不回滚成 never。
 - **审计**：覆盖判定与跳过各写一行（复用 `phase=screen` 的 `action=review|skip`，`preset` 字段写 `subagent` 或根预设名，`reason` 说明依据）。
 
-### R25 必须适配 dsh 0.1.7 的宿主面（不可裁剪）
-0.1.7 删除了本插件依赖的宿主面：宿主设置服务的 `installSection` 与 `get`（0.1.5 的 `@deepseek-ai/dsh-settings@0.1.5-rc.1` 有这两个公开方法，0.1.7 方法面只剩 `describe`/`mutate` 一类）、设置槽位 `settings.plugin.item`、客户端服务 `settingsScope`（后两者在 0.1.7 全树零命中——0.1.5 有十个客户端包消费 `settingsScope`），其中两个会让客户端半边**静默不加载**（不报错、UI 一个挂点都不渲染）。本插件必须在 0.1.7 上**加载即成功、行为与 0.1.5 一致**。
+### R25 必须适配 dsh 0.1.7 的宿主侧（不可裁剪）
+0.1.7 删除了本插件依赖的宿主侧接口：宿主设置服务的 `installSection` 与 `get`（0.1.5 的 `@deepseek-ai/dsh-settings@0.1.5-rc.1` 有这两个公开方法，0.1.7 方法只剩 `describe`/`mutate` 一类）、设置槽位 `settings.plugin.item`、客户端服务 `settingsScope`（后两者在 0.1.7 全树零命中——0.1.5 有十个客户端包消费 `settingsScope`），其中两个会让客户端半边**静默不加载**（不报错、UI 一个挂点都不渲染）。本插件必须在 0.1.7 上**加载即成功、行为与 0.1.5 一致**。
 
-- **（不可裁剪）宿主面跟随**：设置界面从 `settings.plugin.item` 迁到 bundle 级配置槽（槽位名、键与判据以 R27 为准）；设置读写从 `settingsScope` 迁到 `configForms`；设置行的读写通道从 `settings.installSection`/`settings.get` 迁到宿主行 id（`approve-for-me`）+ volatile 引用（插件侧不再调用设置服务——0.1.7 的 volatile 字段解析为稳定引用、宿主原地更新，插件保留 `apply` 收到的 config 引用并每次现读即得热改，schemastery 的 `Volatile<T>` 与 `cordis-plugin-loader` 的 `_commitVolatile`）。
+- **（不可裁剪）宿主侧跟随**：设置界面从 `settings.plugin.item` 迁到 bundle 级配置槽（槽位名、键与判据以 R27 为准）；设置读写从 `settingsScope` 迁到 `configForms`；设置行的读写通道从 `settings.installSection`/`settings.get` 迁到宿主行 id（`approve-for-me`）+ volatile 引用（插件侧不再调用设置服务——0.1.7 的 volatile 字段解析为稳定引用、宿主原地更新，插件保留 `apply` 收到的 config 引用并每次现读即得热改，schemastery 的 `Volatile<T>` 与 `cordis-plugin-loader` 的 `_commitVolatile`）。
 - **（不可裁剪）客户端半边必须真的到达浏览器**：验收判据是**注入表内容或页面 DOM**，不是后端接口返回；`dsh.client.inject` 与客户端 `inject` 列表里不得残留 0.1.7 已不存在的服务名（否则整块不加载且无任何报错）。
 - **（不可裁剪）可热改**：宿主行 `Config` 的每个可编辑字段声明 `.volatile()`；未声明时 0.1.7 的设置接口会跳过整行、写入报错（同 R4）。
 - **（不可裁剪）设置界面走官方机制**：表单注册进 bundle 级配置槽（槽位名与键以 R27 为准；`plugins.item` 是官方宿主命名空间设置页占用的槽位，槽位契约注明「a bundle's configuration belongs in `plugins.bundle.config` or `plugins.row.config` instead」）、用 `configForms` 读写（官方**不**按 schema 自动生成表单——`@deepseek-ai/dsh-settings@0.1.7-rc.1` README 明示表单自动生成「no shipped client does so yet」，因此不得指望「少写代码就自动有 UI」）；**字段与控件不因迁移增删（新增以 R28 为准；文案语言按 R17/R28），只换落点与数据通道**。
 - **不可回退**：适配后**不得**保留"兼容 0.1.5"的分支或双份实现；本插件只服务 0.1.7 及以后。
-- 取证：0.1.7 迁移涉及的宿主面行为（`permissionPresets.current`/`defaultPreset` 行为、typert RPC 清单是否被接受、`client.js` 的完整失效清单）须在 0.1.7 实例上实测核验后才可当依据。
+- 取证：0.1.7 迁移涉及的宿主侧行为（`permissionPresets.current`/`defaultPreset` 行为、typert RPC 清单是否被接受、`client.js` 的完整失效清单）须在 0.1.7 实例上实测核验后才可当依据。
 
 ### R26 预设条目由插件带进来，预设名不得留宿主的跨会话记忆（不可裁剪）
 **背景**：插件形态要求部署配置里存在一个本插件接管的权限预设。但该条目若**只能靠部署方手写**，就违反"装上就出现、卸下就消失"；若预设名被写进宿主的**跨会话记忆**，插件不在场时它就是一个有名无实的空壳（实测后果：预设名留在记忆里、插件移除后，权限下拉仍显示该预设，选择它却得不到任何接管行为）。
@@ -174,7 +174,7 @@
 - **零依赖备用命令**：清理命令只 import `node:*` 与相对路径（`dsh plugin remove` 是另一个进程，插件的 `apply` 与 disposer 都不执行）。
 
 ### R27 0.1.5 的设置界面迁到 0.1.7 的落点并保证可用（不可裁剪）
-0.1.5 的设置界面所依赖的四个宿主面已被 0.1.7 删除（清单与后果见 R25）。设置界面必须整体迁到 0.1.7 的现行落点，并且**在界面上真的能被打开、读到、写入**——槽位注册成功不等于可用。落点同时决定层级：本包只有一个行（`approve-for-me`），设置内容直接放在**本包页面**上（插件详情的行上没有配置入口）。
+0.1.5 的设置界面所依赖的四个宿主侧接口已被 0.1.7 删除（清单与后果见 R25）。设置界面必须整体迁到 0.1.7 的现行落点，并且**在界面上真的能被打开、读到、写入**——槽位注册成功不等于可用。落点同时决定层级：本包只有一个行（`approve-for-me`），设置内容直接放在**本包页面**上（插件详情的行上没有配置入口）。
 
 - **（不可裁剪）落点唯一**：落点是 bundle 级配置槽 `plugins.bundle.config`，键＝包名 `dsh-approve-for-me`（槽位契约：渲染在本包页面的描述与行列表之间、只以 `view:'page'` 渲染，且该槽不注入 `form`，组件必须自取控制器——`@deepseek-ai/dsh-client-ui-plugin-manager@0.1.7-rc.1` 的槽位契约与渲染侧）。不得存在第二落点、旁路写入或双通道实现。
 - **（不可裁剪）前置依赖在位**：客户端 `inject` 必须含 `configForms`，`dsh.client.inject` 必须含其提供方 `@deepseek-ai/dsh-client-ui-settings@0.1.7-rc.1`——缺失或写错的后果同 R25（客户端半边静默不加载），表单永不注册。控制器由表单自取（`configForms.get('approve-for-me')`），不得依赖宿主注入的表单句柄（换槽不换通道）。
@@ -231,7 +231,7 @@
 
 ### R32 grep 的资源上限与同步执行防护（不可裁剪）
 
-审查器把模型给出的 pattern 直接 `new RegExp(args.pattern, 'u')`（`lib/readonly-tools.js:384`），对每个候选文件**整读入内存**（`:406`，无 stat 预检、无大小上限——对照 read_file 的有界读取 `:140`），再逐行**同步** `regex.test`（`:412-417`；行字符上限只限行长，不限回溯）；目录模式的候选文件数无上限（`:430-437`，`WALK_MAX_DIRS=4000` 只限目录数）。三个后果：灾难性回溯 pattern 冻结事件循环——`withTimeout`（`:216`）的 setTimeout 回调在同步执行期间无法触发，R1b 承诺的单工具超时在 grep 路径形同虚设；超大文件整读撑内存；候选无上限拖长审查。只读工具的输出会拼进发往外部 LLM 供应商的提示词，这条同时是安全面：被审会话可以借恶意 pattern 或巨型文件拖死审批。
+审查器把模型给出的 pattern 直接 `new RegExp(args.pattern, 'u')`（`lib/readonly-tools.js:384`），对每个候选文件**整读入内存**（`:406`，无 stat 预检、无大小上限——对照 read_file 的有界读取 `:140`），再逐行**同步** `regex.test`（`:412-417`；行字符上限只限行长，不限回溯）；目录模式的候选文件数无上限（`:430-437`，`WALK_MAX_DIRS=4000` 只限目录数）。三个后果：灾难性回溯 pattern 冻结事件循环——`withTimeout`（`:216`）的 setTimeout 回调在同步执行期间无法触发，R1b 承诺的单工具超时在 grep 路径形同虚设；超大文件整读撑内存；候选无上限拖长审查。只读工具的输出会拼进发往外部 LLM 供应商的提示词，这条同时是安全范围问题：被审会话可以借恶意 pattern 或巨型文件拖死审批。
 
 - **（不可裁剪）文件大小上限**：读文件前 stat 预检，超阈值跳过该文件并在结果文本里说明跳过了哪些超大文件；跳过不得中断其余候选。阈值进常量或配置（1 MiB 量级起步）。
 - **（不可裁剪）候选文件数上限**：目录模式收集候选时设上限，超限停止收集并在结果里说明截断数量。
@@ -242,7 +242,7 @@
 
 拒止清单按凭据 basename/扩展名/目录名匹配（`lib/readonly-tools.js:34-54`），不含 DSH 自身数据目录；而绝对路径解析没有任何根目录围栏（`resolveTarget` `:125-128` 直接 resolve）。审查器因此可以 `read_file` 读到：`$DSH_HOME/sessions/*.jsonl`（全部会话转录——用户粘贴的口令若不呈 `password=` 形态则不命中遮蔽）、本插件审查记录目录（`<DSH_HOME>/approve-for-me/reviews/`）、宿主的 token/URL 文件 `current-url.txt`——这些内容全部拼进发往外部 LLM 供应商的审查提示词。`token=` 形态有部分遮蔽（`lib/policy.js:45` 默认模式），但 URL、端口、裸凭据形态仍可能外送。
 
-- **（不可裁剪）清单必须覆盖 DSH 敏感面**：会话目录（sessions）、本插件审查记录（approve-for-me/reviews）、token 文件（current-url.txt）至少三类；按 `DSH_HOME` 环境变量现读还是按目录名匹配属实现选择（§3 问题 11）。
+- **（不可裁剪）清单必须覆盖 DSH 敏感范围**：会话目录（sessions）、本插件审查记录（approve-for-me/reviews）、token 文件（current-url.txt）至少三类；按 `DSH_HOME` 环境变量现读还是按目录名匹配属实现选择（§3 问题 11）。
 - **（不可裁剪）同一解析口径**：拒止判定用与本插件自身落盘（reviewsDir，`lib/index.js:172-176`：`DSH_HOME` 环境变量优先、缺省回落 `~/.dsh`）相同的解析——自己写在哪，拒止就判到哪。
 - **（不可裁剪）命中即拒的形态**：与现有凭据拒止同形（deniedRead 结果 + 审计 `phase=tool` 行 degraded=denied），不新增出口。
 - **判据（单测注入，可失败）**：①`read_file $DSH_HOME/sessions/<id>.jsonl` → deniedRead（修复前读到全文）；②`read_file` reviews 目录与 current-url.txt → deniedRead；③工作区内正常读取不受影响（对照）。变异验证：从清单移除 DSH 项 → ①②红。
@@ -262,7 +262,7 @@
 
 - **（不可裁剪）锚定放宽**：危险词的边界判定不得因引号、括号等非字母数字包裹而失效；用户自定义 denyPatterns 语义一并适用。具体锚定形式属设计题（§3 问题 12），所选口径必须有显式用例钉住。
 - **（不可裁剪）主体全量过检**：arguments 里**所有**字符串键值都过 deny 清单；哪一键命中写进审计 reason。
-- **（不可裁剪）误伤面受控**：文本引用类正常命令（如 `grep mkfs readme.md`）的处理口径在设计阶段定，但必须有显式测试钉住，不得靠「碰巧不误伤」。
+- **（不可裁剪）误伤范围受控**：文本引用类正常命令（如 `grep mkfs readme.md`）的处理口径在设计阶段定，但必须有显式测试钉住，不得靠「碰巧不误伤」。
 - **判据（单测注入，可失败）**：①`bash -c 'mkfs /dev/sda1'` 与 `cmd /c "format c:"` → deny（修复前过审交给 LLM）；②参数同时含无害 command 与危险 script → deny 且 reason 指明命中键（修复前漏检）；③既有 denyPatterns 命中用例全部保持（回归）。变异验证：锚点改回现行形态 → ①红；提取改回首键命中 → ②红。
 
 ### R36 审查器工具的热改接线：脱敏清单与单工具超时（不可裁剪）
@@ -294,9 +294,9 @@
 
 ### R39 迟到审查结论的观测口径（不可裁剪）
 
-gate 结算（超时/取消/人工）后，审查流的 `finish()` 仍**无条件**写审计行与 onReview、并继续持有并发位到审查流自然结束（`lib/reviewer.js:329-368`）——迟到结论没有任何「已结算」感知：审计里 `phase=review decision=allow` 照写，观测面分不清「按时结论」与「超时后才到的结论」，复盘时会误读为「明明放行了却按超时拒绝」。迟到结论不会二次注入（deliver 只在 gate 结算路径上调用），但这一点目前没有任何测试钉住（并见 R44）。
+gate 结算（超时/取消/人工）后，审查流的 `finish()` 仍**无条件**写审计行与 onReview、并继续持有并发位到审查流自然结束（`lib/reviewer.js:329-368`）——迟到结论没有任何「已结算」感知：审计里 `phase=review decision=allow` 照写，观测范围分不清「按时结论」与「超时后才到的结论」，复盘时会误读为「明明放行了却按超时拒绝」。迟到结论不会二次注入（deliver 只在 gate 结算路径上调用），但这一点目前没有任何测试钉住（并见 R44）。
 
-- **（不可裁剪）迟到结论可辨识**：gate 已结算后到达的 finish 写的审计行带明确标记（abandoned 类字段或独立 reason 措辞），观测面能区分按时/迟到。
+- **（不可裁剪）迟到结论可辨识**：gate 已结算后到达的 finish 写的审计行带明确标记（abandoned 类字段或独立 reason 措辞），观测范围能区分按时/迟到。
 - **（不可裁剪）不重复注入、不改写结算**：迟到结论不得再注入主模型、不得改写已结算结果——用常驻断言钉住（等待迟到 finish 完成后核对注入次数恰 1、decide 行恰 1）。
 - **（不可裁剪）并发位不悬置**：gate 结算即中止审查流（signal），finish 后并发位立即释放的时点要有断言——迟到流不得在队列里压住后续审查。
 - **判据（单测注入，可失败）**：审查时长大于超时、放行结论迟到 → 审计出现带迟到标记的 review 行；注入次数恰 1；decide 行恰 1；后续审查不被压住。变异验证：删掉标记 → 观测断言红；让迟到路径改写结算或再注入 → 常驻断言红。
@@ -335,7 +335,7 @@ screen() 的三类跳过——委派模式 off、工具名不在 `trigger.tools`
 
 ### R44 在册守护与畸形通道的直接用例（不可裁剪）
 
-四个在册守护零直接用例：①`next()` 双调守护（`lib/gate.js:148-152` 抛错保护）——test/ 无「双调」用例；②注入通道抛错（`rt.inject` 的逃逸路径）零覆盖；③审查流**中途**抛错——`test/reviewer-trace.test.mjs:269` 只造了创建期同步抛错（注释自认不需要真流），流迭代中途 throw 零覆盖；④schema 数值边界零直接用例（判据已并入 R37③）。另有确定性隐患：竞速类用例用真实 20–50ms 计时器拼时序，CI 慢机上有误红面。
+四个在册守护零直接用例：①`next()` 双调守护（`lib/gate.js:148-152` 抛错保护）——test/ 无「双调」用例；②注入通道抛错（`rt.inject` 的逃逸路径）零覆盖；③审查流**中途**抛错——`test/reviewer-trace.test.mjs:269` 只造了创建期同步抛错（注释自认不需要真流），流迭代中途 throw 零覆盖；④schema 数值边界零直接用例（判据已并入 R37③）。另有确定性隐患：竞速类用例用真实 20–50ms 计时器拼时序，CI 慢机上有误红风险。
 
 - **（不可裁剪）直测各就位**：双调第二次调用断言抛错；inject 抛错时审批结算不受影响（审计留痕、结果语义不变）；真流迭代中途 throw → error 结算 + 审计。
 - **（不可裁剪）竞速确定性**：迟到侧时距拉大（≥10 倍计时粒度）或注入时钟，消除真实计时器抖动。
@@ -343,7 +343,7 @@ screen() 的三类跳过——委派模式 off、工具名不在 `trigger.tools`
 
 ### R45 transcript 证据管道的直接用例（不可裁剪）
 
-`lib/transcript.js` 是证据管道核心（脱敏次序、双截断标记、`</` 转义、callId 回查降级、PTC 双事件名兼容——审批请求的 `callId` 等于 PTC 派发事件的 `data.subCallId`，见 `@deepseek-ai/dsh-session@0.1.7-rc.1 lib/types/known-event-types.js:73-74`（两个事件名在那里登记）与 `@deepseek-ai/dsh-tools@0.1.7-rc.1 lib/index.js:1354`（`tool/ptc-dispatch-start` 的发射处）），test/ 里**零文件直接 import 它**——全部覆盖经由 reviewer/gate 间接获得，一旦红，回归定位面是整条组装路径而不是单函数。
+`lib/transcript.js` 是证据管道核心（脱敏次序、双截断标记、`</` 转义、callId 回查降级、PTC 双事件名兼容——审批请求的 `callId` 等于 PTC 派发事件的 `data.subCallId`，见 `@deepseek-ai/dsh-session@0.1.7-rc.1 lib/types/known-event-types.js:73-74`（两个事件名在那里登记）与 `@deepseek-ai/dsh-tools@0.1.7-rc.1 lib/index.js:1354`（`tool/ptc-dispatch-start` 的发射处）），test/ 里**零文件直接 import 它**——全部覆盖经由 reviewer/gate 间接获得，一旦红，回归定位落点是整条组装路径而不是单函数。
 
 - **（不可裁剪）直接单测就位**：脱敏命中/未命中、截断标记成对、`</` 转义、callId 不匹配的降级形状（degraded + command）、双事件名兼容。
 - **判据（单测，可失败）**：变异验证——改 redact 次序 / 删转义 / 改截断标记 / 删降级 → 对应用例红。
@@ -379,43 +379,43 @@ screen() 的三类跳过——委派模式 off、工具名不在 `trigger.tools`
 
 ### R49 适配 dsh 0.2.0-rc.1（不可裁剪）
 
-> **状态：已由 0.2.0 线实现与验收（2026-10-01，达成判定见 §4 的 R49/R50 验收小节；裁定见 §5 决策行）；本节全文即该线的现行需求。**
+> **状态：已由 0.2.0 线实现与验收（2026-10-01，达成判定见 §4 的 R49/R50 验收小节；决定见 §5 决策行）；本节全文即该线的现行需求。**
 
-dsh 发布 0.2.0 预览版（npm `next` 标签 `0.2.0-rc.1`，全部 `@deepseek-ai/*` 家族包同版号——registry dist-tags 可查）。逐包比对（0.2.0-rc.1 tarball 对 0.1.7 安装逐包 diff）显示插件消费的宿主面以增量为主、审批缝隙稳定（`dsh-user-approval` 与 `dsh-typert-protocol` 的 lib 运行时零变更，`dsh-llm` 纯增量），但**宿主面版本声明不齐会被 0.2.0 的 bundle 装载跳过**——装载判定只读 `peerDependencies` 里 `@deepseek-ai/dsh*` 名字的声明、无豁免即跳过（`@deepseek-ai/dsh-app-boot@0.2.0-rc.1` 的 `evaluatePluginCompatibility`；实测确认：依赖版本锁定本身不参与判定——这正是下一条要求锁定版本**同步声明为 peer** 的原因），且三处契约需实测复验（模型目录成员语义、审批卡 detail seat、UI 令牌）。本条要求 0.2.0 线插件达到与 0.1.7 线等价的功能面；所有改动按 R50 的隔离纪律落位。
+dsh 发布 0.2.0 预览版（npm `next` 标签 `0.2.0-rc.1`，全部 `@deepseek-ai/*` 家族包同版号——registry dist-tags 可查）。逐包比对（0.2.0-rc.1 tarball 对 0.1.7 安装逐包 diff）显示插件消费的宿主侧以增量为主、审批缝隙稳定（`dsh-user-approval` 与 `dsh-typert-protocol` 的 lib 运行时零变更，`dsh-llm` 纯增量），但**宿主侧版本声明不齐会被 0.2.0 的 bundle 装载跳过**——装载判定只读 `peerDependencies` 里 `@deepseek-ai/dsh*` 名字的声明、无豁免即跳过（`@deepseek-ai/dsh-app-boot@0.2.0-rc.1` 的 `evaluatePluginCompatibility`；实测确认：依赖版本锁定本身不参与判定——这正是下一条要求锁定版本**同步声明为 peer** 的原因），且三处契约需实测复验（模型目录成员语义、审批卡 detail seat、UI 令牌）。本条要求 0.2.0 线插件达到与 0.1.7 线等价的功能集；所有改动按 R50 的隔离纪律落位。
 
-- **（不可裁剪）依赖版本锁定升级**：0.2.0 线包内 `@deepseek-ai/dsh-llm@0.2.0-rc.1`、`@deepseek-ai/dsh-typert-protocol@0.2.0-rc.1` 升到 `0.2.0-rc.1`，且**同步声明为 `peerDependencies`（双保险的承载形态：装载判定只读 peerDependencies 里的 `@deepseek-ai/dsh*` 声明——见本节首段；§24.1 问题 17 裁定的「ref 错装被 peer 检查跳过」由此才真正存在）**；peer `@deepseek-ai/cordis@4.0.4` 与宿主同版（`~4.0.4`）；自带 `node_modules` 同步重装；`engines` 与其余依赖不动。版本不齐的中间状态不得部署到任何实例（bundle 会被跳过，故障形态是插件整行不激活）。
-- **（不可裁剪）宿主面复验（host 半）**：`inject=['approval','llm','sessions']` 三服务解析、`approval/request` waterfall 应答者注册、`session/created` / `loader/volatile-update` / `llm/adapters-updated` 监听、`ctx.get('permissionPresets')` 可选读、`snapshotEvents()` 证据采集——逐项在 0.2.0 实例上有行为证据；`snapshotEvents` 同步读法沿用（上游废弃注记记录在案，迁移等上游分页读法，不在本条范围）。
+- **（不可裁剪）依赖版本锁定升级**：0.2.0 线包内 `@deepseek-ai/dsh-llm@0.2.0-rc.1`、`@deepseek-ai/dsh-typert-protocol@0.2.0-rc.1` 升到 `0.2.0-rc.1`，且**同步声明为 `peerDependencies`（双保险的承载形态：装载判定只读 peerDependencies 里的 `@deepseek-ai/dsh*` 声明——见本节首段；§24.1 问题 17 决定的「ref 错装被 peer 检查跳过」由此才真正存在）**；peer `@deepseek-ai/cordis@4.0.4` 与宿主同版（`~4.0.4`）；自带 `node_modules` 同步重装；`engines` 与其余依赖不动。版本不齐的中间状态不得部署到任何实例（bundle 会被跳过，故障形态是插件整行不激活）。
+- **（不可裁剪）宿主侧复验（host 半）**：`inject=['approval','llm','sessions']` 三服务解析、`approval/request` waterfall 应答者注册、`session/created` / `loader/volatile-update` / `llm/adapters-updated` 监听、`ctx.get('permissionPresets')` 可选读、`snapshotEvents()` 证据采集——逐项在 0.2.0 实例上有行为证据；`snapshotEvents` 同步读法沿用（上游废弃注记记录在案，迁移等上游分页读法，不在本条范围）。
 - **（不可裁剪）client 半四挂点与 RPC 复验**：设置卡（`plugins.bundle.config`）、composer 下拉（`conversation.input.left`）、审批状态条（`conversation.approval.detail`，0.2.0 该契约有增量，须实测复验）、审查记录视图（`conversation.view`）；`modelCatalog` / `modelEfforts` RPC 在 0.2.0 目录成员语义下的表现（0.2.0 模型目录注释口径收紧，须复验）。
 - **（不可裁剪）行为等价**：R1–R48 的现行判据在 0.2.0 实例上等价成立——至少覆盖：加载即成功、端到端 allow→执行→注入、规则拒绝、R46 通道故障模板、R47 重试留痕、R48 熔断打开；单测在 0.2.0 依赖树上全绿（host hooks 解析到 0.2.0 树）。
 - **判据（可失败）**：①0.2.0 实例启动日志无 `skipping profile bundle "dsh-approve-for-me"` 且有 `reason="answerer registered"`；②注入表含 `dsh-approve-for-me/client.js`；③四挂点 DOM 判据按 §4「0.1.7 适配」小节的口径在 0.2.0 实例重取；④端到端三段审计（screen→review allow→decide allowed-once）与 R46 故障轮（`maxTokens=1` 三连 error → 熔断打开 → 通道故障文案）在 0.2.0 实例复演；⑤`npm test` 与 `npm run test:offline` 在 0.2.0 线目录全绿。变异验证（2026-10-01 实测改写）：把 peer 声明 `@deepseek-ai/dsh-llm@0.2.0-rc.1` 退回 `0.1.7-rc.1` → ①红（`skipping profile bundle` ＋ 无 answerer 行，一次性隔离实例装置复现）；单纯回退 dependencies 声明不触发跳过——装载判定不读 dependencies。
 
 ### R50 版本区分与实例隔离：0.2.0 适配不得动 0.1.7 线的在用文件（不可裁剪）
 
-> **状态：已由 0.2.0 线实现与验收（2026-10-01，达成判定见 §4 的 R49/R50 验收小节；裁定见 §5 决策行）；隔离纪律本身对两线并行期继续有效，本节全文即该线的现行需求。**
+> **状态：已由 0.2.0 线实现与验收（2026-10-01，达成判定见 §4 的 R49/R50 验收小节；决定见 §5 决策行）；隔离纪律本身对两线并行期继续有效，本节全文即该线的现行需求。**
 
-R54 前的历史形态：两实例 junction 共用开发树且开发实例侧热重载，原地适配会即时弄坏已部署实例——本条以此立项。R54（2026-10-01）把两实例安装面切到 `v0.1.7` 冻结件、开发树零实例引用后，隔离口径升位：保护对象从「原目录不动」改为「冻结件不动」，开发树（master→main）即 0.2.0 适配工地。
+R54 前的历史形态：两实例 junction 共用开发树且开发实例侧热重载，原地适配会即时弄坏已部署实例——本条以此立项。R54（2026-10-01）把两实例安装侧切到 `v0.1.7` 冻结件、开发树零实例引用后，隔离口径升位：保护对象从「原目录不动」改为「冻结件不动」，开发树（master→main）即 0.2.0 适配工地。
 
 - **（不可裁剪）适配工地＝开发树 main**：0.2.0 适配的实现改动（代码、依赖版本锁定、`node_modules`、部署物）全部落开发树（master 于 tag `v0.1.7` 之后转 main）；冻结件目录零改动；tag `v0.1.7` 不移动。
-- **（不可裁剪）实例隔离**：0.2.0 验证环境用独立 DSH 安装＋独立 `DSH_HOME`＋独立端口（不与两个现有实例共用安装——两实例共用同一份 0.1.7 安装时，升级安装＝同时改两实例）；开发实例保持 `0.1.7-rc.1`＋冻结件；验证实例切 0.2.0（用户裁定，§3 问题 16），升级由用户另委 Agent 执行、原 home 封存。
-- **（不可裁剪）两线并行纪律**：0.1.7 线冻结只修 P1（用户裁定，§3 问题 18）——P1 修复在 `release/0.1.x` 临时工作区做、打新 tag、开发实例冻结件按新 ref 重建切换；修复单向 cherry-pick 至 0.2.0 线；0.2.0 侧通用缺陷仅 P1 回移。包名保持 `dsh-approve-for-me`；版本号对齐宿主（§3 问题 17 裁定，0.1.7 线终版 0.1.7 已落账、0.2.0 线自 0.2.0 起）。
+- **（不可裁剪）实例隔离**：0.2.0 验证环境用独立 DSH 安装＋独立 `DSH_HOME`＋独立端口（不与两个现有实例共用安装——两实例共用同一份 0.1.7 安装时，升级安装＝同时改两实例）；开发实例保持 `0.1.7-rc.1`＋冻结件；验证实例切 0.2.0（用户决定，§3 问题 16），升级由用户另委 Agent 执行、原 home 封存。
+- **（不可裁剪）两线并行纪律**：0.1.7 线冻结只修 P1（用户决定，§3 问题 18）——P1 修复在 `release/0.1.x` 临时工作区做、打新 tag、开发实例冻结件按新 ref 重建切换；修复单向 cherry-pick 至 0.2.0 线；0.2.0 侧通用缺陷仅 P1 回移。包名保持 `dsh-approve-for-me`；版本号对齐宿主（§3 问题 17 决定，0.1.7 线终版 0.1.7 已落账、0.2.0 线自 0.2.0 起）。
 - **判据（可失败；R54 升位口径）**：①适配轮取证前后，开发实例 home 里本插件 junction 目标（＝冻结件）不变，且冻结件目录内容零改动（适配前后文件清单对比）；②开发实例端口活、插件功能冒烟不变（设置卡 DOM 判据按 §4「①设置界面」口径抽测）；③验证实例新 home 的 junction 适配期直投开发树（main）；④验证实例新 home 的 profile patch 插件行 `config` 与 0.1.7 基线等价迁移（不丢配置）。变异验证：改冻结件内任何文件 → ①红。
 
 ### R51 denyPatterns 出厂默认清空：规则墙降位为用户可选黑名单（不可裁剪）
 
-实证（2026-09-30 实机会话）出厂 denyPatterns 把提交说明里出现的危险命令样例文本判成命令本身：规则层强制拒绝、LLM 与人工都不可推翻；改措辞重试又被审查器按注入末句判为「规避刚被强拒的操作」再拒——一次良性提交两连拒、21 分钟后才提交成功。实证该规则墙不是 codex 蓝本成分：codex guardian 全链（openai/codex 的 `core/src/guardian`、`ext/guardian-reviewer`、`ext/guardian-v2`）无任何关键词/正则/黑名单预筛，破坏性命令由 LLM 按租户策略语义判定（先只读查看目标路径、大规模≠破坏性；openai/codex `core/assets/guardian/policy_template.md`）。用户裁定方案 A（见 §5 决策行）。
+实证（2026-09-30 实机会话）出厂 denyPatterns 把提交说明里出现的危险命令样例文本判成命令本身：规则层强制拒绝、LLM 与人工都不可推翻；改措辞重试又被审查器按注入末句判为「规避刚被强拒的操作」再拒——一次良性提交两连拒、21 分钟后才提交成功。实证该规则墙不是 codex 蓝本成分：codex guardian 全链（openai/codex 的 `core/src/guardian`、`ext/guardian-reviewer`、`ext/guardian-v2`）无任何关键词/正则/黑名单预筛，破坏性命令由 LLM 按租户策略语义判定（先只读查看目标路径、大规模≠破坏性；openai/codex `core/assets/guardian/policy_template.md`）。用户决定方案 A（见 §5 决策行）。
 
 - **（不可裁剪）出厂默认＝空清单**：`denyPatterns` 的 schema 默认值改为 `[]`（`lib/config.js:35`）；`DEFAULT_DENY_PATTERNS` 常量（`lib/policy.js:30-41`，现行 8 条）保留导出，作为「出厂参考清单」单点，供用户显式抄写进配置恢复。zod 语义不变：配置一旦提供即整体替换。
 - **（不可裁剪）规则检查代码路径保留**：`lib/policy.js` 主体全量过检与锚定放宽（R35）、`lib/gate.js` 强制拒绝路径的判定与注入文案原样（deny 审计行随 R52 问题 4 补 reason，不属路径行为变化）——显式配置清单的部署行为不变；R35 的抗绕过语义不回退。
-- **（不可裁剪）破坏性命令回归 LLM 审查**：默认配置下破坏性操作风险由审查器按租户策略判定；R7 第 1/2 条「规则拒绝清单承担不可逆拦截」的现行承担者改为「用户显式配置的可选清单＋LLM 审查」（随实现同步改写 R7 与设计 §22.5 误伤面判据，单版本不留注）。
-- **非目标**：不收窄 R35 扫描面与锚定（收窄重开「毒藏后位键」洞）；不改注入末句语义（用户自定义清单命中时该语义仍正确）；不动 0.2.0 线（R49/R50 独立进行）；不改 `mode=rules` 与升权上限检查。
-- **判据（单测注入，可失败）**：①默认值断言：未配置实例的生效配置 `denyPatterns` 为空数组，且把出厂参考清单显式写入配置后命中恢复 deny（防「删掉 deny 路径」的假实现）；②误伤场景回归：提交说明含出厂清单样例文本（`Remove-Item -Recurse -Force` 与用户目录路径字样）的 `git commit -m` 在默认配置下不再被规则强制拒绝，`screen` 判 `action=review`；③误伤面判据翻转钉住（设计 §22.5 判据③）：默认配置下 `bash -c 'mkfs /dev/sda1'` 与 `grep mkfs readme.md` → 进审查；显式配置清单后 → 恢复 deny（墙仍在，默认不装填）；④兼容：显式配置过的部署行为不变（`test/policy.test.mjs` 既有命中用例改显式注入清单后全部保持）；本机两实例均未显式配置该键，插件重启后规则墙自动空置——该行为变化即本条目的；⑤审计与注入回归（终态口径，随 R52 问题 4 同批实现）：显式清单命中时审计行仍为 `action=deny source=rule decision=rejected` 且发生注入（`injectBytes>0`），deny 审计行 reason 含命中键与模式（`键 "…" 命中模式 …`，规则层 `pre.reason` 直通）；注入文本（`rejectText`）包含该 reason。变异验证：默认改回出厂清单 → ②红；删 deny 路径 → ①后半与 ⑤红；去掉 deny 审计行 reason 赋值 → ⑤后半红。
+- **（不可裁剪）破坏性命令回归 LLM 审查**：默认配置下破坏性操作风险由审查器按租户策略判定；R7 第 1/2 条「规则拒绝清单承担不可逆拦截」的现行承担者改为「用户显式配置的可选清单＋LLM 审查」（随实现同步改写 R7 与设计 §22.5 误伤范围判据，单版本不留注）。
+- **非目标**：不收窄 R35 扫描范围与锚定（收窄重开「毒藏后位键」洞）；不改注入末句语义（用户自定义清单命中时该语义仍正确）；不动 0.2.0 线（R49/R50 独立进行）；不改 `mode=rules` 与升权上限检查。
+- **判据（单测注入，可失败）**：①默认值断言：未配置实例的生效配置 `denyPatterns` 为空数组，且把出厂参考清单显式写入配置后命中恢复 deny（防「删掉 deny 路径」的假实现）；②误伤场景回归：提交说明含出厂清单样例文本（`Remove-Item -Recurse -Force` 与用户目录路径字样）的 `git commit -m` 在默认配置下不再被规则强制拒绝，`screen` 判 `action=review`；③误伤范围判据翻转钉住（设计 §22.5 判据③）：默认配置下 `bash -c 'mkfs /dev/sda1'` 与 `grep mkfs readme.md` → 进审查；显式配置清单后 → 恢复 deny（墙仍在，默认不装填）；④兼容：显式配置过的部署行为不变（`test/policy.test.mjs` 既有命中用例改显式注入清单后全部保持）；本机两实例均未显式配置该键，插件重启后规则墙自动空置——该行为变化即本条目的；⑤审计与注入回归（终态口径，随 R52 问题 4 同批实现）：显式清单命中时审计行仍为 `action=deny source=rule decision=rejected` 且发生注入（`injectBytes>0`），deny 审计行 reason 含命中键与模式（`键 "…" 命中模式 …`，规则层 `pre.reason` 直通）；注入文本（`rejectText`）包含该 reason。变异验证：默认改回出厂清单 → ②红；删 deny 路径 → ①后半与 ⑤红；去掉 deny 审计行 reason 赋值 → ⑤后半红。
 - **端到端证据**：取自验证实例——默认配置下同型提交说明进审查（screen 审计行 `action=review`）＋显式写回清单后恢复 deny 两幕留档。
 
 ### R52 问题清单清偿：术语黑名单与取证欠账（不可裁剪）
 
-问题清单来源：术语裁定＋两次排障暴露的取证缺陷。
+问题清单来源：术语决定＋两次排障暴露的取证缺陷。
 
-- **问题 1（不可裁剪）`硬拒` 进术语黑名单并全仓文档清零**：修正词「强制拒绝」。建立项目词表供 `lint_terms.py --terms` 加载并登记该条目；清零范围＝全仓（含历史审查/修正/部署档案，用户裁定「字面执行」，见 §5）——使用位替换、元语言/引用位改行内代码（字面保真）；验收＝lint_terms 按设计 §26.2.3 标准命令（repo 根＋`--terms` 项目词表，无路径豁免）error 清零。变异：任一处去反引号回退 → 标准 lint 即报该行 error。
+- **问题 1（不可裁剪）`硬拒` 进术语黑名单并全仓文档清零**：修正词「强制拒绝」。建立项目词表供 `lint_terms.py --terms` 加载并登记该条目；清零范围＝全仓（含历史审查/修正/部署档案，用户决定「字面执行」，见 §5）——使用位替换、元语言/引用位改行内代码（字面保真）；验收＝lint_terms 按设计 §26.2.3 标准命令（repo 根＋`--terms` 项目词表，无路径豁免）error 清零。变异：任一处去反引号回退 → 标准 lint 即报该行 error。
 - **问题 2（不可裁剪）R35 现行段引用过期**：requirements R35 段「七条／`lib/policy.js:29-36`」改写为与现行代码一致（8 条／`lib/policy.js:30-41`）；design §22.5 历史批次记录不动（档案记当时状态）。
 - **问题 3（不可裁剪）启动审计行版本号硬编码**：`lib/index.js:414` 的 writeStartupLine 硬编码 `v=2`，而审计版本常量为 3（`lib/audit.js:11`）——启动行与审计行版本不一致，排障时误导归因。修复＝启动行引用 `AUDIT_VERSION`；判据＝单测断言两处同源（变异：改常量 → 两行同变），验证实例重启后启动行 `v=3`。
 - **问题 4（不可裁剪）deny 审计行 reason 恒空**：规则拒绝的审计行不写 reason（`lib/gate.js:241-249` 只展开 `pre.fields`；命中键与模式只进注入文本），事后无法从日志知道命中了什么——R51 误拒排障的主要阻碍点。修复＝deny 审计行带上规则层 `pre.reason`（仍单行、其余字段不变，向后兼容）；判据＝显式清单命中的审计行 reason 含「命中模式」（单测＋验证实例实测各一）；R51 判据⑤的「reason 为空串」半句随实现改写。
@@ -430,12 +430,12 @@ R54 前的历史形态：两实例 junction 共用开发树且开发实例侧热
 - **（不可裁剪）R37 非有限数拒止移装载路径**：`normalizeConfig` 显式 `Number.isFinite` 检查（min/max 对 NaN 比较恒 false，schema 挡不住）；「界外 schema 拒、非有限装载拒、超限＝加载失败报错可见」口径不变。变异：摘除检查 → NaN 用例红。
 - **（不可裁剪）decode 往返回归单测**：夹具用含空分节的真实 describe 取值（逐字＝验证实例 profile patch 的 approve-for-me 用户层，含 `human: {}`）；断言一跳/两跳重组 schema 下校验通过（宿主 `validate()` 的 no-throw 语义）、二次序列化后不出现 `callback=undefined` 的 transform 节点。
 - **（不可裁剪）设置界面常驻断言补「字段取值等于生效值」**：结构断言抓不到取值整片为空；DOM 证据档的控件表逐项对 `normalizeConfig` 产物核对。验收＝验证实例重启装载修复后重取设置界面 DOM（20 控件全部带值且逐项等于生效值），常驻断言随新档升位；变异：篡改 dump 任一控件值即红。
-- **非目标**：不改宿主 `dsh-client-ui-settings` 的 rehydrate/validate 语义（宿主面，属上游）；不改表单结构与字段面（R29 判据族不变）；不动开发实例（重启由用户桌面侧执行，取证只在验证实例）。
+- **非目标**：不改宿主 `dsh-client-ui-settings` 的 rehydrate/validate 语义（宿主侧，属上游）；不改表单结构与字段集（R29 判据族不变）；不动开发实例（重启由用户桌面侧执行，取证只在验证实例）。
 - **端到端证据**：取自验证实例——重启后设置界面 DOM dump（控件值＋覆盖组＋读数行＋暂存往返）＋全套单测/语法/lint 三绿留档。
 
 ### R54 插件部署与仓库分离：v0.1.7 冻结件切换（不可裁剪）
 
-0.2.0 适配开工前，两实例的插件安装面仍 junction 共用开发树——开发树任何改动即时影响已部署实例。用户裁定按「单仓单源、实例按 ref 取版」分离部署面与仓库（2026-10-01，§5 决策行）：仓库只做源，实例从按 ref 检出的冻结件安装；全本地操作，不建任何远端（上传 git 在适配完成＋净化之后）。
+0.2.0 适配开工前，两实例的插件安装侧仍 junction 共用开发树——开发树任何改动即时影响已部署实例。用户决定按「单仓单源、实例按 ref 取版」分离部署侧与仓库（2026-10-01，§5 决策行）：仓库只做源，实例从按 ref 检出的冻结件安装；全本地操作，不建任何远端（上传 git 在适配完成＋净化之后）。
 
 - **（不可裁剪）冻结点**：tag `v0.1.7` 打在收尾提交（`version` 0.1.7）上，作为 0.1.7 线已验证态（R1–R53 全部验收）的唯一来源 ref。
 - **（不可裁剪）冻结件**：实例区内的 `dsh-approve-for-me@v0.1.7` 目录（`<实例区>/<包>@<ref>` 形态）＝tag 解包源码＋与已验证态一致的 `node_modules`（整拷 999 文件 0 失败；五包版本核对：cordis 4.0.4、dsh-llm 0.1.7-rc.1、dsh-typert-protocol 0.1.7-rc.1、schemastery 3.18.4、zod 4.6.5）。
@@ -455,23 +455,23 @@ dsh 上游发布 `0.2.0-rc.2`：`@deepseek-ai/dsh@0.2.0-rc.2` 的 `next`/`latest
 - **非目标**：async-tools 的 rc.2 平移（其线自理，仅对齐切换窗口）；github 安装模式（仍是 0.2.0 线完成后的后置验证）；0.1.7 线任何改动（冻结只修 P1）。
 
 ### R56 公开仓内容边界与文档自包含（不可裁剪）
-本仓即将要公开的仓库，采用「单仓双平面」：git 跟踪面承载对外交付物，其余一切过程性产物留在本地不跟踪目录。公开读者只凭仓内内容就应能读懂需求与设计。
+本仓即将要公开的仓库，采用「单仓双层」：公开层（git 跟踪、对外发布）承载对外交付物，其余一切过程性产物留在内部层（`.local/`，本地不跟踪目录）。公开读者只凭仓内内容就应能读懂需求与设计。
 
-- **（不可裁剪）git 跟踪面只含**：产品代码（`lib/`、`client.js`、`typert.host.js`、`assets/`、`cordis.patch.yml`）＋测试与工具（`test/`、`tools/`）＋对外文档（README／CHANGELOG／CONTRIBUTING）＋需求稿（本文件）与设计稿（`docs/design.md`）。其余一切——事实登记簿、过程稿、验证证据、本机部署与配置记录——置于 `.local/`（不被 git 跟踪），不得提交。
+- **（不可裁剪）公开层（git 跟踪）只含**：产品代码（`lib/`、`client.js`、`typert.host.js`、`assets/`、`cordis.patch.yml`）＋测试与工具（`test/`、`tools/`）＋对外文档（README／CHANGELOG／CONTRIBUTING）＋需求稿（本文件）与设计稿（`docs/design.md`）。其余一切——事实登记簿、过程稿、验证证据、本机部署与配置记录——置于 `.local/`（不被 git 跟踪），不得提交。
 - **（不可裁剪）文档自包含**：需求稿与设计稿所依赖的事实直接写在文档内部，并附公开可查的上游出处（公开 npm 包的 `文件:行号` 或公开 URL）；不得引用任何未随仓公开的内容（内部编号、过程稿文件名、证据/截图目录、本机路径与端口、实例与服务名）。
 - **判据（可失败）**：`npm run check:public-surface` 绿（该脚本扫描全部跟踪文件，任何判据命中即红）；变异用例必红——故意在跟踪文件里引入一条内部引用（如事实编号形态）后，检查器必须报出该命中。
 
 ### R57 安装同步配置：bundle patch 承载权限预设（不可裁剪）
 
-背景（自包含；含两轮裁定记录）：宿主安装引擎装卸两侧都经 pnpm——安装＝`pnpm add`（支持把「已批准构建脚本的包名」预写进 profile 的 `pnpm-workspace.yaml` `allowBuilds:` 键，未决名单可回读给调用方呈现批准步骤，`@deepseek-ai/dsh-plugin-manager@0.2.0-rc.2` lib/index.js:1691-1713、941-955）；卸载＝`pnpm remove`（同包 :1844-1858）。**实测（2026-10-07，pnpm 12.8.1）：pnpm 对依赖包从不执行任何卸载脚本（批准名单内亦然；文档侧 pnpm 审批面只覆盖安装期 build scripts）**——preuninstall 在宿主全通道等于死代码。运行期预设注册 API `permissionPresets.registerAuto` 槽位是保留名 `auto`、规格写死 `danger-full-access + ask`（`@deepseek-ai/dsh-permission-presets@0.2.0-rc.2` lib/index.js:52-61、258-268、402-403）、单槽互斥（:260），自定义预设名无运行期入口（目录＝配置行 presets＋活体 auto，:238-240）——与 §5「自动审批的形态」行冲突，不采用。**裁定链**：初裁（2026-10-06）＝npm 生命周期脚本＋`allowBuilds` 显式批准；实测推翻卸载侧后提交裁决；终裁（2026-10-07）＝用户硬性要求「绝不能卸载插件以后还遗留内容」，通道定为 **bundle patch 承载**——预设行随包声明、随包消失：本包 `cordis.patch.yml`（`dsh.bundle.patch` 已声明）内对 dsh-base 插入的 `- id: permission` 行做整行重述（patch 语义＝后层按 id 逐字段整值替换，层序＝`dsh.profile.bundles` 数组顺序、宿主通道安装即保证本包层在 dsh-base 后，`@deepseek-ai/dsh-app-boot@0.2.0-rc.2` lib/index.js:61-110、921-925）。装＝层自动参与组合（零写入 profile 层、无构建脚本、无需人工批准）；卸＝数组除名＋摘包即层消失（宿主 removeBundle 全程不触碰 profile patch，dsh-plugin-manager lib/index.js:1844-1863）——零残留是构造性事实。
+背景（自包含；含两轮决定记录）：宿主安装引擎装卸两侧都经 pnpm——安装＝`pnpm add`（支持把「已批准构建脚本的包名」预写进 profile 的 `pnpm-workspace.yaml` `allowBuilds:` 键，未决名单可回读给调用方呈现批准步骤，`@deepseek-ai/dsh-plugin-manager@0.2.0-rc.2` lib/index.js:1691-1713、941-955）；卸载＝`pnpm remove`（同包 :1844-1858）。**实测（2026-10-07，pnpm 12.8.1）：pnpm 对依赖包从不执行任何卸载脚本（批准名单内亦然；文档侧 pnpm 审批范围只覆盖安装期 build scripts）**——preuninstall 在宿主全通道等于死代码。运行期预设注册 API `permissionPresets.registerAuto` 槽位是保留名 `auto`、规格写死 `danger-full-access + ask`（`@deepseek-ai/dsh-permission-presets@0.2.0-rc.2` lib/index.js:52-61、258-268、402-403）、单槽互斥（:260），自定义预设名无运行期入口（目录＝配置行 presets＋活体 auto，:238-240）——与 §5「自动审批的形态」行冲突，不采用。**决定链**：初裁（2026-10-06）＝npm 生命周期脚本＋`allowBuilds` 显式批准；实测推翻卸载侧后提交决定；终裁（2026-10-07）＝用户硬性要求「绝不能卸载插件以后还遗留内容」，通道定为 **bundle patch 承载**——预设行随包声明、随包消失：本包 `cordis.patch.yml`（`dsh.bundle.patch` 已声明）内对 dsh-base 插入的 `- id: permission` 行做整行重述（patch 语义＝后层按 id 逐字段整值替换，层序＝`dsh.profile.bundles` 数组顺序、宿主通道安装即保证本包层在 dsh-base 后，`@deepseek-ai/dsh-app-boot@0.2.0-rc.2` lib/index.js:61-110、921-925）。装＝层自动参与组合（零写入 profile 层、无构建脚本、无需人工批准）；卸＝数组除名＋摘包即层消失（宿主 removeBundle 全程不触碰 profile patch，dsh-plugin-manager lib/index.js:1844-1863）——零残留是构造性事实。
 
 - **（不可裁剪）随包预设注入**：`cordis.patch.yml` 声明 permission 行四档重述（三标准档与 dsh-base 逐字一致＋`auto-approve`＝workspace-write+ask＋展示名「自动审批」；带 `name` 断言；`auto-approve` 排 workspace-write 之后——宿主 `derive()` 按声明序首中匹配档，dsh-permission-presets lib/index.js:304；不写 `defaultPreset`）。安装后重启（或宿主热装载，以实测为准）预设下拉四项；本仓 `npm install`、CI、克隆目录自装依赖＝普通 npm 操作，零副作用（无生命周期脚本可跑，守护断言钉住）。
-- **（不可裁剪）卸载零残留**：宿主通道移除＝零残留（层随包消失）；会话层安全由宿主 `derive()` 回落语义免费保证（存储档名解析不到→回落第一个 knob 匹配档＝workspace-write，因 auto-approve 与其 knobs 逐字等同；抛错路径只针对保留名 `auto`，dsh-permission-presets lib/index.js:295-306、373-376）——「卸载时处于自动审批权限的会话不可用」不成立。**预设残留防护**（宿主设置界面会把默认预设选择持久化进 profile patch 的 permission 行 config 覆盖，且覆盖自带当时生效的档表——**无论默认档选的是谁**；卸载后默认档悬空使整行装载失败→全部会话不可用 :178-181、277-280，默认档已切标准时被拖入的 auto-approve 条目仍滞留下拉——盲审反例；设置写回路以活动配置为基 dsh-config-editor lib/index.js:77-79＋dsh-settings lib/index.js:508-534）：本包 disposer 经 `ctx.get('profileContext').dir` 读 profile manifest（dsh-app-boot lib/index.js:2065-2071 同源），`dsh.profile.bundles` 已不含本包（removeBundle 先落盘数组再触发卸载，dsh-plugin-manager lib/index.js:1852-1853）→ 锚点式文本修改做**贡献级清理**（行内按全缩进级结构模型校验）：删 auto-approve 条目块（边界＝结构边界，块内空行/注释随块整块移除、不产生孤儿子键）＋删悬空默认行（取值按解析标量判定，引号/行尾注释形态同判）；行去留按编辑后形态——presets 删空或「无默认行且行内恰为已知基线形态（行属性只有基线 name 行、标准档子键与取值逐字等于 dsh-base，无任何手工内容）」→ 整行删除（恢复继承层），用户保留有效默认档或行内有任何自定义（条目/档内键值/行属性）→ 保留行（等价于本包从未存在时设置写出的形态）；设置服务的 unset 通道清不净（next 恒含档表、等值清除分支不触发），故走文件级修改且必要充分；best-effort，不阻断卸载；服务实例「先停机再 remove」与手删包目录路径本包代码不可达，README 卸载节补救（停机后 remove 前跑 `--restore-inherit`；已卸载则重装再跑或手删该行；用户裁定 2026-10-07）。
+- **（不可裁剪）卸载零残留**：宿主通道移除＝零残留（层随包消失）；会话层安全由宿主 `derive()` 回落语义免费保证（存储档名解析不到→回落第一个 knob 匹配档＝workspace-write，因 auto-approve 与其 knobs 逐字等同；抛错路径只针对保留名 `auto`，dsh-permission-presets lib/index.js:295-306、373-376）——「卸载时处于自动审批权限的会话不可用」不成立。**预设残留防护**（宿主设置界面会把默认预设选择持久化进 profile patch 的 permission 行 config 覆盖，且覆盖自带当时生效的档表——**无论默认档选的是谁**；卸载后默认档悬空使整行装载失败→全部会话不可用 :178-181、277-280，默认档已切标准时被拖入的 auto-approve 条目仍滞留下拉——盲审反例；设置写回路以活动配置为基 dsh-config-editor lib/index.js:77-79＋dsh-settings lib/index.js:508-534）：本包 disposer 经 `ctx.get('profileContext').dir` 读 profile manifest（dsh-app-boot lib/index.js:2065-2071 同源），`dsh.profile.bundles` 已不含本包（removeBundle 先落盘数组再触发卸载，dsh-plugin-manager lib/index.js:1852-1853）→ 锚点式文本修改做**贡献级清理**（行内按全缩进级结构模型校验）：删 auto-approve 条目块（边界＝结构边界，块内空行/注释随块整块移除、不产生孤儿子键）＋删悬空默认行（取值按解析标量判定，引号/行尾注释形态同判）；行去留按编辑后形态——presets 删空或「无默认行且行内恰为已知基线形态（行属性只有基线 name 行、标准档子键与取值逐字等于 dsh-base，无任何手工内容）」→ 整行删除（恢复继承层），用户保留有效默认档或行内有任何自定义（条目/档内键值/行属性）→ 保留行（等价于本包从未存在时设置写出的形态）；设置服务的 unset 通道清不净（next 恒含档表、等值清除分支不触发），故走文件级修改且必要充分；best-effort，不阻断卸载；服务实例「先停机再 remove」与手删包目录路径本包代码不可达，README 卸载节补救（停机后 remove 前跑 `--restore-inherit`；已卸载则重装再跑或手删该行；用户决定 2026-10-07）。
 - **（不可裁剪）生命周期脚本禁令**：`package.json` `scripts` 不得命中生命周期脚本规则——禁任何以 `pre`/`post` 开头的键（覆盖 npm 文档全部生命周期键与 `npm run <script>` 影子钩子如 `pretest`）加裸事件键 `install`/`uninstall`/`publish`（盲审修订：人工十键名单曾漏 `prepublish`/`preprepare`/`postprepare` 致变异假绿，改为规则判全＋全键矩阵用例）——该通道经实测否决（卸载侧死代码＋安装侧批准交互在 pnpm 12 与宿主 `approveBuilds` 裸名写法间存在兼容缺口），守护测试常驻断言。
 - **（不可裁剪）存量部署回收**：0.2.0 及此前经 `--init-row`/`--apply` 写进 profile 层的重述＝存量残留，`tools/permission-preset.mjs --revert` 是其条目回收通道（保留，定位降为遗留清理；R26 语义不改——只删 auto-approve 条目，**保留整行重述，不回纯 bundle**）；`--restore-inherit`（盲审新增）＝删 permission 覆盖行整行＋initRow 指纹注释块，回到**纯 bundle 继承**（重述会遮蔽包内四档——revert 后组合仍三档、自动审批档缺失，探针实测；保全校验＝全缩进级：行内出现宇宙外键/取值、标准档手工子键/改值、额外行属性、注释、错位缩进即拒绝代删、失败零落盘；`presets:` 键行尾随空白与取值的引号/行尾注释等价形态不误拒；幂等）；profile 层优先于 bundle 层（宿主用户覆盖语义），存量重述不被自动迁移。
 - **（不可裁剪）文档与承诺改写**：README 安装节（主路径＝装包重启即得，无需人工批准、无手工命令；`link:`/克隆通道依赖自装说明；存量回收节）、回滚节（宿主移除即零残留；服务实例与手删包目录路径的补救句）、「不修改宿主任何文件／删除插件目录即完全回滚」表述按新机制恢复并加强（正常运行与装卸全程不写 profile 层；唯一例外＝预设残留防护在「覆盖行含本包贡献且本包正被移除」时对该行的贡献级修改——该写入即清理本身；回滚补「重启宿主」限定词）。CHANGELOG 补条目；版本按语义化升档（提案 0.3.0：行为变更）。
 - **（不可裁剪）设置卡提示升级**：`card.presets.missing` 附补救指引（zh/en 同步、缺键即抛错口径不变）——成因与出路按 bundle patch 机制表述（停用/兼容跳过/配置遗留）。
-- **判据（可失败）**：①装完即配：一次性干净 profile 上 `dsh plugin add`（或 GUI 对话框，**无需人工批准**）→ 无手工编辑，profile 的 `cordis.patch.yml` **字节不变**，组合结果含四档（宿主组合函数或 dump 取证），重启（或实测热装载）后下拉四项含「自动审批」、启动无 unknown preset 警告；变异＝patch 摘掉 permission 重述 → 组合三档、断言红。②卸载零残留：宿主通道 remove → profile `cordis.patch.yml` 字节不变（从未写入）＋组合三档；设置写出的覆盖行由贡献级修改清理——真 composeEntries 探针覆盖三种默认档形态（auto-approve/workspace-write/read-only）断言「修改后组合三档＋行内无 auto-approve 残留＋幂等」，默认档指向 auto-approve 时整行删除（恢复继承）、已切标准档时条目级清理（行保留、用户选择保全）；会话回落前提（auto-approve knobs 与 workspace-write 逐字段等同）由单测钉住；防护条件矩阵（数组含/不含 × 覆盖行形态含自定义与引号形态 × CRLF/BOM × 写失败 best-effort × 手工形态：档内未知子键/改值/行属性保全、条目内空行与注释不截断边界、行尾注释悬空默认同判）单测，产出经真实 YAML 解析断言合法；变异＝摘掉 knobs 等同约束或反转防护条件或恢复「仅悬空默认才动」旧判定或去掉基线校验（仅看档 id 名单）→ 对应断言红。②′存量回收回纯 bundle（盲审反例）：`--restore-inherit` 合同用例——模板→initRow→apply→revert→restore **零字节差**回基线＋叠加安装态 bundle 组合四档（遮蔽解除）；设置形态（四档＋默认档）直接整行回收；宇宙外键/取值三形态拒绝且零落盘（档内手工子键/改值/行属性/注释同拒；`presets:` 尾随空白与引号/行尾注释取值不误拒）；幂等；变异＝不删重述 → 组合仍三档红、不校验宇宙 → 拒绝用例红。③非 profile 零副作用：`scripts` 不命中生命周期规则（守护断言＋全键矩阵：npm 文档生命周期键＋影子钩子逐一命中、自有脚本名不误伤）；全套 `npm test`＋`test:offline`＋`check`＋`check:public-surface`＋lint 0 error 照绿；变异＝向 `scripts` 引入任一生命周期键（含名单外新增键，如 prepublish）→ 守护断言红。④文档与承诺口径：README/CHANGELOG 按上文改写且 `check:public-surface` 全绿。⑤发布面：`npm pack` 产物含 `cordis.patch.yml`（含重述）、不含 `hooks/`；守护测试在岗。
+- **判据（可失败）**：①装完即配：一次性干净 profile 上 `dsh plugin add`（或 GUI 对话框，**无需人工批准**）→ 无手工编辑，profile 的 `cordis.patch.yml` **字节不变**，组合结果含四档（宿主组合函数或 dump 取证），重启（或实测热装载）后下拉四项含「自动审批」、启动无 unknown preset 警告；变异＝patch 摘掉 permission 重述 → 组合三档、断言红。②卸载零残留：宿主通道 remove → profile `cordis.patch.yml` 字节不变（从未写入）＋组合三档；设置写出的覆盖行由贡献级修改清理——真 composeEntries 探针覆盖三种默认档形态（auto-approve/workspace-write/read-only）断言「修改后组合三档＋行内无 auto-approve 残留＋幂等」，默认档指向 auto-approve 时整行删除（恢复继承）、已切标准档时条目级清理（行保留、用户选择保全）；会话回落前提（auto-approve knobs 与 workspace-write 逐字段等同）由单测钉住；防护条件矩阵（数组含/不含 × 覆盖行形态含自定义与引号形态 × CRLF/BOM × 写失败 best-effort × 手工形态：档内未知子键/改值/行属性保全、条目内空行与注释不截断边界、行尾注释悬空默认同判）单测，产出经真实 YAML 解析断言合法；变异＝摘掉 knobs 等同约束或反转防护条件或恢复「仅悬空默认才动」旧判定或去掉基线校验（仅看档 id 名单）→ 对应断言红。②′存量回收回纯 bundle（盲审反例）：`--restore-inherit` 合同用例——模板→initRow→apply→revert→restore **零字节差**回基线＋叠加安装态 bundle 组合四档（遮蔽解除）；设置形态（四档＋默认档）直接整行回收；宇宙外键/取值三形态拒绝且零落盘（档内手工子键/改值/行属性/注释同拒；`presets:` 尾随空白与引号/行尾注释取值不误拒）；幂等；变异＝不删重述 → 组合仍三档红、不校验宇宙 → 拒绝用例红。③非 profile 零副作用：`scripts` 不命中生命周期规则（守护断言＋全键矩阵：npm 文档生命周期键＋影子钩子逐一命中、自有脚本名不误伤）；全套 `npm test`＋`test:offline`＋`check`＋`check:public-surface`＋lint 0 error 照绿；变异＝向 `scripts` 引入任一生命周期键（含名单外新增键，如 prepublish）→ 守护断言红。④文档与承诺口径：README/CHANGELOG 按上文改写且 `check:public-surface` 全绿。⑤发布范围：`npm pack` 产物含 `cordis.patch.yml`（含重述）、不含 `hooks/`；守护测试在岗。
 - **非目标**：`registerAuto` 通道（否决，理由如上）；向宿主请求通用预设注册 API（另行向上游提）；`link:`/克隆通道自动化；触发机制与宿主预设解耦（产品重塑方向，是否立项另议）。
 
 ## 3. 需要设计阶段回答的问题
@@ -486,7 +486,7 @@ dsh 上游发布 `0.2.0-rc.2`：`@deepseek-ai/dsh@0.2.0-rc.2` 的 `next`/`latest
 8. R29 的重绘怎么组织：枚举下拉、布尔、多行清单、模型＋档位、映射表、多选这套没有官方对应物的控件，如何共用同一套字段外壳（标签行／覆盖标记／「恢复默认」／说明／点击展开帮助）与同一份暂存模型，避免每类控件各写一遍样式与写入路径。
 9. R30 的换算读数怎么排：官方 `primitives.SettingsValueField` 的常驻说明是**单串** prop，且字段非法时只渲染非法文案、`hint` 整段被顶掉——所以读数只能自绘在组件之外（紧随该字段的说明或非法文案），问题剩下「自绘那一行的落点与视觉归属怎么定」，以及草稿实时更新如何在 React 层只重画该字段而不牵动整张表单。
 10. R32 的同步正则时间上界怎么给：pattern 静态校验（拒止哪类病态形态、用什么判据）、移进 worker 线程（中止语义与超时强制终止的成本）、还是换线性时间引擎（引入依赖的代价）——给出对比与结论。
-11. R33 的 DSH_HOME 拒止边界怎么定：按环境变量现读（DSH_HOME 未设时判谁）、固定目录名匹配的误伤面（用户工作区里恰好有同名目录）、reviews 目录与 token 文件是否同口径、要不要例外白名单。
+11. R33 的 DSH_HOME 拒止边界怎么定：按环境变量现读（DSH_HOME 未设时判谁）、固定目录名匹配的误伤范围（用户工作区里恰好有同名目录）、reviews 目录与 token 文件是否同口径、要不要例外白名单。
 12. R35 的锚定放宽选哪种形态：非字母数字边界、子串匹配加引号包裹检测、还是命令结构解析；`grep mkfs readme.md` 一类文本引用按什么口径处理；多键全检的键序与 reason 写法。
 13. R46 的通道故障模板措辞与信息量：原因写到什么粒度（错误类别还是审计 reason 原文）、要不要带尝试进度（与 R47 联动）、无头会话没有「请用户」出口时末行怎么引导。
 14. R47 的可重试错误类判据：宿主 `BlockAssembler.finish` 的哪些码算可重试、`INVALID_REQUEST` 这类「看似确定性、实测间歇」的类怎么归类、重试次数与间隔怎么定、审计留痕落在哪一行。
@@ -543,8 +543,8 @@ dsh 上游发布 `0.2.0-rc.2`：`@deepseek-ai/dsh@0.2.0-rc.2` 的 `next`/`latest
 - [x] **删包即净**：卸载 + 备用清理后，profile 的 `cordis.patch.yml` 里不再有「自动审批」条目，`permission.defaultPreset` 未被本插件改成插件预设名；重启后权限下拉回到基线（仅可查看/工作区内修改/完全权限），`--apply` 复原后重启 → 下拉四项含「自动审批」，两次启动均无 `unknown preset` 警告。回滚四步＝`--revert`（删条目块与备份）→ 摘 junction（`Test-Path`=False，仓库未动，清单回到基线）→ 删 patch 本行 `config` 覆盖块 → 重启复核。**`--revert` 不把 `defaultPreset` 回写成已删除的条目名**（否则下次启动 `permission: unknown preset "auto-approve"`、整行不激活）
 - [x] **隔离性对照**：另一个未使用本插件预设的会话，其审批行为与未安装插件时一致（`trigger.unknown=skip` 的中性表现）——2026-09-24 实测：在同一会话里把预设保持为新建默认的 `workspace-write`，触发同一条工作区外写入命令，插件只写一行中性 `screen` 审计（`action=skip source=preset reason="权限预设「workspace-write」不在接管名单内"`，`inject=no`），页面**不出现任何 `.dsafm_*` 审批元素**、注入字节为 0，请求按宿主原生路径走；随后把同一会话切到「自动审批」才出现接管与卡片状态条——同一会话、同一命令、仅预设不同，对照成立
 - [x] R18/R19 的降级可见：`README.md` 的已知局限一节在适配后仍如实存在，未把未达成的功能写成已达成——2026-09-24 复核 `README.md:220-237`（「轨迹集成」与「已知局限」两节）：记录表原生记录标 ❌「做不到」、近似行标 ⚠️「可选」、时长条拆不开与 `callId` 根因均如实登记，并指向上游提案稿；未出现"已达成"表述
-- [x] **退役机制名零残留**：交付代码与现行文档里不出现退役机制名，代码侧由 `test/index.test.mjs` 的退役静态扫描守着（禁词表与扫描实现同在该文件，含"扫描函数必须命中"的反恒真对照；`test/` 不纳入自扫）；随包发布的 `README.md` 同步清理。设置界面字段与 `lib/config.js` 的 UI 面一致（默认审查模型/按主模型映射/跟随主模型/接管预设/预设不可判定处置/逐次写跳过审计/审查超时/输出上限/审查期间弹出人工卡片/人工超时/人工计时起点/模式/自动放行上限/命令缺失处置/审查未放行处置/会话页注入/注入字节上限/接管工具名单/规则拒绝清单），机器可核清单见设置界面 DOM dump 的字段清单节；「自有视图」指会话「审查记录」页签，不是 config 字段
-- [x] R27 设置界面迁移与可用（验证实例；本包页面落点）：数据通道＝`configForms` + profile patch 本行 `config:`。判据全部落在本包页面 DOM：字段与控件齐备、首屏在场（21 字段逐项＝17 自绘壳＋4 官方数字字段、20 控件表、覆盖组 3、迁移键回读 300000 与 zh/en 带覆盖标记、折叠族零残留、aria-expanded 恰 1 处＝接管预设 picker；`test/settings-dom-dump.test.mjs` 13 用例常驻核对；变异验证：篡改 dump 回读值即红）。判据可变红三路径——删表单注册／改错槽键 → 表单不渲染 → dump 断言红；宿主不再服务命名空间 → `whileServed` 门控无表单零报错（`test/client.test.mjs` 四例单测在岗）；dump 被篡改／误删 → 常驻断言红。改值验证：同一页面上「审查超时 (ms)」300000→120000 保存→回读＝控件值 `120000`＋字段旁「已覆盖」→还原 300000 回读一致，全程零重启。字段面：21 字段＝17 自绘壳＋4 个官方数字字段，「触发／审查模型／高级」三区齐备、首屏在场；对 0.1.5 基线逐项对照，多出「审查期间弹出人工卡片」与语言两行，「接管预设」为多选下拉。常驻断言 `test/settings-dom-dump.test.mjs` 13 用例
+- [x] **退役机制名零残留**：交付代码与现行文档里不出现退役机制名，代码侧由 `test/index.test.mjs` 的退役静态扫描守着（禁词表与扫描实现同在该文件，含"扫描函数必须命中"的反恒真对照；`test/` 不纳入自扫）；随包发布的 `README.md` 同步清理。设置界面字段与 `lib/config.js` 的 UI 字段集一致（默认审查模型/按主模型映射/跟随主模型/接管预设/预设不可判定处置/逐次写跳过审计/审查超时/输出上限/审查期间弹出人工卡片/人工超时/人工计时起点/模式/自动放行上限/命令缺失处置/审查未放行处置/会话页注入/注入字节上限/接管工具名单/规则拒绝清单），机器可核清单见设置界面 DOM dump 的字段清单节；「自有视图」指会话「审查记录」页签，不是 config 字段
+- [x] R27 设置界面迁移与可用（验证实例；本包页面落点）：数据通道＝`configForms` + profile patch 本行 `config:`。判据全部落在本包页面 DOM：字段与控件齐备、首屏在场（21 字段逐项＝17 自绘壳＋4 官方数字字段、20 控件表、覆盖组 3、迁移键回读 300000 与 zh/en 带覆盖标记、折叠族零残留、aria-expanded 恰 1 处＝接管预设 picker；`test/settings-dom-dump.test.mjs` 13 用例常驻核对；变异验证：篡改 dump 回读值即红）。判据可变红三路径——删表单注册／改错槽键 → 表单不渲染 → dump 断言红；宿主不再服务命名空间 → `whileServed` 门控无表单零报错（`test/client.test.mjs` 四例单测在岗）；dump 被篡改／误删 → 常驻断言红。改值验证：同一页面上「审查超时 (ms)」300000→120000 保存→回读＝控件值 `120000`＋字段旁「已覆盖」→还原 300000 回读一致，全程零重启。字段集：21 字段＝17 自绘壳＋4 个官方数字字段，「触发／审查模型／高级」三区齐备、首屏在场；对 0.1.5 基线逐项对照，多出「审查期间弹出人工卡片」与语言两行，「接管预设」为多选下拉。常驻断言 `test/settings-dom-dump.test.mjs` 13 用例
 - [x] R28 中英双语与两块独立切换（验证实例）：①用户文案——切到 `en` 后**本包设置界面页面 DOM 文案整体变英文**（字段名 UI text language／Agent prompt language／Review timeout (ms)、枚举、保存按钮变 Save；hasZh 反向断言＝中文零残留），还原回 `auto` 后中文复原（zhBack=true、enGone=true）；composer 控件与「审查记录」页签的英文切换不单独取证（同一 `useNsT` 机制，`test/client.test.mjs` 三档行为差异测试在岗）；②Agent 提示——zh 档下真实审查落 `phase=screen`→`phase=review decision=allow`→`phase=decide path=allowed-once inject=yes withdraw=ok`，注入卡片中文首行在场；**端到端字节核对 PASS**（`tools/probe-r33-zh-bytes.mjs`）：注入两行（`agent/inbox/spliced`＋折叠 `user/message`）均与 `allowText(fields,'zh')` 逐字节相等、`injectBytes` 与审计行一致、≠同 fields 的 en 模板；zh 系统提示词在场（reviews 记录 `prompt` 字段）。注入文**不渲染进「对话」页签**（生产者自有消息源 kind）——对话页截图不能作注入图证；③独立性——ui=en 档下切 agent=zh 保存后回读「Agent 提示语言｜用户覆盖｜当前生效值: "zh"」，**同一页面 UI 文案与 ui 生效值完全不变**；④字典键集一一对应（`test/agent-texts.test.mjs`：键集奇偶含反向对照、冻结、缺键抛错；`test/client.test.mjs` 中英字典齐备＋三档行为差异）；⑤热生效——语言切换保存后零重启，下一次审查即按新档运行，ui 档切换后表单语言同帧变化；⑥审计行与日志措辞不随切换改变——audit reason 与 `language.agent` 档无关，按字节同形
 
 - [x] R29 设置界面照官方重绘（验证实例）：判据＝R29 段的六条，全部以本包页面 DOM/计算样式实测：①「重置全部覆盖」「当前生效值」「分区标题」页面零命中（dump 逐字文本＋类清单零残留）；②覆盖字段旁「已覆盖＋恢复默认」自绘 3 组＋官方组件内嵌覆盖组，点「恢复默认」只暂存（控件立即显示组合层默认值、不写库），重开回读旧值，保存才落 `unset`；③「保存」初始 `disabled=true`→暂存后 `false`→保存/重开后 `true`；④容器计算样式 `borderStyle=none`/`borderWidth=0px`/`borderRadius=0px`/背景透明；⑤帮助点击后 `aria-expanded=true`、文本进入 DOM、同屏恰 1 个展开区；⑥本包注入 CSS 串对三个失效令牌零命中（收窄到本包 style 元素再数）。落点与数据通道＝`configForms` + profile patch 本行 `config:`；改值回读口径＝控件值＋「已覆盖」。常驻断言 `test/settings-dom-dump.test.mjs` 13 用例（结构断言＋「控件取值逐项等于生效值」）。「只有保存才写」行为差异：language.ui 点「恢复默认」不保存→重开读回 `zh`（写库没发生）→保存后读 `auto` 且覆盖消失→profile patch 本行 `config:` 键随保存变化。变异验证：删「已覆盖/恢复默认」、保存恒可点、加回卡片外壳三条路各自令对应单测变红（`test/client.test.mjs` 静态扫描/门控/首屏三例，已实测红→还原复绿）。现行现场：本包 CSS 8732 字符、human.timeoutMs 为默认 300000（无用户层键、无覆盖组），覆盖组 3＝reviewer.model/language.ui/language.agent
@@ -555,7 +555,7 @@ dsh 上游发布 `0.2.0-rc.2`：`@deepseek-ai/dsh@0.2.0-rc.2` 的 `next`/`latest
 
 - [x] R31 去重复用边界：缺 callId 不共享结论、失败不入 TTL 缓存、dedupe Map 有界（`test/scheduler.test.mjs` R31①②③ 三变异各就位：键塌缩→结论越界红、失败入缓存→重试失败红、去掉淘汰→Map 无界红）
 - [x] R32 grep 资源上限与同步防护：超 1 MiB 文件跳过（①）、候选截断至 200 并说明（②）、病态 pattern 编译前静态拒止——同步返回、不触超时、审计照写（③④，`test/readonly-tools.test.mjs`；`assertSafePattern` 分支矩阵 8 放行/8 拒止）
-- [x] R33 拒止清单覆盖 DSH 敏感面：sessions / reviews / current-url.txt 三类 deniedRead（`test/readonly-tools.test.mjs` R33①②③④，含注入根独立生效与工作区同名目录不误伤对照）
+- [x] R33 拒止清单覆盖 DSH 敏感范围：sessions / reviews / current-url.txt 三类 deniedRead（`test/readonly-tools.test.mjs` R33①②③④，含注入根独立生效与工作区同名目录不误伤对照）
 - [x] R34 两个出口补齐脱敏：审计 reason 先遮后截（①②③）、config.js 注释同步改写、逃逸注入复用交付口径（④：error 内 `sk-…` 被 `[redacted]` 后才注入；`test/audit.test.mjs`＋`test/index.test.mjs`）
 - [x] R35 deny 抗绕过：引号/斜杠包裹命中（①`bash -c 'mkfs /dev/sda1'`、`cmd /c "format c:"`、`/sbin/mkfs`）、arguments 字符串键全量过检且 reason 指明键路径（②`key "script"`＋嵌套 `env.PAYLOAD`）、误伤口径钉住（③④）、既有形态回归（⑤；`test/policy.test.mjs`）
 - [x] R36 热改接线：toolTimeoutMs/redactPatterns 随下一次审查现设（`lib/index.js` rt.review 内 `setToolTimeoutMs`/`setRedactPatterns`，静态扫描钉序）、setter 现读生效（①③）；审计读取器并入 `context.redactPatterns`（R34④ 用例兼作一致性守卫）
@@ -583,12 +583,12 @@ dsh 上游发布 `0.2.0-rc.2`：`@deepseek-ai/dsh@0.2.0-rc.2` 的 `next`/`latest
 
 ### 2026-09-28 R49/R50 立项延期（转 0.2.0 线）
 
-- [x] R49/R50 延期到 0.2.0 线：0.1.7 线本仓不实现 0.2.0 适配与版本区分，两条需求原样由 0.2.0 线实现与验收（含冷启动 URL 复验）；立项目的、隔离纪律与判据全文保留在 §2 中 R49/R50 两节，即该线的现行需求（裁定见 §5 决策行）
+- [x] R49/R50 延期到 0.2.0 线：0.1.7 线本仓不实现 0.2.0 适配与版本区分，两条需求原样由 0.2.0 线实现与验收（含冷启动 URL 复验）；立项目的、隔离纪律与判据全文保留在 §2 中 R49/R50 两节，即该线的现行需求（决定见 §5 决策行）
 
 ### 2026-09-30 R51/R52 验收（规则墙默认清空：实现、单测与端到端取证完成；判据见各段，全部可失败）
 
-- [x] R51 denyPatterns 出厂默认清空：schema 默认改空数组（`lib/config.js:34-36` `.default([]).volatile()`）、规则路径与 R35 语义保留（`lib/policy.js` 8 条清单与锚定不动，显式配置部署行为不变）、文档口径（R7/设计 §22.5 误伤面判据③/§3.4/§16 对照表）与设置卡/README 文案同步——单测判据①-⑤（`test/policy.test.mjs` R51①②③、`test/gate.test.mjs` 路径 2）＋验证实例端到端 A/B 两幕（显式清单 deny＋reason，默认空进审查）；变异 M1 默认回填出厂清单 → ①②③三红
-- [x] R52 问题清单清偿：问题 1 `硬拒` 黑名单＋全仓 lint error 清零（标准命令无豁免 0 error，warn 以终态证据为准；基线 279 处→0）、问题 2 R35 引用更新（8 条/`:30-41`/`:174-188`）、问题 3 启动行版本同源（验证实例重启启动行 `v=3`，`test/index.test.mjs` 同源断言，变异 M3 红）、问题 4 deny 审计行 reason（验证实例实测 reason 含命中键与模式全文；变异 M2 红）——问题 1 全仓口径与问题 4 三处改写均经用户 2026-09-30 迟到作答裁定（§5 决策行）
+- [x] R51 denyPatterns 出厂默认清空：schema 默认改空数组（`lib/config.js:34-36` `.default([]).volatile()`）、规则路径与 R35 语义保留（`lib/policy.js` 8 条清单与锚定不动，显式配置部署行为不变）、文档口径（R7/设计 §22.5 误伤范围判据③/§3.4/§16 对照表）与设置卡/README 文案同步——单测判据①-⑤（`test/policy.test.mjs` R51①②③、`test/gate.test.mjs` 路径 2）＋验证实例端到端 A/B 两幕（显式清单 deny＋reason，默认空进审查）；变异 M1 默认回填出厂清单 → ①②③三红
+- [x] R52 问题清单清偿：问题 1 `硬拒` 黑名单＋全仓 lint error 清零（标准命令无豁免 0 error，warn 以终态证据为准；基线 279 处→0）、问题 2 R35 引用更新（8 条/`:30-41`/`:174-188`）、问题 3 启动行版本同源（验证实例重启启动行 `v=3`，`test/index.test.mjs` 同源断言，变异 M3 红）、问题 4 deny 审计行 reason（验证实例实测 reason 含命中键与模式全文；变异 M2 红）——问题 1 全仓口径与问题 4 三处改写均经用户 2026-09-30 迟到作答决定（§5 决策行）
 
 ### 2026-10-01 R53 验收（设置表单整片全空修复：实现、单测与验证实例端到端取证完成；判据见各段，全部可失败）
 
@@ -609,7 +609,7 @@ dsh 上游发布 `0.2.0-rc.2`：`@deepseek-ai/dsh@0.2.0-rc.2` 的 `next`/`latest
 
 ### 2026-10-06 R57 立项（安装同步配置——实现与取证由后续批次完成）
 
-- [ ] R57 安装同步配置（bundle patch 承载权限预设；初裁 2026-10-06 为生命周期脚本通道，2026-10-07 终裁修订，裁定链见 §5 决策行）：`cordis.patch.yml` permission 行四档重述（随包装卸零残留）＋生命周期脚本禁令＋默认预设悬空防护＋README/CHANGELOG/承诺口径改写＋设置卡补救指引；判据①–⑤见 §2 R57 段（装完即配零写入／卸载零残留／非 profile 零副作用／文档口径／发布面）；立项依据＝宿主装卸引擎与预设服务的源码事实（§2 R57 段引出处）＋全新部署 GUI 安装半配置态实测（2026-10-06）＋pnpm 卸载脚本不执行实测与组合语义实证（2026-10-07）。
+- [ ] R57 安装同步配置（bundle patch 承载权限预设；初裁 2026-10-06 为生命周期脚本通道，2026-10-07 终裁修订，决定链见 §5 决策行）：`cordis.patch.yml` permission 行四档重述（随包装卸零残留）＋生命周期脚本禁令＋默认预设悬空防护＋README/CHANGELOG/承诺口径改写＋设置卡补救指引；判据①–⑤见 §2 R57 段（装完即配零写入／卸载零残留／非 profile 零副作用／文档口径／发布范围）；立项依据＝宿主装卸引擎与预设服务的源码事实（§2 R57 段引出处）＋全新部署 GUI 安装半配置态实测（2026-10-06）＋pnpm 卸载脚本不执行实测与组合语义实证（2026-10-07）。
 
 ### 判定口径
 
@@ -619,7 +619,7 @@ dsh 上游发布 `0.2.0-rc.2`：`@deepseek-ai/dsh@0.2.0-rc.2` 的 `next`/`latest
 
 | 项 | 决定 | 理由 |
 |---|---|---|
-| 自动审批的形态 | **审批应答者**（保留沙箱 + 撞墙升权 + 逐次审查）；**明确不采用**宿主 0.1.7 的官方 `auto` 预设语义，不调 `registerAuto` | 用户裁定：继续继承 codex `--approve-for-me` 的形态。功能依据：`auto` 固定无沙箱 + `approval: never`，而 `never` 让审批在 waterfall 之前短路，应答者收不到请求（依据同 §1） |
+| 自动审批的形态 | **审批应答者**（保留沙箱 + 撞墙升权 + 逐次审查）；**明确不采用**宿主 0.1.7 的官方 `auto` 预设语义，不调 `registerAuto` | 用户决定：继续继承 codex `--approve-for-me` 的形态。功能依据：`auto` 固定无沙箱 + `approval: never`，而 `never` 让审批在 waterfall 之前短路，应答者收不到请求（依据同 §1） |
 | 预设条目与默认预设 | 「自动审批」预设条目由**插件的部署脚本**写入/回收 profile patch；`permission.defaultPreset` **不得**取插件预设名；该预设必须与 `workspace-write` 取值相同且声明在其后 | R26：条目靠部署方手写就违反「装上就出现、卸下就消失」；预设名进了跨会话记忆，插件不在场时就是空壳。排序依据：同组合按声明顺序取第一个匹配项（`@deepseek-ai/dsh-permission-presets@0.1.7-rc.1` 的 `derive()`） |
 | 默认自动放行上限 | 允许到 `danger-full-access`（不因模式上限拦截） | 依据：默认 `workspace-write` 会话下唯一升权目标就是 `danger-full-access`（宿主 `@deepseek-ai/dsh-sandbox@0.1.7-rc.1` lib/index.js 的 `WIDER_MODES` 组合；实测升权 reason 全部指向该目标），若默认拦截则自动放行率恒为 0、插件失去意义；对齐 codex approve-for-me 会批准 escalated permission。安全由 LLM 审查主担，显式配置的可选规则清单承担确定性拦截（R51 后口径） |
 | 审查拒绝后的处置 | `deny` → **直接拒绝**（不交人工），并注入拒绝原因 | 对齐 codex（`core/src/tools/approvals.rs` 的 `Denied → ToolError::Rejected`）；用户明确取消"打回后再交人工复核" |
@@ -638,18 +638,18 @@ dsh 上游发布 `0.2.0-rc.2`：`@deepseek-ai/dsh@0.2.0-rc.2` 的 `next`/`latest
 | 子代理覆盖的翻策略写法 | 只追加 `approval/policy {policy:'ask'}`（省略 `source`），在 `session/created` 监听器内同步完成 | 宿主契约：整预设写入会改写委派沙箱（R24 禁止）；`source` 字段类型只写了 `'delegation'`，自定义值可能被投影校验拒绝；监听器内可安全 `append`（挂载钩子先于事件安装），但监听器抛错会回滚会话挂载，故任何失败只写审计 |
 | 子代理覆盖的判定锚点 | 委派链**根会话**的权限预设 ∈ `trigger.presets`（不是父会话、不是子会话自身） | R24：嵌套子代理的父会话没有稳定预设（custom 或继承值）；根会话一定有 `pinInitialPermission` 补记的预设事件；根不可达（跨进程/已结束未装载）则不覆盖，保持 never 的 fail-closed |
 | 子代理的人工通道 | 无：不 `next()`、不弹卡、`fallback` 对子代理一律按拒绝结算 | 无头会话没有可交互的应答者；waterfall 交人工等于无限挂起（R24） |
-| 设置界面的外观与保存交互 | 照官方设置表单重绘：删除「重置全部覆盖」，回退覆盖改用单字段「已覆盖」＋「恢复默认」；写入时机统一为「只有保存才写」；落点仍留在 bundle 级配置槽 | 用户裁定：本包设置界面与官方设置页并排看是两套样式（规格对照＝`@deepseek-ai/dsh-client-ui-primitives@0.1.7-rc.1` 的 `SettingsForm`/`SettingsValueField`）。落点不迁：槽位目录明说 bundle 的配置属于 `plugins.bundle.config`／`plugins.row.config`，`plugins.item` 是官方宿主命名空间设置页用的槽位（`@deepseek-ai/dsh-client-ui-plugin-manager@0.1.7-rc.1` 的槽位契约），R27 的落点判据不变 |
-| 毫秒字段的秒数显示 | 设置界面的两个毫秒字段（审查超时、人工超时）在常驻说明带显示生效值与草稿值的秒数换算，草稿随输入实时更新；存储、审计与注入文本仍用毫秒 | 用户裁定：六位毫秒数读不出量级。换算只在显示层，配置与按字节核对的证据（审计 `ms=`、`injectBytes`）不受影响；两个 ms 字段都由官方 `SettingsValueField` 渲染、说明是单串 `hint`，换算读数必须自绘一行 |
-| 审查通道故障（error 判定）的注入语义 | 通道故障模板：点明非安全判定、带原因、可直接重试、防风暴指引；`REJECTION_INSTRUCTIONS` 末句只保留给 deny；超时文案（R10）不变；结算仍 `rejected`（fail-closed 不动） | 用户裁定（R46）：实测三次供应商故障误拒证实主模型会把审查器故障读成危险判定并拒绝重试，无头会话没有用户出口；改的只是注入语义，不是放行姿态 |
-| 审查失败的插件内重试与熔断口径 | 可重试错误类在审查器内加试一次（计入 `reviewer.timeoutMs` 同一预算）；熔断 `record` 把 error 与 deny 同权计数，`queue-overflow` 不计数，`breaker-open` 注入走通道故障模板 | 用户裁定（R47/R48）：三次误拒中可证同命令重发即恢复，全推给主模型重试的代价是每次抖动先吃一次误拒注入；无熔断时持续故障反复烧 LLM 调用，引入重试后浪费放大 |
-| 0.2.0 适配的隔离形态 | 单独做 0.2.0 版本适配的插件包：独立插件目录＋独立 DSH 安装/实例承载适配；禁止在两实例 junction 共用的原插件目录（本仓开发树）原地适配 | 用户裁定（R50）：立项时两实例的插件 junction 指向同一物理目录且开发实例热重载，原地适配会直接弄坏已部署插件；须做版本区分 |
-| 规则墙的出厂默认 | `denyPatterns` 出厂默认为**空清单**：规则强制检查代码路径保留，降位为用户显式配置的可选黑名单；破坏性命令风险回归 LLM 审查（租户策略 Destructive Actions 段）承担 | 用户裁定（R51 方案 A）：实测证明默认清单把提交说明/文档文本的误伤做成强制拒绝且不可推翻；codex 蓝本无此层（guardian 全链无关键词/正则预筛，openai/codex `core/assets/guardian/policy_template.md`），防模型被骗由 §3.4 防注入同构机制承担 |
-| 术语 `硬拒` | 进项目黑名单，修正词「强制拒绝」；建项目词表并纳入 lint_terms 检查，清零随 R52 问题 1 执行 | 用户裁定：高频既有用语是遗留项源头，随问题清单一并核销 |
-| lint 清零的验收口径 | 标准命令＝repo 根扫描＋`--terms` 项目词表，**无路径豁免**；全仓（含历史审查/修正/部署档案）error 清零；处置三分法＝使用位替换、元语言/引用位行内代码（字面保真） | 用户裁定（「字面执行：改写全部」）：基线 279 处 error 全清（基线与终态各留一次标准全量扫描读数） |
-| R51「规则路径保留」与 R52 问题 4 的边界 | `lib/gate.js` 强制拒绝路径的判定与注入文案原样；deny 审计行补 reason 属审计观测面（R52 问题 4），不属路径行为变化 | 用户裁定（授权三处同批改写）：R51「规则检查代码路径保留」条与设计 §25.2.2/§25.2.4 的「原样」同批收窄为「判定与注入文案不变，审计行随问题 4 补 reason」 |
-| R49/R50（0.2.0 适配与版本区分）的线归属 | 两条需求由 0.2.0 线实现与验收：0.1.7 线本仓不实现，§2 中 R49/R50 两节全文是该线的现行需求（含冷启动 URL 复验） | 用户裁定：0.2.0 版本适配之后再做；本仓纪律本就禁止动 0.2.0 线 |
+| 设置界面的外观与保存交互 | 照官方设置表单重绘：删除「重置全部覆盖」，回退覆盖改用单字段「已覆盖」＋「恢复默认」；写入时机统一为「只有保存才写」；落点仍留在 bundle 级配置槽 | 用户决定：本包设置界面与官方设置页并排看是两套样式（规格对照＝`@deepseek-ai/dsh-client-ui-primitives@0.1.7-rc.1` 的 `SettingsForm`/`SettingsValueField`）。落点不迁：槽位目录明说 bundle 的配置属于 `plugins.bundle.config`／`plugins.row.config`，`plugins.item` 是官方宿主命名空间设置页用的槽位（`@deepseek-ai/dsh-client-ui-plugin-manager@0.1.7-rc.1` 的槽位契约），R27 的落点判据不变 |
+| 毫秒字段的秒数显示 | 设置界面的两个毫秒字段（审查超时、人工超时）在常驻说明带显示生效值与草稿值的秒数换算，草稿随输入实时更新；存储、审计与注入文本仍用毫秒 | 用户决定：六位毫秒数读不出量级。换算只在显示层，配置与按字节核对的证据（审计 `ms=`、`injectBytes`）不受影响；两个 ms 字段都由官方 `SettingsValueField` 渲染、说明是单串 `hint`，换算读数必须自绘一行 |
+| 审查通道故障（error 判定）的注入语义 | 通道故障模板：点明非安全判定、带原因、可直接重试、防风暴指引；`REJECTION_INSTRUCTIONS` 末句只保留给 deny；超时文案（R10）不变；结算仍 `rejected`（fail-closed 不动） | 用户决定（R46）：实测三次供应商故障误拒证实主模型会把审查器故障读成危险判定并拒绝重试，无头会话没有用户出口；改的只是注入语义，不是放行姿态 |
+| 审查失败的插件内重试与熔断口径 | 可重试错误类在审查器内加试一次（计入 `reviewer.timeoutMs` 同一预算）；熔断 `record` 把 error 与 deny 同权计数，`queue-overflow` 不计数，`breaker-open` 注入走通道故障模板 | 用户决定（R47/R48）：三次误拒中可证同命令重发即恢复，全推给主模型重试的代价是每次抖动先吃一次误拒注入；无熔断时持续故障反复烧 LLM 调用，引入重试后浪费放大 |
+| 0.2.0 适配的隔离形态 | 单独做 0.2.0 版本适配的插件包：独立插件目录＋独立 DSH 安装/实例承载适配；禁止在两实例 junction 共用的原插件目录（本仓开发树）原地适配 | 用户决定（R50）：立项时两实例的插件 junction 指向同一物理目录且开发实例热重载，原地适配会直接弄坏已部署插件；须做版本区分 |
+| 规则墙的出厂默认 | `denyPatterns` 出厂默认为**空清单**：规则强制检查代码路径保留，降位为用户显式配置的可选黑名单；破坏性命令风险回归 LLM 审查（租户策略 Destructive Actions 段）承担 | 用户决定（R51 方案 A）：实测证明默认清单把提交说明/文档文本的误伤做成强制拒绝且不可推翻；codex 蓝本无此层（guardian 全链无关键词/正则预筛，openai/codex `core/assets/guardian/policy_template.md`），防模型被骗由 §3.4 防注入同构机制承担 |
+| 术语 `硬拒` | 进项目黑名单，修正词「强制拒绝」；建项目词表并纳入 lint_terms 检查，清零随 R52 问题 1 执行 | 用户决定：高频既有用语是遗留项源头，随问题清单一并核销 |
+| lint 清零的验收口径 | 标准命令＝repo 根扫描＋`--terms` 项目词表，**无路径豁免**；全仓（含历史审查/修正/部署档案）error 清零；处置三分法＝使用位替换、元语言/引用位行内代码（字面保真） | 用户决定（「字面执行：改写全部」）：基线 279 处 error 全清（基线与终态各留一次标准全量扫描读数） |
+| R51「规则路径保留」与 R52 问题 4 的边界 | `lib/gate.js` 强制拒绝路径的判定与注入文案原样；deny 审计行补 reason 属审计观测范围（R52 问题 4），不属路径行为变化 | 用户决定（授权三处同批改写）：R51「规则检查代码路径保留」条与设计 §25.2.2/§25.2.4 的「原样」同批收窄为「判定与注入文案不变，审计行随问题 4 补 reason」 |
+| R49/R50（0.2.0 适配与版本区分）的线归属 | 两条需求由 0.2.0 线实现与验收：0.1.7 线本仓不实现，§2 中 R49/R50 两节全文是该线的现行需求（含冷启动 URL 复验） | 用户决定：0.2.0 版本适配之后再做；本仓纪律本就禁止动 0.2.0 线 |
 | R53 设置表单修复口径 | Config 全树禁止 `transform` 节点；R37 非有限数拒止移装载路径（`normalizeConfig` 显式检查）；设置界面常驻断言补「字段取值等于生效值」 | 用户目标（2026-10-01，验收方独立复现）：客户端设置通道对 schema 做序列化往返，transform 回调过不了第二次序列化——独立复现双候选（二次序列化丢回调、volatile 引用取值校验抛错）与开发方离线探针一致 |
-| 0.2.0 分线与部署形态（§3 问题 16/17/18/19 答复） | ①验证实例升 0.2.0 宿主（独立安装＋独立 home，由用户另委 Agent 执行，原 home 封存）；②单仓单源、实例按 ref 取版——tag `v0.1.7` 冻结已验证态，0.2.0 适配期验证实例新 home 直投开发树（main），稳定后按 ref 安装；③包版本对齐宿主（0.1.7 线终版 0.1.7、0.2.0 线自 0.2.0 起）；④0.1.7 线冻结只修 P1，修复单向 cherry-pick 至 0.2.0 线，0.2.0 侧通用缺陷仅 P1 回移；⑤问题 19 维持 §24.3 口径 | 用户裁定（验证实例切换、同仓两线、版本对齐宿主、冻结只修 P1）；方案与 async-tools 线讨论后收敛为「仓库与安装目录彻底分离」（用户认可）；安装全程本地，净化后才上传 git，github 安装模式为适配完成后的后置验证 |
-| 插件部署与仓库分离的执行口径（R54） | 安装实体＝按 ref 检出的冻结件（`<实例区>/<包>@<ref>`）；开发树零实例引用；ref 错装时 bundle 被 peer 检查跳过（fail-loud，双保险） | 用户裁定：先分线后适配后净化后开源；两实例重启由用户重启机器执行、切换后按四判据验证 |
-| rc 追跟口径（R55） | 0.2.0 线内上游 rc 发布＝版本锁定平移轮：4 处声明＋lockfile/`node_modules` 重装＋README 版串＋基线哈希实测追跟＋§24.2 清单在宿主重取；lib/client 零改动预期、实测不符才最小修并注明依据；插件与宿主同轮切换，单边先行期间 bundle 被 peer 检查跳过＝预期中间态不修；`version` 不随 rc 尾缀（仍 `0.2.0`） | 用户裁定：rc.2 内容增量为零（逐包 diff 实证）仍须追跟——不平移即无法装载（peer 精确锁定）；宿主升级/重启由用户执行；切换窗口须与 async-tools（验证实例 bundle 同挂）对齐 |
-| 装卸自动化通道（R57） | 初裁（2026-10-06）：npm 生命周期脚本（`postinstall`＝init-row＋apply、`preuninstall`＝revert）＋ pnpm `allowBuilds` 显式批准；不批准＝回落 0.2.0 手工脚本现状；不采用 `registerAuto`（保留名 `auto`、规格写死、单槽互斥，与「自动审批的形态」行冲突）。**终裁修订（2026-10-07）**：实测 pnpm 对依赖包从不执行卸载脚本（批准名单内亦然）→ preuninstall 死代码；用户裁定「绝不能卸载以后还遗留内容」→ 通道改为 **bundle patch 承载**（permission 行四档重述随包声明、随包消失；装卸零写入 profile 层；无构建脚本、无需人工批准；生命周期脚本改为禁令）；会话回落由宿主 `derive()` 免费保证；默认预设悬空防护＝disposer 读 profile manifest 判定（数组已除名才 unset 该覆盖），服务实例先停后卸路径 README 补救；`--revert` 降位为存量部署（0.2.0 及此前 profile 层重述）的回收通道 | 用户裁定（2026-10-06 初裁，全新部署 GUI 安装半配置态实测后；2026-10-07 终裁修订，pnpm 卸载脚本不执行实测＋零残留硬性要求＋会话回落要求后）；上游若开放通用预设注册 API 再评估 |
+| 0.2.0 分线与部署形态（§3 问题 16/17/18/19 答复） | ①验证实例升 0.2.0 宿主（独立安装＋独立 home，由用户另委 Agent 执行，原 home 封存）；②单仓单源、实例按 ref 取版——tag `v0.1.7` 冻结已验证态，0.2.0 适配期验证实例新 home 直投开发树（main），稳定后按 ref 安装；③包版本对齐宿主（0.1.7 线终版 0.1.7、0.2.0 线自 0.2.0 起）；④0.1.7 线冻结只修 P1，修复单向 cherry-pick 至 0.2.0 线，0.2.0 侧通用缺陷仅 P1 回移；⑤问题 19 维持 §24.3 口径 | 用户决定（验证实例切换、同仓两线、版本对齐宿主、冻结只修 P1）；方案与 async-tools 线讨论后收敛为「仓库与安装目录彻底分离」（用户认可）；安装全程本地，净化后才上传 git，github 安装模式为适配完成后的后置验证 |
+| 插件部署与仓库分离的执行口径（R54） | 安装实体＝按 ref 检出的冻结件（`<实例区>/<包>@<ref>`）；开发树零实例引用；ref 错装时 bundle 被 peer 检查跳过（fail-loud，双保险） | 用户决定：先分线后适配后净化后开源；两实例重启由用户重启机器执行、切换后按四判据验证 |
+| rc 追跟口径（R55） | 0.2.0 线内上游 rc 发布＝版本锁定平移轮：4 处声明＋lockfile/`node_modules` 重装＋README 版串＋基线哈希实测追跟＋§24.2 清单在宿主重取；lib/client 零改动预期、实测不符才最小修并注明依据；插件与宿主同轮切换，单边先行期间 bundle 被 peer 检查跳过＝预期中间态不修；`version` 不随 rc 尾缀（仍 `0.2.0`） | 用户决定：rc.2 内容增量为零（逐包 diff 实证）仍须追跟——不平移即无法装载（peer 精确锁定）；宿主升级/重启由用户执行；切换窗口须与 async-tools（验证实例 bundle 同挂）对齐 |
+| 装卸自动化通道（R57） | 初裁（2026-10-06）：npm 生命周期脚本（`postinstall`＝init-row＋apply、`preuninstall`＝revert）＋ pnpm `allowBuilds` 显式批准；不批准＝回落 0.2.0 手工脚本现状；不采用 `registerAuto`（保留名 `auto`、规格写死、单槽互斥，与「自动审批的形态」行冲突）。**终裁修订（2026-10-07）**：实测 pnpm 对依赖包从不执行卸载脚本（批准名单内亦然）→ preuninstall 死代码；用户决定「绝不能卸载以后还遗留内容」→ 通道改为 **bundle patch 承载**（permission 行四档重述随包声明、随包消失；装卸零写入 profile 层；无构建脚本、无需人工批准；生命周期脚本改为禁令）；会话回落由宿主 `derive()` 免费保证；默认预设悬空防护＝disposer 读 profile manifest 判定（数组已除名才 unset 该覆盖），服务实例先停后卸路径 README 补救；`--revert` 降位为存量部署（0.2.0 及此前 profile 层重述）的回收通道 | 用户决定（2026-10-06 初裁，全新部署 GUI 安装半配置态实测后；2026-10-07 终裁修订，pnpm 卸载脚本不执行实测＋零残留硬性要求＋会话回落要求后）；上游若开放通用预设注册 API 再评估 |

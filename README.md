@@ -340,6 +340,6 @@ MIT —— 版权行见 [`LICENSE`](LICENSE)。
 | 本插件**必须**做什么：不可裁剪条目与逐条可失败判据 | [`docs/requirements.md`](docs/requirements.md) |
 | 它**怎么实现**、为什么这么定（含被否掉的方案与理由） | [`docs/design.md`](docs/design.md) |
 | 版本变更 | [`CHANGELOG.md`](CHANGELOG.md) |
-| 公开面的内容边界规则与开发/测试指南（不接受外部 PR） | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
+| 公开范围的内容边界规则与开发/测试指南（不接受外部 PR） | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 
 本仓以 `v0.2.0` 为首个公开发布版本。开发期的逐轮审查报告、验证证据与本机部署配置不随仓发布；上面这几份是仅有的对外文档，且各自自包含——所依赖的事实都写在文档内部（外部依据给到上游包的 `文件:行号` 或公开 URL），不需要读者去别处找。

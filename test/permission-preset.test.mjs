@@ -234,9 +234,9 @@ test('`[]` 行之后还有有效内容：--init-row 必须报错且不落盘（�
   assert.equal(patchOf(home), mixed, '失败时不得落盘（原内容必须一字不动）');
 });
 
-test('带引号的 defaultPreset: "auto-approve"：--apply 禁令与 --revert 兜底都必须生效（终审漏洞回归）', () => {
+test('带引号的 defaultPreset: "auto-approve"：--apply 禁令与 --revert 回退都必须生效（终审漏洞回归）', () => {
   // YAML 里 `auto-approve` 与 `"auto-approve"` 是同一个标量；只比对裸串会让 R26 禁令与
-  // revert 兜底双双失效，从而复活 D6 那类「defaultPreset 指向已删预设」的启动失败。
+  // revert 回退双双失效，从而复活 D6 那类「defaultPreset 指向已删预设」的启动失败。
   const home = makeHome(patchText('    defaultPreset: "auto-approve"'));
   assert.equal(run(home, '--apply').status, 0);
   assert.match(patchOf(home), /defaultPreset: workspace-write/, '带引号的插件预设名同样必须被改写（R26）');
@@ -293,7 +293,7 @@ test('--restore-inherit（盲审反例）：存量部署 revert 后重述遮蔽�
   assert.equal(restored, '# legacy template\n[]\n', '模板→initRow→apply→revert→restore 零字节差往返（纯 bundle 继承）');
   assert.equal(restored.includes('permission'), false, '覆盖行必须消失');
   // 反向钉住遮蔽危害：restore 前 permission 重述在场＝组合三档；restore 后＝组合四档由探针
-  // （review-r57-blind-probe）用真 composeEntries 证明，这里钉文件位面。
+  // （review-r57-blind-probe）用真 composeEntries 证明，这里钉文件位置。
   assert.equal(deployed.includes('- id: permission'), true);
 });
 
