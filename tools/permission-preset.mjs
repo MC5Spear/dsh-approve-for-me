@@ -5,10 +5,13 @@
  *
  * 为什么必须插件自带脚本（0.1.7 立项理由，层序认知已过时、回收使命仍在）：写入侧的
  * 「第三方 bundle 层命中不了 permission 行」判断只对 0.1.7 成立；但**回收侧**的理由始终成立——
- * `dsh plugin remove` 是另一个进程、不执行任何插件代码，profile 层的存量重述只有这条零依赖
- * 命令能收（只 import node:* 与相对路径，删光 node_modules 后也要能跑）。
+ * `dsh plugin remove` 是另一个进程、不执行任何插件代码，profile 层的存量重述只有这条命令能收。
+ * 依赖口径（修正窗③）：--init-row/--apply/--revert 零 npm 依赖（node_modules 被拆光也能跑）；
+ * --restore-inherit 基于真实 YAML 解析定位（lib/patch-surgery.js，运行时依赖 yaml 包），
+ * 解析器缺席时拒绝动作、零落盘（报错指引到依赖完整的环境或手工处理）。
  *
- * 语义（锚点式文本编辑，不解析 YAML——不猜结构；实现住在 lib/permission-preset.js）：
+ * 语义（--restore-inherit 为解析定位；其余三个入口是锚点式文本编辑，不解析 YAML——不猜
+ * 结构；实现住在 lib/permission-preset.js）：
  *   --init-row  干净 profile（从官方模板新建、patch 里还没重述过 `permission` 行）走这一步：
  *             把该行的整份内容追加到 patch 末尾（三档与 dsh-base 逐字一致）。老部署若已重述过，
  *             本条幂等跳过。没有它，`--apply` 会因为找不到锚点而失败——2026-09-25 在
@@ -29,8 +32,9 @@
  *             删除 permission 覆盖行**整行**＝回到纯 bundle 继承（包内四档直接生效，用户层
  *             不再遮蔽）。0.2.x 存量部署升级到新机制后的回收主通道：`--revert`（若用过
  *             --apply 先收回条目与默认档）之后跑这一条，或直接跑它（行内含 auto-approve
- *             条目也一并回收）。保全校验：行内出现不认识的 config 键/预设 id/默认档取值
- *             （可能是手工自定义）一律拒绝代删并提示手工处理；幂等（行不存在＝零动作）。
+ *             条目也一并回收）。定位基于真实 YAML 解析（修正窗③，B1-B4）：已知子集之外
+ *             （解析错误/锚点·别名/flow 风格等）或解析器缺席一律拒绝代删并提示手工处理；
+ *             幂等（行不存在＝零动作）。
  *
  * 锚点缺失（找不到 permission 行 / presets 块 / 两个邻接条目）一律报错退出、不落盘。
  * 写回：UTF-8 无 BOM（原文件带 BOM 则保留）、原子写（同目录临时文件 + rename）。
@@ -69,7 +73,7 @@ try {
 	const backupFile = join(args.home, 'approve-for-me', 'permission-grant.json');
 	if (args.mode === '--apply') applyPreset(patchFile, backupFile);
 	else if (args.mode === '--init-row') initRow(patchFile);
-	else if (args.mode === '--restore-inherit') restoreInheritRow(patchFile);
+	else if (args.mode === '--restore-inherit') await restoreInheritRow(patchFile);
 	else revertPreset(patchFile, backupFile);
 } catch (error) {
 	process.stderr.write(`[permission-preset] 失败（未落盘）：${error instanceof Error ? error.message : String(error)}\n`);

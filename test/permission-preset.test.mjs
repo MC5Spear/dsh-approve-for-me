@@ -11,9 +11,14 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { restoreInheritRow } from '../lib/permission-preset.js';
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), '..', 'tools', 'permission-preset.mjs');
+// 修正窗③起 --restore-inherit 依赖 yaml 包做解析定位：仓库本地没有 node_modules，CLI
+// 子进程须带上开发期解析钩子锚到宿主树（安装完整的包环境里钩子文件不存在则按默认解析）。
+const HOOKS = join(dirname(fileURLToPath(import.meta.url)), '..', 'tools', '_host-hooks.mjs');
+const cliArgs = (args) => [...(existsSync(HOOKS) ? ['--import', pathToFileURL(HOOKS).href] : []), SCRIPT, ...args];
 
 /**
  * 构造与真实部署的 profile patch 同形的 permission 块文本。
@@ -59,7 +64,7 @@ function makeHome(patch) {
 }
 
 /** 跑脚本（继承 stdio，断言只看 exit code 与落盘结果）。 */
-const run = (home, ...args) => spawnSync(process.execPath, [SCRIPT, ...args, '--home', home, '--profile', 'web'], { stdio: 'inherit' });
+const run = (home, ...args) => spawnSync(process.execPath, [...cliArgs(args), '--home', home, '--profile', 'web'], { stdio: 'inherit' });
 const patchOf = (home) => readFileSync(join(home, 'profiles', 'web', 'cordis.patch.yml'), 'utf8');
 const backupPath = (home) => join(home, 'approve-for-me', 'permission-grant.json');
 
@@ -250,20 +255,28 @@ test('带引号的 defaultPreset: "auto-approve"：--apply 禁令与 --revert �
   assert.match(after, /defaultPreset: workspace-write/);
 });
 
-test('脚本与共享内核是零依赖的：import 只有 node: 前缀或包内相对路径（删光 node_modules 也能跑）', () => {
-  // R57 起实现住在 lib/permission-preset.js、CLI 是薄封装（设计 §28.2/§28.3）——判据不变
-  // （零 npm 依赖），机械面扩为：两个文件的 import 只允许 node: 前缀或指向包内内核的相对路径。
+test('脚本与共享内核的静态 import 零 npm 依赖：只有 node: 前缀或包内相对路径（init/apply/revert 删光 node_modules 也能跑）', () => {
+  // 修正窗③修订：restore-inherit 改为真实 YAML 解析定位（lib/patch-surgery.js，运行时
+  // 动态 `import('yaml')`，解析器缺席时拒绝动作零落盘）。静态 import 层面的零 npm 依赖
+  // 判据不变（node:* 前缀或包内相对路径）；动态 import 只允许 'yaml' 这一个运行时解析
+  // 依赖——出现任何其他裸包名即红。
   const CORE = join(dirname(fileURLToPath(import.meta.url)), '..', 'lib', 'permission-preset.js');
-  const RELATIVE_CORE = '../lib/permission-preset.js';
-  for (const file of [SCRIPT, CORE]) {
+  const SURGERY = join(dirname(fileURLToPath(import.meta.url)), '..', 'lib', 'patch-surgery.js');
+  const files = [[SCRIPT, [/^(\.\.?\/)/u], true], [CORE, [/^(\.\.?\/)/u], true], [SURGERY, [/^(\.\.?\/)/u], false]];
+  for (const [file, relativeOk, requireStatic] of files) {
     const source = readFileSync(file, 'utf8');
     const imports = [...source.matchAll(/^import\s+[^;]+?from\s+'([^']+)';/gm)].map((match) => match[1]);
-    assert.ok(imports.length > 0, `${file} 至少应有一条 import（防正则失配造成恒真）`);
+    // patch-surgery.js 的静态 import 可以为零（解析器是动态 import； SCRIPT/CORE 各有
+    // node:path 等静态依赖，保留「至少一条」防正则失配恒真）。
+    if (requireStatic) assert.ok(imports.length > 0, `${file} 至少应有一条 import（防正则失配造成恒真）`);
     for (const specifier of imports) {
       assert.ok(
-        /^node:/.test(specifier) || (file === SCRIPT && specifier === RELATIVE_CORE),
-        `禁止非 node: 依赖：${specifier}（${file}）`,
+        /^node:/.test(specifier) || relativeOk.some((pattern) => pattern.test(specifier)),
+        `禁止非 node:/包内依赖的静态 import：${specifier}（${file}）`,
       );
+    }
+    for (const match of source.matchAll(/\bimport\(\s*'([^']+)'\s*\)/gu)) {
+      assert.equal(match[1], 'yaml', `${file} 的动态 import 只允许运行时解析依赖 'yaml'，实际：${match[1]}`);
     }
   }
 });
@@ -487,4 +500,109 @@ test('--restore-inherit：幂等——行不存在时零 diff、exit 0', () => {
   const home2 = makeHome(noPermission);
   assert.equal(run(home2, '--restore-inherit').status, 0, '无覆盖行＝无需动作（幂等）');
   assert.equal(patchOf(home2), noPermission, '零 diff');
+});
+
+/** 修正窗③（复审 B1-B4）边界回归的公共底稿：基线行＋本包条目＋悬空默认。 */
+const WINDOW3_ROW = [
+  '- id: permission',
+  "  name: '@deepseek-ai/dsh-permission-presets'",
+  '  config:',
+  '    presets:',
+  '      read-only:',
+  '        sandbox: read-only',
+  '        approval: ask',
+  '      auto-approve:',
+  '        sandbox: workspace-write',
+  '        approval: ask',
+  '      workspace-write:',
+  '        sandbox: workspace-write',
+  '        approval: ask',
+  '    defaultPreset: auto-approve',
+  '',
+].join('\n');
+
+/** 进程内调 restoreInheritRow（注入解析器），捕获报错文案；配合 makeHome/patchOf 断言零落盘。 */
+async function restoreInProcess(home, patch, deps) {
+  const YAML = deps === undefined ? await import('yaml') : deps;
+  let error = '';
+  try {
+    await restoreInheritRow(join(home, 'profiles', 'web', 'cordis.patch.yml'), { yaml: YAML });
+  } catch (thrown) {
+    error = thrown instanceof Error ? thrown.message : String(thrown);
+  }
+  return { error, bytes: patchOf(home) === patch };
+}
+
+test('--restore-inherit（修正窗③ B1）：config 下其他映射/块标量正文里的同名文本是用户数据——拒绝代删、零落盘', async () => {
+  // 反例：`extra.auto-approve` 与 `text: |` 正文里的 `auto-approve:` 字样都被旧缩进模型当
+  // 本包档位删掉（真档反而滞留）。解析定位后它们只是 config 键宇宙外的用户内容。
+  const foreignMap = WINDOW3_ROW.replace('    presets:', '    extra:\n      auto-approve:\n        userData: keep\n    presets:');
+  const r1 = await restoreInProcess(makeHome(foreignMap), foreignMap);
+  assert.match(r1.error, /config\.extra/u, '应按 config 键宇宙外拒绝');
+  assert.ok(r1.bytes, '拒绝时零落盘');
+  const literal = WINDOW3_ROW.replace('    presets:', '    text: |\n      auto-approve:\n        userData: keep\n    presets:');
+  const r2 = await restoreInProcess(makeHome(literal), literal);
+  assert.match(r2.error, /config\.text/u, '块标量正文＝字符串数据，不是档位');
+  assert.ok(r2.bytes, '拒绝时零落盘');
+});
+
+test('--restore-inherit（修正窗③ B2/B3）：锚点/别名——跨行引用、锚定默认、别名默认一律拒绝、零落盘', async () => {
+  // B2：本包档块里定义的锚被无关行引用时，删块会让整份 patch 无法解析；
+  // B3：`defaultPreset: &chosen auto-approve` / `*chosen` 的语义就是 auto-approve，
+  // 未知引用图上一律整体拒绝，不做半清理。
+  const aliasOther = WINDOW3_ROW.replace(
+    '        approval: ask\n      workspace-write:',
+    '        approval: ask\n        name: &shared user-data\n      workspace-write:',
+  ) + '- id: unrelated\n  config:\n    value: *shared\n';
+  const r1 = await restoreInProcess(makeHome(aliasOther), aliasOther);
+  assert.match(r1.error, /anchor-alias/u, '锚点/别名＝已知子集外，整体拒绝');
+  assert.ok(r1.bytes, '拒绝时零落盘');
+  const anchored = WINDOW3_ROW.replace('defaultPreset: auto-approve', 'defaultPreset: &chosen auto-approve');
+  const r2 = await restoreInProcess(makeHome(anchored), anchored);
+  assert.match(r2.error, /anchor-alias/u);
+  assert.ok(r2.bytes, '拒绝时零落盘');
+  const aliasDefault = WINDOW3_ROW.replace('  config:', '  custom: &chosen auto-approve\n  config:').replace('defaultPreset: auto-approve', 'defaultPreset: *chosen');
+  const r3 = await restoreInProcess(makeHome(aliasDefault), aliasDefault);
+  assert.match(r3.error, /anchor-alias/u);
+  assert.ok(r3.bytes, '拒绝时零落盘');
+});
+
+test('--restore-inherit（修正窗③ B4）：单引号双写转义——前缀相同但语义不同的 name/default 必须拒绝、零落盘', async () => {
+  // `'auto-approve''#custom: value'` 是合法 YAML 转义、解析值含引号与井号；旧的「按首个
+  // 引号截断」会误判成基线 name/本包档名。取值一律按解析值比较——不在已知宇宙 ⇒ 拒绝。
+  const escapedName = WINDOW3_ROW.replace(
+    "name: '@deepseek-ai/dsh-permission-presets'",
+    "name: '@deepseek-ai/dsh-permission-presets''#custom: value'",
+  );
+  const r1 = await restoreInProcess(makeHome(escapedName), escapedName);
+  assert.match(r1.error, /行属性\.name=@deepseek-ai\/dsh-permission-presets'#custom: value/u, '转义后的语义值必须整串出现在拒绝理由里');
+  assert.ok(r1.bytes, '拒绝时零落盘');
+  const escapedDefault = WINDOW3_ROW.replace('defaultPreset: auto-approve', "defaultPreset: 'auto-approve''#custom: value'");
+  const r2 = await restoreInProcess(makeHome(escapedDefault), escapedDefault);
+  assert.match(r2.error, /defaultPreset=auto-approve'#custom: value/u, '转义默认值不是本包档名，也不得误判未知值放行');
+  assert.ok(r2.bytes, '拒绝时零落盘');
+  const quotedColonHash = WINDOW3_ROW.replace('defaultPreset: auto-approve', 'defaultPreset: "custom: # value"');
+  const r3 = await restoreInProcess(makeHome(quotedColonHash), quotedColonHash);
+  assert.match(r3.error, /defaultPreset=custom: # value/u);
+  assert.ok(r3.bytes, '拒绝时零落盘');
+});
+
+test('--restore-inherit（修正窗③）：多文档与 flow 风格＝已知子集之外——拒绝、零落盘', async () => {
+  const multiDoc = WINDOW3_ROW + '---\n- id: unrelated\n  config:\n    keep: true\n';
+  const r1 = await restoreInProcess(makeHome(multiDoc), multiDoc);
+  assert.match(r1.error, /parse-errors/u, '多文档按解析错误拒绝（宿主 patch 要求单顶层数组）');
+  assert.ok(r1.bytes, '拒绝时零落盘');
+  const flow = '[{id: permission, config: {presets: {read-only: {sandbox: read-only, approval: ask}}}}]\n';
+  const r2 = await restoreInProcess(makeHome(flow), flow);
+  assert.match(r2.error, /flow-style/u, 'flow 集合与兄弟条目共行，行级手术必须拒绝');
+  assert.ok(r2.bytes, '拒绝时零落盘');
+});
+
+test('--restore-inherit（修正窗③）：解析器缺席的降级环境——拒绝动作、零落盘、报错指引手工处理', async () => {
+  // node_modules 被拆光时 CLI 仍可运行，但 restore-inherit 绝不退回「按缩进猜结构」：
+  // 保守拒绝 + 指引到依赖完整的环境或 README 手工路径。
+  const home = makeHome(WINDOW3_ROW);
+  const r = await restoreInProcess(home, WINDOW3_ROW, null);
+  assert.match(r.error, /解析器不可用[\s\S]*零落盘/u, '报错必须说明原因与出路');
+  assert.ok(r.bytes, '降级拒绝时零落盘');
 });

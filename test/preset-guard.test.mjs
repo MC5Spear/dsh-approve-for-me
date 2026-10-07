@@ -397,13 +397,13 @@ test('复位路径：引号形态 defaultPreset: "auto-approve" 同样命中', a
   rmSync(dir, { recursive: true, force: true });
 });
 
-test('复位路径：手工损坏形态（注释＋[]＋行）不产出双占位', async () => {
-  const dir = makeProfile({ bundles: ['dsh-base'], patch: `${TEMPLATE_HEADER}\n[]\n${overrideRow()}\n` });
-  const result = await guardDefaultPreset({ profileDir: dir });
-  assert.equal(result.action, 'reset');
-  const after = readFileSync(join(dir, 'cordis.patch.yml'), 'utf8');
-  assert.equal(countPlaceholders(after), 1, '已有 [] 行时不得再补（双流式序列＝非法 YAML）');
-  assert.doesNotMatch(after, /^- /mu);
+test('复位路径（修正窗③）：手工损坏形态（注释＋[]＋行）不是合法 YAML——保守跳过、零字节改动', async () => {
+  // `[]` 之后再续块序列项＝非法 YAML（宿主装载器同样解析不了这份 patch）。修正窗③起
+  // guard 基于真实解析定位：已知子集之外**拒绝动作**，不代猜——也不会再产出双 `[]` 占位。
+  const patch = `${TEMPLATE_HEADER}\n[]\n${overrideRow()}\n`;
+  const dir = makeProfile({ bundles: ['dsh-base'], patch });
+  assert.deepEqual(await guardDefaultPreset({ profileDir: dir }), { action: 'skip', reason: 'patch-refused:parse-errors' });
+  assert.equal(readFileSync(join(dir, 'cordis.patch.yml'), 'utf8'), patch, '拒绝时零落盘');
   rmSync(dir, { recursive: true, force: true });
 });
 
@@ -544,5 +544,131 @@ test('防护不触碰 manifest 与其他文件：只重写 cordis.patch.yml', as
   await guardDefaultPreset({ profileDir: dir });
   assert.equal(readFileSync(join(dir, 'package.json'), 'utf8'), manifestBefore, 'manifest 只读');
   assert.equal(readFileSync(join(dir, 'subdir', 'keep.txt'), 'utf8'), 'keep');
+  rmSync(dir, { recursive: true, force: true });
+});
+
+/** 修正窗③（复审 B1-B4）边界回归的公共底稿：基线行＋本包条目＋悬空默认。 */
+const WINDOW3_ROW = [
+  '- id: permission',
+  "  name: '@deepseek-ai/dsh-permission-presets'",
+  '  config:',
+  '    presets:',
+  '      read-only:',
+  '        sandbox: read-only',
+  '        approval: ask',
+  '      auto-approve:',
+  '        sandbox: workspace-write',
+  '        approval: ask',
+  '      workspace-write:',
+  '        sandbox: workspace-write',
+  '        approval: ask',
+  '    defaultPreset: auto-approve',
+  '',
+].join('\n');
+
+/** 解析编辑结果并取 permission 行的 config（真实 YAML 语义断言用）。 */
+async function permissionConfigOf(text) {
+  const YAML = await import('yaml');
+  const parsed = YAML.parse(text);
+  assert.ok(Array.isArray(parsed), '编辑产出必须是合法 YAML 顶层数组');
+  return parsed.find((row) => row?.id === 'permission')?.config ?? null;
+}
+
+test('复位路径（修正窗③ B1）：config 其他映射/块标量正文里的同名文本＝用户数据——只清 presets 内本包条目', async () => {
+  // 复审反例：`extra.auto-approve` 映射与 `text: |` 正文里的 `auto-approve:` 字样被旧缩进
+  // 模型当本包档位删掉（用户数据损坏），真正的 presets.auto-approve 反而滞留。解析定位后：
+  // 只有 config.presets 映射内的条目才是档位。
+  const foreignMap = WINDOW3_ROW.replace('    presets:', '    extra:\n      auto-approve:\n        userData: keep\n    presets:');
+  const dirA = makeProfile({ bundles: ['dsh-base'], patch: `${TEMPLATE_HEADER}\n${foreignMap}\n` });
+  assert.deepEqual(await guardDefaultPreset({ profileDir: dirA }), { action: 'reset', reason: 'removed-tier-entry' }, '行内有用户内容 ⇒ 保留行、条目级清理');
+  const afterA = readFileSync(join(dirA, 'cordis.patch.yml'), 'utf8');
+  const configA = await permissionConfigOf(afterA);
+  assert.equal(configA?.presets?.['auto-approve'], undefined, 'presets 内的本包条目必须删除');
+  assert.equal(configA?.extra?.['auto-approve']?.userData, 'keep', 'extra.auto-approve 的用户数据逐值保全（B1 反例）');
+  assert.equal(configA?.defaultPreset, undefined, '悬空默认一并清除');
+  rmSync(dirA, { recursive: true, force: true });
+  const literal = WINDOW3_ROW.replace('    presets:', '    text: |\n      auto-approve:\n        userData: keep\n    presets:');
+  const dirB = makeProfile({ bundles: ['dsh-base'], patch: `${TEMPLATE_HEADER}\n${literal}\n` });
+  assert.equal((await guardDefaultPreset({ profileDir: dirB })).reason, 'removed-tier-entry');
+  const afterB = readFileSync(join(dirB, 'cordis.patch.yml'), 'utf8');
+  const configB = await permissionConfigOf(afterB);
+  assert.equal(configB?.presets?.['auto-approve'], undefined, '真档必须删除');
+  assert.equal(configB?.text, 'auto-approve:\n  userData: keep\n', '块标量正文是字符串数据，逐字节保全（B1 反例）');
+  rmSync(dirB, { recursive: true, force: true });
+});
+
+test('复位路径（修正窗③ 深嵌套）：标准档内的深层映射/嵌套序列＝用户修改——保留行、只清本包贡献', async () => {
+  const deep = WINDOW3_ROW.replace(
+    '        sandbox: read-only',
+    '        extra:\n          items:\n            - nested: true\n        sandbox: read-only',
+  );
+  const dir = makeProfile({ bundles: ['dsh-base'], patch: `${TEMPLATE_HEADER}\n${deep}\n` });
+  assert.equal((await guardDefaultPreset({ profileDir: dir })).reason, 'removed-tier-entry', '非基线标准档 ⇒ 保留行');
+  const config = await permissionConfigOf(readFileSync(join(dir, 'cordis.patch.yml'), 'utf8'));
+  assert.deepEqual(config?.presets?.['read-only']?.extra, { items: [{ nested: true }] }, '深嵌套用户数据逐值保全');
+  assert.equal(config?.presets?.['auto-approve'], undefined, '本包条目仍必须清除');
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('复位路径（修正窗③ B2/B3）：锚点/别名＝已知子集之外——整体跳过、字节不变', async () => {
+  // B2：本包档块里定义的锚被无关行引用时，删块会让整份 patch 无法解析；B3：锚定/别名
+  // 默认的语义就是 auto-approve——引用图不可理解 ⇒ 保守跳过（残留留给 README 补救句，
+  // 绝不产不可解析输出、绝不半清理）。
+  const aliasOther = WINDOW3_ROW.replace(
+    '        approval: ask\n      workspace-write:',
+    '        approval: ask\n        name: &shared user-data\n      workspace-write:',
+  ) + '- id: unrelated\n  config:\n    value: *shared\n';
+  const anchored = WINDOW3_ROW.replace('defaultPreset: auto-approve', 'defaultPreset: &chosen auto-approve');
+  const aliasDefault = WINDOW3_ROW.replace('  config:', '  custom: &chosen auto-approve\n  config:').replace('defaultPreset: auto-approve', 'defaultPreset: *chosen');
+  for (const patch of [aliasOther, anchored, aliasDefault]) {
+    const dir = makeProfile({ bundles: ['dsh-base'], patch: `${TEMPLATE_HEADER}\n${patch}\n` });
+    assert.deepEqual(await guardDefaultPreset({ profileDir: dir }), { action: 'skip', reason: 'patch-refused:anchor-alias' }, '锚点/别名 ⇒ 拒绝动作');
+    assert.equal(readFileSync(join(dir, 'cordis.patch.yml'), 'utf8'), `${TEMPLATE_HEADER}\n${patch}\n`, '拒绝时零字节改动');
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('复位路径（修正窗③ B4）：单引号双写转义——前缀相同但语义不同的 name/default 不判基线/不判悬空', async () => {
+  // `'@deepseek-ai/dsh-permission-presets''#custom: value'` 的解析值含引号与井号（合法
+  // YAML 转义）；旧「按首个引号截断」把它误判基线并整行代删。取值一律按解析值比较：
+  // name 非基线 ⇒ 保留行；default 非本包档名 ⇒ 不是悬空默认、字节保全。
+  const escapedName = WINDOW3_ROW.replace(
+    "name: '@deepseek-ai/dsh-permission-presets'",
+    "name: '@deepseek-ai/dsh-permission-presets''#custom: value'",
+  );
+  const dirA = makeProfile({ bundles: ['dsh-base'], patch: `${TEMPLATE_HEADER}\n${escapedName}\n` });
+  assert.equal((await guardDefaultPreset({ profileDir: dirA })).reason, 'removed-tier-entry', '转义 name 的语义值非基线 ⇒ 保留行');
+  const afterA = readFileSync(join(dirA, 'cordis.patch.yml'), 'utf8');
+  assert.ok(afterA.includes("name: '@deepseek-ai/dsh-permission-presets''#custom: value'"), '转义 name 行逐字节保全（B4 反例）');
+  const configA = await permissionConfigOf(afterA);
+  assert.equal(configA?.presets?.['auto-approve'], undefined, '本包条目仍删除');
+  rmSync(dirA, { recursive: true, force: true });
+  const escapedDefault = WINDOW3_ROW.replace('defaultPreset: auto-approve', "defaultPreset: 'auto-approve''#custom: value'");
+  const dirB = makeProfile({ bundles: ['dsh-base'], patch: `${TEMPLATE_HEADER}\n${escapedDefault}\n` });
+  assert.equal((await guardDefaultPreset({ profileDir: dirB })).reason, 'removed-tier-entry', '转义 default 的语义值非本包档名 ⇒ 行保留');
+  const afterB = readFileSync(join(dirB, 'cordis.patch.yml'), 'utf8');
+  const configB = await permissionConfigOf(afterB);
+  assert.equal(configB?.defaultPreset, "auto-approve'#custom: value", '用户自定义默认值按语义保全（B4 反例：不误判悬空）');
+  assert.equal(configB?.presets?.['auto-approve'], undefined);
+  rmSync(dirB, { recursive: true, force: true });
+});
+
+test('复位路径（修正窗③）：多文档与 flow 风格＝已知子集之外——整体跳过、字节不变', async () => {
+  const multiDoc = `${WINDOW3_ROW}---\n- id: unrelated\n  config:\n    keep: true\n`;
+  const flow = '[{id: permission, config: {presets: {read-only: {sandbox: read-only, approval: ask}}}}]\n';
+  const dirA = makeProfile({ bundles: ['dsh-base'], patch: `${TEMPLATE_HEADER}\n${multiDoc}` });
+  assert.deepEqual(await guardDefaultPreset({ profileDir: dirA }), { action: 'skip', reason: 'patch-refused:parse-errors' }, '多文档按解析错误拒绝');
+  assert.equal(readFileSync(join(dirA, 'cordis.patch.yml'), 'utf8'), `${TEMPLATE_HEADER}\n${multiDoc}`);
+  rmSync(dirA, { recursive: true, force: true });
+  const dirB = makeProfile({ bundles: ['dsh-base'], patch: flow });
+  assert.deepEqual(await guardDefaultPreset({ profileDir: dirB }), { action: 'skip', reason: 'patch-refused:flow-style' }, 'flow 条目共行，行级手术必须拒绝');
+  assert.equal(readFileSync(join(dirB, 'cordis.patch.yml'), 'utf8'), flow);
+  rmSync(dirB, { recursive: true, force: true });
+});
+
+test('复位路径（修正窗③）：解析器缺席的降级环境——skip 且字节不变（绝不退回按缩进猜结构）', async () => {
+  const dir = makeProfile({ bundles: ['dsh-base'], patch: SETTINGS_AP });
+  assert.deepEqual(await guardDefaultPreset({ profileDir: dir, yaml: null }), { action: 'skip', reason: 'yaml-unavailable' });
+  assert.equal(readFileSync(join(dir, 'cordis.patch.yml'), 'utf8'), SETTINGS_AP, '降级时零字节改动');
   rmSync(dir, { recursive: true, force: true });
 });
