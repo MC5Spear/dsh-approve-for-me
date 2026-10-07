@@ -759,4 +759,15 @@ test('复位路径（修正窗③ r65-F3）：整行删除一并回收本包 --i
   assert.ok(!afterCrlf.includes('--init-row 写入'), 'CRLF 文件的指纹注释块同样回收（r65-N1）');
   assert.deepEqual((await import('yaml')).parse(afterCrlf), []);
   rmSync(dirCrlf, { recursive: true, force: true });
+  // r65 闭环残余：指纹块前的空行分隔在 LF/CRLF 上同样收敛（产出行序逐字节对称）。
+  const tail = '- id: after\n  config:\n    keep: true\n';
+  for (const [label, eol] of [['LF', '\n'], ['CRLF', '\r\n']]) {
+    const bytes = (`# hdr\n\n${marker}\n${WINDOW3_ROW}${tail}`).replace(/\n/gu, eol);
+    const dirTail = makeProfile({ bundles: ['dsh-base'], patch: bytes });
+    const afterTail = (await guardDefaultPreset({ profileDir: dirTail })).reason === 'removed-user-override'
+      ? readFileSync(join(dirTail, 'cordis.patch.yml'), 'utf8')
+      : null;
+    assert.equal(afterTail, `# hdr${eol}- id: after${eol}  config:${eol}    keep: true${eol}`, `${label}：指纹＋行＋空行分隔整体回收`);
+    rmSync(dirTail, { recursive: true, force: true });
+  }
 });
