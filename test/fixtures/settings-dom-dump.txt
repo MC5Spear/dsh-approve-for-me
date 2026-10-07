@@ -234,7 +234,7 @@ dsafm_form / dsafm_field / dsafm_f_head / dsafm_labelgroup / dsafm_f_label / dsa
 
 ## 9. 失败登录计数
 
-- 采集前 `BadPasswordAttempts=未读`，采集后 `=未读`（本轮无头 Edge 启动次数见 开发期图证台账（不随仓发布） 台账；窗口阈值 10/10min，纪律 ≤5 次/10min）。
+- 采集前 `BadPasswordAttempts=未读`，采集后 `=未读`（本轮无头 Edge 启动次数见 开发期图证记录表（不随仓发布） 记录表；窗口阈值 10/10min，纪律 ≤5 次/10min）。
 
 ## 10. R30 换算读数（.dsafm_f_sec，干净页＝无暂存）
 
