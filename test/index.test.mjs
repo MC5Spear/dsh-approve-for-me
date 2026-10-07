@@ -620,7 +620,7 @@ test('R48⑦ 真接线：dedupe 同 key 双投递共享在飞任务，record 恰
   }
 });
 
-test('R57§28.3-2 真接线：预设残留防护 disposer——先于禁用早退注册，卸载判定时手术', async (t) => {
+test('R57§28.3-2 真接线：预设残留防护 disposer——先于禁用早退注册，卸载判定时做贡献级清理', async (t) => {
   const { mkdirSync, mkdtempSync, rmSync, readFileSync, writeFileSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');

@@ -362,6 +362,84 @@ test('--restore-inherit：保全校验——行内含不认识的键/取值时�
   assert.match(patchOf(customDefault), /defaultPreset: my-tier/u);
 });
 
+test('--restore-inherit（复审 N1）：标准档未知子键/改值、额外行属性、档内注释——拒绝代删且零落盘', () => {
+  const base = [
+    '- id: permission',
+    "  name: '@deepseek-ai/dsh-permission-presets'",
+    '  config:',
+    '    presets:',
+    '      read-only:',
+    '        sandbox: read-only',
+    '        approval: ask',
+    '      auto-approve:',
+    '        sandbox: workspace-write',
+    '        approval: ask',
+    '      danger-full-access:',
+    '        sandbox: danger-full-access',
+    '        approval: never',
+    '',
+  ].join('\n');
+  // (a) 标准档带未知子键。
+  const nested = makeHome(base.replace('        sandbox: read-only', '        customKnob: true\n        sandbox: read-only'));
+  const nestedBefore = patchOf(nested);
+  assert.notEqual(run(nested, '--restore-inherit').status, 0, '档内未知子键必须拒绝代删');
+  assert.equal(patchOf(nested), nestedBefore, '失败零落盘');
+  // (b) 标准档改值（approval 换成非基线取值，含行尾注释形态）。
+  const modified = makeHome(base.replace('        approval: ask', '        approval: never # user'));
+  const modifiedBefore = patchOf(modified);
+  assert.notEqual(run(modified, '--restore-inherit').status, 0, '标准档改值必须拒绝代删');
+  assert.equal(patchOf(modified), modifiedBefore, '失败零落盘');
+  // (c) 额外行属性（2 空格 disabled: true）。
+  const rowProp = makeHome(base.replace('  config:', '  disabled: true\n  config:'));
+  const rowPropBefore = patchOf(rowProp);
+  assert.notEqual(run(rowProp, '--restore-inherit').status, 0, '额外行属性必须拒绝代删');
+  assert.equal(patchOf(rowProp), rowPropBefore, '失败零落盘');
+  // (d) 档内注释行。
+  const commented = makeHome(base.replace('        sandbox: read-only', '        # 手工注释\n        sandbox: read-only'));
+  const commentedBefore = patchOf(commented);
+  assert.notEqual(run(commented, '--restore-inherit').status, 0, '档内注释必须拒绝代删');
+  assert.equal(patchOf(commented), commentedBefore, '失败零落盘');
+});
+
+test('--restore-inherit（复审 N3/N4）：presets 键行尾随空白不误拒；取值按解析标量（引号/行尾注释）接受', () => {
+  // N4：`    presets:  ` 尾随空白不是自定义内容——正常整行回收。
+  const trailing = makeHome([
+    '- id: permission',
+    "  name: '@deepseek-ai/dsh-permission-presets'",
+    '  config:',
+    '    presets:  ',
+    '      read-only:',
+    '        sandbox: read-only',
+    '        approval: ask',
+    '      danger-full-access:',
+    '        sandbox: danger-full-access',
+    '        approval: never',
+    '',
+  ].join('\n'));
+  assert.equal(run(trailing, '--restore-inherit').status, 0, 'presets 键尾随空白不得误拒');
+  assert.doesNotMatch(patchOf(trailing), /permission/u, '整行回收＝纯继承');
+  // 取值等价形态：引号、行尾注释——语义在四档宇宙内即接受（N3 同源标量解析）。
+  const quoted = makeHome([
+    '- id: permission',
+    "  name: '@deepseek-ai/dsh-permission-presets'",
+    '  config:',
+    '    presets:',
+    '      read-only:',
+    '        sandbox: read-only',
+    '        approval: ask',
+    '      auto-approve:',
+    '        sandbox: workspace-write',
+    '        approval: ask',
+    '      danger-full-access:',
+    '        sandbox: danger-full-access',
+    '        approval: never',
+    '    defaultPreset: "workspace-write" # 注释也算已知取值',
+    '',
+  ].join('\n'));
+  assert.equal(run(quoted, '--restore-inherit').status, 0, '引号/行尾注释取值＝已知档名，接受回收');
+  assert.doesNotMatch(patchOf(quoted), /permission|defaultPreset/u);
+});
+
 test('--restore-inherit：幂等——行不存在时零 diff、exit 0', () => {
   const home = makeHome('# clean\n[]\n');
   assert.equal(run(home, '--restore-inherit').status, 0);

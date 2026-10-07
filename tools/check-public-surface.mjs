@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 公开面边界检查器（常驻，进 CI）。
+ * 公开范围边界检查器（常驻，进 CI）。
  *
  * 本仓采用「单仓双平面」：本目录即公开仓，机器事实、语料与证据全部归拢到不被跟踪的
  * `.local/`。本检查器守住那条边界，判据三类：
@@ -28,7 +28,7 @@ import { fileURLToPath } from 'node:url';
 export const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 /**
- * 本机指纹。命中即违规——这些串只会出现在本机平面，公开面出现必是漏网。
+ * 本机指纹。命中即违规——这些串只会出现在本机环境，公开范围出现必是漏网。
  *
  * 各类变体都要覆盖：反斜杠原形、转义形态（`D:\\P`）、正斜杠形态（`D:/P`）。
  * 典型假阴性教训：只写 `D:\P` 会漏掉 `D:/P` 与 `D:\\P`。
@@ -47,7 +47,7 @@ export const FINGERPRINTS = [
 ];
 
 /**
- * 未随仓公开的内部引用。公开面必须自包含：所依赖的事实写在文档内部，不得把读者指向
+ * 未随仓公开的内部引用。公开范围必须自包含：所依赖的事实写在文档内部，不得把读者指向
  * 仓外的东西。**代码注释一并受检**——读者读 `lib/` 或 `client.js` 时同样解不开
  * 「事实编号」「问题编号」这类标记，它们和文档里的悬空引用是同一类毛病。
  */
@@ -136,9 +136,9 @@ export function trackedFiles(root = ROOT) {
 /**
  * 遍历目录（enumerateTracked 的兜底路径）。
  *
- * 跳过 `.local` **及其一切变体**（`.local.bak` 之类）：本机平面是唯一例外目录，
+ * 跳过 `.local` **及其一切变体**（`.local.bak` 之类）：本机侧是唯一例外目录，
  * 它的临时改名不该把整片本机内容灌进受检面——实测踩过：改名演练时检查器把
- * `.local.bak` 当成公开面扫，报出 11k 处「违规」。
+ * `.local.bak` 当成公开范围扫，报出 11k 处「违规」。
  */
 function walk(root, dir = root, out = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -174,7 +174,7 @@ function readText(full) {
  * 扫描一段文本，返回命中的违规。
  *
  * 导出以便变异用例直接调用（见 test/public-surface.test.mjs）：种下指纹或内部引用，
- * 本函数必须报出来——「检查器恒绿」与「公开面干净」是两件事，必须能区分。
+ * 本函数必须报出来——「检查器恒绿」与「公开范围干净」是两件事，必须能区分。
  * @param {string} text - 待扫文本。
  * @param {object} [options] - 选项。
  * @param {string} [options.file] - 相对路径（写进违规记录）。
@@ -231,7 +231,7 @@ export function checkStructure(root, files) {
   }
 
   for (const file of files) {
-    if (file.startsWith('.local/')) push('跟踪文件落在本机平面里', file, '');
+    if (file.startsWith('.local/')) push('跟踪文件落进本机侧', file, '');
     if (!CODE_EXT.test(file) || LOCAL_LITERAL_ALLOWED.has(file)) continue;
     const text = readText(join(root, file));
     if (text === undefined) continue;
@@ -302,7 +302,7 @@ function main() {
     byRule.get(key).push(violation);
   }
 
-  console.log(`公开面边界检查：受检文件 ${result.files} 个（扫描内容 ${result.scanned} 个），豁免 ${EXEMPT.size} 个`);
+  console.log(`公开范围边界检查：受检文件 ${result.files} 个（扫描内容 ${result.scanned} 个），豁免 ${EXEMPT.size} 个`);
   console.log(`文件枚举：${result.source}`);
   for (const [file, entry] of EXEMPT) console.log(`  豁免：${file} —— ${entry.reason}`);
   if (result.violations.length === 0) {

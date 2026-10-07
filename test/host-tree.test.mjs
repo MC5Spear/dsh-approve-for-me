@@ -23,7 +23,7 @@ function resolvedPackageVersion(specifier) {
   };
 }
 
-test('R49⑤ 守卫：dsh-llm 宿主解析版本的与 package.json 钉版一致（锚点退回 0.1.7 树即红）', () => {
+test('R49⑤ 守卫：dsh-llm 宿主解析版本的与 package.json 锁定版本一致（锚点退回 0.1.7 树即红）', () => {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   const pinned = pkg.dependencies['@deepseek-ai/dsh-llm'];
   const { resolved, version } = resolvedPackageVersion('@deepseek-ai/dsh-llm');

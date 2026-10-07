@@ -795,7 +795,7 @@ mode(request):
 
 ## 13. UI
 
-> **0.1.7 落点（现行，R27）**：0.1.5 的四个宿主面（`settings.plugin.item` 槽位、客户端服务 `settingsScope`、`dsh-settings` 的 `installSection`/`get`）已随 0.1.7 删除（0.1.7 安装树对 `settingsScope` 与 `settings.plugin.item` 全树零命中；`@deepseek-ai/dsh-settings@0.1.7-rc.1` 公开面只剩 `describe`/`update`/`replace`/`mutate` 一类读写通道）。设置面按 R27 落在：
+> **0.1.7 落点（现行，R27）**：0.1.5 的四个宿主面（`settings.plugin.item` 槽位、客户端服务 `settingsScope`、`dsh-settings` 的 `installSection`/`get`）已随 0.1.7 删除（0.1.7 安装树对 `settingsScope` 与 `settings.plugin.item` 全树零命中；`@deepseek-ai/dsh-settings@0.1.7-rc.1` 公开面只剩 `describe`/`update`/`replace`/`mutate` 一类读写通道）。设置界面按 R27 落在：
 >
 > | 项 | 现行落点 |
 > |---|---|
@@ -810,7 +810,7 @@ mode(request):
 >
 > **不可回退（R25 条款，明文）**：不保留任何 0.1.5 兼容分支或双通道实现；本插件只服务 0.1.7 及以后。
 >
-> **外观与交互（R29）**：字段集与控件功能面不变（多选预设下拉、模型两段式下拉、映射行表）；设置面外观与保存交互按 R29 重绘（§13.5：字段竖排、覆盖＝「已覆盖」Tag＋单字段「恢复默认」、暂存＋单一「保存」、说明常驻＋点击展开）。槽位落点与数据通道仍以本表为准。
+> **外观与交互（R29）**：字段集与控件功能面不变（多选预设下拉、模型两段式下拉、映射行表）；设置界面外观与保存交互按 R29 重绘（§13.5：字段竖排、覆盖＝「已覆盖」Tag＋单字段「恢复默认」、暂存＋单一「保存」、说明常驻＋点击展开）。槽位落点与数据通道仍以本表为准。
 >
 > **行号口径**：本节正文里的 `client.js:NNN` 行号随实现漂移，以源码为准；行号失配不构成实现缺陷。
 
@@ -891,12 +891,12 @@ R29 重绘（官方规格取自 `@deepseek-ai/dsh-client-ui-primitives@0.1.7-rc.
 
 **§3 第 8 问的回答（非官方控件的共用组织）**：枚举下拉、布尔、多行清单、模型＋档位、映射表、预设多选共用同一 `FieldShell`（标签行／覆盖组／常驻说明／点击展开帮助）与同一暂存模型（同一条 stage→plan→save 路径）；控件本体只是 `FieldShell` 的一个子节点，样式由官方输入规格的共用类给出。每类控件不再各写一遍样式与写入路径。
 
-**样式令牌纪律（R29 判据⑥）**：交付 CSS 串对三个 0.1.7 令牌表不存在的别名零命中——`--dsw-alias-state-warning-primary`（笔误；现行值 `--dsw-alias-state-warn-primary`——composer 错误徽标 `.dsafm_badge` 随本条改正，设置面不再使用该类）、`--dsw-alias-label-error`（官方 `.failed` 的笔误）、`--dsw-alias-bg-layer-4`（官方 `.helpButton:hover` 的笔误；本包 hover 只变色不加底色，见上）。
+**样式令牌纪律（R29 判据⑥）**：交付 CSS 串对三个 0.1.7 令牌表不存在的别名零命中——`--dsw-alias-state-warning-primary`（笔误；现行值 `--dsw-alias-state-warn-primary`——composer 错误徽标 `.dsafm_badge` 随本条改正，设置界面不再使用该类）、`--dsw-alias-label-error`（官方 `.failed` 的笔误）、`--dsw-alias-bg-layer-4`（官方 `.helpButton:hover` 的笔误；本包 hover 只变色不加底色，见上）。
 
 **字典键变更**：删 `card.resetAll`、`card.resolved`、`card.section.*`、`card.saved`（官方表单无「已保存」提示：保存成功＝按钮回弹＋表单回净）；`card.override` 改「已覆盖」（en `Overridden`，与官方同词）；新增 `card.resetField`（「恢复默认」／`Reset to default`）、`card.invalidNumber`（数字字段非法文案）、`hint.<path>`（21 字段×中英，常驻短说明）。
 ### 13.5b 毫秒字段的秒数读数（R30）
 
-R30 只在显示层加换算读数：存储、审计行（`ms=`）、注入文本与按字节核对的 `injectBytes` 一律仍是毫秒；写库路径（暂存→保存计划→`mutate`）零改动。适用范围＝`FIELDS` 里带 `unit:"ms"` 标记的数字字段——标记随 R30 新增，现行恰给两个（`reviewer.timeoutMs`、`human.timeoutMs`）；字节与令牌类字段（`reviewer.maxTokens`、`ui.injectMaxBytes`）不带标记、无读数；将来 ms 字段（并发排队超时、熔断冷却）暴露到设置面时带上标记即自动适用。本节是 §13.5「控件的值就是生效值」经 R30 裁定的唯一例外：读数行只做既有值的换算显示，不是编辑入口。
+R30 只在显示层加换算读数：存储、审计行（`ms=`）、注入文本与按字节核对的 `injectBytes` 一律仍是毫秒；写库路径（暂存→保存计划→`mutate`）零改动。适用范围＝`FIELDS` 里带 `unit:"ms"` 标记的数字字段——标记随 R30 新增，现行恰给两个（`reviewer.timeoutMs`、`human.timeoutMs`）；字节与令牌类字段（`reviewer.maxTokens`、`ui.injectMaxBytes`）不带标记、无读数；将来 ms 字段（并发排队超时、熔断冷却）暴露到设置界面时带上标记即自动适用。本节是 §13.5「控件的值就是生效值」经 R30 裁定的唯一例外：读数行只做既有值的换算显示，不是编辑入口。
 
 **落点＝官方组件之外自绘一行（R30 不可裁剪；依据：官方 `SettingsValueField` 的行为边界）**。官方 `SettingsValueField` 的常驻说明是单串 `hint` prop，且字段非法时只渲染 `invalidLabel`、`hint` 整段被顶掉——把读数拼进 `hint` 会让非数字输入期间读数整体消失（违反判据⑦）。做法：`numberField` 对带 `unit:"ms"` 的字段返回 React Fragment（平铺进表单、不引入包装 DOM），子节点＝官方组件元素＋一行自绘读数 `<p class="dsafm_f_sec" id="{NS}-sec-{路径}">`——紧随官方组件根元素之后＝该字段说明或非法文案之后。帮助展开态下官方组件的展开帮助区仍在官方根元素内部、位于读数行之前，读数行始终在整个字段块之后（判据只要求在场）。行内两个具名 span（`dsafm_sec_resolved`＝生效值读数、`dsafm_sec_draft`＝草稿读数）与一个「 · 」分隔文本节点，`textContent` 可读作「生效：300 秒 · 草稿：120 秒」。行带 `id` 供 DOM 断言与外部 `aria-describedby` 引用；官方组件没有 `describedby` prop（功能边界），不越权改其内部结构。
 
@@ -1032,7 +1032,7 @@ R30 只在显示层加换算读数：存储、审计行（`ms=`）、注入文�
 
 ### 14.2 部署步骤（装包即行）
 
-> R57 起（§28）本节手工步骤降位：预设注入改由本包 `cordis.patch.yml` 的 bundle patch 承载——装包重启即得（无批准回合、无手工命令）；本节步骤＝`link:`/克隆通道的依赖自装说明与**存量部署**（0.2.0 及此前写过 profile 层重述）的回收参考。
+> R57 起（§28）本节手工步骤降位：预设注入改由本包 `cordis.patch.yml` 的 bundle patch 承载——装包重启即得（无需人工批准、无手工命令）；本节步骤＝`link:`/克隆通道的依赖自装说明与**存量部署**（0.2.0 及此前写过 profile 层重述）的回收参考。
 
 1. `dsh plugin --profile web add <仓库路径>`——`dsh-plugin-manager` 自己安装并原子维护 `dsh.profile.bundles`（本包有 `dsh.bundle.patch`，作为 profile layer 挂载；无 `dsh.bundle` 才会装成普通依赖并警告）。
 2. **迁移 `.imported` 分节（一次性）**：0.1.7 升级时 `importLegacyDocument` 跑了一遍，但当时本插件行不在 bundles 里，`approve-for-me` 分节不会落进 profile patch（导入写路径要求挂载行在场——找不到行或行无可热改字段的分节只留在改名档里不被消费）；部署时把旧一次性导入档（`DSH_HOME` 下的 `settings.yaml.imported`）该分节的 4 键（`reviewer.model` 对象、`reviewer.timeoutMs: 300000`、`human.timeoutMs: 600000`、`ui.trace.capture: full`——全部在 volatile 名单内，§6.1）手工并入 profile patch 本行 `config:` 块，防止用户既有选择丢失。其余分节不动。
@@ -1117,9 +1117,9 @@ R30 只在显示层加换算读数：存储、审计行（`ms=`）、注入文�
 28. **0.1.7·装包即行/删包即净**（R9/R26）：干净 profile 上 `dsh plugin --profile web add` + `tools/permission-preset.mjs --apply` + 一次重启后：权限下拉出现「自动审批」、插件行为完整；脚本二次执行零 diff（幂等）；`--revert` + `dsh plugin remove` + 重启后：无「自动审批」条目、`defaultPreset` 恢复备份值、bundles 干净、无残留目录。
 29. **0.1.7·typert 装载**：验证实例启动日志（字节游标只读新增段）无 typert 行装载警告；会话内 `approveForMe/getState` RPC 一次成功（清单被 `dsh-typert-protocol@0.1.7` 接受的运行时证据）。
 30. **0.1.7·权限预设判定**：活会话上切「自动审批」→ `permissionPresets.current()` 返回 `auto-approve`、插件接管；切「工作区内修改」→ 返回 `workspace-write`、插件 `next()`；未显式选择的旧会话 → 返回 `workspace-write`（声明顺序语义的行为证据）。
-31. **R27·迁移值回读与写入**（requirements §4 R27 行）：本包页面上回读三个迁移值——审查超时 `300000`、人工超时 `600000`、默认审查模型 `zai/glm-5.3 · max`，R29 后**值直接在控件里**且旁有「已覆盖」Tag＋「恢复默认」（「接管预设」显示「自动审批」属 bundle 默认回落，非迁移值）；在该页改一次值保存后回读一致、**不重启**即生效（行为判据＝状态条读数随新超时变化，同 requirements §4「设置面可改审查超时」条）。
-32. **R28·双语与两块独立切换**（requirements §4 R28 行 ①–⑥）：①`language.ui='en'` → 设置面与审批卡片状态条的页面 DOM 文案变英文，切回 `zh`/`auto` 复原；②`language.agent` 切换 → 审计 `phase=prompt` 的提示词与注入文本按**字节**核对该语言首行（zh 首行 `[approve-for-me] …`；en 对应首行，拒绝末句＝codex `REJECTION_INSTRUCTIONS` 原文）；③独立性——一次只切一块，另一块的 DOM 文案与注入字节前后不变；④字典键集一一对应（单测断言 zh/en 相等，变异删键即红）；⑤热生效——改完不重启，**下一次**审查与注入即用新语言；⑥审计行与日志措辞不随切换改变（字节对照）。
-33. **R29·设置面照官方重绘**（requirements §4 R29 行，六条判据＋暂存行为差异，全部落本包页面 DOM 与计算样式）：①「重置全部覆盖」零命中；②覆盖字段旁「已覆盖」＋「恢复默认」在场，点「恢复默认」后暂存文本回默认值但**不写库**（关掉重开回旧值，或读 profile patch 本行 `config:` 仍旧值）；③「保存」无改动时 `disabled`、改动后去掉；④配置区顶层容器无自绘外壳（计算样式 `border-style` 为 `none`/边框宽 0 且 `border-radius`<12px）；⑤字段说明点击后 `aria-expanded=true` 且说明文本进入 DOM；⑥交付 CSS 串对三个 0.1.7 不存在的令牌零命中（判据⑥名单扩为 `--dsw-alias-state-warning-primary`/`--dsw-alias-label-error`/`--dsw-alias-bg-layer-4`）。**「只有保存才写」行为差异**：改一个值不点保存 → 关掉重开本包页面回读旧值；点保存 → 回读新值且 profile patch 本行 `config:` 出现该键。另取一张本包页面整图留档；取证纪律：无头浏览器取证每次启动会产生一次失败交互登录（本机锁定策略阈值 10 次/10 分钟），批量 ≤5 次/10min，取证前后各读一次失败登录计数自查余量。
+31. **R27·迁移值回读与写入**（requirements §4 R27 行）：本包页面上回读三个迁移值——审查超时 `300000`、人工超时 `600000`、默认审查模型 `zai/glm-5.3 · max`，R29 后**值直接在控件里**且旁有「已覆盖」Tag＋「恢复默认」（「接管预设」显示「自动审批」属 bundle 默认回落，非迁移值）；在该页改一次值保存后回读一致、**不重启**即生效（行为判据＝状态条读数随新超时变化，同 requirements §4「设置界面可改审查超时」条）。
+32. **R28·双语与两块独立切换**（requirements §4 R28 行 ①–⑥）：①`language.ui='en'` → 设置界面与审批卡片状态条的页面 DOM 文案变英文，切回 `zh`/`auto` 复原；②`language.agent` 切换 → 审计 `phase=prompt` 的提示词与注入文本按**字节**核对该语言首行（zh 首行 `[approve-for-me] …`；en 对应首行，拒绝末句＝codex `REJECTION_INSTRUCTIONS` 原文）；③独立性——一次只切一块，另一块的 DOM 文案与注入字节前后不变；④字典键集一一对应（单测断言 zh/en 相等，变异删键即红）；⑤热生效——改完不重启，**下一次**审查与注入即用新语言；⑥审计行与日志措辞不随切换改变（字节对照）。
+33. **R29·设置界面照官方重绘**（requirements §4 R29 行，六条判据＋暂存行为差异，全部落本包页面 DOM 与计算样式）：①「重置全部覆盖」零命中；②覆盖字段旁「已覆盖」＋「恢复默认」在场，点「恢复默认」后暂存文本回默认值但**不写库**（关掉重开回旧值，或读 profile patch 本行 `config:` 仍旧值）；③「保存」无改动时 `disabled`、改动后去掉；④配置区顶层容器无自绘外壳（计算样式 `border-style` 为 `none`/边框宽 0 且 `border-radius`<12px）；⑤字段说明点击后 `aria-expanded=true` 且说明文本进入 DOM；⑥交付 CSS 串对三个 0.1.7 不存在的令牌零命中（判据⑥名单扩为 `--dsw-alias-state-warning-primary`/`--dsw-alias-label-error`/`--dsw-alias-bg-layer-4`）。**「只有保存才写」行为差异**：改一个值不点保存 → 关掉重开本包页面回读旧值；点保存 → 回读新值且 profile patch 本行 `config:` 出现该键。另取一张本包页面整图留档；取证纪律：无头浏览器取证每次启动会产生一次失败交互登录（本机锁定策略阈值 10 次/10 分钟），批量 ≤5 次/10min，取证前后各读一次失败登录计数自查余量。
 34. **R30·毫秒字段的秒数读数**（requirements §4 R30 行，七条判据，全部落本包页面 DOM；实时性只认「同一次输入后的 DOM 读数」）：①两个 ms 字段（审查超时、人工超时）的生效值读数与当前生效值一致（本机部署迁移值示例：300000 → `300 秒`、600000 → `600 秒`）；②在输入框键入 `120000`（不保存）后同一次输入即见草稿读数 `120 秒`、生效值读数仍 `300 秒`；③`1500` → `1.5 秒`；④清空输入 → 草稿读数占位 `—` 且生效值读数不变；⑤保存 `120000` 后重开页面生效值读数变 `120 秒`；⑥`en` 档单位变 `s`；⑦输入 `12x` → 草稿读数占位且**生效值读数仍在场**（读数自绘在官方组件之外，不随 `hint` 被非法文案顶掉）。取证后本机复原（超时值与语言档）；重取本包页面 DOM dump（换算读数钉进 `test/settings-dom-dump.test.mjs`）＋一张整图；取证纪律同上。
 ### 15.3 验收清单映射
 
@@ -1145,9 +1145,9 @@ R30 只在显示层加换算读数：存储、审计行（`ms=`）、注入文�
 | R17 中文文案 | 15.2 #23；单测「每个 `select` 字段都有 `optionLabels` 且与 `options` 一一对应」 |
 | R25 宿主面适配 | 15.2 #25（客户端到达·注入表/DOM 判据）/ #26（设置表单落点）/ #27（volatile 热改）；单测 config/mode/退役静态扫描 |
 | R26 预设条目 | 15.2 #28（装包即行/删包即净含 `--apply` 幂等与 `--revert` 恢复）；单测 `tools/permission-preset.mjs` |
-| R27 设置面迁移与可用 | 15.2 #26（bundle 页落点＋打开即见）/ #31（迁移值回读＋写入＋不重启生效）；单测 `test/settings-dom-dump.test.mjs`（bundle 页 dump 常驻断言）＋ `test/client.test.mjs` 的 `configForms`/`whileServed` 四例；判据可变红见 requirements R27 条款与 §4 判定口径 |
+| R27 设置界面迁移与可用 | 15.2 #26（bundle 页落点＋打开即见）/ #31（迁移值回读＋写入＋不重启生效）；单测 `test/settings-dom-dump.test.mjs`（bundle 页 dump 常驻断言）＋ `test/client.test.mjs` 的 `configForms`/`whileServed` 四例；判据可变红见 requirements R27 条款与 §4 判定口径 |
 | R28 双语两块独立切换 | 15.2 #32（六条判据）；单测 `lib/agent-texts.js` 键集/末句/不变块＋client 字典键集与 `useNsT` 三档 |
-| R29 设置面照官方重绘 | 15.2 #33（六条判据＋暂存行为差异）；单测 `test/settings-dom-dump.test.mjs`（R29 dump 常驻断言）＋`test/client.test.mjs`（暂存/恢复默认/保存门控/帮助 aria/静态扫描）＋`test/client-primitives.test.mjs`（图标引用面） |
+| R29 设置界面照官方重绘 | 15.2 #33（六条判据＋暂存行为差异）；单测 `test/settings-dom-dump.test.mjs`（R29 dump 常驻断言）＋`test/client.test.mjs`（暂存/恢复默认/保存门控/帮助 aria/静态扫描）＋`test/client-primitives.test.mjs`（图标引用面） |
 | R30 毫秒字段的秒数读数 | 15.2 #34（七条判据，实时性＝同一次输入后的 DOM 读数）；单测 `test/client.test.mjs`（生效值常驻/草稿实时/格式边界/占位/恢复默认/写字段数/en 档/非 ms 字段无读数/字典整表键集奇偶）＋`test/settings-dom-dump.test.mjs`（dump 换算读数常驻断言） |
 | R18/R20 轨迹 | 15.2 #10/#13（自有视图）；退役判据见 §15.2 的退役静态扫描 |
 ### 15.4 验证与留档
@@ -1172,11 +1172,11 @@ R30 只在显示层加换算读数：存储、审计行（`ms=`）、注入文�
 | --- | --- |
 | 设置表单（bundle 页）：全部字段首屏在场、无展开步骤（R27 主判据，DOM；字段结构照 R29 六条） | 设置页 DOM dump（页面身份＋配置区全文＋控件清单＋容器计算样式＋帮助按钮 aria 配对）＋整页截图；常驻断言 `test/settings-dom-dump.test.mjs` 按本 dump 做 |
 | 设置表单：三个迁移值回读（本机部署迁移值 300000/600000/`zai/glm-5.3 · max`，值进控件）＋「已覆盖」Tag与「恢复默认」 | 同上 dump 的控件表与覆盖标记邻接表；「接管预设」显示「自动审批」属 bundle 默认回落（非迁移值） |
-| 设置表单：改值保存回读＋不重启生效 | 重取取证（按 retick 步骤脚本实走）：改「审查超时」300000→120000→保存→控件回读 120000＋「已覆盖」→重开仍 120000→复原；行为证据（状态条读数随新超时变化）沿用 requirements §4「设置面可改审查超时」条 |
+| 设置表单：改值保存回读＋不重启生效 | 重取取证（按 retick 步骤脚本实走）：改「审查超时」300000→120000→保存→控件回读 120000＋「已覆盖」→重开仍 120000→复原；行为证据（状态条读数随新超时变化）沿用 requirements §4「设置界面可改审查超时」条 |
 | R29 暂存语义（只有保存才写） | 行为差异取证（language.ui 点「恢复默认」不保存→重开回读 `zh`；保存→回读 `auto`＋覆盖消失→profile patch 键随保存变化），结果留档；英文文案与独立性重取同在 retick 轮 |
-| R30 毫秒字段的秒数读数（生效值常驻/草稿实时/占位/en 档单位） | 设置面 dump 的「换算读数」段（`tools/build-dom-dump.mjs` 生成）＋实时性取证（按读数取证步骤脚本实走：键入→同一次输入后读文本：`120000`→`120 秒`、`1500`→`1.5 秒`、清空/`12x`→占位且生效值读数在场、保存重开→`120 秒`、`en`→`s`）＋整图两张（非法占位态：hint 被顶掉、草稿占位转错误色、生效值读数在场；en 档单位 `s`）；常驻断言 `test/settings-dom-dump.test.mjs` |
+| R30 毫秒字段的秒数读数（生效值常驻/草稿实时/占位/en 档单位） | 设置界面 dump 的「换算读数」段（`tools/build-dom-dump.mjs` 生成）＋实时性取证（按读数取证步骤脚本实走：键入→同一次输入后读文本：`120000`→`120 秒`、`1500`→`1.5 秒`、清空/`12x`→占位且生效值读数在场、保存重开→`120 秒`、`en`→`s`）＋整图两张（非法占位态：hint 被顶掉、草稿占位转错误色、生效值读数在场；en 档单位 `s`）；常驻断言 `test/settings-dom-dump.test.mjs` |
 | R29 单字段恢复默认 | 点「恢复默认」→ 控件立即回默认值且不写库（重开回旧值）→ 保存后覆盖消失（profile patch `config:` 不再含该键） |
-| R28 用户文案切英文／复原（设置面＋卡片状态条 DOM） | 截图留档（设置面整页英文）；composer／审批卡／审查记录的 en 档不单独截图（同一 `useNsT` 机制，三档行为差异由 `test/client.test.mjs` 断言在岗）；切回复原另取一图 |
+| R28 用户文案切英文／复原（设置界面＋卡片状态条 DOM） | 截图留档（设置界面整页英文）；composer／审批卡／审查记录的 en 档不单独截图（同一 `useNsT` 机制，三档行为差异由 `test/client.test.mjs` 断言在岗）；切回复原另取一图 |
 | R28 Agent 提示切语言（按字节核对） | `test/agent-texts.test.mjs`（en 模板＝HEAD 逐字节、不变块两语言逐字节一致、拒绝末句＝codex 原文）＋验证实例端到端字节核对（注入两行＝`allowText(fields,'zh')` 逐字节、253 B＝审计 injectBytes、≠en 模板；requirements §4 R28 ② 已完成） |
 | composer 两段式菜单（跟随全局 / 模型段 / 档位段 / 选中态） | 截图留档：两段式菜单展开态 |
 | 设置页在非 loopback 页面自然降级 | 截图留档：非 loopback 设置页 |
@@ -1189,7 +1189,7 @@ R30 只在显示层加换算读数：存储、审计行（`ms=`）、注入文�
 | 审批卡片：`自动审批超时` + 人工倒计时 | 截图留档：超时态卡片 |
 | 审批卡片：`自动审批拒绝` + 原因 + 人工倒计时 | 截图留档：拒绝态卡片 |
 | 超时注入文本（点明超时与可重试、无 codex 末句） | 截图留档：超时注入文本 ＋ 审计 `decide source=timeout inject=yes`（人工超时路径按字节核对：`timeoutText('human', 6000)`＝397 B ＝ `injectBytes`） |
-| R27 设置面迁移：本包页面机器可核 DOM dump（新入口路径实走、配置区全文、控件清单、迁移键回读值与覆盖标记） | 现行 dump（常驻断言 `test/settings-dom-dump.test.mjs` 按本 dump 做，变异验证篡改控件值即红；附整页截图） |
+| R27 设置界面迁移：本包页面机器可核 DOM dump（新入口路径实走、配置区全文、控件清单、迁移键回读值与覆盖标记） | 现行 dump（常驻断言 `test/settings-dom-dump.test.mjs` 按本 dump 做，变异验证篡改控件值即红；附整页截图） |
 | 关闭弹卡：审查期间无卡片、交人工时才出现 | 截图留档：关闭弹卡路径 |
 | 会话开始前控件可写（无「未激活」提示） | 截图留档：全新会话中控件已渲染 |
 | 按预设显隐（切到自动审批立即出现 / 切走 3 s 内消失，均不刷新） | 截图留档：切换前后各一（均不刷新） |
@@ -1820,7 +1820,7 @@ R46–R48 的实现按下表落位（主文档各节已随实现同步改写为�
 **复验结果（2026-10-01，验证实例＝0.2.0-rc.1 新 home 实测）**：
 
 - `approval/request` waterfall：接管在位——重启后启动行 `answerer registered`，真实会话 screen→review（41.0 s，审查器带 `read_file` 读回核验）→decide `allowed-once` 全链，`withdraw=ok`（卡先弹后撤）；`displayReason` 未消费如计划。
-- `dsh-llm` 四导出＋RPC：`modelCatalog`/`modelEfforts` 全绿——目录含 zai 双模型＋moonshotai＋deepseek-official，`modelEfforts(zai/glm-5.3-flash)=low/high/max`；目录外模型引用照常解析（设置面目录 picker 实测）。
+- `dsh-llm` 四导出＋RPC：`modelCatalog`/`modelEfforts` 全绿——目录含 zai 双模型＋moonshotai＋deepseek-official，`modelEfforts(zai/glm-5.3-flash)=low/high/max`；目录外模型引用照常解析（设置界面目录 picker 实测）。
 - `snapshotEvents()`：无参沿用，GUI 会话与 CLI 通道的证据采集（tool 段 `read_file bytes=97`）均正常产出；waiver 注记维持。
 - `session/created`、`loader/volatile-update`、`permissionPresets`：presetCatalog 4 预设、`auto-approve` isDefault=true 且 configured 命中；新会话默认预设＝自动审批（composer 座位随即出现）。
 - bundle 装载：新增日志段 skipping=0、did-not-activate=0（5 次启动全部注册成功）；变异口径（peer 退回 0.1.7 → skipping＋无 answerer）此前已在一次性装置实证。
@@ -1937,7 +1937,7 @@ R52 一条需求四问（下文以「问 1–问 4」指称）；依据：R52 �
 | 问 3 | `lib/index.js`＋`test/index.test.mjs`＋三处文档样例 | 启动行 v 与 `AUDIT_VERSION` 同源断言（期望值由测试导入常量）；变异改常量 → 红；验证实例重启启动行 `v=3` |
 | 问 4 | `lib/gate.js`＋`test/gate.test.mjs` | deny 审计行 reason 含「命中模式」断言；变异去 reason 赋值 → 红；验证实例显式清单命中审计行带 reason |
 
-## 27. 设置表单修复（R53）：设置面 schema 的序列化往返契约
+## 27. 设置表单修复（R53）：设置界面 schema 的序列化往返契约
 
 ### 27.1 根因（双候选均实证，同一修复面）
 
@@ -1985,9 +1985,9 @@ R52 一条需求四问（下文以「问 1–问 4」指称）；依据：R52 �
 |---|---|---|
 | 预设注入通道 | 本包 `cordis.patch.yml`（`dsh.bundle.patch` 已声明的同一文件）内加 `- id: permission` 行重述（四档） | patch 语义＝后层按 id 对前层行**逐字段整值替换**（`@deepseek-ai/dsh-app-boot@0.2.0-rc.2` lib/index.js:61-110；`config` 整体替换不深合并）；层序＝`dsh.profile.bundles` 数组顺序（同文件 :921-925），启用＝追加数组末尾（`@deepseek-ai/dsh-plugin-manager@0.2.0-rc.2` lib/index.js:1994）、dsh-base 在出厂模板与 profile 初始化语义下恒为首位（dsh-app-boot lib/index.js:530-534、543；手改数组可反转——§28.7-2 另覆盖）——宿主通道安装即保证本包层在 dsh-base 层之后、重述必然生效。装卸两侧零额外动作：装＝包落 node_modules、其 patch 层自动参与组合；卸＝数组除名＋摘包、层随之消失（dsh-plugin-manager lib/index.js:1844-1863，全程不触碰 profile 的 `cordis.patch.yml`）。**零残留是构造性事实，不是流程约定** |
 | 与手工脚本的关系 | `tools/permission-preset.mjs`＋内核 `lib/permission-preset.js` 保留，定位降为**遗留残留清理**（R54 及此前部署写进 profile 层的重述回收）＋供 §28.3-2 复用 `detectProfileDir` | 0.2.0 及之前经 `--init-row`/`--apply` 写进 profile 层的重述在卸载后滞留（正是终裁要消灭的那类残留）；CLI 是它们的回收通道。R26 语义与既有测试全数不改判 |
-| 生命周期钩子 | 整套移除：`hooks/` 两文件、`package.json` 的 `scripts.postinstall`/`scripts.preuninstall`、check-syntax 的 hooks 扩展、install-hooks 测试；发布面守护**反转**为「禁止声明生命周期脚本」（§28.6） | pnpm 不执行依赖卸载脚本（§28.8-1）→ preuninstall 是死代码；postinstall 的全部职责被 bundle patch 取代，且后者无批准回合、无失败分支、无非 profile 探测需求。保留＝同时维护两条注入路径且其中一条半残 |
+| 生命周期钩子 | 整套移除：`hooks/` 两文件、`package.json` 的 `scripts.postinstall`/`scripts.preuninstall`、check-syntax 的 hooks 扩展、install-hooks 测试；发布面守护**反转**为「禁止声明生命周期脚本」（§28.6） | pnpm 不执行依赖卸载脚本（§28.8-1）→ preuninstall 是死代码；postinstall 的全部职责被 bundle patch 取代，且后者无需人工批准、无失败分支、无非 profile 探测需求。保留＝同时维护两条注入路径且其中一条半残 |
 | profile 层已写重述的存量部署 | 不自动迁移（profile 层最后应用，会盖住 bundle 层重述——这是宿主的用户覆盖语义，dsh-app-boot lib/index.js:558、1025-1030）；README 提供一条 `--revert` 回收命令供用户自行回到纯 bundle 形态 | 自动改写用户 patch 层＝越权。存量重述本身含四档（与 bundle 重述等价），不清理无功能损失；差别只在卸载时需 `--revert` 收尾——README 明示 |
-| 默认预设悬空防护 | disposer 读 profile manifest 判定：数组已不含本包，才把 `defaultPreset` 指向 `auto-approve` 的 profile 覆盖行整行删除（文件手术，§28.3-2） | 详见 §28.3-2（含设置写回路的关键事实、覆盖矩阵与 README 补救句） |
+| 默认预设悬空防护 | disposer 读 profile manifest 判定：数组已不含本包，才把 `defaultPreset` 指向 `auto-approve` 的 profile 覆盖行整行删除（文件级修改，§28.3-2） | 详见 §28.3-2（含设置写回路的关键事实、覆盖矩阵与 README 补救句） |
 | 设置卡补救指引 | `card.presets.missing.remedy` 键保留，文案按新机制改写（成因＝bundle 层缺席：插件停用／宿主兼容跳过／配置遗留），不再是「批准构建脚本后重装」 | 指引必须与现实机制一致；渲染门控不变（missing 非空才出现） |
 
 ### 28.2 机制形状与组合语义
@@ -2021,22 +2021,22 @@ R52 一条需求四问（下文以「问 1–问 4」指称）；依据：R52 �
 #### 28.3-2 默认预设（settings 的 `permissionPresets.defaultPreset`）：disposer 读 manifest 判定的防护
 
 - **为什么要防**：宿主设置界面把默认预设选择持久化进 profile patch 的 permission 行 config 覆盖。卸载后该覆盖滞留两类后果：(a) 默认档指向已删的 `auto-approve` → PP 构造器 `this.resolve(defaultPreset)` 抛 `unknown preset`（dsh-permission-presets lib/index.js:178-181）→ 整行装载失败 → 每个会话查投影都抛「projection is not registered」（:277-280）→ 全部会话不可用；(b) **即便默认档已切回标准档**，被设置写回路拖入的四档 presets 仍滞留覆盖——卸载后下拉仍显示本包档名（盲审反例：默认 workspace-write/read-only 时组合仍四档）。
-- **关键事实（决定防护形态）**：设置写回路的 `strip(raw, form)` 以**当时生效的活动配置**为基（dsh-config-editor lib/index.js:77-79 的 `raw＝entry.options.config`；dsh-settings lib/index.js:508-534）——写入的覆盖行＝`{presets: 当时生效的档表（含本包四档）, defaultPreset: 所选值}`，**无论默认档选的是谁**。因此悬空值只可能源自该覆盖行（无覆盖时易变值回落推断默认）；且设置服务通道的 `unset defaultPreset` 清不净——`next＝strip(raw)` 恒含档表，等值清除分支（dsh-config-editor lib/index.js:99-104，next 深等于 inherited 才删行）不会触发，API 路径必留残值——文件手术必要且充分，且不依赖任何服务/光纤的销毁顺序。
+- **关键事实（决定防护形态）**：设置写回路的 `strip(raw, form)` 以**当时生效的活动配置**为基（dsh-config-editor lib/index.js:77-79 的 `raw＝entry.options.config`；dsh-settings lib/index.js:508-534）——写入的覆盖行＝`{presets: 当时生效的档表（含本包四档）, defaultPreset: 所选值}`，**无论默认档选的是谁**。因此悬空值只可能源自该覆盖行（无覆盖时易变值回落推断默认）；且设置服务通道的 `unset defaultPreset` 清不净——`next＝strip(raw)` 恒含档表，等值清除分支（dsh-config-editor lib/index.js:99-104，next 深等于 inherited 才删行）不会触发，API 路径必留残值——文件级修改必要且充分，且不依赖任何服务/光纤的销毁顺序。
 - **触发点**：本包 `apply()` 新增一个 effect 作用域（既有 apply 无 disposer——纯监听器注册；新增作用域置于**配置禁用早退之前**，config-disabled 形态下摘除防护也要在岗），disposer 内执行防护。
 - **判定**：
   - profile 定位＝宿主运行态事实：`ctx.get('profileContext')?.dir`（dsh-app-boot lib/index.js:2065-2071 同源用法，profileContext 由 loader 提供且带 `.dir`）——不做文件系统走查，junction/link 形（含 R54 冻结件部署）也无盲区；
   - 数组判定＝读 `<profile.dir>/package.json` 的 `dsh.profile.bundles`，**不含本包名**才动作。依据：宿主 removeBundle/停用＝`selectBundle(name, false)` 落盘数组**先于** `reload()` 触发的 disposer（dsh-plugin-manager lib/index.js:1852-1853 的顺序）；普通关停、升级、热重载时数组仍含本包 → 不动作（不会把用户的配置在每次重启时抹掉）。
-- **动作（贡献级手术，盲审修订）**：锚点式文本手术（纪律与 `lib/permission-preset.js` 同源：不解析 YAML、不猜结构、原子写同目录临时文件＋rename、BOM 保留、删空补 `[]` 占位）——只删**本包的贡献**，保全用户的有效选择与自定义：
-  1. 删覆盖行 presets 里的 `auto-approve:` 条目块（若有）；
-  2. 删指向 `auto-approve` 的 `defaultPreset` 行（若有；悬空源，裸名/引号两形态）；
-  3. 行去留按**编辑后形态**判定：presets 被删空（空档表会让 PP 构造器按无匹配档抛错）→ 整行删除；「无 defaultPreset（悬空行已移除＝用户没有仍有效的默认选择）且 config 键只剩 presets、条目全为三标准档」＝纯设置拖入形态 → 整行删除＝恢复继承层；用户仍保留有效默认档（如已切回 workspace-write）或行内有自定义条目 → **保留行**（等价于「本包从未存在时宿主设置写出的形态」——外来档名已清、用户选择无损）。
+- **动作（贡献级修改，盲审修订＋复审 N1-N3 修订）**：锚点式文本修改（纪律与 `lib/permission-preset.js` 同源：不整文解析 YAML、不猜结构、原子写同目录临时文件＋rename、BOM 保留、删空补 `[]` 占位；行内按**全缩进级结构模型**建行内宇宙——2 空格＝行属性、4 空格＝config 键、6 空格＝档位裸键、≥8 空格＝档内子键，空行跨行不断结构）——只删**本包的贡献**，保全用户的有效选择与自定义：
+  1. 删覆盖行 presets 里的 `auto-approve:` 条目块（若有）。条目块边界＝**结构边界**（6 空格兄弟键/4 空格 config 键/行尾），空行与注释行（任意缩进）随块跨行不截断（复审 N2：子键间合法空行截断会切出重复键，产出非法 YAML）；
+  2. 删指向 `auto-approve` 的 `defaultPreset` 行（若有；悬空源）。取值按**解析标量**判定：剥包裹引号、剥行尾注释（复审 N3：`defaultPreset: auto-approve # 注释` 语义就是 auto-approve，只认裸值会漏删）；
+  3. 行去留按**编辑后形态**判定：presets 被删空（空档表会让 PP 构造器按无匹配档抛错）→ 整行删除；「无 defaultPreset（悬空行已移除＝用户没有仍有效的默认选择）且行内恰为**已知基线形态**」＝纯设置拖入形态 → 整行删除＝恢复继承层；否则 → **保留行**（等价于「本包从未存在时宿主设置写出的形态」——外来档名已清、用户选择无损）。基线形态＝逐层校验（复审 N1）：行属性只允许基线 `name` 行与 `config:` 容器键（`disabled: true` 一类额外行属性＝用户内容）；config 键 ⊆ {presets, defaultPreset}；档位键为裸键且 id ∈ 三标准档；**标准档子键恰为基线两条形态**（sandbox/approval 与 dsh-base 逐字一致——未知子键、改值、档内注释、错位缩进都算用户修改）；本包条目不做子键校验（整块随贡献移除）。
 - **失败语义**：best-effort——disposer 内全链 try/catch＋审计（`reset` 或失败性 `skip` 落一行，良性跳过静默——关停/升级/重载是常态）；manifest/patch 不可读、锚点不命中、写失败等一切异常只降级为跳过，绝不阻断卸载/停用。
-- **接受面（设计明示）**：条目级清理保全用户自定义条目与有效默认选择；整行删除仅发生在「无有效默认选择且行内无本包宇宙外内容」时（纯设置拖入形态）。README 卸载节说明。
+- **接受面（设计明示）**：条目级清理保全用户自定义条目、档内手工键/改值、行属性与有效默认选择；整行删除仅发生在「无有效默认选择且行内恰为已知基线形态」时（纯设置拖入形态）。产出恒为合法 YAML（空行/注释随条目块整块移除，不产生孤儿子键）。README 卸载节说明。
 - **覆盖矩阵**：
 
 | 卸载路径 | disposer 是否带着「数组已除名」运行 | 结果 |
 |---|---|---|
-| 交互宿主：移除/停用（reload 热卸载） | 是（selectBundle 先落盘） | 贡献级手术：本包条目＋悬空默认行清除，按形态整行删除或保留行（零外来残留） |
+| 交互宿主：移除/停用（reload 热卸载） | 是（selectBundle 先落盘） | 贡献级修改：本包条目＋悬空默认行清除，按形态整行删除或保留行（零外来残留） |
 | 服务宿主：先停机再 remove | 否（停机时数组仍含本包；remove 在独立进程，本包代码此后不再运行） | README 补救：停机后、remove 前跑 `--restore-inherit`（包还在、CLI 可用）；已卸载则重装再跑或手删该行 |
 | 手删包目录 / kill -9 | disposer 不运行 | 同上 README 补救句（手删另有 boot 的 skippedBundles 告警，dsh-app-boot lib/index.js:928-945） |
 | 非 profile 环境 / profileContext 缺席 | — | `dir` 缺失即跳过（防护只在 profile 内动作） |
@@ -2045,7 +2045,7 @@ R52 一条需求四问（下文以「问 1–问 4」指称）；依据：R52 �
 
 | 通道 | 安装侧 | 卸载侧 | 退化路径 |
 |---|---|---|---|
-| registry（`pnpm add <name>/<tgz>`，宿主 installBundle） | 零动作：无构建脚本、无批准回合；层自动参与组合，重启（或热装载，§28.8-4）后下拉四档 | `remove` → 层消失 → 三档；会话层 derive 回落（§28.3-1） | 停用 bundle＝同卸载语义（`selectBundle(false)`） |
+| registry（`pnpm add <name>/<tgz>`，宿主 installBundle） | 零动作：无构建脚本、无需人工批准；层自动参与组合，重启（或热装载，§28.8-4）后下拉四档 | `remove` → 层消失 → 三档；会话层 derive 回落（§28.3-1） | 停用 bundle＝同卸载语义（`selectBundle(false)`） |
 | `github:`（git 源） | 同 registry（声明在包内，通道无关） | 同上 | 同上 |
 | GUI 安装对话框 | 同 registry（同一安装引擎） | 同上 | 同上 |
 | `link:`/克隆目录 | 同 registry（`dsh.bundle.patch` 随包走，link 通道照常组合） | 摘链＋除名 → 层消失 | 同上 |
@@ -2066,7 +2066,7 @@ R52 一条需求四问（下文以「问 1–问 4」指称）；依据：R52 �
 
 ### 28.7 风险清单
 
-1. **冻结重述遮蔽上游**（与 profile 层重述同族，本方案全面更优）：`config` 整体替换，dsh-base 未来改 permission 行（加键/改档位/换包名）会被旧版重述遮蔽至本包发新版。差异：(a) 重述**随本包版本化**——升级插件即同步、卸载即解除遮蔽回到上游真身（profile 层重述则滞留用户磁盘，卸载后仍遮蔽）；(b) 漂移是**告警级**不是静默错配——peers 钉版不满足时 bundle 被 boot 跳过并报因（dsh-app-boot lib/index.js:928-945）、上游换包名→name 断言告警跳过（:100-103）、上游删行→id 未命中告警跳过（:95-99）。
+1. **冻结重述遮蔽上游**（与 profile 层重述同族，本方案全面更优）：`config` 整体替换，dsh-base 未来改 permission 行（加键/改档位/换包名）会被旧版重述遮蔽至本包发新版。差异：(a) 重述**随本包版本化**——升级插件即同步、卸载即解除遮蔽回到上游真身（profile 层重述则滞留用户磁盘，卸载后仍遮蔽）；(b) 漂移是**告警级**不是静默错配——peer 精确锁定版本不满足时 bundle 被 boot 跳过并报因（dsh-app-boot lib/index.js:928-945）、上游换包名→name 断言告警跳过（:100-103）、上游删行→id 未命中告警跳过（:95-99）。
 2. **层序被手改反转**：用户手工把 bundles 数组里本包挪到 dsh-base 之前 → 三档胜出（§28.8-3 场景三实测）＋本包 override 未命中告警。显式用户行为，README 一句。
 3. **默认预设悬空的未覆盖路径**：§28.3-2 覆盖矩阵后两行（先停后卸、手删/kill）靠 README；这是包内代码的可达性边界（卸载后本包代码不再运行），非流程疏漏。
 4. **插件自有数据目录**（`<DSH_HOME>/approve-for-me/`：reviews、session-models）属用户数据，按惯例可留（与机制无关）。
@@ -2074,14 +2074,14 @@ R52 一条需求四问（下文以「问 1–问 4」指称）；依据：R52 �
 ### 28.8 实测记录（本批已完成的实验事实；端到端全链在验收轮补齐）
 
 1. **pnpm 不执行依赖卸载脚本**（pnpm 12.8.1 实测）：批准名单内（裸名＋版本键均 `true`）执行 `pnpm remove` → 零钩子输出、包摘除、profile patch 残留在场。文档佐证：pnpm 审批面只覆盖安装期 build scripts（`preinstall`/`install`/`postinstall` 族），remove 通道无脚本语义。→ preuninstall 死代码的实测依据。
-2. **pnpm 12 安装侧批准语义**（钩子通道时代的副产物，留档）：未裁决＝`ERR_PNPM_IGNORED_BUILDS` 硬性失败（宿主 installBundle 失败路径回读 pendingBuilds）；`file:` 依赖的裁决键带版本形（`name@file:…`）而宿主 `approveBuilds` 只写裸名 → pnpm 12 下宿主批准回合可能不解锁安装（上游兼容观察，非本包问题）。bundle patch 通道无构建脚本，全部绕开。
+2. **pnpm 12 安装侧批准语义**（钩子通道时代的副产物，留档）：未裁决＝`ERR_PNPM_IGNORED_BUILDS` 硬性失败（宿主 installBundle 失败路径回读 pendingBuilds）；`file:` 依赖的裁决键带版本形（`name@file:…`）而宿主 `approveBuilds` 只写裸名 → pnpm 12 下宿主批准交互可能不解锁安装（上游兼容观察，非本包问题）。bundle patch 通道无构建脚本，全部绕开。
 3. **组合证明**（宿主 `composeEntries` 直驱，dsh-base 真 patch＋本包新 patch）：安装序四档 PASS；卸载序三档 PASS；手改序三档＋override 未命中=warn 跳过 PASS。
 4. **装后生效通道**（验收轮）：scratch 宿主实例上装包→观察 reload 热装载是否免重启到达下拉；不能则 README 维持重启口径。
 
 ### 28.9 与既有需求的边界
 
 - **R26**：CLI（`tools/permission-preset.mjs`）与内核语义原样保留（遗留清理通道），`test/permission-preset.test.mjs` 既有用例不改判；其定位从「部署必经」降为「存量残留回收」。**盲审修订**：`--revert` 只删条目、保留整行重述（R26 语义），升级后它会遮蔽包内四档——新增 `--restore-inherit`（删 permission 覆盖行整行＝回纯 bundle 继承；保全校验：行内出现宇宙外键/取值即拒绝代删；幂等；`--init-row` 指纹注释块一并回收，模板往返零字节差），作为存量部署升级后的回收主通道。
-- **R20 与承诺口径**：初裁稿拟收窄的「运行时代码不改宿主文件」口径**作废**——新机制下正常运行与装卸全程不写 profile 层；**唯一例外**＝§28.3-2 防护在「覆盖行含本包贡献（auto-approve 条目或悬空默认档）且本包正被移除/停用」时对该覆盖行的贡献级手术（该写入本身就是清理、移除残留，且仅此一种情形发生）。README 四处承诺句（英文摘要、风险节 bullet 6、轨迹集成节、回滚节尾；以 `grep` 全量清点为准）按此口径改写（「不修改宿主任何文件，装卸均可逆」，例外场景随 §28.3-2 补救句一并写明）；「删除插件目录即完全回滚」在 bundle patch 机制下为真（层随包目录消失，宿主重启后回到基线——补「重启宿主」限定词）。
+- **R20 与承诺口径**：初裁稿拟收窄的「运行时代码不改宿主文件」口径**作废**——新机制下正常运行与装卸全程不写 profile 层；**唯一例外**＝§28.3-2 防护在「覆盖行含本包贡献（auto-approve 条目或悬空默认档）且本包正被移除/停用」时对该覆盖行的贡献级修改（该写入本身就是清理、移除残留，且仅此一种情形发生）。README 四处承诺句（英文摘要、风险节 bullet 6、轨迹集成节、回滚节尾；以 `grep` 全量清点为准）按此口径改写（「不修改宿主任何文件，装卸均可逆」，例外场景随 §28.3-2 补救句一并写明）；「删除插件目录即完全回滚」在 bundle patch 机制下为真（层随包目录消失，宿主重启后回到基线——补「重启宿主」限定词）。
 - **R16**：fail-loud missing 提示保留原语义；指引行按 §28.5 改写。
 - **版本与 CHANGELOG**：CHANGELOG 补 R57 条目（要点：预设改由 bundle patch 随包提供、装卸零写入零残留、钩子方案及其否决过程一句带过、默认预设防护、存量部署 `--revert` 回收指引、承诺口径改写），以 `0.3.0` 未发布段为标题；`package.json` 升 `0.3.0` 为**提案**（验收报告提交用户裁定，通过后同批改 `version`——0.2.0 状态下发布行为变更＝语义化违约，升档与发布同窗）。
 - **§14（部署与回滚）**：§14.1 立项理由段补历史注记（0.1.7 层序认知）、§14.2/§14.3 头部指针注记按新机制改写（主路径＝装包重启即得；手工命令＝存量残留回收与 `link:` 通道说明）；既有步骤本体不动。
@@ -2090,8 +2090,8 @@ R52 一条需求四问（下文以「问 1–问 4」指称）；依据：R52 �
 
 | 判据 | 测试/取证 | 可失败性（变异） |
 |---|---|---|
-| ① 装完即配 | 端到端实验（scratch profile＋宿主通道装 tarball，**无批准回合**）→ profile `cordis.patch.yml` 字节不变（零写入断言）＋组合四档（§28.8-3 同款取证）＋重启后下拉四项含「自动审批」、无 unknown preset 警告 | 变异＝patch 摘掉 permission 重述 → 组合三档、断言红 |
-| ② 卸载零残留 | 端到端实验（宿主 remove）→ profile `cordis.patch.yml` 字节不变（从未写入）＋组合三档；**盲审修订**：设置写出的覆盖行（含被拖入的四档）由 §28.3-2 贡献级手术清理——默认档指向 auto-approve 时整行删除（恢复继承）、默认档已切标准档时条目级清理（行保留、用户选择保全），断言＝「手术后组合三档＋行内无 auto-approve 残留」（真 composeEntries 探针覆盖三种默认档形态）；会话档位回落＝单测钉住「auto-approve knobs 与 workspace-write 逐字段等同」（derive 回落的前提）；防护＝lib 单测条件矩阵＋disposer 接线测试 | 摘掉 knobs 等同约束 → 单测红；防护条件反转 → 条件矩阵红；默认档切标准漏清 → 探针/矩阵红 |
+| ① 装完即配 | 端到端实验（scratch profile＋宿主通道装 tarball，**无需人工批准**）→ profile `cordis.patch.yml` 字节不变（零写入断言）＋组合四档（§28.8-3 同款取证）＋重启后下拉四项含「自动审批」、无 unknown preset 警告 | 变异＝patch 摘掉 permission 重述 → 组合三档、断言红 |
+| ② 卸载零残留 | 端到端实验（宿主 remove）→ profile `cordis.patch.yml` 字节不变（从未写入）＋组合三档；**盲审修订**：设置写出的覆盖行（含被拖入的四档）由 §28.3-2 贡献级修改清理——默认档指向 auto-approve 时整行删除（恢复继承）、默认档已切标准档时条目级清理（行保留、用户选择保全），断言＝「修改后组合三档＋行内无 auto-approve 残留」（真 composeEntries 探针覆盖三种默认档形态）；会话档位回落＝单测钉住「auto-approve knobs 与 workspace-write 逐字段等同」（derive 回落的前提）；防护＝lib 单测条件矩阵＋disposer 接线测试 | 摘掉 knobs 等同约束 → 单测红；防护条件反转 → 条件矩阵红；默认档切标准漏清 → 探针/矩阵红 |
 | ②′ 存量回收回纯 bundle（盲审反例） | `--restore-inherit`：删 permission 覆盖行整行＋initRow 指纹注释块＝零字节差回模板基线；叠加安装态 bundle 后组合四档（遮蔽解除）；行内宇宙外键/取值拒绝代删且零落盘；幂等 | 变异＝不删重述 → 组合仍三档红；不校验宇宙 → 拒绝用例红 |
 | ③ 非 profile 零副作用 | 声明面守护：`scripts` 不命中生命周期规则（pre/post 前缀＋裸事件键 install/uninstall/publish，§28.6；全键矩阵用例在岗）；全套 `npm test`＋`test:offline`＋`check`＋`check:public-surface`＋lint 0 error | 变异＝向 `scripts` 引入任一生命周期键（含名单外新增键）→ 守护断言红 |
 | ④ 文档口径 | README/CHANGELOG 按上文改写＋`check:public-surface` 全绿；CHANGELOG 含 R57 条目（`0.3.0` 未发布段）＋验收报告含版本升档提案 | 检查器既有变异用例在岗 |

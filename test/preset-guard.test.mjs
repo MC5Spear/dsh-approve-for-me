@@ -197,6 +197,136 @@ test('复位路径（再审查 N1 回归）：行内带值宇宙外键——条�
   rmSync(dirC, { recursive: true, force: true });
 });
 
+test('复位路径（复审 N1 回归）：标准档未知子键/改值、2 空格行属性——一律保留行，手工内容不代删', async () => {
+  // 复审反例：合法 YAML 的标准档加 `customKnob: true`（8 空格）、改 `approval: never`、
+  // 或行内加 `disabled: true`（2 空格行属性）——旧判定只看档 id 在不在名单，整行删除
+  // 会连用户修改一并吞掉。新判定＝全缩进级基线校验：非基线 ⇒ 保留行。
+  const base = [
+    '- id: permission',
+    "  name: '@deepseek-ai/dsh-permission-presets'",
+    '  config:',
+    '    presets:',
+    '      read-only:',
+    '        sandbox: read-only',
+    '        approval: ask',
+    '      auto-approve:',
+    '        sandbox: workspace-write',
+    '        approval: ask',
+    '      danger-full-access:',
+    '        sandbox: danger-full-access',
+    '        approval: never',
+    '    defaultPreset: auto-approve',
+  ].join('\n');
+  // (a) 标准档带未知子键：条目级清理（悬空默认＋本包条目仍清），行与子键保全。
+  const dirA = makeProfile({ bundles: ['dsh-base'], patch: `${TEMPLATE_HEADER}\n${base.replace('        sandbox: read-only', '        customKnob: true\n        sandbox: read-only')}\n` });
+  assert.deepEqual(await guardDefaultPreset({ profileDir: dirA }), { action: 'reset', reason: 'removed-tier-entry' });
+  const afterA = readFileSync(join(dirA, 'cordis.patch.yml'), 'utf8');
+  assert.match(afterA, /customKnob: true/u, '档内手工键不得被吞（N1 反例）');
+  assert.doesNotMatch(afterA, /auto-approve|defaultPreset/u, '本包条目与悬空默认仍必须清除');
+  assert.match(afterA, /- id: permission/u, '行保留');
+  rmSync(dirA, { recursive: true, force: true });
+  // (b) 标准档改值（含行尾注释形态）：同口径保留。
+  const dirB = makeProfile({ bundles: ['dsh-base'], patch: `${base.replace('        approval: ask', '        approval: never # user')}\n` });
+  assert.equal((await guardDefaultPreset({ profileDir: dirB })).reason, 'removed-tier-entry', '非基线取值 ⇒ 保留行');
+  const afterB = readFileSync(join(dirB, 'cordis.patch.yml'), 'utf8');
+  assert.match(afterB, /approval: never # user/u, '用户改值保全');
+  assert.doesNotMatch(afterB, /auto-approve|defaultPreset/u);
+  rmSync(dirB, { recursive: true, force: true });
+  // (c) 2 空格行属性（disabled: true）：同口径保留。
+  const dirC = makeProfile({ bundles: ['dsh-base'], patch: `${base.replace('  config:', '  disabled: true\n  config:')}\n` });
+  assert.equal((await guardDefaultPreset({ profileDir: dirC })).reason, 'removed-tier-entry', '额外行属性 ⇒ 保留行');
+  const afterC = readFileSync(join(dirC, 'cordis.patch.yml'), 'utf8');
+  assert.match(afterC, / {2}disabled: true/u, '行属性保全');
+  assert.doesNotMatch(afterC, /auto-approve|defaultPreset/u);
+  rmSync(dirC, { recursive: true, force: true });
+});
+
+test('复位路径（复审 N2 回归）：条目子键间空行/注释不得截断条目边界——产出不得切出重复键', async () => {
+  // 复审反例：auto-approve 的 sandbox 与 approval 之间插入合法空行（或注释行），旧收集
+  // 循环在空行处停——approval 行错挂上一档＝重复键，真实 YAML.parse 直接失败。新边界＝
+  // 结构边界（6 空格兄弟键/4 空格 config 键/行尾），空行注释随条目块整块移除。
+  const blank = [
+    '- id: permission',
+    "  name: '@deepseek-ai/dsh-permission-presets'",
+    '  config:',
+    '    presets:',
+    '      read-only:',
+    '        sandbox: read-only',
+    '        approval: ask',
+    '      workspace-write:',
+    '        sandbox: workspace-write',
+    '        approval: ask',
+    '      auto-approve:',
+    '        sandbox: workspace-write',
+    '',
+    '        approval: ask',
+    '      danger-full-access:',
+    '        sandbox: danger-full-access',
+    '        approval: never',
+    '    defaultPreset: workspace-write',
+    '',
+  ].join('\n');
+  const dir = makeProfile({ bundles: ['dsh-base'], patch: blank });
+  assert.deepEqual(await guardDefaultPreset({ profileDir: dir }), { action: 'reset', reason: 'removed-tier-entry' }, '标准默认在场 ⇒ 条目级清理');
+  const after = readFileSync(join(dir, 'cordis.patch.yml'), 'utf8');
+  const afterLines = after.split('\n');
+  // 结构级断言：workspace-write 档的子键恰为 [sandbox, approval]（重复键/孤儿行即红）。
+  const wsIndex = afterLines.findIndex((line) => /^ {6}workspace-write:\s*$/u.test(line));
+  const wsChildren = [];
+  for (let index = wsIndex + 1; index < afterLines.length; index += 1) {
+    const line = afterLines[index];
+    if (line.trim() === '' || /^ {4}\S/u.test(line) || /^ {6}\S/u.test(line) || /^-/u.test(line)) break;
+    if (/^ {8}\S/u.test(line)) wsChildren.push(line.trim());
+  }
+  assert.deepEqual(wsChildren, ['sandbox: workspace-write', 'approval: ask'], '空行不得截断条目＝approval 不得错挂 workspace-write');
+  assert.equal((after.match(/^ {8}approval:/gmu) ?? []).length, 3, '三个保留档各恰一条 approval 子键');
+  assert.doesNotMatch(after, /auto-approve/u);
+  assert.doesNotMatch(after, /\n\n/u, '条目块整块移除＝不遗留行内空行');
+  rmSync(dir, { recursive: true, force: true });
+  // 同形态、注释行夹在条目子键间：同口径整块移除。
+  const commented = blank.replace('      auto-approve:\n        sandbox: workspace-write\n', '      auto-approve:\n        # 手工注释\n        sandbox: workspace-write\n');
+  const dir2 = makeProfile({ bundles: ['dsh-base'], patch: commented });
+  assert.equal((await guardDefaultPreset({ profileDir: dir2 })).reason, 'removed-tier-entry');
+  const after2 = readFileSync(join(dir2, 'cordis.patch.yml'), 'utf8');
+  assert.doesNotMatch(after2, /手工注释/u, '条目内注释随条目块移除');
+  assert.doesNotMatch(after2, /auto-approve/u);
+  rmSync(dir2, { recursive: true, force: true });
+});
+
+test('复位路径（复审 N3 回归）：行尾注释形态的悬空默认按解析标量判定——先删档后不得仍指向已删档', async () => {
+  // `defaultPreset: auto-approve # user comment` 是合法 YAML、语义就是 auto-approve——
+  // 只认裸值的正则会漏删该行，卸载后默认档仍指向已删档。含两种形态：有/无本包条目。
+  const withEntry = [
+    '- id: permission',
+    "  name: '@deepseek-ai/dsh-permission-presets'",
+    '  config:',
+    '    presets:',
+    '      read-only:',
+    '        sandbox: read-only',
+    '        approval: ask',
+    '      auto-approve:',
+    '        sandbox: workspace-write',
+    '        approval: ask',
+    '      danger-full-access:',
+    '        sandbox: danger-full-access',
+    '        approval: never',
+    '    defaultPreset: auto-approve # user comment',
+  ].join('\n');
+  const dirA = makeProfile({ bundles: ['dsh-base'], patch: `${TEMPLATE_HEADER}\n${withEntry}\n` });
+  assert.deepEqual(await guardDefaultPreset({ profileDir: dirA }), { action: 'reset', reason: 'removed-user-override' }, '剩余恰为基线形态 ⇒ 整行删除');
+  const afterA = readFileSync(join(dirA, 'cordis.patch.yml'), 'utf8');
+  assert.doesNotMatch(afterA, /auto-approve|defaultPreset/u, '行尾注释形态的悬空默认必须一并处置');
+  assert.equal(countPlaceholders(afterA), 1);
+  rmSync(dirA, { recursive: true, force: true });
+  // 无条目形态：仅悬空默认行指向本包档（旧的「无条目即 skip」反例）。
+  const noEntry = withEntry.replace('      auto-approve:\n        sandbox: workspace-write\n        approval: ask\n', '');
+  const dirB = makeProfile({ bundles: ['dsh-base'], patch: `${noEntry}\n` });
+  assert.deepEqual(await guardDefaultPreset({ profileDir: dirB }), { action: 'reset', reason: 'removed-user-override' }, '悬空默认单独在场也必须触发手术');
+  const afterB = readFileSync(join(dirB, 'cordis.patch.yml'), 'utf8');
+  assert.doesNotMatch(afterB, /auto-approve|defaultPreset|permission/u);
+  rmSync(dirB, { recursive: true, force: true });
+});
+
 test('复位路径：行内只剩本包条目（presets 删空风险）——整行删除', async () => {
   const bare = [
     '- id: permission',
