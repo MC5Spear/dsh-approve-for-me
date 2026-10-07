@@ -241,6 +241,47 @@ test('复位路径（复审 N1 回归）：标准档未知子键/改值、2 空�
   rmSync(dirC, { recursive: true, force: true });
 });
 
+test('复位路径（复审 r62-R1 回归）：宿主序列化双引号 name 形态——整行删除必须触发', async () => {
+  // 宿主 configEditor 对含 `@` 的值序列化为**双引号**（eemeli/yaml 引号风格），本包手工重述用
+  // 单引号——基线 name 判定按剥引号语义值，两种形态同判（r62-R1）；行尾空白同口径（r62-R3）。
+  const hostRow = [
+    '- id: permission',
+    '  name: "@deepseek-ai/dsh-permission-presets"',
+    '  config:',
+    '    presets:',
+    '      read-only:',
+    '        sandbox: read-only',
+    '        approval: ask',
+    '      workspace-write:',
+    '        sandbox: workspace-write',
+    '        approval: ask',
+    '      auto-approve:',
+    '        sandbox: workspace-write',
+    '        approval: ask',
+    '      danger-full-access:',
+    '        sandbox: danger-full-access',
+    '        approval: never',
+    '    defaultPreset: auto-approve',
+  ].join('\n');
+  const dirA = makeProfile({ bundles: ['dsh-base'], patch: `${TEMPLATE_HEADER}\n${hostRow}\n` });
+  assert.deepEqual(await guardDefaultPreset({ profileDir: dirA }), { action: 'reset', reason: 'removed-user-override' }, '宿主真实序列化形态必须走整行删除主路径（r62-R1 反例：单引号字面比较使其永不触发）');
+  const afterA = readFileSync(join(dirA, 'cordis.patch.yml'), 'utf8');
+  assert.doesNotMatch(afterA, /permission|auto-approve|defaultPreset/u, '整行删除＝恢复继承（重装不再被重述遮蔽）');
+  assert.equal(countPlaceholders(afterA), 1);
+  rmSync(dirA, { recursive: true, force: true });
+  // 尾随空白（R3）：同口径接受。
+  const dirB = makeProfile({ bundles: ['dsh-base'], patch: hostRow.replace('presets"', 'presets"  ') });
+  assert.equal((await guardDefaultPreset({ profileDir: dirB })).reason, 'removed-user-override', 'name 行尾随空白不得改变判定');
+  rmSync(dirB, { recursive: true, force: true });
+  // name 值被用户改过（非本服务包名）＝行属性宇宙外——保留行。
+  const dirC = makeProfile({ bundles: ['dsh-base'], patch: hostRow.replace('dsh-permission-presets', 'dsh-something-else') });
+  assert.equal((await guardDefaultPreset({ profileDir: dirC })).reason, 'removed-tier-entry', '改值 name ⇒ 保留行（用户修改不代删）');
+  const afterC = readFileSync(join(dirC, 'cordis.patch.yml'), 'utf8');
+  assert.match(afterC, /dsh-something-else/u, '改值 name 保全');
+  assert.doesNotMatch(afterC, /auto-approve|defaultPreset/u);
+  rmSync(dirC, { recursive: true, force: true });
+});
+
 test('复位路径（复审 N2 回归）：条目子键间空行/注释不得截断条目边界——产出不得切出重复键', async () => {
   // 复审反例：auto-approve 的 sandbox 与 approval 之间插入合法空行（或注释行），旧收集
   // 循环在空行处停——approval 行错挂上一档＝重复键，真实 YAML.parse 直接失败。新边界＝

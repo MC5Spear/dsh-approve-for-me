@@ -401,6 +401,39 @@ test('--restore-inherit（复审 N1）：标准档未知子键/改值、额外�
   assert.equal(patchOf(commented), commentedBefore, '失败零落盘');
 });
 
+test('--restore-inherit（复审 r62-R1）：宿主序列化双引号 name 形态不误拒；改值 name 拒绝', () => {
+  // 宿主 configEditor 对含 `@` 的值产出双引号——保全校验按剥引号语义值判定（r62-R1）。
+  const hostRow = [
+    '- id: permission',
+    '  name: "@deepseek-ai/dsh-permission-presets"',
+    '  config:',
+    '    presets:',
+    '      read-only:',
+    '        sandbox: read-only',
+    '        approval: ask',
+    '      auto-approve:',
+    '        sandbox: workspace-write',
+    '        approval: ask',
+    '      danger-full-access:',
+    '        sandbox: danger-full-access',
+    '        approval: never',
+    '    defaultPreset: workspace-write',
+    '',
+  ].join('\n');
+  const home = makeHome(hostRow);
+  assert.equal(run(home, '--restore-inherit').status, 0, '宿主标准序列化形态必须可回收（r62-R1 反例：曾按手工自定义误拒）');
+  assert.doesNotMatch(patchOf(home), /permission|auto-approve/u, '整行回收＝纯继承');
+  // 尾随空白（R3）：同口径接受。
+  const homeB = makeHome(hostRow.replace('presets"', 'presets"  '));
+  assert.equal(run(homeB, '--restore-inherit').status, 0, 'name 行尾随空白不得误拒');
+  assert.doesNotMatch(patchOf(homeB), /permission/u);
+  // name 值被改过＝行属性宇宙外——拒绝且零落盘。
+  const homeC = makeHome(hostRow.replace('dsh-permission-presets', 'dsh-something-else'));
+  const before = patchOf(homeC);
+  assert.notEqual(run(homeC, '--restore-inherit').status, 0, '改值 name 必须拒绝代删');
+  assert.equal(patchOf(homeC), before, '失败零落盘');
+});
+
 test('--restore-inherit（复审 N3/N4）：presets 键行尾随空白不误拒；取值按解析标量（引号/行尾注释）接受', () => {
   // N4：`    presets:  ` 尾随空白不是自定义内容——正常整行回收。
   const trailing = makeHome([
