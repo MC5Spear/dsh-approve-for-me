@@ -1,6 +1,6 @@
 # 参与指南
 
-**接受 issue，不接受外部 PR。** 本仓个人维护、按精力更新——issue 欢迎报问题、提场景与想法，但不保证响应与修复时间。想改代码请 fork 后在自己的分支上维护，本仓不合并外部改动。下面的运行与验证信息供 fork 维护者和想复现问题的人使用。
+**接受 issue，不接受外部 PR。** 本仓个人维护、按精力更新——issue 欢迎报问题、描述使用场景与提出想法，但不保证响应与修复时间。想改代码请 fork 后在自己的分支上维护，本仓不合并外部改动。下面的运行与验证信息供 fork 维护者和想复现问题的人使用。
 
 ## 报 issue
 
@@ -23,8 +23,11 @@ npm install --omit=dev
 
 **宿主解析锚点**：宿主接线用例需要解析 `@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-typert-protocol`、`@deepseek-ai/cordis` 等同版包（本包按 peer 版本锁定）。两种给法：
 
-1. 在克隆目录里显式装同版宿主包（CI 走这条）：
-   `npm install --no-save @deepseek-ai/cordis@4.0.4 @deepseek-ai/dsh-llm@0.2.0-rc.2 @deepseek-ai/dsh-typert-protocol@0.2.0-rc.2 @deepseek-ai/schemastery@3.18.4`
+1. 在克隆目录里显式安装同版宿主包。宿主和 cordis 版本取[当前兼容基准](<docs/requirements.md#13-当前兼容基准>)，其他依赖取项目已声明的约束；将下列占位符替换为满足约束的实际版本，不直接执行占位命令：
+
+   ```powershell
+   npm install --no-save @deepseek-ai/cordis@<cordis版本> @deepseek-ai/dsh-llm@<宿主版本> @deepseek-ai/dsh-typert-protocol@<宿主版本> @deepseek-ai/schemastery@<项目依赖版本>
+   ```
 2. 指向一份已存在的宿主安装树：环境变量 `DSAFM_HOST_MODULES=<宿主安装目录>\node_modules`（取值顺序与配置文件形状见 `tools/local-config.mjs` 与 `tools/local-config.example.mjs`）。
 
 两条都不可用时，宿主接线用例会**自我跳过**——`npm run test:offline` 则是完全不注册宿主钩子的形态。
@@ -42,10 +45,12 @@ npm run probe:typert        # 离线校验 ./typert 清单
 - 沙箱环境拦 per-file 子进程时，用等价形态：
   `node --import ./tools/_host-hooks.mjs --test --experimental-test-isolation=none "test/*.test.mjs"`
 
+运行真实模型探针前，确认允许读取所用实例的凭据并向配置的供应商端点发送请求；不要在未获授权的实例上执行。无凭据或断网时的跳过不是离线协议验证。
+
 | 探针 | 需要什么 |
 | --- | --- |
 | `npm run probe:typert` | 离线（校验 `./typert` 清单与实现一致） |
-| `npm run probe:llm`（`tools/probe-llm-tools.mjs`） | 离线（无凭据/断网时优雅跳过，打印 `RESULT: SKIP — 未验证`） |
+| `npm run probe:llm`（`tools/probe-llm-tools.mjs`） | 需要网络和用户提供的 LLM 凭据；无凭据或网络不可达时打印 `RESULT: SKIP — 未验证`，跳过不算通过 |
 | `npm run probe:reviewer`（`tools/probe-reviewer-live.mjs`） | 需要真实 LLM 凭据（从 `$DSH_HOME/.credentials.yaml` 的 `refs.DEEPSEEK_API_KEY` 读，输出不含密钥） |
 
 涉及真实实例的端到端验证请在你**自己的实例**上跑。那类取证工具（`tools/browser-shot.mjs` 浏览器驱动、`tools/probe-rpc.mjs` 实例 RPC 探针、`tools/probe-composer-dom.mjs` 页面结构探针等）**随本仓发布**：接入坐标（实例地址、token 文件、浏览器路径、输出目录）一律经 `tools/local-config.mjs` 给定或显式传参，脚本不含机器事实，可在你自己的实例上排障取证；**运行产物**（截图、DOM 转储、步骤场景）落在本机配置的输出目录，不进提交。
@@ -74,7 +79,7 @@ npm run check:public-surface     # 结构 / 本机指纹 / 内部引用，三类
 - 新增配置字段：在 `lib/config.js` 的 `Config` 里声明，需要热改就加 `.volatile()`（`@deepseek-ai/schemastery` ≥ 3.18.4），界面文案进 `lib/agent-texts.js` 的中英字典（缺键即抛错，不静默回退），并在 `test/config.test.mjs` / `test/agent-texts.test.mjs` 补用例。
 - 面向模型的文案（系统提示、注入文本）改动请**逐字节**核对是否影响既有判据：本仓有冻结断言守着不可变块。
 - 中文文档与注释保持本仓既有术语；改行为时同步更新 README 里对应的用户可见说明。
-- 部分代码注释仍有不对应当前文档的编号或旧小节名。本次文档整理未改产品代码，不能据这些注释恢复已取消的机制；维护代码时改用稳定主题定位，不再新增按修复批次编号的引用。
+- 部分代码注释的编号和小节名不对应当前文档，不具备现行规范权威。维护代码时使用稳定主题定位，不能据旧注释恢复已取消的机制，也不新增按修复批次编号的引用。
 
 **运行真机的经验**（不是硬性要求）：
 

@@ -6,11 +6,11 @@
 
 为无人值守长任务和缺乏技术判断能力的用户提供沙箱升权审查。独立 LLM 审查器可以只读取证，安全则允许本次操作，危险则拒绝并说明原因；系统故障与危险判断分别说明。
 
-**English summary.** This third-party DSH plugin reviews sandbox-escalation approval requests with an independent LLM and read-only local tools. Safe requests are allowed once; unsafe requests are denied. Review failures are fail-closed and distinguished from safety denials. The permission tier is supplied by the package declaration. Host settings may persist the tier in user overrides, so uninstall does not guarantee a clean user configuration. The target contract does not provide plugin-side YAML cleanup. This document update is not a completed implementation or runtime acceptance.
+**English summary.** This third-party DSH plugin reviews sandbox-escalation approval requests with an independent LLM and read-only local tools. Safe requests are allowed once; unsafe requests are denied. Review failures are fail-closed and distinguished from safety denials. The permission tier is supplied by the package declaration. Host settings may persist the tier in user overrides, so uninstall does not guarantee a clean user configuration. The target contract does not provide plugin-side YAML cleanup. The implementation has outstanding requirements and verification work; the current backlog is defined in the design document.
 
 ## 实现与验收边界
 
-需求和设计是当前目标规范，不代表代码已经符合所有要求。本轮文档重组没有修改插件代码或完成运行验收。当前工作树仍须实施并验证：每次实际操作取得本次有效审批、停用卸载不自动修改用户 YAML、默认摘要完整性，以及无上限风险提醒。
+当前实现尚未满足或完成验证的事项，以[设计中的当前实施与验证待办](<docs/design.md#11-当前实施与验证待办>)为准。部署前尤其要核对独立审批、停用卸载时的用户配置写入、默认摘要完整性和无上限风险提醒；不能将目标要求当作已经交付的保证。
 
 核对所用提交及验收结果后再部署，不能把目标描述当作已发布保证。
 
@@ -27,7 +27,7 @@
 
 ## 兼容性
 
-当前声明目标为 dsh `0.2.0-rc.2`：`@deepseek-ai/dsh-llm` 和 `@deepseek-ai/dsh-typert-protocol` 的依赖与 peer 精确锁定该版本，cordis peer 为 `~4.0.4`。不宣称支持全部 `0.2.x`。
+支持的宿主版本和依赖约束统一见[当前兼容基准](<docs/requirements.md#13-当前兼容基准>)。不要将某个目标版本推广为整个版本系列兼容，也不要靠 npm 标签推测依赖是否匹配。
 
 宿主不兼容时可能跳过 bundle，并记录 `skipping profile bundle "dsh-approve-for-me"`。安装宿主依赖显式指定版本，不靠 npm 标签推测。宿主升级后重新验证应答者、模型目录、设置页面、卡片和记录视图；安装成功不等于完整可用。
 
@@ -62,28 +62,24 @@ dsh plugin --profile web add <克隆目录的绝对路径>
 
 配置命名空间为 `approve-for-me`。设置页及宿主 profile 配置作用于同一行；插件不读独立的 `settings.yaml` 分节。
 
-| 设置 | 默认值 | 要点 |
-| --- | --- | --- |
-| `enabled` / `mode` | `true` / `rules` | 规则加LLM；关闭或off不接管 |
-| `trigger.presets` / `trigger.unknown` / `trigger.subagents` | `['auto-approve']` / `skip` / `review` | 主会话按预设，子代理按根会话；空预设表不命中任何已知预设，未知分支仍按unknown设置 |
-| `trigger.auditEverySkip` | `false` | 跳过记录默认按会话和原因降噪，设true逐次记录 |
-| `tools` / `denyPatterns` | `[]` / `[]` | 空工具名单覆盖全部升权；空拒绝清单无文本拦截 |
-| `allowEscalationTo` / `unknownSubject` / `fallback` | `danger-full-access` / `reject` / `reject` | 升权上限、缺操作证据和人工备用处置 |
-| `reviewer.model` / `reviewer.byParentModel` / `reviewer.followParent` | `''` / `{}` / `true` | 模型与档位；按下列四层回退 |
-| `reviewer.timeoutMs` / `human.timeoutMs` / `human.timeoutFrom` | `90000` / `300000` / `request` | 审查零取消时限；人工零立即拒绝；人工时限仅备用通道使用 |
-| `reviewer.maxTokens` / `reviewer.temperature` | `0` / `0` | 零输出预算不传上限，仍受供应商限制；温度0至2且有限 |
-| `reviewer.maxToolSteps` / `reviewer.toolTimeoutMs` | `4` / `5000` | 工具轮次用尽要求直接回答；单工具零不设时限 |
-| `context.maxTranscriptBytes` / `maxEntryBytes` / `maxEntries` / `includeToolResults` | `24576` / `4096` / `40` / `true` | 字节零不裁剪，条数零不取上下文；本次真实参数仍独立送审 |
-| `context.redactPatterns` | 六类敏感形态 | 用户清单整体替换；空表关闭遮蔽，不能识别所有秘密 |
-| `concurrency.max` / `queueMax` / `queueTimeoutMs` | `2` / `8` / `30000` | 全局并发、等待队列容量及等待上限 |
-| `breaker.consecutiveDenials` / `windowSize` / `windowDenials` / `cooldownMs` | `3` / `50` / `10` / `600000` | 拒绝或审查错误达到任一阈值进入冷却 |
-| `ui.inject` / `injectMaxBytes` / `humanCardDuringReview` | `all` / `2048` / `true` | 通知范围、单条预算、审查期间人工卡片 |
-| `ui.trace.capture` / `ownView` / `turnSummary` / `legacyRow` | `summary` / `true` / `true` / `false` | 摘要、自有记录视图、耗时对照、可选近似行 |
-| `ui.trace.maxRecords` / `maxBytes` | `200` / `8192` | 回读窗口、全文单字段预算 |
-| `audit.enabled` / `includePrompt` / `includeRaw` / `maxLineBytes` | `true` / `false` / `false` / `4096` | 默认审计、不采敏感全文 |
-| `language.ui` / `language.agent` | `auto` / `en` | 界面语言与模型文案独立 |
+默认值统一见[配置默认值](<docs/requirements.md#53-配置默认值>)；下表只说明设置用途，不维护第二份默认表。
 
-所有毫秒字段为 `0` 至 `2147483647` 的整数，非法值拒绝加载，不静默缩成短时限。设置草稿非法时不能保存。
+| 设置 | 使用要点 |
+| --- | --- |
+| `enabled`、`mode`、`trigger.*` | 控制接管；空预设表不命中已知预设，未知预设仍按 `trigger.unknown`；子代理按根会话判断 |
+| `trigger.auditEverySkip` | 开启后逐次记录跳过，不降噪 |
+| `tools`、`allowEscalationTo` | 收窄工具和升权范围；空工具名单覆盖全部升权工具 |
+| `denyPatterns`、`unknownSubject`、`fallback` | 拒绝规则、缺操作证据和人工备用处置；规则空清单不作文本拦截 |
+| `reviewer.model`、`reviewer.byParentModel`、`reviewer.followParent` | 选择审查模型与档位，按模型选择规则回退 |
+| `reviewer.timeoutMs`、`human.timeoutMs`、`human.timeoutFrom` | 控制审查及人工等待；审查零取消时限，人工零立即拒绝，两者不同 |
+| `reviewer.maxTokens`、`reviewer.temperature`、`reviewer.maxToolSteps`、`reviewer.toolTimeoutMs` | 控制模型响应和取证；工具轮次用尽要求直接回答；输出预算零不传上限，单工具零不设时限 |
+| `context.*` | 控制上下文取样和脱敏；条数零不取上下文，本次真实参数仍独立送审；清单空表关闭遮蔽 |
+| `concurrency.*`、`breaker.*` | 控制审查并发、排队及持续故障冷却 |
+| `ui.inject`、`ui.injectMaxBytes`、`ui.humanCardDuringReview` | 通知范围、文本预算与审查期间人工卡片 |
+| `ui.trace.*`、`audit.*` | 控制记录视图、保留范围和采集内容；敏感全文按需主动开启 |
+| `language.ui`、`language.agent` | 界面文案与模型文案独立切换 |
+
+合法类型和范围见[配置生效与校验](<docs/requirements.md#52-配置生效与校验>)及[时限](<docs/requirements.md#42-时限>)。非法草稿不能保存，非法加载值不能静默变成默认值。
 
 ### 模型选择与配置更新
 
@@ -124,11 +120,11 @@ dsh plugin --profile web add <克隆目录的绝对路径>
 
 stderr记录操作、接管原因、模型和决策、理由、风险授权、耗时、故障及缺失情况，一次审批可有多条可关联记录。日志裁剪或写失败必须承认不完整，不能将默认补全伪装成模型实际分析。
 
-默认summary保留可复盘摘要，不要求保存提示词、推理文本或原始输出全文；full主动开启才采详情，全部先脱敏后裁剪。模型返回的推理不是判断正确的证明。当前摘要完整性仍须按新合同验证。
+默认summary保留可复盘摘要，不要求保存提示词、推理文本或原始输出全文；full主动开启才采详情，全部先脱敏后裁剪。模型返回的推理不是判断正确的证明。摘要完整性的实施与验证状态见[当前实施与验证待办](<docs/design.md#11-当前实施与验证待办>)。
 
 会话“审查记录”提供列表、详情及“工具总计 = 执行 + 审批”对照；无法关联工具时只显示已知耗时和缺失说明。插件不修改宿主原生轨迹的标签、位置或工具段跨度；legacyRow仅为可选近似行，不能冒充原生审批记录。
 
-记录在重启后按窗口回读；单文件超过窗口四倍时保留最近窗口，默认最多50个会话文件。写失败可能仅留内存，重启会丢失；多实例共享同一记录目录不受支持。
+记录在重启后按窗口回读，保留范围统一见[记录保留要求](<docs/requirements.md#73-自有视图耗时与保留范围>)。写失败可能仅留内存，重启会丢失；多实例共享同一记录目录不受支持。
 
 ## 卸载与已知风险
 
@@ -141,7 +137,7 @@ dsh plugin --profile web remove dsh-approve-for-me
 - 宿主设置可能把含“自动审批”的预设表写入用户profile配置，即使默认选择的是标准档也可能保留插件条目。
 - 卸载后残留条目可能继续显示；默认选择失效还可能使权限服务加载失败并影响会话。
 - 当前目标不由插件解析、改写或自动清理用户YAML，避免损坏用户自定义内容。不提供自动清理命令，也不宣称宿主已有完整恢复支持；等待宿主后续兼容处理并重新核验。
-- 本轮代码尚未完成该目标的实施与验证，不能因文档更新就认为现有停用卸载路径不会写用户配置。
+- 当前停用卸载实现尚待核对，不应假定它已经符合用户配置保全目标；部署前检查[当前实施与验证待办](<docs/design.md#11-当前实施与验证待办>)。
 
 插件数据在 `$DSH_HOME/approve-for-me/`：会话模型选择及审查记录默认保留，不随卸载删除。它们是运行数据，不等同于部署副作用。
 
