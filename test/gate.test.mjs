@@ -120,7 +120,10 @@ function makeRt(cfg, options = {}) {
       const controller = new AbortController();
       let projected;
       if (canWithdraw) {
-        projected = original === undefined ? controller.signal : AbortSignal.any([original, controller.signal]);
+        // null 与 undefined 同路径（与真实 withdraw 一致；AbortSignal.any 对 null 成员抛 TypeError）。
+        projected = original === undefined || original === null
+          ? controller.signal
+          : AbortSignal.any([original, controller.signal]);
         request.signal = projected;
       }
       return {
