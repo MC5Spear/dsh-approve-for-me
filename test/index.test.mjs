@@ -760,6 +760,43 @@ test('§4.1 配置不可读时逃逸出口自含：不外抛、恰一条结算�
   }
 });
 
+test('§4.1 在飞审查期间配置变不可读：审查记录仍落盘（redactText 回退默认清单，不整条丢失）', async (t) => {
+  const { mkdtempSync, readFileSync, readdirSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const host = await loadHost();
+  if (host === undefined) {
+    t.skip('宿主包不可解析（离线环境）');
+    return;
+  }
+  const previousHome = process.env.DSH_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'afm-redact-mid-'));
+  process.env.DSH_HOME = home;
+  try {
+    // 流替身延迟 150ms 后抛 provider 500：审查照常产出 error 判定；延迟期间把生效配置变不可读
+    // （volatile 旁路写 NaN）——redactText 的读取必须防抛并回退默认清单，审查记录不得整条丢失。
+    const wired = await wiredEnv({ behavior: { delay: 150 } });
+    if (wired === undefined) {
+      t.skip('宿主包不可解析（离线环境）');
+      return;
+    }
+    const promise = wired.answerer(wired.makeRequest('c1'), () => new Promise(() => {}));
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    wired.config.reviewer = { ...wired.config.reviewer, temperature: Number.NaN };
+    assert.equal(await promise, 'rejected');
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const dir = join(home, 'approve-for-me', 'reviews');
+    const rows = readdirSync(dir).flatMap((file) =>
+      readFileSync(join(dir, file), 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line)));
+    assert.ok(rows.some((row) => row.kind === 'review'), '审查记录必须照常落盘（不因配置不可读整条丢失）');
+    assert.ok(rows.some((row) => row.kind === 'settle'), '结算记录照常落盘');
+  } finally {
+    if (previousHome === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = previousHome;
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test('§5.1/§4.2 同一请求对象再派发：收尾恢复原始信号，再次到达按新请求处理（完整审查）', async (t) => {
   const { mkdtempSync, readFileSync, readdirSync, rmSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');

@@ -1258,6 +1258,51 @@ test('§5.3 中止侧回调抛错：在飞审查信号不带超时标记（不�
   assert.notEqual(signal.reason.message, REVIEW_TIMEOUT_ABORT_MESSAGE, '中止侧回调抛错不冒用超时标记（reviewer 按被替代跳过）');
 });
 
+test('§5.3 计数口径端到端：审查计时回调抛错与真实超时同形——两次计数后第三次被冷却拦截', async () => {
+  // 公共审批流水线注入不了回调抛错（设计 §5.3），故在 gate 层直驱：fake rt 的计时器注入抛错，
+  // 审查侧用最小镜像把 gate 的中止标记接到**真 scheduler**（lib/scheduler.js）上——
+  // 镜像的仅是 index.js rt.review 的调度包装（L82-96）与 reviewer 的中止分类（L399-411），
+  // 两处各有真接线测试（R48⑤／reviewer 用例）；本用例验证的是「两种情形在计数上同权」这一判据。
+  for (const [label, throwMode] of [['计时回调抛错', true], ['真实超时', false]]) {
+    const scheduler = createScheduler({ breaker: { consecutiveDenials: 2, windowDenials: 99, cooldownMs: 600000 } });
+    const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 40 } }), {
+      ...(throwMode ? { timerFireThrows: 'review' } : {}),
+      reviewDelayMs: 250,
+    });
+    const baseReview = rt.review;
+    rt.review = async (req, located, pre, cfg, opts) => {
+      const sessionId = typeof req?.agent?.session?.id === 'string' ? req.agent.session.id : '-';
+      const result = await scheduler.run({ sessionId, callId: req?.callId }, async () => {
+        const value = await baseReview(req, located, pre, cfg, opts);
+        const signal = opts?.signal;
+        if (signal?.aborted === true) {
+          // 镜像 reviewer：非超时标记的中止＝被替代（不计数），超时标记照常计数。
+          const superseded = !(signal.reason instanceof Error && signal.reason.message === REVIEW_TIMEOUT_ABORT_MESSAGE);
+          const classified = { decision: 'error', reason: 'aborted', toolCalls: 0, ...(superseded ? { superseded: true } : {}) };
+          if (classified.superseded !== true) scheduler.record(classified.decision);
+          return classified;
+        }
+        return value;
+      });
+      if (result.ok !== true) {
+        const reason = `审查未执行：${result.reason}`;
+        return { decision: 'error', reason, toolCalls: 0, fields: { degraded: result.reason, reason }, stage: 'queue' };
+      }
+      return result.value;
+    };
+    // 前两次到达：各自完整结算（第 2 次的审查排队等第 1 次释放——每会话串行 1）。
+    for (let index = 0; index < 2; index += 1) {
+      assert.equal(await onApprovalRequest(request(), next, rt), 'rejected', `${label}：第 ${index + 1} 次到达按拒绝结算`);
+    }
+    for (let i = 0; i < 150 && scheduler.state().breakerOpen !== true; i += 1) await delay(20);
+    assert.equal(scheduler.state().breakerOpen, true, `${label}：两次计数后冷却打开`);
+    // 第三次到达：冷却拦截，审查不再发起（信号捕获数停在 2），结算点明冷却。
+    assert.equal(await onApprovalRequest(request(), next, rt), 'rejected');
+    assert.equal(state.reviewSignals.length, 2, `${label}：第三次审查未执行`);
+    assert.match(state.settles.at(-1).reason, /breaker-open/u, `${label}：第三次结算点明冷却`);
+  }
+});
+
 // ── §4.2 收尾恢复请求信号（ISS-7）────────────────────────────────────────
 
 test('§4.2 收尾恢复：结算后请求对象的信号回到原始值，投影不残留', async () => {
@@ -1332,16 +1377,17 @@ test('§4.1 gate catch 自含：生效配置读取抛错不外抛，语言回落
   assert.ok(errorRow, '「审查器内部错误」审计行必须照写');
 });
 
-test('§4.1 preset 读取抛错不外抛：结算记录照常落盘，preset 字段缺失', async () => {
+test('§4.1 preset 读取抛错不外抛：两处读取（审查 opts 与结算记录）各自防抛，审查照常执行', async () => {
   const { rt, state, next } = makeRt(baseConfig());
   rt.preset = () => {
     throw new Error('preset boom');
   };
-  // preset 在审查调用 opts 与结算记录两处被读取；两处都必须防抛——
-  // 修复前 catch 分支的结算记录读取直接把异常抛出 onApprovalRequest。
+  // preset 在审查调用 opts（gate.js 主流程）与结算记录两处被读取，两处都必须防抛：
+  // 只防结算一处时审查仍被中止（rejected/error 且零审查发起），本用例以审查发起数区分两条路径。
   const outcome = await onApprovalRequest(request(), next, rt);
-  assert.equal(outcome, 'rejected');
+  assert.equal(state.reviewSignals.length, 1, 'preset 读取失败不得中止审查（审查照常发起）');
+  assert.equal(outcome, 'allowed-once', '结论按默认判定放行（未被翻成内部异常拒绝）');
   const settle = state.settles[0];
-  assertSettleShape(settle, { outcome: 'rejected', source: 'error' });
-  assert.equal(settle.preset, undefined, 'preset 读取抛错：字段明确缺失');
+  assertSettleShape(settle, { outcome: 'allowed-once', source: 'llm' });
+  assert.equal(settle.preset, undefined, '结算记录的 preset 读取防抛：字段缺失');
 });
