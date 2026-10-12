@@ -783,7 +783,10 @@ test('§4.1 在飞审查期间配置变不可读：审查记录仍落盘（redac
       return;
     }
     const promise = wired.answerer(wired.makeRequest('c1'), () => new Promise(() => {}));
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    // 轮询确认审查已发起（流已被调用）再突变配置——比固定延时更能根除慢机偶红。
+    for (let i = 0; i < 100 && wired.state.streamCalls < 1; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
     wired.config.reviewer = { ...wired.config.reviewer, temperature: Number.NaN };
     assert.equal(await promise, 'rejected');
     await new Promise((resolve) => setTimeout(resolve, 150));
@@ -823,7 +826,10 @@ test('§4.2 同一性守卫（真接线）：在飞期间信号被第三方改�
     const controller = new AbortController();
     const req = wired.makeRequest('c1', controller.signal);
     const promise = wired.answerer(req, () => new Promise(() => {}));
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    // 轮询确认审查已发起（流已被调用）再改写信号——比固定延时更能根除慢机偶红。
+    for (let i = 0; i < 100 && wired.state.streamCalls < 1; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
     // 审查在飞时，后续到达的审批或宿主改写了请求对象的信号（真实 withdraw 的守卫场景）。
     const sentinel = new AbortController().signal;
     req.signal = sentinel;
