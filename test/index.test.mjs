@@ -761,7 +761,7 @@ test('§4.1 配置不可读时逃逸出口自含：不外抛、恰一条结算�
 });
 
 test('§5.1/§4.2 同一请求对象再派发：收尾恢复原始信号，再次到达按新请求处理（完整审查）', async (t) => {
-  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { mkdtempSync, readFileSync, readdirSync, rmSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const host = await loadHost();
@@ -791,6 +791,17 @@ test('§5.1/§4.2 同一请求对象再派发：收尾恢复原始信号，再�
     const second = await wired.answerer(req, next);
     assert.equal(second, 'rejected', '再次到达走完整审查并按结论结算（不是 cancelled(signal)）');
     assert.ok(wired.state.streamCalls > callsBefore, '再次到达重新发起模型流');
+    // 判据补全：两次到达各落一条结算记录（再次到达不是复用首次的记录）。
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const dir = join(home, 'approve-for-me', 'reviews');
+    const rows = readdirSync(dir).flatMap((file) =>
+      readFileSync(join(dir, file), 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line)));
+    const settles = rows.filter((row) => row.kind === 'settle');
+    assert.equal(settles.length, 2, '两次到达各落一条结算记录');
+    assert.equal(settles[0].outcome, 'rejected');
+    assert.equal(settles[1].outcome, 'rejected');
+    assert.equal(settles[1].source, 'llm', '第二条按完整审查的结论结算（非 signal 取消）');
+    assert.notEqual(settles[0].approvalId, settles[1].approvalId, '两次到达是两个审批实例');
   } finally {
     if (previousHome === undefined) delete process.env.DSH_HOME;
     else process.env.DSH_HOME = previousHome;
