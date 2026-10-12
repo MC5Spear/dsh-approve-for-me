@@ -32,24 +32,38 @@ test('R37② 毫秒字段 0 是合法值（各字段 0 语义：不设超时/立
   }
 });
 
-test('R37③ temperature：0 与 2 通过、-0.1 与 2.1 与 NaN 与 Infinity 拒绝（装载路径，ISS-1 移位）', () => {
+test('R37③ temperature：0 与 2 通过、-0.1 与 2.1 拒绝（schema 界限）；非有限数双层拒绝（§6.1）', () => {
   for (const good of [0, 2, 1.5]) {
     assert.equal(normalizeConfig(Config({ reviewer: { temperature: good } })).reviewer.temperature, good, `${good} 应通过`);
   }
-  // ISS-1 修复口径：transform 已从 Config 树移除（客户端设置通道无法序列化往返），
-  // 拒止分两层——界外仍由 schema 拒（Config 直调，加载即失败）；NaN/Infinity 能骗过
-  // schemastery 的 min/max 比较（比较恒 false，R37 立项依据），有限性在装载路径
-  // normalizeConfig 显式拒止。
+  // 双层防线（§6.1）：schema 层区间边界＋退化步长拒非有限数（调用即拒，见下一条用例）；
+  // 读取路径 normalizeConfig 的有限性检查保留——volatile 写路径原地更新引用、不过 schema 校验，
+  // 程序化写入的非法值仍由读取检查拒绝。
   for (const bound of [-0.1, 2.1]) {
     assert.throws(() => Config({ reviewer: { temperature: bound } }), `${bound} 必须被 schema 界限拒绝`);
   }
   for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+    assert.throws(() => Config({ reviewer: { temperature: bad } }), `${bad} 必须在 schema 调用即拒`);
     assert.throws(() => normalizeConfig({ reviewer: { temperature: bad } }), `${bad} 必须在装载时拒绝`);
   }
   // 缺省 0 且 volatile 元数据保留（热改通道不因字段直陈丢失）。
   const raw = Config({});
   assert.equal(isVolatile(raw.reviewer.temperature), true, '缺省仍应是 volatile 引用');
   assert.equal(normalizeConfig(raw).reviewer.temperature, 0);
+});
+
+test('温度 schema 层退化步长：序列化往返后拦截保留、有限值零损失（§6.1，ISS-1 契约）', () => {
+  // 退化步长 Number.MIN_VALUE＝2^-1074：一切有限双精度数都是它的整数倍，取模恰为 0——
+  // 不排除任何有限值，只把取模为 NaN 的非有限数交给整除校验拒绝（±Infinity 另被区间边界拒）。
+  const s1 = new z(JSON.parse(JSON.stringify(Config.toJSON())));
+  const s2 = new z(JSON.parse(JSON.stringify(s1.toJSON())));
+  for (const [hop, schema] of [['one-hop', s1], ['two-hop', s2]]) {
+    assert.throws(() => schema({ reviewer: { temperature: Number.NaN } }), `${hop}：往返后 NaN 仍拒`);
+    assert.throws(() => schema({ reviewer: { temperature: Number.POSITIVE_INFINITY } }), `${hop}：往返后 +Infinity 仍拒`);
+    for (const good of [0, 0.7, 1.5, 1e-300, 2]) {
+      assert.doesNotThrow(() => schema({ reviewer: { temperature: good } }), `${hop}：有限值 ${good} 零损失`);
+    }
+  }
 });
 
 test('R37④ rt.timer 的入参上界注释在位（config 层保证 ≤ 2^31-1）', () => {

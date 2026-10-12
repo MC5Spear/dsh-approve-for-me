@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { agentLangOf, allowText, errorText, guardNext, onApprovalRequest, rejectText, timeoutText } from '../lib/gate.js';
+import { agentLangOf, allowText, errorText, guardNext, onApprovalRequest, rejectText, REVIEW_SUPERSEDED, REVIEW_TIMEOUT_ABORT_MESSAGE, timeoutText } from '../lib/gate.js';
 import { createScheduler } from '../lib/scheduler.js';
 import { DEFAULT_DENY_PATTERNS } from '../lib/policy.js';
 
@@ -19,7 +19,7 @@ function baseConfig(overrides = {}) {
 
 /** 构造一次 gate 调用的运行时契约与可观测状态。 */
 function makeRt(cfg, options = {}) {
-  const state = { nextCalls: 0, nextResolvers: [], nextRejectors: [], injections: [], audits: [], timers: [], cancels: [], aborts: [], pending: [], settles: [] };
+  const state = { nextCalls: 0, nextResolvers: [], nextRejectors: [], injections: [], audits: [], timers: [], cancels: [], aborts: [], pending: [], settles: [], reviewSignals: [] };
   const rt = {
     nextId: () => 'req-1',
     mode: () => options.mode ?? 'auto',
@@ -43,6 +43,8 @@ function makeRt(cfg, options = {}) {
       return options.pre ?? { action: 'review', why: 'ok', fields: { action: 'review', mode: 'danger-full-access', tool: 'pwsh' } };
     },
     async review(_request, _located, _pre, _cfg, opts) {
+      // §5.3 计数口径测试缝：捕获传入的在飞审查信号，供断言中止标记（超时/被替代）。
+      state.reviewSignals.push(opts?.signal);
       if (options.reviewDelayMs !== undefined) await delay(options.reviewDelayMs);
       if (options.reviewThrows === true) throw new Error('review exploded');
       // 测试缝（R39 端到端链）：真实审查器收尾时写 phase=review 审计行且带 late 观测（reviewer.js:345 同形）。
@@ -111,10 +113,16 @@ function makeRt(cfg, options = {}) {
       return entry;
     },
     withdraw(request) {
+      // 镜像真实 withdraw（lib/index.js）：投影信号捕获＋同一性守卫恢复——gate 的收尾恢复
+      // 依赖这两点，假实现必须同形，否则 §4.2 用例测的是假实现自己。
       const original = request.signal;
       const canWithdraw = !Object.isFrozen(request);
       const controller = new AbortController();
-      if (canWithdraw) request.signal = original === undefined ? controller.signal : AbortSignal.any([original, controller.signal]);
+      let projected;
+      if (canWithdraw) {
+        projected = original === undefined ? controller.signal : AbortSignal.any([original, controller.signal]);
+        request.signal = projected;
+      }
       return {
         signal: controller.signal,
         original,
@@ -124,7 +132,7 @@ function makeRt(cfg, options = {}) {
           controller.abort(reason);
         },
         restore() {
-          if (canWithdraw) request.signal = original;
+          if (canWithdraw && request.signal === projected) request.signal = original;
         },
       };
     },
@@ -1199,4 +1207,141 @@ test('结算记录：onSettle 抛错不影响结算结果', async () => {
   const outcome = await onApprovalRequest(request(), next, rt);
   assert.equal(outcome, 'allowed-once');
   assert.equal(state.settles.length, 0);
+});
+
+// ── §5.3 计数口径：计时回调抛错的中止标记（ISS-8，裁定 A）──────────────────
+// 两种情形的计数差异全部由中止标记承载：审查环节的计时回调抛错复用超时标记
+// （reviewer 零改动、按超时计数）；人工时限环节与中止侧维持被替代标记（不计数）。
+
+test('§5.3 审查计时回调抛错：在飞审查信号按超时标记中止（与真实超时同权计数）', async () => {
+  // 时距拉大（40ms 计时 vs 5000ms 审查）：慢机上竞速不会拼错时序。
+  const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 40 } }), {
+    timerFireThrows: 'review',
+    reviewDelayMs: 5000,
+  });
+  const outcome = await onApprovalRequest(request(), next, rt);
+  assert.equal(outcome, 'rejected');
+  const signal = state.reviewSignals[0];
+  assert.equal(signal.aborted, true, '回调抛错结算后审查信号中止');
+  assert.equal(
+    signal.reason.message,
+    REVIEW_TIMEOUT_ABORT_MESSAGE,
+    '中止标记＝超时标记：reviewer 按超时计数，不按被替代跳过',
+  );
+});
+
+test('§5.3 人工计时回调抛错：在飞审查信号按被替代标记中止（不计数）', async () => {
+  const cfg = baseConfig({
+    fallback: 'ask',
+    reviewer: { timeoutMs: 0 },
+    human: { timeoutMs: 15, timeoutFrom: 'handoff' },
+  });
+  const { rt, state, next } = makeRt(cfg, {
+    timerFireThrows: true,
+    reviewDelayMs: 5000,
+    verdict: { decision: 'deny', risk: 'high', authorization: 'low', reason: 'risky', toolCalls: 0, fields: { risk: 'high', auth: 'low', tools: 0, degraded: 'none' } },
+  });
+  const outcome = await onApprovalRequest(request(), next, rt);
+  assert.equal(outcome, 'rejected');
+  assert.equal(state.reviewSignals[0].reason, REVIEW_SUPERSEDED, '人工环节的回调抛错＝他路先结算（不计数）');
+});
+
+test('§5.3 中止侧回调抛错：在飞审查信号不带超时标记（不计数）', async () => {
+  const { rt, state, next } = makeRt(baseConfig(), { abortFireThrows: true, reviewDelayMs: 5000 });
+  const controller = new AbortController();
+  const promise = onApprovalRequest(request(controller.signal), next, rt);
+  await tick();
+  controller.abort(new Error('user cancel'));
+  assert.equal(await promise, 'cancelled');
+  const signal = state.reviewSignals[0];
+  assert.equal(signal.aborted, true);
+  assert.notEqual(signal.reason.message, REVIEW_TIMEOUT_ABORT_MESSAGE, '中止侧回调抛错不冒用超时标记（reviewer 按被替代跳过）');
+});
+
+// ── §4.2 收尾恢复请求信号（ISS-7）────────────────────────────────────────
+
+test('§4.2 收尾恢复：结算后请求对象的信号回到原始值，投影不残留', async () => {
+  const { rt, state, next } = makeRt(baseConfig());
+  const controller = new AbortController();
+  const req = request(controller.signal);
+  const outcome = await onApprovalRequest(req, next, rt);
+  assert.equal(outcome, 'allowed-once');
+  assert.equal(req.signal, controller.signal, '结算后信号恢复为进入时的原始值（同一性，非新信号）');
+  assert.equal(state.pending.filter((row) => row.op === 'clear').length, 1, '卡片状态照常清理');
+});
+
+test('§4.2 同一性守卫：审查在飞期间信号被第三方改写 → 收尾不覆盖新值', async () => {
+  const { rt, state, next } = makeRt(baseConfig(), { reviewDelayMs: 80 });
+  const controller = new AbortController();
+  const req = request(controller.signal);
+  const promise = onApprovalRequest(req, next, rt);
+  await tick();
+  // 审查在飞时，后续到达的审批或宿主改写了请求对象的信号。
+  const sentinel = new AbortController().signal;
+  req.signal = sentinel;
+  assert.equal(await promise, 'allowed-once');
+  assert.equal(req.signal, sentinel, '收尾恢复跳过：不把第三方写入的信号覆盖回旧值');
+});
+
+test('§4.2 冻结请求：无投影写入、无恢复动作，审批照常完成', async () => {
+  const { rt, state, next } = makeRt(baseConfig());
+  const controller = new AbortController();
+  const req = Object.freeze(request(controller.signal));
+  const outcome = await onApprovalRequest(req, next, rt);
+  assert.equal(outcome, 'allowed-once');
+  assert.equal(req.signal, controller.signal, '冻结对象的信号从不被改写');
+});
+
+test('§4.2 恢复自身失败：只留观测记录，不中断其余清理与结算', async () => {
+  const { rt, state, next } = makeRt(baseConfig());
+  const base = rt.withdraw;
+  rt.withdraw = (req) => {
+    const handle = base(req);
+    return { ...handle, restore() { throw new Error('restore boom'); } };
+  };
+  const outcome = await onApprovalRequest(request(), next, rt);
+  assert.equal(outcome, 'allowed-once', '恢复失败不影响结算结果');
+  const row = state.audits.find((entry) => entry.phase === 'error' && entry.source === 'signal');
+  assert.ok(row, '恢复失败必须留下观测记录');
+  assert.match(row.reason, /收尾恢复请求信号失败：Error: restore boom/u);
+  assert.equal(state.pending.filter((entry) => entry.op === 'clear').length, 1, '卡片状态清理照常执行');
+});
+
+// ── §4.1 逃逸出口的生效配置读取防抛（ISS-6）──────────────────────────────
+
+test('§4.1 gate catch 自含：生效配置读取抛错不外抛，语言回落 en，注入走通道故障模板', async () => {
+  const { rt, state, next } = makeRt(baseConfig()); // language zh：读取抛错时应回落 en
+  rt.configFor = () => {
+    throw new Error('cfg boom');
+  };
+  rt.cfg = () => {
+    throw new Error('cfg read boom');
+  };
+  // 修复前：catch 分支的 rt.cfg?.() 把异常抛出 onApprovalRequest（I2 承接层自身外逃）；
+  // 修复后：读取按未取得配置处理，语言回落 en、注入上限回落 2048，fail-closed 照常。
+  const outcome = await onApprovalRequest(request(), next, rt);
+  assert.equal(outcome, 'rejected');
+  assert.equal(state.injections.length, 1, '逃逸仍注入（通道故障模板）');
+  assert.equal(
+    state.injections[0].split('\n')[0],
+    '[approve-for-me] Automatic approval channel failure; this escalation request is treated as rejected.',
+    '配置不可读时语言回落 en（zh 配置不生效）',
+  );
+  assert.match(state.injections[0], /Reason: reviewer internal error: Error: cfg boom/u);
+  const errorRow = state.audits.find((row) => row.phase === 'error');
+  assert.ok(errorRow, '「审查器内部错误」审计行必须照写');
+});
+
+test('§4.1 preset 读取抛错不外抛：结算记录照常落盘，preset 字段缺失', async () => {
+  const { rt, state, next } = makeRt(baseConfig());
+  rt.preset = () => {
+    throw new Error('preset boom');
+  };
+  // preset 在审查调用 opts 与结算记录两处被读取；两处都必须防抛——
+  // 修复前 catch 分支的结算记录读取直接把异常抛出 onApprovalRequest。
+  const outcome = await onApprovalRequest(request(), next, rt);
+  assert.equal(outcome, 'rejected');
+  const settle = state.settles[0];
+  assertSettleShape(settle, { outcome: 'rejected', source: 'error' });
+  assert.equal(settle.preset, undefined, 'preset 读取抛错：字段明确缺失');
 });

@@ -172,3 +172,62 @@ test('R51③ 误伤范围判据翻转钉住（§3.5 判据③）：默认进审�
     assert.equal(explicit.action, 'deny', `显式清单应恢复 deny：${command}`);
   }
 });
+
+// ── 规则扫描次序与 unknownSubject 交叉（§3.5）──────────────────────────────
+// 前置条件＝回查参数无命令类键（即无法辨认实际操作）：规则扫描先于主体判定执行，
+// 其他键的载荷同样过检；命中即直拒（不带 command 降级标记），未命中才按 unknownSubject 处置。
+
+test('§3.5 交叉表：无命令类键载荷命中规则 → deny 带命中键路径与模式，不带 command 降级标记（两种取值同形）', () => {
+  for (const unknownSubject of ['reject', 'review']) {
+    const verdict = screen(
+      escalation(),
+      located({ env: { PAYLOAD: 'rm -rf /' } }),
+      { ...baseConfig, unknownSubject },
+    );
+    assert.equal(verdict.action, 'deny', `unknownSubject=${unknownSubject}：命中即直拒`);
+    assert.match(verdict.why, /deny pattern/u);
+    assert.match(verdict.reason, /键 "env\.PAYLOAD"/u, '拒绝理由带命中键路径');
+    assert.match(verdict.reason, /命中模式/u, '拒绝理由带命中规则');
+    assert.equal(verdict.fields.degraded, undefined, '规则命中的拒绝不置 command 降级标记');
+  }
+});
+
+test('§3.5 交叉表：无命令类键载荷未命中 → 按 unknownSubject 处置，两分支都带 command 降级标记', () => {
+  const rejected = screen(escalation(), located({ env: { PAYLOAD: 'echo hi' } }), baseConfig);
+  assert.equal(rejected.action, 'deny');
+  assert.equal(rejected.fields.degraded, 'command', 'reject 取值：拒绝且带缺证标记');
+
+  const reviewed = screen(escalation(), located({ env: { PAYLOAD: 'echo hi' } }), { ...baseConfig, unknownSubject: 'review' });
+  assert.equal(reviewed.action, 'review');
+  assert.equal(reviewed.fields.degraded, 'command', 'review 取值：携缺证标记进入审查');
+});
+
+test('§3.5 回查失败无值可扫：按 unknownSubject 处置，非空规则清单不改变结果', () => {
+  const rejected = screen(escalation(), null, baseConfig);
+  assert.equal(rejected.action, 'deny');
+  assert.equal(rejected.fields.degraded, 'command');
+
+  const reviewed = screen(escalation(), null, { ...baseConfig, unknownSubject: 'review' });
+  assert.equal(reviewed.action, 'review');
+  assert.equal(reviewed.fields.degraded, 'command');
+});
+
+test('§3.5 次序钉住：升权上限拒绝先于规则扫描（超上限的危险命令按上限拒，不按规则拒）', () => {
+  const verdict = screen(
+    escalation('danger-full-access'),
+    located({ command: 'rm -rf /' }),
+    { ...baseConfig, allowEscalationTo: 'workspace-write' },
+  );
+  assert.equal(verdict.action, 'deny');
+  assert.match(verdict.why, /exceeds allowEscalationTo/u, '上限判定优先，不落规则命中');
+});
+
+test('§3.5 次序钉住：mode=off 不运行规则扫描（危险命令仍 skip）', () => {
+  assert.equal(screen(escalation(), located({ command: 'rm -rf /' }), { ...baseConfig, mode: 'off' }).action, 'skip');
+});
+
+test('§3.5 键路径形态：嵌套数组下标（点分与下标组合）', () => {
+  const verdict = screen(escalation(), located({ command: 'ls', notes: ['shutdown /s'] }), baseConfig);
+  assert.equal(verdict.action, 'deny');
+  assert.match(verdict.reason, /notes\[0\]/u);
+});

@@ -285,7 +285,8 @@ test('normalizeConfig 深度解包 volatile 引用（要求 schemastery ≥3.18.
 /**
  * 构造一次「应答者逃逸异常」请求：`request.agent.session.id` 的 getter 抛错。
  * gate.js 在 `try` 之外读取该字段（`const sessionId = request?.agent?.session?.id`），
- * 异常因此穿透 I2 承接层、直达 index.js 应答者最外层 catch——即 `gate.escape.body` 注入路径。
+ * 异常因此穿透 I2 承接层、直达 index.js 应答者最外层 catch——即逃逸通知路径
+ * （通道故障模板＋`gate.escape.reason` 原因段，设计 §4.4）。
  * （不能改 `crypto.randomUUID` 造逃逸：注入消息工厂 `createUserMessage` 内部也用它。）
  * @param {object[]} injected - 收集注入消息的数组。
  * @returns {object} 审批请求。
@@ -320,28 +321,30 @@ async function runEscape(language) {
   return { outcome, texts: injected.map((message) => message.content[0].text), nextCalls };
 }
 
-test('逃逸异常注入文本按 language.agent 切换：zh 中文整句、en 英文整句（G1/N1 两语言行为差异）', async (t) => {
+test('逃逸通知走通道故障模板并按 language.agent 切换：zh 中文整句、en 英文整句（G1/N1 两语言行为差异；§4.4）', async (t) => {
   const host = await loadHost();
   if (host === undefined) {
     t.skip('宿主包不可解析（离线环境）');
     return;
   }
-  // zh 档：首行与关键字按字节核对（口径同 requirements R28 判据②），fail-closed 为 rejected。
+  // zh 档：首行与关键字按字节核对（口径同 requirements R28 判据②），fail-closed 为 rejected；
+  // 首行是通道故障模板头（§4.4：逃逸通知与内部异常通知同构，不另维护逃逸专用正文）。
   const zh = await runEscape({ agent: 'zh' });
   assert.equal(zh.outcome, 'rejected');
   assert.equal(zh.nextCalls, 0, '逃逸发生在 next() 之前');
   assert.equal(zh.texts.length, 1);
-  assert.equal(zh.texts[0].split('\n')[0], '[approve-for-me] 本次升权请求被拒绝。');
+  assert.equal(zh.texts[0].split('\n')[0], '[approve-for-me] 自动审批通道故障，本次升权请求按拒绝处理。');
   assert.match(zh.texts[0], /原因：应答者逃逸异常：Error: session id boom/u);
   // en 档：同一逃逸异常下注入英文整句，首行字节核对，且不得含 zh 档短语。
   const en = await runEscape({ agent: 'en' });
   assert.equal(en.outcome, 'rejected');
   assert.equal(en.texts.length, 1);
-  assert.equal(en.texts[0].split('\n')[0], '[approve-for-me] This escalation request was rejected.');
+  assert.equal(en.texts[0].split('\n')[0], '[approve-for-me] Automatic approval channel failure; this escalation request is treated as rejected.');
   assert.match(en.texts[0], /Reason: an exception escaped the answerer: Error: session id boom/u);
-  assert.doesNotMatch(en.texts[0], /本次升权请求被拒绝/u, 'en 档不得残留 zh 档短语');
+  assert.doesNotMatch(en.texts[0], /自动审批通道故障/u, 'en 档不得残留 zh 档短语');
   // 变红判据：若逃逸注入退回硬编码 zh（N1 修正前形态），en 档首行等值断言与
-  // doesNotMatch 双红；若 language.agent 不再驱动注入语言（两档同文），两首行断言其一必红。
+  // doesNotMatch 双红；若 language.agent 不再驱动注入语言（两档同文），两首行断言其一必红；
+  // 若逃逸通知退回专用拒绝正文（缺通道故障要素），两首行断言双红。
 });
 
 test('退役静态扫描：源码零补丁档位/旧宿主侧残留（设计 §8.5 判据）', async () => {
@@ -497,7 +500,7 @@ async function wiredEnv(options = {}) {
     reason: 'escalate sandbox to danger-full-access: x',
     ...(signal === undefined ? {} : { signal }),
   });
-  return { host, env, state, answerer, makeRequest };
+  return { host, env, state, answerer, makeRequest, config };
 }
 
 test('R48⑤ 真接线：有机 error ×3 打开冷却，第 4 个请求零流调用并注入通道故障＋breaker-open', async (t) => {
@@ -697,6 +700,98 @@ test('GAP-02 真接线：装载→停用/卸载全程不解析、不改写用户
     assert.doesNotMatch(written.join(''), /预设残留防护/u, '不得再出现备用清理的审计动作');
   } finally {
     process.stderr.write = original;
+    if (previousHome === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = previousHome;
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+// ── ISS-6/ISS-7：配置不可读的逃逸出口与同一对象再派发（真接线） ─────────────
+
+test('§4.1 配置不可读时逃逸出口自含：不外抛、恰一条结算记录、审计行照写、通知走通道故障模板（en 回退）', async (t) => {
+  const { mkdtempSync, readFileSync, readdirSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const host = await loadHost();
+  if (host === undefined) {
+    t.skip('宿主包不可解析（离线环境）');
+    return;
+  }
+  const previousHome = process.env.DSH_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'afm-p05b-unit-'));
+  process.env.DSH_HOME = home;
+  const written = [];
+  const original = process.stderr.write;
+  process.stderr.write = (chunk) => { written.push(String(chunk)); return true; };
+  try {
+    const wired = await wiredEnv();
+    if (wired === undefined) {
+      t.skip('宿主包不可解析（离线环境）');
+      return;
+    }
+    // volatile 旁路：apply 后程序化写入 NaN（不过 schema 校验），生效配置此后每读即抛。
+    wired.config.reviewer = { ...wired.config.reviewer, temperature: Number.NaN };
+    const outcome = await wired.answerer(wired.makeRequest('c1'), () => new Promise(() => {}));
+    assert.equal(outcome, 'rejected', '配置不可读也 fail-closed 为拒绝，不外抛');
+    assert.equal(wired.state.streamCalls, 0, '配置不可读：审查未发起');
+    const text = wired.env.injected[0].content[0].text;
+    assert.equal(
+      text.split('\n')[0],
+      '[approve-for-me] Automatic approval channel failure; this escalation request is treated as rejected.',
+      '配置不可读时语言回落 en（zh 配置不生效）',
+    );
+    assert.match(text, /Reason: reviewer internal error/u);
+    assert.match(written.join(''), /审查器内部错误/u, '审计行照写');
+    // 恰一条结算记录（默认采集档继续落盘；preset 字段因读取失败而缺失）。
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const dir = join(home, 'approve-for-me', 'reviews');
+    const rows = readdirSync(dir).flatMap((file) =>
+      readFileSync(join(dir, file), 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line)));
+    const settles = rows.filter((row) => row.kind === 'settle');
+    assert.equal(settles.length, 1, '恰一条结算记录');
+    assert.equal(settles[0].outcome, 'rejected');
+    assert.equal(settles[0].source, 'error');
+    assert.equal(settles[0].preset, undefined, 'preset 读取失败：字段缺失');
+  } finally {
+    process.stderr.write = original;
+    if (previousHome === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = previousHome;
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('§5.1/§4.2 同一请求对象再派发：收尾恢复原始信号，再次到达按新请求处理（完整审查）', async (t) => {
+  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const host = await loadHost();
+  if (host === undefined) {
+    t.skip('宿主包不可解析（离线环境）');
+    return;
+  }
+  const previousHome = process.env.DSH_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'afm-p06e-unit-'));
+  process.env.DSH_HOME = home;
+  try {
+    const wired = await wiredEnv();
+    if (wired === undefined) {
+      t.skip('宿主包不可解析（离线环境）');
+      return;
+    }
+    const controller = new AbortController();
+    const req = wired.makeRequest('c1', controller.signal);
+    const next = () => new Promise(() => {});
+    // 首次到达：provider 500 → error 判定 → rejected；结算后投影不残留。
+    const first = await wired.answerer(req, next);
+    assert.equal(first, 'rejected');
+    assert.equal(req.signal, controller.signal, '首次结算后信号恢复为进入时的原始值（同一性，非新信号）');
+    assert.equal(controller.signal.aborted, false, '原始信号未被审批过程中止');
+    // 同一对象再次到达：按新请求处理——重新发起完整审查（流再次调用），而非 cancelled(signal)。
+    const callsBefore = wired.state.streamCalls;
+    const second = await wired.answerer(req, next);
+    assert.equal(second, 'rejected', '再次到达走完整审查并按结论结算（不是 cancelled(signal)）');
+    assert.ok(wired.state.streamCalls > callsBefore, '再次到达重新发起模型流');
+  } finally {
     if (previousHome === undefined) delete process.env.DSH_HOME;
     else process.env.DSH_HOME = previousHome;
     rmSync(home, { recursive: true, force: true });
