@@ -797,6 +797,81 @@ test('§4.1 在飞审查期间配置变不可读：审查记录仍落盘（redac
   }
 });
 
+test('§4.2 同一性守卫（真接线）：在飞期间信号被第三方改写 → 收尾不覆盖新值', async (t) => {
+  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const host = await loadHost();
+  if (host === undefined) {
+    t.skip('宿主包不可解析（离线环境）');
+    return;
+  }
+  const previousHome = process.env.DSH_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'afm-guard-unit-'));
+  process.env.DSH_HOME = home;
+  try {
+    // 流替身延迟 150ms 后抛 provider 500：结算前有明确的在飞窗口。
+    const wired = await wiredEnv({ behavior: { delay: 150 } });
+    if (wired === undefined) {
+      t.skip('宿主包不可解析（离线环境）');
+      return;
+    }
+    const controller = new AbortController();
+    const req = wired.makeRequest('c1', controller.signal);
+    const promise = wired.answerer(req, () => new Promise(() => {}));
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    // 审查在飞时，后续到达的审批或宿主改写了请求对象的信号（真实 withdraw 的守卫场景）。
+    const sentinel = new AbortController().signal;
+    req.signal = sentinel;
+    assert.equal(await promise, 'rejected');
+    assert.equal(req.signal, sentinel, '收尾恢复跳过：不把第三方写入的信号覆盖回旧值（守卫在真 withdraw 上）');
+  } finally {
+    if (previousHome === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = previousHome;
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('§4.1 逃逸兜底记录（getter 触发逃逸）：结算记录照常落盘，会话按缺省会话 - 归档', async (t) => {
+  const { mkdtempSync, readFileSync, readdirSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const host = await loadHost();
+  if (host === undefined) {
+    t.skip('宿主包不可解析（离线环境）');
+    return;
+  }
+  const previousHome = process.env.DSH_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'afm-escape-record-'));
+  process.env.DSH_HOME = home;
+  try {
+    // session.id 的 getter 抛错触发逃逸（G1/N1 同款）：背景读取防抛后，结算记录不得丢失，
+    // 会话 id 按缺省会话 '-'（与 rt.review 的约定一致）归档。
+    const config = { mode: 'rules', language: { agent: 'zh' } };
+    const env = makeCtx(config);
+    env.injected = [];
+    host.apply(env.ctx, config);
+    const answerer = env.listeners.find((entry) => entry.event === 'approval/request').handler;
+    const outcome = await answerer(escapeRequest(env.injected), async () => 'ask');
+    assert.equal(outcome, 'rejected');
+    assert.equal(env.injected.length, 1);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const dir = join(home, 'approve-for-me', 'reviews');
+    const rows = readdirSync(dir).flatMap((file) =>
+      readFileSync(join(dir, file), 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line)));
+    const settles = rows.filter((row) => row.kind === 'settle');
+    assert.equal(settles.length, 1, 'getter 触发逃逸也恰落一条结算记录');
+    assert.equal(settles[0].sessionId, '-', '会话 id 取不到时按缺省会话 - 归档');
+    assert.equal(settles[0].outcome, 'rejected');
+    assert.equal(settles[0].source, 'error');
+    assert.match(settles[0].reason, /应答者逃逸异常/u);
+  } finally {
+    if (previousHome === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = previousHome;
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test('§5.1/§4.2 同一请求对象再派发：收尾恢复原始信号，再次到达按新请求处理（完整审查）', async (t) => {
   const { mkdtempSync, readFileSync, readdirSync, rmSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
