@@ -478,7 +478,7 @@ async function wiredEnv(options = {}) {
     if (Number.isFinite(state.behavior.delay) && state.behavior.delay > 0) {
       await new Promise((resolve) => setTimeout(resolve, state.behavior.delay));
     }
-    throw new Error('provider 500');
+    throw new Error(state.behavior.errorText ?? 'provider 500');
   })();
   host.apply(env.ctx, config);
   const answerer = env.listeners.find((entry) => entry.event === 'approval/request').handler;
@@ -773,9 +773,11 @@ test('§4.1 在飞审查期间配置变不可读：审查记录仍落盘（redac
   const home = mkdtempSync(join(tmpdir(), 'afm-redact-mid-'));
   process.env.DSH_HOME = home;
   try {
-    // 流替身延迟 150ms 后抛 provider 500：审查照常产出 error 判定；延迟期间把生效配置变不可读
-    // （volatile 旁路写 NaN）——redactText 的读取必须防抛并回退默认清单，审查记录不得整条丢失。
-    const wired = await wiredEnv({ behavior: { delay: 150 } });
+    // 流替身延迟 150ms 后抛带密钥样式的 provider 500：审查照常产出 error 判定；延迟期间把生效配置
+    // 变不可读（volatile 旁路写 NaN）——redactText 的读取必须防抛并回退**随包默认清单**（不只是
+    // 记录存活：默认清单命中的秘密串在记录里必须已遮蔽），审查记录不得整条丢失。
+    const secret = 'sk-AbCdEf123456';
+    const wired = await wiredEnv({ behavior: { delay: 150, errorText: `provider 500 ${secret}` } });
     if (wired === undefined) {
       t.skip('宿主包不可解析（离线环境）');
       return;
@@ -786,10 +788,12 @@ test('§4.1 在飞审查期间配置变不可读：审查记录仍落盘（redac
     assert.equal(await promise, 'rejected');
     await new Promise((resolve) => setTimeout(resolve, 150));
     const dir = join(home, 'approve-for-me', 'reviews');
-    const rows = readdirSync(dir).flatMap((file) =>
-      readFileSync(join(dir, file), 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line)));
+    const raw = readdirSync(dir).map((file) => readFileSync(join(dir, file), 'utf8')).join('\n');
+    const rows = raw.split('\n').filter(Boolean).map((line) => JSON.parse(line));
     assert.ok(rows.some((row) => row.kind === 'review'), '审查记录必须照常落盘（不因配置不可读整条丢失）');
     assert.ok(rows.some((row) => row.kind === 'settle'), '结算记录照常落盘');
+    assert.ok(!raw.includes(secret), '回退默认清单生效：记录里不得出现原始秘密串');
+    assert.ok(raw.includes('[redacted]'), '默认清单命中的秘密串必须已遮蔽');
   } finally {
     if (previousHome === undefined) delete process.env.DSH_HOME;
     else process.env.DSH_HOME = previousHome;
@@ -832,7 +836,7 @@ test('§4.2 同一性守卫（真接线）：在飞期间信号被第三方改�
   }
 });
 
-test('§4.1 逃逸兜底记录（getter 触发逃逸）：结算记录照常落盘，会话按缺省会话 - 归档', async (t) => {
+test('§4.1 逃逸出口的结算记录（getter 触发逃逸）：结算记录照常落盘，会话按缺省会话 - 归档', async (t) => {
   const { mkdtempSync, readFileSync, readdirSync, rmSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
