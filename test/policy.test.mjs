@@ -164,7 +164,7 @@ test('R51② 场景回归：提交说明含出厂清单样例文本的 git commi
   assert.equal(screen(escalation(), located({ command }), baseConfig).action, 'deny');
 });
 
-test('R51③ 误伤范围判据翻转钉住（§22.5 判据③）：默认进审查、显式配置恢复 deny', () => {
+test('R51③ 误伤范围判据翻转钉住（§3.5 判据③）：默认进审查、显式配置恢复 deny', () => {
   for (const command of ["bash -c 'mkfs /dev/sda1'", 'grep mkfs readme.md']) {
     const byDefault = screen(escalation(), located({ command }), normalizeConfig());
     assert.equal(byDefault.action, 'review', `默认配置应进审查：${command}`);

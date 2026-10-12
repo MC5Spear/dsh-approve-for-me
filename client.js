@@ -76,6 +76,7 @@ window.__ModuleLoader__.load({
 			"seconds.resolved": "生效：{v}",
 			"seconds.draft": "草稿：{v}",
 			"seconds.unit": "秒",
+			"warn.noLimit": "风险：审查模型挂起、工具或其他异常可能使请求无限停在自动审批；插件不会自动恢复时限，取消与其他人工路径按各自条件生效。",
 			"card.readonly": "当前页面不可写入设置（非 loopback），可用 profile patch 配置。",
 			"help.trigger.presets": "哪些权限预设下由本插件接管审批。默认只在「自动审批」预设下接管；其他预设保持原有的人工审批行为。",
 			"help.trigger.unknown": "读不到会话权限预设时的处置：跳过＝不接管（保持原行为）；接管＝视为已开启自动审批。宿主服务缺失时才会发生。",
@@ -138,7 +139,6 @@ window.__ModuleLoader__.load({
 			"countdown.seconds": "剩余 {n} 秒后自动拒绝",
 			"countdown.minutes": "剩余 {m} 分 {s} 秒后自动拒绝",
 			"countdown.review": "审查时限剩余 {n} 秒",
-			"countdown.none": "无自动拒绝时限，将一直等待你的决定",
 			"countdown.unlimited": "审查不限时",
 			"view.review": "审查记录",
 			"view.needSession": "请先打开一个会话",
@@ -148,6 +148,7 @@ window.__ModuleLoader__.load({
 			"view.count": "共 {n} 条",
 			"view.refresh": "刷新",
 			"view.disabled": "审查记录视图已关闭（ui.trace.ownView = false）",
+			"view.readFailed": "记录读取失败或不完整，列表可能缺少条目",
 			"decision.allow": "放行（allow）",
 			"decision.allowed-once": "放行（allowed-once）",
 			"decision.deny": "拒绝（deny）",
@@ -162,15 +163,46 @@ window.__ModuleLoader__.load({
 			"time.review": "审查 {n}",
 			"time.human": "人工 {n}",
 			"detail.title": "单次审查",
+			"detail.outcome": "最终结算",
+			"detail.decision": "审查判定",
+			"detail.source": "结算来源",
+			"detail.stage": "环节",
 			"detail.model": "模型",
 			"detail.effort": "档位",
+			"detail.layer": "解析层级",
+			"detail.attempts": "尝试次数",
 			"detail.tokens": "思维链 token",
+			"detail.risk": "风险",
+			"detail.auth": "授权",
+			"detail.fieldsDefaulted": "解析补全",
+			"detail.degraded": "降级标记",
+			"detail.preset": "接管预设",
+			"detail.origin": "归属",
+			"detail.escalation": "升权目标",
+			"detail.configTag": "配置标识",
+			"detail.policyTag": "策略标识",
+			"detail.evidence": "上下文证据",
+			"detail.probes": "只读取证",
+			"detail.reason": "理由",
 			"detail.prompt": "提示词",
 			"detail.input": "输入",
 			"detail.reasoning": "思维链",
 			"detail.output": "输出",
 			"detail.notCaptured": "未采集（capture 档为 summary）",
 			"detail.truncated": "已截断",
+			"detail.absent": "缺失",
+			"source.rule": "规则（rule）",
+			"source.llm": "审查（llm）",
+			"source.human": "人工（human）",
+			"source.timeout": "超时（timeout）",
+			"source.gateway": "通道关闭（gateway）",
+			"source.signal": "取消（signal）",
+			"source.error": "异常（error）",
+			"stage.queue": "排队（queue）",
+			"stage.review": "审查（review）",
+			"stage.human": "人工（human）",
+			"origin.main": "主会话（main）",
+			"origin.subagent": "子代理（subagent）",
 			"legacy.row": "【自动审批】{tool} · {decision} · 耗时 {duration}",
 			"legacy.outcome.allowed-once": "放行",
 			"legacy.outcome.rejected": "拒绝",
@@ -201,7 +233,7 @@ window.__ModuleLoader__.load({
 			"option.language.agent.zh": "中文",
 			"option.language.agent.en": "英文",
 			"help.language.ui": "插件自有界面文案的语言：auto 跟随宿主界面语言，zh/en 强制。切换即热生效。",
-			"help.language.agent": "送给审查模型与注入主模型的全部文本的语言（系统提示、工具说明、注入文案、轮次指令）；默认 en，判定链路不受语言影响。",
+			"help.language.agent": "送给审查模型与注入主模型的全部文本的语言（系统提示、工具说明、注入文案、轮次指令）；默认 en，判定调用链不受语言影响。",
 			"hint.trigger.presets": "哪些权限预设下由本插件接管审批。",
 			"hint.trigger.unknown": "读不到会话权限预设时的处置。",
 			"hint.trigger.auditEverySkip": "预设不匹配的跳过是否每次都写审计。",
@@ -249,6 +281,7 @@ window.__ModuleLoader__.load({
 			"seconds.resolved": "Effective: {v}",
 			"seconds.draft": "Draft: {v}",
 			"seconds.unit": "s",
+			"warn.noLimit": "Risk: a hung review model, a tool failure or another error can leave the request stuck in auto-approval forever; the plugin does not restore the limit automatically — cancel and other human paths still apply per their conditions.",
 			"card.readonly": "Settings are read-only on this page (non-loopback). Use a profile patch instead.",
 			"help.trigger.presets": "Permission presets this plugin takes over. By default only Auto-approve; other presets keep the original human approval flow.",
 			"help.trigger.unknown": "What to do when the session preset cannot be read: skip keeps the original behaviour; review treats it as auto-approve. Only happens when the host service is missing.",
@@ -311,7 +344,6 @@ window.__ModuleLoader__.load({
 			"countdown.seconds": "Auto-rejects in {n}s",
 			"countdown.minutes": "Auto-rejects in {m}m {s}s",
 			"countdown.review": "Review deadline in {n}s",
-			"countdown.none": "No auto-reject deadline; it waits for your decision",
 			"countdown.unlimited": "No review deadline",
 			"view.review": "Review log",
 			"view.needSession": "Open a session first",
@@ -321,6 +353,7 @@ window.__ModuleLoader__.load({
 			"view.count": "{n} records",
 			"view.refresh": "Refresh",
 			"view.disabled": "The review-log view is disabled (ui.trace.ownView = false)",
+			"view.readFailed": "Record read failed or incomplete; entries may be missing",
 			"decision.allow": "Allowed (allow)",
 			"decision.allowed-once": "Allowed (allowed-once)",
 			"decision.deny": "Denied (deny)",
@@ -335,15 +368,46 @@ window.__ModuleLoader__.load({
 			"time.review": "review {n}",
 			"time.human": "human {n}",
 			"detail.title": "Review detail",
+			"detail.outcome": "Final outcome",
+			"detail.decision": "Review decision",
+			"detail.source": "Outcome source",
+			"detail.stage": "Stage",
 			"detail.model": "Model",
 			"detail.effort": "Effort",
+			"detail.layer": "Resolution layer",
+			"detail.attempts": "Attempts",
 			"detail.tokens": "thinking tokens",
+			"detail.risk": "Risk",
+			"detail.auth": "Authorization",
+			"detail.fieldsDefaulted": "Defaulted fields",
+			"detail.degraded": "Degradation marks",
+			"detail.preset": "Take-over preset",
+			"detail.origin": "Origin",
+			"detail.escalation": "Escalation target",
+			"detail.configTag": "Config tag",
+			"detail.policyTag": "Policy tag",
+			"detail.evidence": "Context evidence",
+			"detail.probes": "Read-only probes",
+			"detail.reason": "Reason",
 			"detail.prompt": "Prompt",
 			"detail.input": "Input",
 			"detail.reasoning": "Reasoning",
 			"detail.output": "Output",
 			"detail.notCaptured": "Not captured (capture level is summary)",
 			"detail.truncated": "truncated",
+			"detail.absent": "absent",
+			"source.rule": "rule",
+			"source.llm": "review (llm)",
+			"source.human": "human",
+			"source.timeout": "timeout",
+			"source.gateway": "card closed (gateway)",
+			"source.signal": "cancelled (signal)",
+			"source.error": "error",
+			"stage.queue": "queue",
+			"stage.review": "review",
+			"stage.human": "human",
+			"origin.main": "main session",
+			"origin.subagent": "subagent",
 			"legacy.row": "[auto-approval] {tool} · {decision} · took {duration}",
 			"legacy.outcome.allowed-once": "allowed",
 			"legacy.outcome.rejected": "rejected",
@@ -458,6 +522,7 @@ window.__ModuleLoader__.load({
 			".dsafm_f_sec{margin:-12px 0 12px;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary);overflow-wrap:anywhere}",
 			".dsafm_f_sec + div:not(.dsafm_field){border-top:.5px solid var(--dsw-alias-border-l2)}",
 			".dsafm_sec_invalid{color:var(--dsw-alias-state-error-primary)}",
+			".dsafm_sec_warn{display:block;margin-top:2px;color:var(--dsw-alias-state-warn-primary,#b8860b)}",
 			// 控件本体：官方输入规格（34px/0 12px/0.5px border-l4/8px/bg-layer-3；聚焦与非法边框）。
 			".dsafm_input{flex:1;min-width:0;width:100%;height:34px;padding:0 12px;border:.5px solid var(--dsw-alias-border-l4);border-radius:8px;background:var(--dsw-alias-bg-layer-3);font-family:inherit;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-primary)}",
 			".dsafm_input:focus-visible{outline:none;border-color:var(--dsw-alias-brand-primary)}",
@@ -513,11 +578,14 @@ window.__ModuleLoader__.load({
 			".dsafm_review_head{display:flex;align-items:baseline;gap:8px;min-width:0;flex-wrap:wrap;border:none;background:none;cursor:pointer;font-family:inherit;color:inherit;text-align:left;padding:0}",
 			".dsafm_review_head:hover{color:var(--dsw-alias-label-primary)}",
 			".dsafm_review_tool{font-weight:500;overflow-wrap:anywhere}",
+			".dsafm_review_subject{font-size:11px;color:var(--dsw-alias-label-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}",
 			".dsafm_review_decision{font-size:12px;color:var(--dsw-alias-label-secondary)}",
 			".dsafm_review_decision_allow{color:var(--dsw-alias-state-business-primary)}",
 			".dsafm_review_decision_deny{color:var(--dsw-alias-state-error-primary)}",
+			".dsafm_review_decision_sub{font-size:11px;color:var(--dsw-alias-label-tertiary)}",
 			".dsafm_review_meta{font-size:11px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums;margin-left:auto}",
 			".dsafm_review_z{font-size:11px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums}",
+			".dsafm_review_degraded{font-size:11px;color:var(--dsw-alias-state-warn-primary,#b8860b)}",
 			".dsafm_review_equation{font-size:12px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}",
 			".dsafm_review_unmatched{color:var(--dsw-alias-label-tertiary)}",
 			".dsafm_review_detail{display:flex;flex-direction:column;gap:8px;margin-top:6px;border-top:.5px solid var(--dsw-alias-border-l2);padding-top:8px}",
@@ -754,27 +822,29 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 有限数字或 0（缺的耗时分段按 0 计，不显示 `-`，等式才可加）。
-		 * @param {unknown} value - 值。
-		 * @returns {number} 数字。
+		 * 分段耗时的展示文本：缺失段显示 `—`，不按 0 计（设计 §8.5；缺失不是测量值 0）。
+		 * @param {unknown} ms - 分段毫秒数。
+		 * @returns {string} 文本。
 		 */
-		function numberOf(value) {
-			return typeof value === "number" && Number.isFinite(value) ? value : 0;
+		function segmentText(ms) {
+			return typeof ms === "number" && Number.isFinite(ms) ? formatMillis(ms) : "—";
 		}
 
 		/**
-		 * 审批耗时 Z ＝ `queueMs + reviewMs + humanWaitMs`（设计 §17.3 等式）。
-		 * 摘要行没有 `humanWaitMs`（详情端点才有），此时按 0——展开后的等式用它自己的详情值。
-		 * @param {object | null | undefined} record - 审查记录（摘要或详情）。
+		 * 审批耗时 Z ＝ 在场分段之和（设计 §8.5：只累加在场的分段，缺失段不按 0 计）。
+		 * @param {object | null | undefined} record - 记录（摘要或合并详情）。
 		 * @returns {number} 毫秒。
 		 */
 		function approvalMsOf(record) {
-			return numberOf(record?.queueMs) + numberOf(record?.reviewMs) + numberOf(record?.humanWaitMs);
+			return [record?.queueMs, record?.reviewMs, record?.humanWaitMs].reduce(
+				(sum, value) => (typeof value === "number" && Number.isFinite(value) ? sum + value : sum),
+				0,
+			);
 		}
 
 		/**
 		 * 判定文案的字典键：兼容 verdict 词汇（allow/deny/error，现行 host 落盘值）与
-		 * 结局词汇（allowed-once/rejected/timed-out，设计 §17.2 的字段口径）；其余原样返回 null。
+		 * 结局词汇（allowed-once/rejected/timed-out，设计 §8.2 的字段口径）；其余原样返回 null。
 		 * @param {unknown} decision - 判定值。
 		 * @returns {string | null} 字典键。
 		 */
@@ -789,7 +859,7 @@ window.__ModuleLoader__.load({
 		 *
 		 * 口径复刻宿主 `dsh-client-ui-trajectory` 的 `durationSeconds(node.time, node.callTime)`：
 		 * 结算行 = `time − callTime`、下限 0；`callTime` 缺失（窗口截断）或调用在飞时**没有总时长**，
-		 * 返回 `null`（绝不猜 X，设计 §17.3）。根调用（`kind: 'tool-result'` 节点）与 PTC 子调用
+		 * 返回 `null`（绝不猜 X，设计 §8.5）。根调用（`kind: 'tool-result'` 节点）与 PTC 子调用
 		 * （`subCalls` 里的结算行，审批的 `callId` 多为 `…:ptc:N` 子调用）都在扫描范围。
 		 * @param {object | null | undefined} snapshot - `useTrajectory` 选择器返回的记录表快照。
 		 * @param {string | null | undefined} callId - 审批请求的 `callId`。
@@ -912,7 +982,7 @@ window.__ModuleLoader__.load({
 			}, [sessionId]);
 
 			// 权限预设变化即刷新（R21）：宿主已把权限状态发布成 `permissions` 投影（`dsh-permission-presets`，
-			// 值为 `{options, currentValue}`），客户端只把它当"该刷新了"的闹钟——**接管判定仍在宿主侧**（设计 §8.1 / §17.7）。
+			// 值为 `{options, currentValue}`），客户端只把它当"该刷新了"的闹钟——**接管判定仍在宿主侧**（设计 §8.1 / §7.1）。
 			// 钩子可能不存在（旧宿主）：用恒定空实现占位，保证 hooks 顺序稳定。
 			const projectionHook = typeof props.useProjection === "function" ? props.useProjection : () => undefined;
 			const permissionsValue = (() => {
@@ -1213,7 +1283,7 @@ window.__ModuleLoader__.load({
 					missing.length === 0
 						? null
 						: jsxRuntime.jsx("div", { className: "dsafm_hint", children: `${t("card.presets.missing")}${missing.join("、")}` }),
-					// R57：缺失态附补救指引（设计 §28.6）——指引服务于缺失态，不是常驻文案。
+					// R57：缺失态附补救指引（设计 §9.1）——指引服务于缺失态，不是常驻文案。
 					missing.length === 0 ? null : jsxRuntime.jsx("div", { className: "dsafm_hint", children: t("card.presets.missing.remedy") }),
 				],
 			});
@@ -1293,11 +1363,13 @@ window.__ModuleLoader__.load({
 						? (entry.reason === "" ? t("cardstate.denied.noreason") : t("cardstate.denied").replace("{reason}", entry.reason))
 						: t("cardstate.reviewing");
 			const remaining = entry.deadlineAt === null ? null : Math.max(0, Math.ceil((entry.deadlineAt - now) / 1000));
+			// 倒计时文案（设计 §7.4）：只在审查状态且截止为 null 时显示「审查不限时」；非审查状态的
+			// null 截止不渲染任何无时限等待文案，只显示状态与原因（VER-01：零时限立即结算，无瞬态倒计时）。
 			const countdown =
 				remaining === null
 					? entry.state === "reviewing"
 						? t("countdown.unlimited")
-						: t("countdown.none")
+						: null
 					: entry.state === "reviewing"
 						? t("countdown.review").replace("{n}", String(remaining))
 						: remaining >= 60
@@ -1311,7 +1383,13 @@ window.__ModuleLoader__.load({
 				{
 					className: "dsafm_carddetail",
 					children: [
-						jsxRuntime.jsxs("span", { className: stateClass, children: [stateText, jsxRuntime.jsx("span", { className: "dsafm_state_time", children: ` · ${countdown}` })] }),
+						jsxRuntime.jsxs("span", {
+							className: stateClass,
+							children: [
+								stateText,
+								countdown === null ? null : jsxRuntime.jsx("span", { className: "dsafm_state_time", children: ` · ${countdown}` }),
+							],
+						}),
 						command === undefined || command === null ? null : jsxRuntime.jsx("span", { className: "dsafm_cmd", children: command }),
 					],
 				},
@@ -1320,7 +1398,7 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 会话视图「审查记录」（设计 §17.3 呈现层第一落点）：本会话全部自动审批记录 + 单次详情 + 每轮耗时对照。
+		 * 会话视图「审查记录」（设计 §8.5 呈现层第一落点）：本会话全部自动审批记录 + 单次详情 + 每轮耗时对照。
 		 *
 		 * 列表走 `approveForMe/traceRecords`（只回摘要字段），点开一条再按需拉 `approveForMe/traceRecord` 全文；
 		 * X（工具调用在记录表里的总时长）从标准 prop `useTrajectory` 取、按 `callId` 匹配工具行
@@ -1342,6 +1420,8 @@ window.__ModuleLoader__.load({
 			const [sessionId, setSessionId] = react.useState(() => sessionIdOf?.(props.sessionId) ?? "");
 			const [records, setRecords] = react.useState(null);
 			const [error, setError] = react.useState("");
+			// VER-02：该会话记录读取是否降级（读失败或末行撕裂）——列表可能不完整，必须可见、不伪装成「没有记录」
+			const [readFailed, setReadFailed] = react.useState(false);
 			const [openId, setOpenId] = react.useState("");
 			const [detail, setDetail] = react.useState(null);
 			const [viewOff, setViewOff] = react.useState(false);
@@ -1374,6 +1454,7 @@ window.__ModuleLoader__.load({
 					.then((response) => {
 						if (response?.ok !== true) return;
 						setRecords(Array.isArray(response.value?.records) ? response.value.records : []);
+						setReadFailed(response.value?.readFailed === true);
 						setError("");
 					})
 					.catch(() => setError(t("view.loadFailed")));
@@ -1390,6 +1471,7 @@ window.__ModuleLoader__.load({
 				loadedRef.current = sessionId;
 				setRecords(null);
 				setError("");
+				setReadFailed(false);
 				setOpenId("");
 				setDetail(null);
 				refresh();
@@ -1414,7 +1496,7 @@ window.__ModuleLoader__.load({
 				}
 				setDetail(null);
 				Promise.resolve()
-					.then(() => props.rpcCall("approveForMe/traceRecord", { sessionId, reviewId: openId }))
+					.then(() => props.rpcCall("approveForMe/traceRecord", { sessionId, approvalId: openId }))
 					.then((response) => {
 						if (response?.ok === true) setDetail(response.value?.record ?? null);
 					})
@@ -1461,6 +1543,8 @@ window.__ModuleLoader__.load({
 						children: records === null ? t("view.loading") : t("view.count").replace("{n}", String(records.length)),
 					}),
 					error === "" ? null : jsxRuntime.jsx("span", { className: "dsafm_hint dsafm_warn", children: error }),
+					// VER-02：读取降级必须可见——「列表可能不完整」不是错误（数据仍在），用警示色而非错误文案。
+					readFailed ? jsxRuntime.jsx("span", { className: "dsafm_review_degraded", children: t("view.readFailed") }) : null,
 					jsxRuntime.jsx("button", { type: "button", className: "dsafm_button", onClick: refresh, children: t("view.refresh") }),
 				],
 			});
@@ -1525,19 +1609,59 @@ window.__ModuleLoader__.load({
 
 			// 旧在后 → 新在前展示。
 			const rows = [...records].reverse().map((record) => {
-				const open = record.reviewId === openId;
-				const decisionKey = decisionKeyOf(record.decision);
+				const open = record.approvalId === openId;
+				// 主判定＝最终结算 outcome（§8.5）；旧格式行没有 outcome，回落 decision；两者都缺原样展示。
+				const primary = typeof record.outcome === "string" && record.outcome.length > 0 ? record.outcome : record.decision;
+				const primaryKey = decisionKeyOf(primary);
 				const decisionClass =
-					decisionKey === "decision.allow" || decisionKey === "decision.allowed-once"
+					primaryKey === "decision.allow" || primaryKey === "decision.allowed-once"
 						? "dsafm_review_decision dsafm_review_decision_allow"
-						: decisionKey === "decision.deny" || decisionKey === "decision.rejected" || decisionKey === "decision.error"
+						: primaryKey === "decision.deny" || primaryKey === "decision.rejected" || primaryKey === "decision.error"
 							? "dsafm_review_decision dsafm_review_decision_deny"
 							: "dsafm_review_decision";
+				const decisionKey = decisionKeyOf(record.decision);
 				const truncated = detail?.truncated === true;
+				/**
+				 * 枚举字段的文案：闭集词汇走字典（附原始 id），未知值原样返回，缺失返回 null（不渲染该段）。
+				 * @param {string} prefix - 字典键前缀（如 `source`）。
+				 * @param {unknown} value - 字段值。
+				 * @returns {string | null} 文案。
+				 */
+				const enumText = (prefix, value) => {
+					if (typeof value !== "string" || value.length === 0) return null;
+					const key = `${prefix}.${value}`;
+					const text = t(key);
+					return text === key ? value : text;
+				};
+				// 详情元信息段：只列在场字段（§8.4「取不到明确缺失」——缺失段不显示假占位）。
 				const metaParts = [];
-				if (typeof detail?.model === "string" && detail.model.length > 0) metaParts.push(`${t("detail.model")}: ${detail.model}`);
-				if (typeof detail?.effort === "string" && detail.effort.length > 0) metaParts.push(`${t("detail.effort")}: ${detail.effort}`);
-				if (typeof detail?.tokens === "number" && Number.isFinite(detail.tokens)) metaParts.push(`${t("detail.tokens")}: ${detail.tokens}`);
+				const metaOf = (titleKey, value, formatter) => {
+					if (value === undefined || value === null || value === "") return;
+					if (formatter !== undefined) {
+						const text = formatter(value);
+						if (text === null) return;
+						metaParts.push(`${t(titleKey)}: ${text}`);
+						return;
+					}
+					metaParts.push(`${t(titleKey)}: ${String(value)}`);
+				};
+				metaOf("detail.decision", record.decision, (value) => (decisionKey === null ? String(value) : t(decisionKey)));
+				metaOf("detail.source", record.source, (value) => enumText("source", value));
+				metaOf("detail.stage", detail?.stage, (value) => enumText("stage", value));
+				metaOf("detail.origin", record.origin, (value) => enumText("origin", value));
+				metaOf("detail.escalation", record.escalation);
+				metaOf("detail.preset", detail?.preset);
+				metaOf("detail.model", record.model);
+				metaOf("detail.effort", record.effort);
+				metaOf("detail.layer", detail?.layer);
+				metaOf("detail.attempts", detail?.attempts);
+				metaOf("detail.tokens", detail?.tokens);
+				metaOf("detail.risk", record.risk);
+				metaOf("detail.auth", record.auth);
+				metaOf("detail.fieldsDefaulted", detail?.fieldsDefaulted);
+				metaOf("detail.degraded", detail?.degraded);
+				metaOf("detail.configTag", detail?.configTag);
+				metaOf("detail.policyTag", detail?.policyTag);
 				return jsxRuntime.jsxs(
 					"div",
 					{
@@ -1547,13 +1671,18 @@ window.__ModuleLoader__.load({
 								type: "button",
 								className: "dsafm_review_head",
 								"aria-expanded": open,
-								onClick: () => setOpenId((value) => (value === record.reviewId ? "" : record.reviewId)),
+								onClick: () => setOpenId((value) => (value === record.approvalId ? "" : record.approvalId)),
 								children: [
 									jsxRuntime.jsx("span", { className: "dsafm_review_tool", children: typeof record.toolName === "string" && record.toolName.length > 0 ? record.toolName : "-" }),
 									jsxRuntime.jsx("span", {
 										className: decisionClass,
-										children: decisionKey === null ? String(record.decision ?? "-") : t(decisionKey),
+										children: primaryKey === null ? String(primary ?? "-") : t(primaryKey),
 									}),
+									// 审查判定与最终结算并存且不同（人工推翻、超时、取消）：次级徽标并排可分辨（§8.5）。
+									decisionKey !== null && record.decision !== record.outcome
+										? jsxRuntime.jsx("span", { className: "dsafm_review_decision_sub", children: t(decisionKey) })
+										: null,
+									jsxRuntime.jsx("span", { className: "dsafm_review_subject", children: typeof record.subject === "string" && record.subject.length > 0 ? record.subject : null }),
 									jsxRuntime.jsx("span", { className: "dsafm_review_meta", children: formatClock(record.startedAt) }),
 									jsxRuntime.jsx("span", { className: "dsafm_review_z", children: t("time.approvalOnly").replace("{z}", formatMillis(approvalMsOf(record))) }),
 								],
@@ -1570,12 +1699,16 @@ window.__ModuleLoader__.load({
 													jsxRuntime.jsx("div", {
 														className: "dsafm_review_equation",
 														children: [
-															t("time.queue").replace("{n}", formatMillis(detail.queueMs)),
-															` · ${t("time.review").replace("{n}", formatMillis(detail.reviewMs))}`,
-															` · ${t("time.human").replace("{n}", formatMillis(detail.humanWaitMs))}`,
+															// 缺失段显示 —，不按 0 计（§8.5：缺失不是测量值）。
+															t("time.queue").replace("{n}", segmentText(detail.queueMs)),
+															` · ${t("time.review").replace("{n}", segmentText(detail.reviewMs))}`,
+															` · ${t("time.human").replace("{n}", segmentText(detail.humanWaitMs))}`,
 														].join(""),
 													}),
 													metaParts.length === 0 ? null : jsxRuntime.jsx("div", { className: "dsafm_review_meta", children: metaParts.join(" · ") }),
+													sectionOf("detail.reason", detail.reason, truncated),
+													sectionOf("detail.evidence", detail.evidence, truncated),
+													sectionOf("detail.probes", detail.probes, truncated),
 													sectionOf("detail.prompt", detail.prompt, truncated),
 													sectionOf("detail.input", detail.input, truncated),
 													sectionOf("detail.reasoning", detail.reasoning, truncated),
@@ -1587,7 +1720,7 @@ window.__ModuleLoader__.load({
 								: null,
 						],
 					},
-					record.reviewId,
+					record.approvalId,
 				);
 			});
 
@@ -1598,7 +1731,7 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 记录表近似行的会话定义（设计 §17.3 第二落点，默认关）。
+		 * 记录表近似行的会话定义（设计 §8.5 第二落点，默认关）。
 		 *
 		 * `approval/asked` 开一个上下文、`approval/decided` 收尾（同一 `id` 配对），收尾后产出一行
 		 * `kind: 'context'` 节点，文案含工具名、判定与耗时（两条审计事件的时间戳差，实测正确）。
@@ -2098,6 +2231,14 @@ window.__ModuleLoader__.load({
 				const draftNumber = draftRaw.length === 0 ? null : secondsNumberText(Number(draftRaw));
 				const fill = (number) => (number === null ? "—" : `${number} ${unit}`);
 				const draftInvalid = draftRaw.length > 0 && draftNumber === null;
+				// GAP-06：无上限风险提醒固定渲染在审查时限字段的秒数读数行内（设计 §7.2），可见性不依赖
+				// 帮助区展开；草稿为 0 或生效值为 0 时显示。只描述风险，不改写输入：草稿为 0 仍可保存。
+				// 人工时限字段的 0 是「立即拒绝」，不显示该提醒。
+				const noLimitWarn =
+					field.path.join(".") === "reviewer.timeoutMs" &&
+					(resolvedNumber === "0" || draftNumber === "0")
+						? t("warn.noLimit")
+						: null;
 				return jsxRuntime.jsxs("p", {
 					id: `${NS}-sec-${field.path.join("-")}`,
 					className: "dsafm_f_sec",
@@ -2111,6 +2252,7 @@ window.__ModuleLoader__.load({
 							className: draftInvalid ? "dsafm_sec_draft dsafm_sec_invalid" : "dsafm_sec_draft",
 							children: t("seconds.draft").replace("{v}", fill(draftNumber)),
 						}),
+						noLimitWarn === null ? null : jsxRuntime.jsx("span", { className: "dsafm_sec_warn", children: noLimitWarn }),
 					],
 				});
 			};
@@ -2492,7 +2634,7 @@ window.__ModuleLoader__.load({
 			const translate =
 				typeof ctx.locale?.bind === "function" ? ctx.locale.bind(NS) : (key) => key;
 
-			// R28 用户文案语言档（design §21.3）：`auto`＝宿主界面语言（沿用 `translate`，现状行为）；
+			// R28 用户文案语言档（设计 §7.5）：`auto`＝宿主界面语言（沿用 `translate`，现状行为）；
 			// `zh`/`en`＝强制直查本命名空间字典——不经宿主 setLocale（那会写全局语言）。缺键抛错，不静默回退。
 			/** @type {(lang: string, key: string) => string} */
 			const localT = (lang, key) => {
@@ -2642,7 +2784,7 @@ window.__ModuleLoader__.load({
 				),
 			);
 
-			// 会话视图「审查记录」（设计 §17.3 呈现层第一落点）：与「对话」（order 0）、「轨迹」（order 10）并列的
+			// 会话视图「审查记录」（设计 §8.5 呈现层第一落点）：与「对话」（order 0）、「轨迹」（order 10）并列的
 			// 第三个页签，`list` 座位按 `priority` 再 `order` 升序排，20 恰好排在其后。
 			// owner props 是 `{ viewRequest, openView, completeViewRequest }`；`useTrajectory` 等 hook 走标准 props。
 			ctx.slots.inject("conversation.view", () =>
@@ -2659,7 +2801,7 @@ window.__ModuleLoader__.load({
 				),
 			);
 
-			// 记录表近似行（可选，默认关；设计 §17.3）：内部自回退，任何失败只写 window.__dsafmProbe，不影响上面四个挂点。
+			// 记录表近似行（可选，默认关；设计 §8.5）：内部自回退，任何失败只写 window.__dsafmProbe，不影响上面四个挂点。
 			registerLegacyRow(ctx, call, sessionIdOf, (key) => {
 				// 近似行按当前语言档现取；结局闭集探测未命中时回退原值（auto 档键名回显的同一语义）。
 				try {

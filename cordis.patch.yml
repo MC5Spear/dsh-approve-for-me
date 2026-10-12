@@ -1,5 +1,5 @@
 # dsh-approve-for-me bundle patch: one host row over the web profile,
-# plus the permission-preset row restated with the extra「自动审批」tier.
+# plus the permission-presets row restated with the extra「自动审批」tier.
 # The row name resolves from the profile's own node_modules where
 # `dsh plugin --profile web add <path>` installed this package.
 #

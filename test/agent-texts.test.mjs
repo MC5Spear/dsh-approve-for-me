@@ -1,6 +1,6 @@
 /**
  * R28 字典守护：lib/agent-texts.js 的结构与语义断言。
- * 设计 §21.2：键集相等（可变红——给单侧加键必红）、冻结、未知 lang 抛错、缺键抛错、
+ * 设计 §7.5：键集相等（可变红——给单侧加键必红）、冻结、未知 lang 抛错、缺键抛错、
  * 不变块两语言逐字节一致、en 拒绝末句＝codex 原文、超时文案不含末句（R10）。
  */
 import { strict as assert } from 'node:assert';
@@ -220,7 +220,7 @@ test('字典外无残留硬编码送模文本（G3 静态扫描：锚短语只�
     const hits = scan(readFileSync(join(libDir, file), 'utf8'));
     if (hits.length > 0) offenders.push(`${file}: ${hits.join(', ')}`);
   }
-  assert.deepEqual(offenders, [], `送模文本句身必须只住在字典（design §21.2）：\n${offenders.join('\n')}`);
+  assert.deepEqual(offenders, [], `送模文本句身必须只住在字典（设计 §7.5）：\n${offenders.join('\n')}`);
   // 变红判据：把任一消费方（index/reviewer/prompt/gate）改回内联硬编码句——即「故意留一处」——
   // 对应锚短语离开字典出现在消费文件，本扫描必红；这正是 N1–N3 漏出去的那类缺口。
 });

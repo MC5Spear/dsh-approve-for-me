@@ -17,10 +17,8 @@ import { pathToFileURL } from 'node:url';
 
 import { loadLocalConfig } from './local-config.mjs';
 
-/** 需要重新锚定的裸包名。`yaml`＝R57 修正窗③起 permission 行手术的解析依赖
- * （lib/patch-surgery.js 经动态 `import('yaml')` 惰性加载；仓库本地 node_modules
- * 同样没有它，测试期一并锚到宿主树）。 */
-const HOST_PACKAGES = ['zod', '@deepseek-ai/', 'yaml'];
+/** 需要重新锚定的裸包名（本仓不自带这些依赖，测试期一并锚到宿主树）。 */
+const HOST_PACKAGES = ['zod', '@deepseek-ai/'];
 
 /**
  * 判断目录里能否真正读到 `zod`，以及 schemastery 是否带 volatile 生命周期。
@@ -33,8 +31,6 @@ const HOST_PACKAGES = ['zod', '@deepseek-ai/', 'yaml'];
 function usable(dir) {
   try {
     if (!statSync(join(dir, 'zod', 'package.json')).isFile()) return false;
-    // `yaml` 是 permission 行手术（lib/patch-surgery.js）的解析依赖，锚点树必须同样供得上。
-    if (!statSync(join(dir, 'yaml', 'package.json')).isFile()) return false;
     const schemasteryLib = readFileSync(join(dir, '@deepseek-ai', 'schemastery', 'lib', 'index.mjs'), 'utf8');
     return schemasteryLib.includes('Schema.prototype.volatile');
   } catch {

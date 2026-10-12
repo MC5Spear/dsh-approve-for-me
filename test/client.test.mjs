@@ -329,7 +329,7 @@ test('注册四个挂点：设置卡片、composer 下拉、审批卡片状态�
   assert.ok(detail.options.priority < 0, `priority 必须是负数，实际 ${detail.options.priority}`);
   // 该 seat 的 owner props 只有 `callId`，标准 props 里要用 `useChat` 自己渲染命令。
   assert.equal(typeof detail.component, 'function');
-  // 会话视图（设计 §17.3）：`list` 座位按 priority 再 order 升序，20 排在 chat(0)/trajectory(10) 之后；
+  // 会话视图（设计 §8.5）：`list` 座位按 priority 再 order 升序，20 排在 chat(0)/trajectory(10) 之后；
   // label 是 thunk（宿主 resolveSlotLabel 会调用它），注册时机早于字典也会安全退回键名。
   const view = env.registrations.find((entry) => entry.options.name === 'conversation.view');
   assert.equal(view.options.id, 'approve-for-me');
@@ -1148,7 +1148,7 @@ test('接管预设：多选下拉的选项来自宿主目录，勾选暂存、�
   assert.equal(trigger.props.id, 'approve-for-me-ctl-trigger-presets', '字段外壳的控件 id 应挂在触发器上');
   assert.match(JSON.stringify(trigger.props.children), /自动审批/);
   assert.doesNotMatch(JSON.stringify(trigger.props.children), /dsafm_map_parent/, '不应退化成文本输入');
-  // R57：预设无缺失时补救指引行不得出现（指引服务于缺失态，不是常驻文案——设计 §28.6）。
+  // R57：预设无缺失时补救指引行不得出现（指引服务于缺失态，不是常驻文案——设计 §9.1）。
   assert.doesNotMatch(JSON.stringify(tree), /card\.presets\.missing\.remedy/, 'missing 为空时指引行不应渲染');
   assert.equal(findByClass(tree, 'dsafm_save').props.disabled, true, '无改动时保存应 disabled');
 
@@ -1200,7 +1200,7 @@ test('接管预设：目录不可用时提示改用 settings.yaml，并把未知
   assert.match(text, /card\.presets\.unavailable/);
   assert.match(text, /card\.presets\.missing/);
   assert.match(text, /ghost/);
-  // R57：缺失态附补救指引（设计 §28.6）——missing 行与指引行成对出现，指引不出现即红。
+  // R57：缺失态附补救指引（设计 §9.1）——missing 行与指引行成对出现，指引不出现即红。
   assert.match(text, /card\.presets\.missing\.remedy/, '缺失态必须渲染补救指引行');
 });
 
@@ -1486,28 +1486,101 @@ test('审批卡片状态条：审查中显示审查时限，无时限时说明�
   }
 });
 
+test('审批卡片状态条（VER-01）：非审查状态的 null 截止不渲染任何无时限等待文案', async () => {
+  resetHooks();
+  const client = loadClient();
+  // 人工零时限立即结算：理论上不该出现该状态；万一出现（denied/timeout + null 截止），
+  // 也不得显示「无时限等待」——只显示状态与原因（§7.4）。
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async () => ({ ok: true, value: { entries: [{ callId: 'call_1', state: 'denied', reason: '风险高', startedAt: 1, deadlineAt: null, deadlineKind: null, updatedAt: 1 }] } }),
+  });
+  client.apply(env.ctx);
+  const detail = env.registrations.find((entry) => entry.options.name === 'conversation.approval.detail');
+  const t = (key) => ({ 'cardstate.denied': '自动审批拒绝；原因：{reason}', 'countdown.unlimited': '审查不限时', 'countdown.none': '无自动拒绝时限，将一直等待你的决定' })[key] ?? key;
+  const props = { callId: 'call_1', t, useChat: () => 'rm x', ...detail.options.inject() };
+  render(detail.component, props);
+  await tick();
+  hookIndex = 0;
+  const text = JSON.stringify(render(detail.component, props));
+  assert.match(text, /自动审批拒绝/);
+  assert.match(text, /风险高/);
+  assert.ok(!text.includes('审查不限时'), '非审查状态的 null 截止不得显示无上限文案');
+  assert.ok(!text.includes('无自动拒绝时限'), '已移除的 countdown.none 文案不得出现');
+  assert.ok(!text.includes(' · '), '没有倒计时时不得残留时间分隔段');
+});
+
 /** 审查视图用的字典映射：返回真实模板，等式与文案才能断言替换结果。 */
 const REVIEW_TEXT = {
   'view.needSession': '请先打开一个会话',
   'view.empty': '本会话还没有自动审批记录',
   'view.count': '共 {n} 条',
+  'view.readFailed': '记录读取失败或不完整，列表可能缺少条目',
+  'decision.allow': '放行（allow）',
+  'decision.allowed-once': '放行（allowed-once）',
+  'decision.deny': '拒绝（deny）',
+  'decision.rejected': '拒绝（rejected）',
   'time.total': '工具总计 {x} = 执行 {y} + 审批 {z}',
   'time.approvalOnly': '审批 {z}',
   'time.unmatched': '未匹配到工具行',
+  'time.queue': '排队 {n}',
+  'time.review': '审查 {n}',
+  'time.human': '人工 {n}',
+  'detail.decision': '审查判定',
+  'detail.source': '结算来源',
+  'detail.stage': '环节',
+  'detail.origin': '归属',
+  'detail.escalation': '升权目标',
+  'detail.preset': '接管预设',
+  'detail.model': '模型',
+  'detail.effort': '档位',
+  'detail.layer': '解析层级',
+  'detail.attempts': '尝试次数',
+  'detail.tokens': '思维链 token',
+  'detail.risk': '风险',
+  'detail.auth': '授权',
+  'detail.fieldsDefaulted': '解析补全',
+  'detail.degraded': '降级标记',
+  'detail.configTag': '配置标识',
+  'detail.policyTag': '策略标识',
+  'detail.evidence': '上下文证据',
+  'detail.probes': '只读取证',
+  'detail.reason': '理由',
+  'detail.prompt': '提示词',
+  'detail.input': '输入',
+  'detail.reasoning': '思维链',
+  'detail.output': '输出',
   'detail.notCaptured': '未采集（capture 档为 summary）',
   'detail.truncated': '已截断',
+  'source.llm': '审查（llm）',
+  'source.human': '人工（human）',
+  'source.timeout': '超时（timeout）',
+  'source.rule': '规则（rule）',
+  'source.gateway': '通道关闭（gateway）',
+  'source.signal': '取消（signal）',
+  'source.error': '异常（error）',
+  'stage.queue': '排队（queue）',
+  'stage.review': '审查（review）',
+  'stage.human': '人工（human）',
+  'origin.main': '主会话（main）',
+  'origin.subagent': '子代理（subagent）',
 };
 const reviewT = (key) => REVIEW_TEXT[key] ?? key;
 
-/** 两条摘要记录（queueMs+reviewMs 在摘要里，humanWaitMs 只在详情里——与 bridge 的投影字段一致）。 */
+/**
+ * 三条合并行（§8.2/§8.5）：A 审查+结算齐全（人工推翻审查：decision≠outcome）；B 审查+结算齐全（审查拒绝）；
+ * C 只有结算（队列已满，未执行审查——decision/model 等模型侧字段缺失）。
+ */
 const TRACE_ROWS = [
-  { reviewId: 's1:call_A:1', callId: 'call_A', startedAt: 1_700_000_000_000, endedAt: 1_700_000_002_100, queueMs: 100, reviewMs: 2000, decision: 'allow', model: 'zai/glm-5.3', effort: 'low', toolName: 'pwsh', truncated: false },
-  { reviewId: 's1:call_B:2', callId: 'call_B', startedAt: 1_700_000_010_000, endedAt: 1_700_000_010_500, queueMs: 0, reviewMs: 500, decision: 'deny', model: 'zai/glm-5.3', effort: 'low', toolName: 'edit', truncated: false },
+  { approvalId: 'apA', callId: 'call_A', toolName: 'pwsh', origin: 'main', escalation: 'danger-full-access', startedAt: 1_700_000_000_000, endedAt: 1_700_000_002_100, queueMs: 100, reviewMs: 2000, humanWaitMs: null, decision: 'allow', outcome: 'rejected', source: 'human', model: 'zai/glm-5.3', effort: 'low', risk: 'low', auth: 'high', reason: '命令安全', subject: 'npm i', truncated: false },
+  { approvalId: 'apB', callId: 'call_B', toolName: 'edit', origin: 'main', escalation: null, startedAt: 1_700_000_010_000, endedAt: 1_700_000_010_500, queueMs: 0, reviewMs: 500, humanWaitMs: null, decision: 'deny', outcome: 'rejected', source: 'llm', model: 'zai/glm-5.3', effort: 'low', risk: 'high', auth: 'low', reason: '改动敏感文件', subject: 'edit x.ts', truncated: false },
+  { approvalId: 'apC', callId: 'call_C', toolName: 'pwsh', origin: 'subagent', escalation: null, startedAt: 1_700_000_020_000, endedAt: 1_700_000_020_010, queueMs: null, reviewMs: null, humanWaitMs: null, decision: null, outcome: 'rejected', source: 'llm', model: null, effort: null, risk: null, auth: null, reason: '审查未执行：queue-overflow', subject: 'npm run build', truncated: false },
 ];
-/** 详情：A 有 humanWaitMs 与两段全文（input/reasoning 缺）；B 什么全文都没有。 */
+/** 详情：A 有 humanWaitMs 与两段全文（input/reasoning 缺）；B 只有 humanWaitMs；C 全段缺失且 stage=queue。 */
 const TRACE_DETAILS = {
-  's1:call_A:1': { ...TRACE_ROWS[0], humanWaitMs: 400, prompt: 'PROMPT-A', output: 'OUTPUT-A' },
-  's1:call_B:2': { ...TRACE_ROWS[1], humanWaitMs: 0 },
+  apA: { ...TRACE_ROWS[0], humanWaitMs: 400, prompt: 'PROMPT-A', output: 'OUTPUT-A', layer: 'session', attempts: 1, tokens: 32, preset: 'auto-approve', configTag: 'a1b2c3d4e5f6', policyTag: 'zh:missing' },
+  apB: { ...TRACE_ROWS[1], humanWaitMs: 0, layer: 'session', attempts: 1 },
+  apC: { ...TRACE_ROWS[2], stage: 'queue', degraded: 'queue-overflow' },
 };
 /** 记录表快照：call_A 有结算工具行（X=5000ms），call_B 故意没有。 */
 const TRAJECTORY_SNAPSHOT = {
@@ -1535,7 +1608,7 @@ test('审查视图：空会话只显示提示，空列表显示空文案', async
   const env = makeCtx({
     currentSession: 's1',
     call: async (endpoint) => {
-      if (endpoint === 'approveForMe/traceRecords') return { ok: true, value: { records: [] } };
+      if (endpoint === 'approveForMe/traceRecords') return { ok: true, value: { records: [], readFailed: false } };
       if (endpoint === 'approveForMe/getState') return { ok: true, value: { trace: { capture: 'summary', ownView: true, turnSummary: true } } };
       return { ok: true, value: {} };
     },
@@ -1552,14 +1625,14 @@ test('审查视图：空会话只显示提示，空列表显示空文案', async
   assert.match(JSON.stringify(tree), /共 0 条/);
 });
 
-test('审查视图：列表展示摘要与 Z，点开后按 callId 匹配记录表得出等式，匹配不上只显示 Z', async () => {
+test('审查视图：合并行主判定为 outcome、判定与结算并存可分辨，Z 只累加在场分段；详情按 approvalId 拉', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
     currentSession: 's1',
     call: async (endpoint, args) => {
-      if (endpoint === 'approveForMe/traceRecords') return { ok: true, value: { records: TRACE_ROWS } };
-      if (endpoint === 'approveForMe/traceRecord') return { ok: true, value: { record: TRACE_DETAILS[args?.reviewId] ?? null } };
+      if (endpoint === 'approveForMe/traceRecords') return { ok: true, value: { records: TRACE_ROWS, readFailed: false } };
+      if (endpoint === 'approveForMe/traceRecord') return { ok: true, value: { record: TRACE_DETAILS[args?.approvalId] ?? null } };
       if (endpoint === 'approveForMe/getState') return { ok: true, value: { trace: { capture: 'summary', ownView: true, turnSummary: true } } };
       return { ok: true, value: {} };
     },
@@ -1573,30 +1646,19 @@ test('审查视图：列表展示摘要与 Z，点开后按 callId 匹配记录�
   hookIndex = 0;
   const listTree = render(view.component, props);
   const listText = JSON.stringify(listTree);
-  // 新在前（B 在上）；列表行的 Z 只由摘要字段算（无 humanWaitMs）：B = 0 + 500 = 500 ms。
-  assert.match(listText, /"edit"/, '新记录排在前');
-  assert.match(listText, /审批 500 ms/, '摘要行的 Z = queueMs + reviewMs');
-  assert.match(listText, /共 2 条/);
+  // 新在前（C 在上）；共 3 条；subject 摘要在场。
+  assert.match(listText, /npm run build/, 'subject 摘要进列表行');
+  assert.match(listText, /共 3 条/);
+  // A 行：主判定＝结算 outcome（人工推翻审查放行）→ 拒绝（rejected）为主、放行（allow）为次级徽标。
+  assert.match(listText, /拒绝（rejected）/, 'outcome 是主判定');
+  assert.match(listText, /放行（allow）/, '审查判定为次级徽标（GAP-04：两者可分辨）');
+  // C 行（只有结算）：Z 无任何在场分段 → 0ms 由在场分段求和得出。
+  assert.match(listText, /npm run build/);
+  assert.match(listText, /审批 0 ms/, '无在场分段时 Z=0（求和口径）');
 
-  // 点开 B（匹配不上）：只显示 Z 并标注「未匹配到工具行」；缺段显示未采集说明。
+  // 点开 A（匹配上，humanWaitMs 只在详情里）：X=5000ms，Z=100+2000+400=2500ms，Y=2500ms。
   const heads = findAllByClass(listTree, 'dsafm_review_head');
-  const headB = heads.find((entry) => JSON.stringify(entry).includes('"edit"'));
-  assert.ok(headB, '应找到 edit 行');
-  headB.props.onClick();
-  hookIndex = 0;
-  render(view.component, props);
-  await tick();
-  await tick();
-  hookIndex = 0;
-  const denyText = JSON.stringify(render(view.component, props));
-  assert.match(denyText, /审批 500 ms/, '匹配不上时仍显示 Z');
-  assert.match(denyText, /未匹配到工具行/, '匹配不上时必须标注，不猜 X');
-  assert.ok(!denyText.includes('工具总计'), '匹配不上时不得显示等式');
-  assert.equal((denyText.match(/未采集（capture 档为 summary）/g) ?? []).length, 4, '四段全文都缺时各显示一次未采集说明');
-
-  // 收起 B、点开 A（匹配上，且 humanWaitMs 只在详情里）：X=5000ms，Z=100+2000+400=2500ms，Y=2500ms。
-  const headsA = findAllByClass(render(view.component, props), 'dsafm_review_head');
-  const headA = headsA.find((entry) => JSON.stringify(entry).includes('"pwsh"'));
+  const headA = heads.find((entry) => JSON.stringify(entry).includes('"pwsh"') && JSON.stringify(entry).includes('npm i'));
   assert.ok(headA, '应找到 pwsh 行');
   headA.props.onClick();
   hookIndex = 0;
@@ -1607,20 +1669,72 @@ test('审查视图：列表展示摘要与 Z，点开后按 callId 匹配记录�
   const allowText = JSON.stringify(render(view.component, props));
   assert.match(allowText, /工具总计 5\.0 s = 执行 2\.5 s \+ 审批 2\.5 s/);
   assert.ok(!allowText.includes('未匹配到工具行'), '匹配上时不应再显示未标注');
-  assert.equal((allowText.match(/未采集（capture 档为 summary）/g) ?? []).length, 2, 'input/reasoning 两段缺');
+  // A：input/reasoning 与 evidence/probes 四段缺（capture=summary）。
+  assert.equal((allowText.match(/未采集（capture 档为 summary）/g) ?? []).length, 4, '四段缺各显示一次未采集说明');
   assert.match(allowText, /PROMPT-A/);
   assert.match(allowText, /OUTPUT-A/);
+  // 详情元信息：结算来源/环节/层级/尝试次数/标识在场（§8.2 详情补充字段）。
+  assert.match(allowText, /结算来源: 人工（human）/);
+  assert.match(allowText, /解析层级: session/);
+  assert.match(allowText, /尝试次数: 1/);
+  assert.match(allowText, /接管预设: auto-approve/);
+  assert.match(allowText, /配置标识: a1b2c3d4e5f6/);
+  assert.match(allowText, /策略标识: zh:missing/);
+  assert.match(allowText, /归属: 主会话（main）/);
+  assert.match(allowText, /升权目标: danger-full-access/);
+
+  // 收起 A、点开 C（只有结算）：全部分段缺失显示 —，不按 0 计（GAP-05）。
+  const headsC = findAllByClass(render(view.component, props), 'dsafm_review_head');
+  const headC = headsC.find((entry) => JSON.stringify(entry).includes('npm run build'));
+  headC.props.onClick();
+  hookIndex = 0;
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const cText = JSON.stringify(render(view.component, props));
+  assert.match(cText, /排队 — · 审查 — · 人工 —/, '缺失段显示 —，不按 0 计');
+  assert.match(cText, /环节: 排队（queue）/);
+  assert.match(cText, /降级标记: queue-overflow/);
+  assert.match(cText, /审查未执行：queue-overflow/, '理由段携带固定前缀原文');
+  assert.ok(!cText.includes('工具总计'), '匹配不上时不得显示等式');
+  assert.match(cText, /未匹配到工具行/, '匹配不上时必须标注，不猜 X');
+  assert.match(cText, /审批 0 ms/, '无在场分段时 Z=0（求和口径）');
+  // C 六段全文/取证缺（理由段在场）。
+  assert.equal((cText.match(/未采集（capture 档为 summary）/g) ?? []).length, 6, '六段缺各显示一次未采集说明');
+});
+
+test('审查视图：readFailed=true 时显示读取降级提示，不伪装成「没有记录」（VER-02）', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/traceRecords') return { ok: true, value: { records: [], readFailed: true } };
+      if (endpoint === 'approveForMe/getState') return { ok: true, value: { trace: { capture: 'summary', ownView: true, turnSummary: true } } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const view = env.registrations.find((entry) => entry.options.name === 'conversation.view');
+  const props = { t: reviewT, ...view.options.inject() };
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const text = JSON.stringify(render(view.component, props));
+  assert.match(text, /记录读取失败或不完整，列表可能缺少条目/);
 });
 
 test('审查视图：详情匹配 PTC 子调用行；truncated 标注已截断；拿不到 useTrajectory 时只显示 Z', async () => {
   resetHooks();
   const client = loadClient();
-  const rows = [{ ...TRACE_ROWS[0], callId: 'call_ptc', reviewId: 's1:call_ptc:3', truncated: true, queueMs: 100, reviewMs: 100 }];
+  const rows = [{ ...TRACE_ROWS[0], approvalId: 'apP', callId: 'call_ptc', truncated: true, queueMs: 100, reviewMs: 100, decision: null, outcome: 'rejected', source: 'llm', reason: '危险写入', subject: null }];
   const detail = { ...rows[0], humanWaitMs: 0, prompt: 'P2' };
   const env = makeCtx({
     currentSession: 's1',
     call: async (endpoint) => {
-      if (endpoint === 'approveForMe/traceRecords') return { ok: true, value: { records: rows } };
+      if (endpoint === 'approveForMe/traceRecords') return { ok: true, value: { records: rows, readFailed: false } };
       if (endpoint === 'approveForMe/traceRecord') return { ok: true, value: { record: detail } };
       if (endpoint === 'approveForMe/getState') return { ok: true, value: { trace: { capture: 'full', ownView: true, turnSummary: true } } };
       return { ok: true, value: {} };
@@ -1906,6 +2020,8 @@ test('毫秒字段秒数读数：生效值常驻、草稿随输入实时换算�
   const typed = await afterEdit('120000');
   assert.equal(secSpan(typed, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_draft').props.children, '草稿：120 秒', '键入 120000 未保存即出现 120 秒');
   assert.equal(secSpan(typed, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_resolved').props.children, '生效：300 秒', '生效值读数不随草稿变化');
+  // GAP-06：草稿与生效值都非 0 时，无上限风险提醒不在场。
+  assert.equal(secSpan(typed, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_warn'), undefined, '非零时限不显示提醒');
   // 判据③＋格式边界：整数不带小数点；非整数一位小数（1501 四舍五入到 1.5；999 到 1.0）；0 按字面显示。
   const oneFive = await afterEdit('1500');
   assert.equal(secSpan(oneFive, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_draft').props.children, '草稿：1.5 秒', '1500 → 1.5 秒');
@@ -1915,12 +2031,58 @@ test('毫秒字段秒数读数：生效值常驻、草稿随输入实时换算�
   assert.equal(secSpan(sub, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_draft').props.children, '草稿：1.0 秒', '999 → 1.0 秒（非整数秒一位小数）');
   const zero = await afterEdit('0');
   assert.equal(secSpan(zero, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_draft').props.children, '草稿：0 秒', '0 按字面显示 0 秒');
+  // GAP-06（设计 §7.2）：草稿为 0 → 无上限风险提醒固定渲染在审查时限字段的秒数读数行内，
+  // 可见性不依赖帮助区；只描述风险不改写输入（0 仍可保存）。人工时限字段的 0 是「立即拒绝」，不显示。
+  const warnZero = secSpan(zero, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_warn');
+  assert.ok(warnZero, '草稿为 0 时无上限提醒必须在场');
+  assert.match(String(warnZero.props.children), /无限停/u);
+  assert.equal(secSpan(zero, 'approve-for-me-sec-human-timeoutMs', 'dsafm_sec_warn'), undefined, '人工时限的 0 不显示该提醒');
   // 判据⑥：en 档单位 s（同一暂存文本，读数跟随语言）。
   const enProps = { t: (key) => dicts.en[key] ?? key, scope: env.scope, ...card.options.inject() };
   hookIndex = 0;
   const enTree = render(card.component, enProps);
   assert.equal(secSpan(enTree, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_resolved').props.children, 'Effective: 300 s', 'en 档生效值读数单位 s');
   assert.equal(secSpan(enTree, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_draft').props.children, 'Draft: 0 s', 'en 档草稿读数单位 s');
+  // GAP-06 中英成对：en 档提醒文本同样在场。
+  const warnEn = secSpan(enTree, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_warn');
+  assert.ok(warnEn && /forever/u.test(String(warnEn.props.children)), 'en 档无上限提醒在场');
+});
+
+test('GAP-06：生效值为 0 即显示无上限提醒（保存读回语义）；草稿改回非零不撤销提醒', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    snapshot: {
+      status: 'ready',
+      value: { reviewer: { timeoutMs: 0 }, human: { timeoutMs: 600000 } },
+      base: {},
+      user: {},
+      revision: 1,
+      writable: true,
+    },
+  });
+  client.apply(env.ctx);
+  const dicts = env.dictionaries[0].dicts;
+  const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
+  const props = { t: (key) => dicts.zh[key] ?? key, scope: env.scope, ...card.options.inject() };
+  const tree = await expandCard(card.component, props);
+  const line = findAllNodes(tree, (node) => node.props?.id === 'approve-for-me-sec-reviewer-timeoutMs')[0];
+  assert.ok(line, '审查时限秒数读数行应在场');
+  const resolved = findAllByClass(line, 'dsafm_sec_resolved')[0];
+  assert.equal(resolved.props.children, '生效：0 秒', '生效值读数为 0 秒');
+  const warn = findAllByClass(line, 'dsafm_sec_warn')[0];
+  assert.ok(warn, '生效值为 0 即显示提醒（保存读回仍可见）');
+  assert.match(String(warn.props.children), /不会自动恢复时限/u);
+  // 草稿分支互补：生效值仍为 0、草稿键入非零 → 提醒必须仍在场（设计 §7.2「草稿为 0 或生效值为 0」）。
+  const marker = findAllNodes(tree, (node) => node.type === primitivesStub.SettingsValueField)
+    .find((node) => node.props.id === 'approve-for-me-ctl-reviewer-timeoutMs');
+  marker.props.onEdit('120000');
+  await tick();
+  hookIndex = 0;
+  const typed = render(card.component, props);
+  const typedLine = findAllNodes(typed, (node) => node.props?.id === 'approve-for-me-sec-reviewer-timeoutMs')[0];
+  assert.equal(findAllByClass(typedLine, 'dsafm_sec_draft')[0].props.children, '草稿：120 秒', '草稿读数随键入换算');
+  assert.ok(findAllByClass(typedLine, 'dsafm_sec_warn')[0], '生效值为 0 时草稿非零不撤销提醒');
 });
 
 test('秒数读数占位：清空与非数字走占位、生效值读数仍在场（R30 判据④⑦）', async () => {

@@ -55,7 +55,7 @@ test('同一会话串行 1：第二个任务排队', async () => {
   assert.deepEqual(started, ['1', '2']);
 });
 
-test('排队上限与排队超时都按拒绝处理', async () => {
+test('排队上限与排队超时都按拒绝处理；排队超时携带 queueMs 观测', async () => {
   const overflow = createScheduler({ max: 1, queueMax: 1, queueTimeoutMs: 1000 });
   const hold = deferred();
   const running = overflow.run({ sessionId: 'a', callId: '1' }, () => hold.promise);
@@ -70,14 +70,17 @@ test('排队上限与排队超时都按拒绝处理', async () => {
   const slow = deferred();
   const runningSlow = timeout.run({ sessionId: 'a', callId: '1' }, () => slow.promise);
   const timedOut = await timeout.run({ sessionId: 'b', callId: '2' }, async () => 'b');
-  assert.deepEqual(timedOut, { ok: false, reason: 'queue-timeout' });
+  // GAP-01：失败包络只在 queue-timeout 带 queueMs（入口→放弃的实际等待），其他失败不带。
+  assert.equal(timedOut.ok, false);
+  assert.equal(timedOut.reason, 'queue-timeout');
+  assert.ok(Number.isFinite(timedOut.queueMs) && timedOut.queueMs >= 0, '排队超时必须携带 queueMs');
   slow.resolve('a');
   await runningSlow;
 });
 
-test('同一 (sessionId, callId) 去重：在飞共享结果，完成后按 TTL 复用', async () => {
+test('GAP-01：同键并发不再共享在飞任务——各自排队、各自执行', async () => {
   let calls = 0;
-  const scheduler = createScheduler({ max: 2, dedupeTtlMs: 1000 });
+  const scheduler = createScheduler({ max: 2 });
   const task = async () => {
     calls += 1;
     return { decision: 'allow' };
@@ -86,28 +89,35 @@ test('同一 (sessionId, callId) 去重：在飞共享结果，完成后按 TTL 
     scheduler.run({ sessionId: 's', callId: 'c1' }, task),
     scheduler.run({ sessionId: 's', callId: 'c1' }, task),
   ]);
-  assert.deepEqual(a, b);
-  assert.equal(calls, 1);
-  const again = await scheduler.run({ sessionId: 's', callId: 'c1' }, task);
-  assert.deepEqual(again.value, { decision: 'allow' });
-  assert.equal(calls, 1, 'TTL 内应复用已完成结果');
+  assert.deepEqual(a, { ok: true, value: { decision: 'allow' } });
+  assert.deepEqual(b, { ok: true, value: { decision: 'allow' } });
+  assert.equal(calls, 2, '两次投递都真实执行审查（在飞共享已按设计 §5.1 退役）');
 });
 
-test('去重窗口过期后重新执行', async () => {
+test('GAP-01：任务回调收到 queueMs（入口→许可），排队者测量真实等待', async () => {
   let clock = 0;
-  let calls = 0;
-  const scheduler = createScheduler({ max: 1, dedupeTtlMs: 100, now: () => clock });
-  const task = async () => {
-    calls += 1;
-    return calls;
-  };
-  await scheduler.run({ sessionId: 's', callId: 'c1' }, task);
-  clock = 500;
-  const second = await scheduler.run({ sessionId: 's', callId: 'c1' }, task);
-  assert.equal(second.value, 2);
+  const scheduler = createScheduler({ max: 1, queueTimeoutMs: 10_000, now: () => clock });
+  const hold = deferred();
+  const seen = [];
+  const running = scheduler.run({ sessionId: 'a', callId: '1' }, async (queueMs) => {
+    seen.push(queueMs);
+    await hold.promise;
+    return 'a';
+  });
+  const queued = scheduler.run({ sessionId: 'b', callId: '2' }, async (queueMs) => {
+    seen.push(queueMs);
+    return 'b';
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  clock = 25;
+  hold.resolve('x');
+  await running;
+  await queued;
+  assert.equal(seen[0], 0, '首个任务立即取得许可：queueMs=0');
+  assert.ok(seen[1] >= 25, `排队任务的 queueMs≥排队时长：${seen[1]}`);
 });
 
-test('熔断：连续拒绝达到阈值后打开，冷却后恢复', async () => {
+test('冷却：连续拒绝达到阈值后打开，冷却期结束后恢复', async () => {
   let clock = 0;
   const scheduler = createScheduler({
     max: 1,
@@ -136,7 +146,7 @@ test('allow 清零连续计数；error 与 deny 同权计数（R48 口径改写�
   assert.equal(scheduler.state().breakerOpen, false);
   // 变异对照：record 对 error 继续早退时 consecutive 停在 0，下一断言红。
   scheduler.record('error');
-  assert.equal(scheduler.state().breakerOpen, true, 'error 连发达阈值同样打开熔断');
+  assert.equal(scheduler.state().breakerOpen, true, 'error 连发达阈值同样打开冷却');
 });
 
 test('任务抛错收敛为失败结果，许可仍被释放', async () => {
@@ -188,25 +198,76 @@ test('R31② 失败不入 TTL 缓存：queue-timeout 后同 callId 重发重新�
   assert.equal(calls, 1, '失败结果不得缓存，重发必须重新执行');
 });
 
-test('R31③ dedupe 缓存有界：超过 256 条后最旧淘汰，最新键仍可复用', async () => {
-  const scheduler = createScheduler({ max: 1, dedupeTtlMs: 60000 });
-  for (let index = 0; index < 2000; index += 1) {
+test('GAP-01：无 callId 的并发请求各自执行；大批量顺序执行后状态干净', async () => {
+  let calls = 0;
+  const scheduler = createScheduler({ max: 4 });
+  const task = async () => {
+    calls += 1;
+    return calls;
+  };
+  const [a, b] = await Promise.all([
+    scheduler.run({ sessionId: 's' }, task),
+    scheduler.run({ sessionId: 's' }, task),
+  ]);
+  assert.equal(calls, 2, '缺 callId 的并发请求必须各自执行');
+  assert.notEqual(a.value, b.value);
+
+  // 大批量顺序执行：全部完成、无遗留（dedupe 缓存已退役，state 不再有 dedupeSize）。
+  for (let index = 0; index < 500; index += 1) {
     await scheduler.run({ sessionId: 's', callId: `c${index}` }, async () => index);
   }
-  assert.ok(scheduler.state().dedupeSize <= 256, `dedupe 尺寸必须有界：${scheduler.state().dedupeSize}`);
-  // 最新键仍在缓存：复用、不执行（变异对照：去掉容量淘汰 → 尺寸 2000，本断言不红但上一条红）。
-  let calls = 0;
-  const again = await scheduler.run({ sessionId: 's', callId: 'c1999' }, async () => {
-    calls += 1;
-    return 'again';
-  });
-  assert.deepEqual(again, { ok: true, value: 1999 });
-  assert.equal(calls, 0, '最新键仍应命中缓存');
+  assert.equal(scheduler.state().inFlight, 0);
+  assert.equal('dedupeSize' in scheduler.state(), false, 'dedupe 状态已随 GAP-01 退役');
+  const again = await scheduler.run({ sessionId: 's', callId: 'c499' }, async () => 'again');
+  assert.deepEqual(again, { ok: true, value: 'again' }, '重发同键重新执行，不复用任何缓存');
 });
 
-// ── R48：error 计入熔断窗口 ────────────────────────────────────────────────
+// ── VER-03：排队与冷却零值的现行边界（验证留档，不改语义） ────────────────────
 
-test('R48-①调度器层 连续 error 达 consecutiveDenials → 熔断打开，冷却后恢复', async () => {
+test('VER-03：queueMax=0 → 满载时不再排队，直接按 queue-overflow 拒绝', async () => {
+  const scheduler = createScheduler({ max: 1, queueMax: 0, queueTimeoutMs: 1000 });
+  const hold = deferred();
+  const running = scheduler.run({ sessionId: 'a', callId: '1' }, () => hold.promise);
+  const rejected = await scheduler.run({ sessionId: 'b', callId: '2' }, async () => 'never');
+  // 现行边界：每会话排队上限 0＝不设等待位，争用时立即拒绝（不是无限排队）。
+  assert.deepEqual(rejected, { ok: false, reason: 'queue-overflow' });
+  hold.resolve('a');
+  await running;
+});
+
+test('VER-03：queueTimeoutMs=0 → 争用请求拿不到立即释放的许可即按排队超时拒绝', async () => {
+  const scheduler = createScheduler({ max: 1, queueMax: 4, queueTimeoutMs: 0 });
+  const hold = deferred();
+  const running = scheduler.run({ sessionId: 'a', callId: '1' }, () => hold.promise);
+  const timedOut = await scheduler.run({ sessionId: 'b', callId: '2' }, async () => 'never');
+  // 现行边界：零等待上限＝零延时计时器在下一宏任务生效，等待许可的请求随即按 queue-timeout 拒绝。
+  assert.equal(timedOut.ok, false);
+  assert.equal(timedOut.reason, 'queue-timeout');
+  assert.ok(Number.isFinite(timedOut.queueMs), '零等待超时同样携带 queueMs 观测');
+  hold.resolve('a');
+  await running;
+  // 许可空出后新请求照常执行（零值只影响争用期的等待）。
+  const after = await scheduler.run({ sessionId: 'b', callId: '3' }, async () => 'ok');
+  assert.deepEqual(after, { ok: true, value: 'ok' });
+});
+
+test('VER-03：cooldownMs=0 → 冷却打开后下次检查即恢复（零时长冷却）', async () => {
+  let clock = 0;
+  const scheduler = createScheduler({
+    breaker: { consecutiveDenials: 2, windowSize: 10, windowDenials: 5, cooldownMs: 0 },
+    now: () => clock,
+  });
+  scheduler.record('deny');
+  scheduler.record('deny');
+  // 现行边界：冷却时长 0＝now()-openedAt>=0 恒真，下次 run 前检查即自动关闭并清零计数。
+  const allowed = await scheduler.run({ sessionId: 's', callId: 'c1' }, async () => 'x');
+  assert.deepEqual(allowed, { ok: true, value: 'x' }, '零时长冷却不拦截后续请求');
+  assert.equal(scheduler.state().consecutive, 0, '自动关闭同时清空连续计数');
+});
+
+// ── R48：error 计入冷却窗口 ────────────────────────────────────────────────
+
+test('R48-①调度器层 连续 error 达 consecutiveDenials → 冷却打开，冷却期结束后恢复', async () => {
   let clock = 0;
   const scheduler = createScheduler({
     breaker: { consecutiveDenials: 3, windowSize: 10, windowDenials: 5, cooldownMs: 100 },
@@ -216,9 +277,9 @@ test('R48-①调度器层 连续 error 达 consecutiveDenials → 熔断打开�
   scheduler.record('error');
   assert.equal(scheduler.state().breakerOpen, false, '两次 error 未达阈值');
   scheduler.record('error');
-  assert.equal(scheduler.state().breakerOpen, true, '第三次 error 打开熔断（与 deny 同权）');
+  assert.equal(scheduler.state().breakerOpen, true, '第三次 error 打开冷却（与 deny 同权）');
   const blocked = await scheduler.run({ sessionId: 's', callId: 'c1' }, async () => 'x');
-  assert.deepEqual(blocked, { ok: false, reason: 'breaker-open' }, '熔断打开后零任务执行');
+  assert.deepEqual(blocked, { ok: false, reason: 'breaker-open' }, '冷却打开后零任务执行');
   clock = 200;
   assert.equal(scheduler.state().breakerOpen, false, '冷却结束自动关闭并清空计数');
 });

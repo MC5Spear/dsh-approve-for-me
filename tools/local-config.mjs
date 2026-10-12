@@ -1,10 +1,9 @@
 /**
  * 本机配置加载器——公开范围与「本机侧」之间**唯一**的通道。
  *
- * 本仓采用单仓双层：本目录即公开仓，机器事实（宿主安装树锚点、实例 URL、启动 token
- * 文件、浏览器路径、探针输出目录）一律不进公开范围，只存在于不被 git 跟踪的
- * `.local/config.mjs`。公开范围的脚本与用例经本模块取值，因此公开代码里没有任何
- * 硬编码的机器事实，而本机跑的时候又能拿到真实值。
+ * 宿主安装树、实例 URL、启动 token 文件、浏览器与探针目录通过环境变量或
+ * `.local/config.mjs` 提供；配置文件不由本公开仓跟踪。公开脚本与用例经本模块
+ * 读取配置，不在代码中写入具体机器路径或实例坐标。
  *
  * **解析顺序（逐字段）**：
  *   1. 环境变量（最高优先，便于 CI 与一次性覆盖）
@@ -184,5 +183,5 @@ export async function instance(name) {
  */
 export function missingNotice(field, hint) {
   return `[dsafm] 未配置 ${field}${hint === undefined ? '' : `（${hint}）`}：`
-    + `设对应 DSAFM_* 环境变量，或在不被跟踪的本机侧里声明——形状见 tools/local-config.example.mjs。按文档化跳过。`;
+    + `设对应 DSAFM_* 环境变量，或在不由本公开仓跟踪的本机配置里声明——形状见 tools/local-config.example.mjs。按文档化跳过。`;
 }

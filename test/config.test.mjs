@@ -7,7 +7,7 @@ import { Config, normalizeConfig } from '../lib/config.js';
 
 // ── R37：数值边界（毫秒上界与 temperature 有限性） ────────────────────────
 
-/** 五个进 setTimeout 域的毫秒字段（设计 §22.7）：上界必须是 2^31-1。 */
+/** 五个进 setTimeout 域的毫秒字段（设计 §6.1）：上界必须是 2^31-1。 */
 const MS_FIELDS = [
   ['reviewer', 'timeoutMs'],
   ['reviewer', 'toolTimeoutMs'],
@@ -86,7 +86,7 @@ test('R42③ 输出契约显式化：normalizeConfig 的 JSDoc 写明输入/输�
 // 宿主调用链：settings.describe → schema.toJSON() 信封 →（客户端镜像可能再序列化一次）→
 // new Schema(信封) 重组 → validate(draft)。transform 节点的 JS 回调在第二次序列化时丢失
 // （callback=undefined），重组后校验任何值都抛 `callback is not a function`、decode() 返回
-// undefined、表单整片全空——所以 Config 全树禁止 transform（修复口径，design §27）。
+// undefined、表单整片全空——所以 Config 全树禁止 transform（修复口径，设计 §6.1）。
 
 test('ISS-1① 信封全树无 transform 节点：一次与二次序列化都不携带回调', () => {
   const json1 = JSON.stringify(Config.toJSON());

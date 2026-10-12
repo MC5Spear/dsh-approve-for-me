@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { createReviewer } from '../lib/reviewer.js';
 
 /**
- * 审查记录接线测试（设计 §17.2/§17.6）。
+ * 审查记录接线测试（设计 §8.2/§8.3）。
  *
  * 覆盖两层：`lib/reviewer.js` 的 onReview 契约（成功路径的字段一致性、采集档开关、fire-and-forget），
  * 以及 `lib/index.js` 的端到端接线（gate 补的审批上下文 → reviewer → onReview → JSONL 落盘、
@@ -119,9 +119,11 @@ test('onReview：成功审查后恰好调用一次，判定相关字段与 Verdi
       usage: { reasoningTokens: 7 },
     },
   ]);
-  const verdict = await h.review({ trace: { sessionId: 'session-t1', callId: 'call-9', toolName: 'pwsh' } });
+  const verdict = await h.review({ trace: { sessionId: 'session-t1', callId: 'call-9', toolName: 'pwsh', approvalId: 'ap-1', origin: 'main', escalation: 'rules', preset: 'auto-approve' }, queueMs: 4 });
   assert.equal(h.entries.length, 1, '一次审查恰好一条记录');
   const entry = h.entries[0];
+  assert.equal(entry.kind, 'review');
+  assert.equal(entry.approvalId, 'ap-1');
   assert.equal(entry.decision, 'allow');
   assert.equal(entry.decision, verdict.decision);
   assert.equal(entry.reason, 'ok');
@@ -135,9 +137,75 @@ test('onReview：成功审查后恰好调用一次，判定相关字段与 Verdi
   assert.equal(entry.sessionId, 'session-t1');
   assert.equal(entry.callId, 'call-9');
   assert.equal(entry.toolName, 'pwsh');
+  assert.equal(entry.origin, 'main');
+  assert.equal(entry.escalation, 'rules');
+  assert.equal(entry.preset, 'auto-approve');
+  assert.equal(entry.queueMs, 4, '排队等待时长经 opts.queueMs 进记录');
   assert.equal(Number.isFinite(entry.startedAt), true);
   assert.equal(Number.isFinite(entry.endedAt), true);
   assert.equal(entry.reviewMs >= 0, true);
+  // §8.2 摘要取证字段：attempts、subject/evidence/probes、配置与策略标识。
+  assert.equal(entry.attempts, 1, '成功路径流过一次模型');
+  assert.match(entry.subject, /npm i/, 'subject 取命令文本');
+  assert.equal(entry.evidence, 'E', 'evidence 取送审证据原文（pre.evidence）');
+  assert.equal(entry.probes, undefined, '无工具轮时 probes 缺失');
+  assert.equal(entry.tools, 0);
+  // §8.2 fieldsDefaulted 生产侧口径：解析完整（risk/auth/rationale 都在场）→ 空串＝无补全。
+  assert.equal(entry.fieldsDefaulted, '', '无字段缺失时 fieldsDefaulted 为空串');
+  assert.match(entry.configTag, /^[0-9a-f]{12}$/, 'configTag 是稳定串摘要的前 12 位十六进制');
+  assert.match(entry.policyTag, /^(zh|en):(missing|[0-9a-f]{12})$/, 'policyTag 带语言与策略文件摘要');
+  assert.equal(verdict.queueMs, 4, 'queueMs 随判定返回给 gate 结算');
+});
+
+test('onReview：subject/reason 超出 maxEntryBytes 时首尾保留并置 truncated', async () => {
+  const h = harness(
+    [
+      {
+        blocks: [text('{"outcome":"deny","rationale":"' + 'x'.repeat(4096) + '"}')],
+      },
+    ],
+    { cfg: { context: { maxEntryBytes: 64 } } },
+  );
+  await h.review();
+  const entry = h.entries[0];
+  assert.equal(entry.truncated, true, '任一摘要字段被裁剪即置 truncated');
+  // JSON 只有 outcome＋rationale：risk/auth 缺失按 outcome 回退 → 清单按序逗号拼接（§8.2）。
+  assert.equal(entry.fieldsDefaulted, 'risk,auth', '缺失字段的清单值按序拼接');
+  assert.ok(entry.reason.includes('<truncated bytes='), '截断标记在场');
+  assert.ok(entry.reason.startsWith('x') && entry.reason.endsWith('x'), '首尾保留');
+  assert.ok(Buffer.byteLength(entry.reason, 'utf8') <= 64 + 96, '裁剪后不显著超出预算（标记本身占字节）');
+});
+
+test('onReview：redactText 先于裁剪套用（脱敏后不再出现敏感串）', async () => {
+  const seen = [];
+  const redacted = [];
+  const entries = [];
+  const turns = [{ blocks: [text('{"outcome":"deny","rationale":"leak SECRET now"}')] }];
+  let index = 0;
+  const llm = { stream() { const turn = turns[Math.min(index, turns.length - 1)]; index += 1; return (async function* gen() { for (const b of turn.blocks) yield { type: 'block', index: 0, block: b }; yield { type: 'finish', reason: { kind: 'stop' } }; })(); } };
+  const reviewer = createReviewer({
+    llm,
+    blocks: { BlockAssembler: FakeAssembler },
+    messages,
+    tools: { schemas: [], run: async () => ({ text: 'x', isError: false }) },
+    prompt,
+    audit: () => {},
+    redactText: (text) => { seen.push(text); return text.replaceAll('SECRET', '***'); },
+    onReview: (entry) => entries.push(entry),
+  });
+  await reviewer.review(
+    { toolName: 'pwsh', reason: 'escalate sandbox: x' },
+    { command: 'run SECRET cmd' },
+    { fields: {}, evidence: 'E SECRET' },
+    { reviewer: { maxTokens: 0, temperature: 0, maxToolSteps: 4, timeoutMs: 1000 }, audit: {}, resolution: { provider: 'p1', model: 'm1', layer: 'user', effort: 'low' } },
+    { id: 'r1', signal: new AbortController().signal },
+  );
+  assert.ok(seen.some((text) => text.includes('SECRET')), '脱敏函数见到原文');
+  const entry = entries[0];
+  assert.ok(!entry.reason.includes('SECRET'), 'reason 已脱敏');
+  assert.ok(!entry.subject.includes('SECRET'), 'subject 已脱敏');
+  assert.ok(!entry.evidence.includes('SECRET'), 'evidence 已脱敏');
+  redacted.push(entry);
 });
 
 test('onReview：capture=off 时不收集 prompt/input/reasoning/output 全文（避免白做功）', async () => {
@@ -284,30 +352,55 @@ test('index 接线：record 收到 sessionId/callId/toolName，配置签名变�
 
     assert.equal(await answerer(request(), next), 'rejected');
     const file = join(tmp, 'approve-for-me', 'reviews', 'trace-wire.jsonl');
-    const first = await waitForLines(file, 1);
-    assert.equal(first.length, 1);
+    // 每审批恰两条：审查记录先落（reviewer 汇合点），结算记录随后（gate 按 fallback 结算）。
+    const first = await waitForLines(file, 2);
+    assert.equal(first.length, 2);
+    assert.equal(first[0].kind, 'review');
     assert.equal(first[0].sessionId, 'trace-wire', 'record 收到 sessionId（存储侧按文件键归一化）');
     assert.equal(first[0].callId, 'call-1', 'callId 来自审批请求的 request.callId（gate.js 补入）');
     assert.equal(first[0].toolName, 'pwsh', 'toolName 来自审批请求的 request.toolName（gate.js 补入）');
     assert.equal(first[0].decision, 'error');
     assert.equal(first[0].model, 'deepseek-official/probe-model');
     assert.equal(first[0].effort, 'low');
-    assert.equal(first[0].reviewKeySource, 'startedAt', 'askedSeq 拿不到时由 startedAt 回退');
+    assert.equal(first[0].origin, 'main');
+    assert.equal(first[0].preset, 'auto-approve', '接管命中的权限预设名（事件折叠回退）');
+    assert.equal(first[0].attempts, 2, '同步抛错属可重试错误类：R47 整建重试一次后仍失败（尝试次数 2）');
+    assert.match(first[0].configTag, /^[0-9a-f]{12}$/);
     assert.equal(Number.isFinite(first[0].startedAt), true);
     assert.equal(Number.isFinite(first[0].reviewMs), true);
     assert.equal(first[0].prompt, undefined, 'capture=summary（默认档）不落详情全文');
+    assert.equal(first[1].kind, 'settle');
+    assert.equal(first[1].outcome, 'rejected');
+    assert.equal(first[1].source, 'llm', '模型侧错误按 llm 来源结算');
+    // §8.4 settle 行端到端落盘（gate→onSettle→trace-store）：摘要字段带脱敏后的理由与命令主题、
+    // 跨度两端在场；非超时结算不带 stage。
+    assert.match(first[1].reason, /stream exploded/, '结算理由来自审查判定的 reason 摘要');
+    assert.equal(first[1].subject, 'npm i', 'subject 是脱敏后的命令主题');
+    assert.equal(Number.isFinite(first[1].endedAt), true);
+    assert.equal(first[1].stage, undefined, '非超时结算不带 stage');
+    assert.equal(first[0].fieldsDefaulted, '', '模型没产出判定：解析未发生，fieldsDefaulted 为空串');
+    assert.equal(first[1].approvalId, first[0].approvalId, '两类记录经 approvalId 关联');
+    assert.equal(first[1].callId, 'call-1');
+    assert.equal(first[1].origin, 'main');
+    assert.equal(first[1].preset, 'auto-approve');
+    assert.notEqual(first[1].reviewId, first[0].reviewId, 'kind 进键：两行主键不同');
+    assert.ok(first[1].reviewId.endsWith(`:settle:${first[1].approvalId}`), '结算行主键＝四段键的 settle 段');
 
     // 改配置签名（maxBytes 变化）→ 重建存储实例；事实源是 JSONL，同一文件继续追加、旧数据不丢。
     // 0.1.7：直接原地改 config 对象——current() 现算即读到新签名，无需任何设置服务回调。
     config.ui = { trace: { maxBytes: 512 } };
     callId = 'call-2';
     assert.equal(await answerer(request(), next), 'rejected');
-    const both = await waitForLines(file, 2);
-    assert.equal(both.length, 2, '两次写入都落在同一会话的 JSONL 里');
+    const both = await waitForLines(file, 4);
+    assert.equal(both.length, 4, '两次审批各两条记录都落在同一会话的 JSONL 里');
     assert.equal(both[0].callId, 'call-1', '重建前的记录仍在（数据不丢）');
-    assert.equal(both[1].callId, 'call-2');
-    assert.equal(both[1].sessionId, 'trace-wire');
-    assert.notEqual(both[0].reviewId, both[1].reviewId);
+    assert.equal(both[2].kind, 'review');
+    assert.equal(both[2].callId, 'call-2');
+    assert.equal(both[3].kind, 'settle');
+    assert.equal(both[3].callId, 'call-2');
+    assert.equal(both[2].sessionId, 'trace-wire');
+    assert.notEqual(both[0].reviewId, both[2].reviewId);
+    assert.notEqual(both[0].approvalId, both[2].approvalId, '两次审批是不同审批实例');
   } finally {
     if (previousHome === undefined) delete process.env.DSH_HOME;
     else process.env.DSH_HOME = previousHome;

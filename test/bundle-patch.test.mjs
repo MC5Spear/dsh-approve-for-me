@@ -5,11 +5,11 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * R57（设计 §28.2/§28.6/§28.10）：bundle patch 形状守护＋发布范围守护。
+ * R57（设计 §9.1）：bundle patch 形状守护＋发布范围守护。
  *
  * 预设注入主路径＝本包 cordis.patch.yml 的 permission 行四档重述（随包装卸）；
  * 生命周期脚本是被实测否决的路径（pnpm 不执行依赖卸载脚本），禁止回潮。
- * 本文件不解析 YAML（无解析依赖）：按行定位做定向断言，与 lib/permission-preset.js
+ * 本文件不解析 YAML（无解析依赖）：按行定位做定向断言，与既有手术合同的历史形态
  * 的锚点式文本编辑同一哲学——不猜结构，找不到锚点就红。
  */
 
@@ -127,7 +127,7 @@ test('bundle patch：auto-approve knobs 与 workspace-write 逐字段等同＋�
   const block = rowBlock('permission');
   const workspaceWrite = tierIndex(block, 'workspace-write');
   const autoApprove = tierIndex(block, 'auto-approve');
-  // knobs 等同是宿主 derive() 会话回落的前提（设计 §28.3-1）：unset 或改值都会让旧会话悬空。
+  // knobs 等同是宿主 derive() 会话回落的前提（设计 §9.1）：unset 或改值都会让旧会话悬空。
   assert.equal(scalarOf(autoApprove, block, 'sandbox'), scalarOf(workspaceWrite, block, 'sandbox'), 'auto-approve.sandbox 必须与 workspace-write 相同');
   assert.equal(scalarOf(autoApprove, block, 'approval'), scalarOf(workspaceWrite, block, 'approval'), 'auto-approve.approval 必须与 workspace-write 相同');
   assert.match(patchLines[autoApprove + 3] ?? '', /name: 自动审批/u, 'auto-approve 需带展示名');
@@ -163,9 +163,12 @@ test('发布范围守护：生命周期禁令按规则判全——npm 全集键�
 test('发布范围守护：files 白名单与 hooks 缺席', () => {
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
   const files = pkg.files ?? [];
-  for (const entry of ['cordis.patch.yml', 'lib', 'tools/permission-preset.mjs']) {
+  for (const entry of ['cordis.patch.yml', 'lib']) {
     assert.ok(files.includes(entry), `files 白名单缺少 ${entry}`);
   }
+  // GAP-02：配置清理工具随手术机制整体退役，发布产物不再携带。
+  assert.ok(!files.includes('tools/permission-preset.mjs'), 'files 白名单不得再含配置清理工具');
+  assert.equal(existsSync(join(root, 'tools', 'permission-preset.mjs')), false, '配置清理工具脚本必须删除');
   assert.ok(!files.includes('hooks'), 'files 白名单不得再含 hooks');
   assert.equal(existsSync(join(root, 'hooks')), false, 'hooks/ 目录必须删除（生命周期脚本禁令）');
 });

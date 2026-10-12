@@ -23,7 +23,7 @@ export const getStateResultSchema = z.object({
   layer: z.string(),
   preset: z.string().nullable(),
   active: z.boolean(),
-  /** 轨迹集成（设计 §17）：自有视图开关与采集档；0.1.7 起档位开关已退役（§17.0）。 */
+  /** 轨迹集成（设计 §8.5）：自有视图开关与采集档；0.1.7 起档位开关已退役（§8.5）。 */
   trace: z.object({ capture: z.string(), ownView: z.boolean(), turnSummary: z.boolean(), legacyRow: z.boolean() }),
 });
 
@@ -64,43 +64,71 @@ export const presetCatalogResultSchema = z.object({
   configured: z.array(z.string()),
 });
 
-/** `traceRecords` 结果：某会话的审查记录列表（只回摘要字段，全文由 `traceRecord` 按需拉）。 */
+/** `traceRecords` 结果：某会话的审查与结算合并行（§8.2 摘要字段词汇表；详情按 `approvalId` 经 `traceRecord` 拉取）。 */
 export const traceRecordsResultSchema = z.object({
   records: z.array(
     z.object({
-      reviewId: z.string(),
+      approvalId: z.string(),
       callId: z.string().nullable(),
+      toolName: z.string().nullable(),
+      origin: z.string().nullable(),
+      escalation: z.string().nullable(),
       startedAt: z.number().nullable(),
       endedAt: z.number().nullable(),
       queueMs: z.number().nullable(),
       reviewMs: z.number().nullable(),
+      humanWaitMs: z.number().nullable(),
       decision: z.string().nullable(),
+      outcome: z.string().nullable(),
+      source: z.string().nullable(),
       model: z.string().nullable(),
       effort: z.string().nullable(),
-      toolName: z.string().nullable(),
+      risk: z.string().nullable(),
+      auth: z.string().nullable(),
+      reason: z.string().nullable(),
+      subject: z.string().nullable(),
       truncated: z.boolean(),
     }),
   ),
+  readFailed: z.boolean(),
 });
 
-/** `traceRecord` 结果：单条审查记录详情；全文字段只在写入时 `capture=full` 才存在。 */
+/** `traceRecord` 结果：按审批实例 id 合并的详情；全文字段只在写入时 `capture=full` 才存在。 */
 export const traceRecordResultSchema = z.object({
   record: z
     .object({
-      reviewId: z.string(),
+      approvalId: z.string(),
       callId: z.string().nullable(),
+      toolName: z.string().nullable(),
+      origin: z.string().nullable(),
+      escalation: z.string().nullable(),
       startedAt: z.number().nullable(),
       endedAt: z.number().nullable(),
       queueMs: z.number().nullable(),
       reviewMs: z.number().nullable(),
+      humanWaitMs: z.number().nullable(),
       decision: z.string().nullable(),
+      outcome: z.string().nullable(),
+      source: z.string().nullable(),
       model: z.string().nullable(),
       effort: z.string().nullable(),
-      toolName: z.string().nullable(),
+      risk: z.string().nullable(),
+      auth: z.string().nullable(),
+      reason: z.string().nullable(),
+      subject: z.string().nullable(),
       truncated: z.boolean(),
-      humanWaitMs: z.number().optional(),
+      stage: z.string().optional(),
+      layer: z.string().optional(),
+      attempts: z.number().optional(),
+      tools: z.number().optional(),
+      fieldsDefaulted: z.string().optional(),
+      degraded: z.string().optional(),
+      preset: z.string().optional(),
+      evidence: z.string().optional(),
+      probes: z.string().optional(),
+      configTag: z.string().optional(),
+      policyTag: z.string().optional(),
       tokens: z.number().optional(),
-      reviewKeySource: z.string().optional(),
       prompt: z.string().optional(),
       input: z.string().optional(),
       reasoning: z.string().optional(),
@@ -234,7 +262,7 @@ export const TYPERT = {
       invocation: { kind: 'direct' },
       parameters: params([
         { name: 'sessionId', schema: z.string() },
-        { name: 'reviewId', schema: z.string() },
+        { name: 'approvalId', schema: z.string() },
       ]),
       result: {
         mode: 'strict',
@@ -307,17 +335,17 @@ export const TYPERT = {
             kind: 'method',
             name: 'traceRecords',
             signature: '@Remote("traceRecords") traceRecords(args: { sessionId: string }): TraceRecordsResult',
-            summary: 'List the review records of one session as summary rows, for the review history view.',
+            summary: 'List one session review and settle records as merged rows, for the review history view.',
             jsDoc:
-              '/**\n * List one session review records (summary fields only).\n * @param args - session id.\n * @returns summary rows; full texts are fetched per record via traceRecord.\n */',
+              '/**\n * List one session review and settle records merged by approvalId (list fields only).\n * @param args - session id.\n * @returns merged rows plus the read-degraded flag; details are fetched per approval via traceRecord.\n */',
           },
           {
             kind: 'method',
             name: 'traceRecord',
-            signature: '@Remote("traceRecord") traceRecord(args: { sessionId: string; reviewId: string }): TraceRecordResult',
-            summary: 'Read one review record with its details, full texts only when captured as full.',
+            signature: '@Remote("traceRecord") traceRecord(args: { sessionId: string; approvalId: string }): TraceRecordResult',
+            summary: 'Read one approval merged detail, full texts only when captured as full.',
             jsDoc:
-              '/**\n * Read one review record with details.\n * @param args - session id and the reviewId from a traceRecords row.\n * @returns the record, or null when it is outside the read-back window.\n */',
+              '/**\n * Read one approval merged detail by approvalId.\n * @param args - session id and the approvalId from a traceRecords row.\n * @returns the merged record, or null when it is outside the read-back window.\n */',
           },
         ],
         types: [
@@ -353,12 +381,12 @@ export const TYPERT = {
           {
             name: 'TraceRecordsResult',
             declaration:
-              'export interface TraceRecordsResult { records: { reviewId: string; callId: string | null; startedAt: number | null; endedAt: number | null; queueMs: number | null; reviewMs: number | null; decision: string | null; model: string | null; effort: string | null; toolName: string | null; truncated: boolean; }[]; }',
+              'export interface TraceRecordsResult { records: { approvalId: string; callId: string | null; toolName: string | null; origin: string | null; escalation: string | null; startedAt: number | null; endedAt: number | null; queueMs: number | null; reviewMs: number | null; humanWaitMs: number | null; decision: string | null; outcome: string | null; source: string | null; model: string | null; effort: string | null; risk: string | null; auth: string | null; reason: string | null; subject: string | null; truncated: boolean; }[]; readFailed: boolean; }',
           },
           {
             name: 'TraceRecordResult',
             declaration:
-              'export interface TraceRecordResult { record: { reviewId: string; callId: string | null; startedAt: number | null; endedAt: number | null; queueMs: number | null; reviewMs: number | null; decision: string | null; model: string | null; effort: string | null; toolName: string | null; truncated: boolean; humanWaitMs?: number; tokens?: number; reviewKeySource?: string; prompt?: string; input?: string; reasoning?: string; output?: string; } | null; }',
+              'export interface TraceRecordResult { record: { approvalId: string; callId: string | null; toolName: string | null; origin: string | null; escalation: string | null; startedAt: number | null; endedAt: number | null; queueMs: number | null; reviewMs: number | null; humanWaitMs: number | null; decision: string | null; outcome: string | null; source: string | null; model: string | null; effort: string | null; risk: string | null; auth: string | null; reason: string | null; subject: string | null; truncated: boolean; stage?: string; layer?: string; attempts?: number; tools?: number; fieldsDefaulted?: string; degraded?: string; preset?: string; evidence?: string; probes?: string; configTag?: string; policyTag?: string; tokens?: number; prompt?: string; input?: string; reasoning?: string; output?: string; } | null; }',
           },
         ],
       },

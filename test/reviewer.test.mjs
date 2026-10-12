@@ -516,7 +516,7 @@ test('R47② 连败至上限：两次尝试后 error，reason 与审计 review �
 
 test('R47③ 预算权威：signal 已中止（gate 计时器先到/请求取消）不再开始下一次尝试', async () => {
   const aborted = new AbortController();
-  // 用 gate 计时器的真实 reason 形状（§23.3 决定 2 的超时标记）。
+  // 用 gate 计时器的真实 reason 形状（§5.3 决定 2 的超时标记）。
   aborted.abort(new Error(REVIEW_TIMEOUT_ABORT_MESSAGE));
   // 第二轮次本可成功：预算已耗尽时不许再烧——超时结算由 gate 计时器决定（R10 优先于重试）。
   const h = harness([
@@ -527,7 +527,7 @@ test('R47③ 预算权威：signal 已中止（gate 计时器先到/请求取消
   assert.equal(h.requests.length, 1, '中止信号下不得开始第二次尝试');
   assert.equal(verdict.decision, 'error');
   assert.equal(verdict.reason, 'first failure', '未发生重试，不带尝试前缀');
-  assert.equal(verdict.superseded, undefined, '审查计时器的中止计入熔断（§23.3 决定 2）');
+  assert.equal(verdict.superseded, undefined, '审查计时器的中止计入冷却（§5.3 决定 2）');
   const reviewLine = h.audits.find((row) => row.phase === 'review');
   assert.equal(reviewLine.late, 'yes');
   assert.equal(reviewLine.degraded, 'none');
@@ -565,17 +565,20 @@ test('R47 留痕：失败尝试的 finish 摘要只在 capture=full 档进 trace
   assert.equal(verdict.decision, 'error');
   assert.equal(verdict.reason, 'attempt 2/2: gateway unreachable');
   assert.equal(full.length, 1, 'trace 记录按请求一份，不因重试翻倍');
-  // attempts 只记中间失败尝试（最终尝试的结局由 review 行自述：reason 前缀＋finish）。
-  assert.deepEqual(full[0].attempts, [
+  // failedAttempts 只记中间失败尝试（最终尝试的结局由 review 行自述：reason 前缀＋finish）；
+  // 顶层 attempts 是 §8.2 的总尝试次数（数字），与失败摘要数组不同名不互撞。
+  assert.deepEqual(full[0].failedAttempts, [
     { finish: 'error:EMPTY_RESPONSE' },
-  ], '失败尝试的摘要按失败顺序落 details.attempts');
+  ], '失败尝试的摘要按失败顺序落 details.failedAttempts');
+  assert.equal(full[0].attempts, 2, '§8.2 attempts＝总尝试次数');
 
   // 非 full 档：不收集失败尝试摘要（off/summary 下这些字段不落盘，提前拼是白做功）。
   const summary = [];
   const summaryHarness = harness([{ throws: 'x' }], { onReview: (entry) => summary.push(entry) });
   await summaryHarness.review();
   assert.equal(summary.length, 1);
-  assert.equal(summary[0].attempts, undefined);
+  assert.equal(summary[0].failedAttempts, undefined);
+  assert.equal(summary[0].attempts, 2, '总尝试次数与档位无关，恒在场');
 });
 
 // ── R48 计数口径：abort 型 error 的 superseded 分类（实现审查 r46 P2-1 修正） ──
@@ -591,7 +594,7 @@ test('R48 分类：gate 他路先结算的中止（REVIEW_SUPERSEDED 标记/宿�
   const markedVerdict = await markedHarness.review({ signal: marked.signal });
   assert.equal(markedHarness.requests.length, 1, '中止不重试');
   assert.equal(markedVerdict.decision, 'error');
-  assert.equal(markedVerdict.superseded, true, '他路先结算的中止不是通道故障，index 层据此跳过熔断计数');
+  assert.equal(markedVerdict.superseded, true, '他路先结算的中止不是通道故障，index 层据此跳过冷却计数');
   assert.match(markedVerdict.reason, /aborted（gate 他路先结算，非通道故障）/u);
   const markedLine = markedHarness.audits.find((row) => row.phase === 'review');
   assert.equal(markedLine.degraded, 'superseded', '跳过原因必须落审计（review 行 degraded）');
@@ -602,7 +605,7 @@ test('R48 分类：gate 他路先结算的中止（REVIEW_SUPERSEDED 标记/宿�
   cancelled.abort(new Error('tool cancelled by user'));
   const cancelledHarness = harness([{ throws: 'stream torn down' }]);
   const cancelledVerdict = await cancelledHarness.review({ signal: cancelled.signal });
-  assert.equal(cancelledVerdict.superseded, true, '宿主取消引发的 abort 型 error 同样不计熔断');
+  assert.equal(cancelledVerdict.superseded, true, '宿主取消引发的 abort 型 error 同样不计冷却');
   assert.match(cancelledVerdict.reason, /aborted（gate 他路先结算，非通道故障）：stream torn down/u);
 });
 
@@ -616,7 +619,7 @@ test('R48 分类：审查计时器的中止（reason＝REVIEW_TIMEOUT_ABORT_MESS
   const verdict = await h.review({ signal: timer.signal });
   assert.equal(h.requests.length, 1);
   assert.equal(verdict.decision, 'error');
-  assert.equal(verdict.superseded, undefined, '慢通道也是不可信通道：超时中止计入熔断（§23.3 决定 2）');
+  assert.equal(verdict.superseded, undefined, '慢通道也是不可信通道：超时中止计入冷却（§5.3 决定 2）');
   assert.equal(verdict.reason, 'stream torn down');
   const reviewLine = h.audits.find((row) => row.phase === 'review');
   assert.equal(reviewLine.degraded, 'none');
@@ -654,5 +657,5 @@ test('R47 full 档：空输出可重试的失败尝试条目自带 error 字段�
   );
   const verdict = await h.review();
   assert.equal(verdict.decision, 'deny');
-  assert.deepEqual(entries[0].attempts, [{ finish: 'stop', error: 'empty payload' }], '条目必须自带可观测内容');
+  assert.deepEqual(entries[0].failedAttempts, [{ finish: 'stop', error: 'empty payload' }], '条目必须自带可观测内容');
 });

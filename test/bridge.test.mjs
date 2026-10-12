@@ -52,7 +52,7 @@ function service(options = {}) {
   };
   return {
     ctx: { get: (name) => (name === 'permissionPresets' ? options.service : undefined) },
-    deps: { settingsSnapshot: () => snapshot, sessionStore: store, pending: options.pending, audit: (fields) => audits.push(fields) },
+    deps: { settingsSnapshot: () => snapshot, sessionStore: store, pending: options.pending, audit: (fields) => audits.push(fields), traceStore: options.traceStore },
     writes,
     audits,
     choiceOf: bridge.createSessionChoiceReader(store),
@@ -60,6 +60,8 @@ function service(options = {}) {
     permissionPresetsService: proto.permissionPresetsService,
     pendingState: proto.pendingState,
     presetCatalog: proto.presetCatalog,
+    traceRecords: proto.traceRecords,
+    traceRecord: proto.traceRecord,
     sessionOf: () => options.session,
     getState: proto.getState,
     setSessionModel: proto.setSessionModel,
@@ -235,4 +237,139 @@ testHost('getState（R14）：清除条目后回落全局层，而不是仍报 s
   assert.equal(state.sessionModel, null);
   assert.equal(state.layer, 'global');
   assert.equal(state.effective, 'zai/glm-5.3');
+});
+
+// ── §8.2/§8.5：traceRecords 合并行与 traceRecord 合并详情 ────────────────────
+
+/** traceStore 替身：预置行 + 降级标记（list 对旧格式行合成 approvalId，与真实存储一致）。 */
+function traceStoreOf(rows, degraded = false) {
+  return {
+    list: () => rows.map((row) => (row.kind === undefined && row.approvalId === undefined ? { ...row, approvalId: row.reviewId } : row)),
+    approval: (sessionId, approvalId) => {
+      const hit = {};
+      for (const row of rows) {
+        if (row.approvalId === approvalId || (row.kind === undefined && row.reviewId === approvalId)) {
+          if (row.kind === 'settle') hit.settle = { ...row };
+          else if (row.kind === 'review') hit.review = { ...row };
+          else hit.legacy = { ...row, approvalId: row.reviewId };
+        }
+      }
+      return Object.keys(hit).length > 0 ? hit : null;
+    },
+    degraded: () => degraded,
+  };
+}
+
+testHost('traceRecords：同一审批两类记录按 approvalId 合并，旧格式行独立成行，readFailed 透传', () => {
+  const instance = service({
+    traceStore: traceStoreOf([
+      {
+        reviewId: 's1:c1:review:ap1',
+        kind: 'review',
+        approvalId: 'ap1',
+        callId: 'c1',
+        toolName: 'pwsh',
+        origin: 'main',
+        escalation: 'danger-full-access',
+        startedAt: 1000,
+        endedAt: 2500,
+        queueMs: 100,
+        reviewMs: 1000,
+        decision: 'allow',
+        model: 'zai/glm-5.3',
+        effort: 'low',
+        risk: 'low',
+        auth: 'high',
+        reason: '安全',
+        subject: 'npm i',
+        truncated: false,
+      },
+      {
+        reviewId: 's1:c1:settle:ap1',
+        kind: 'settle',
+        approvalId: 'ap1',
+        callId: 'c1',
+        toolName: 'pwsh',
+        origin: 'main',
+        startedAt: 1000,
+        endedAt: 2900,
+        humanWaitMs: 300,
+        outcome: 'rejected',
+        source: 'human',
+        reason: '安全',
+        truncated: true,
+      },
+      { reviewId: 's1:c2:5', callId: 'c2', toolName: 'edit', startedAt: 50, endedAt: 60, decision: 'allowed-once' },
+    ]),
+  });
+  const result = instance.traceRecords('s1');
+  assert.equal(result.readFailed, false);
+  assert.equal(result.records.length, 2, '两类记录合并成一行，旧格式行独立成行');
+  const merged = result.records[0];
+  assert.equal(merged.approvalId, 'ap1');
+  assert.equal(merged.decision, 'allow', 'decision 在场＝有审查记录');
+  assert.equal(merged.outcome, 'rejected', 'outcome 在场＝有结算记录');
+  assert.equal(merged.source, 'human');
+  assert.equal(merged.startedAt, 1000, '起点取审查记录');
+  assert.equal(merged.endedAt, 2900, '终点取结算记录');
+  assert.equal(merged.humanWaitMs, 300);
+  assert.equal(merged.truncated, true, '任一记录置真即真');
+  assert.ok(!('reviewId' in merged), '存储内部字段 reviewId 不进产品投影');
+  const legacy = result.records[1];
+  assert.equal(legacy.approvalId, 's1:c2:5', '旧格式行合成 approvalId');
+  assert.equal(legacy.outcome, null, '旧格式行没有 outcome');
+});
+
+testHost('traceRecords：readFailed=true 透传（VER-02）；traceRecord 按 approvalId 给合并详情', () => {
+  const degradedStore = traceStoreOf([], true);
+  const degradedInstance = service({ traceStore: degradedStore });
+  assert.deepEqual(degradedInstance.traceRecords('s1'), { records: [], readFailed: true });
+
+  const rows = [
+    { reviewId: 's1:c1:review:ap1', kind: 'review', approvalId: 'ap1', callId: 'c1', toolName: 'pwsh', origin: 'main', startedAt: 1000, endedAt: 2500, queueMs: 100, reviewMs: 1000, decision: 'error', model: 'zai/glm-5.3', layer: 'session', attempts: 2, evidence: 'EV', probes: 'read_file:ok', configTag: 'a1b2c3d4e5f6', policyTag: 'zh:missing', reason: '审查未执行：queue-overflow', truncated: false },
+    { reviewId: 's1:c1:settle:ap1', kind: 'settle', approvalId: 'ap1', callId: 'c1', toolName: 'pwsh', origin: 'subagent', preset: 'auto-approve', startedAt: 1000, endedAt: 2900, outcome: 'rejected', source: 'llm', stage: 'queue', degraded: 'queue-overflow', truncated: false },
+  ];
+  const instance = service({ traceStore: traceStoreOf(rows) });
+  const { record } = instance.traceRecord('s1', 'ap1');
+  assert.equal(record.approvalId, 'ap1');
+  assert.equal(record.decision, 'error');
+  assert.equal(record.outcome, 'rejected');
+  // 结算侧独有字段（stage/preset/degraded）从结算记录补入；审查侧（attempts/layer/取证）保留。
+  assert.equal(record.stage, 'queue');
+  assert.equal(record.preset, 'auto-approve');
+  assert.equal(record.degraded, 'queue-overflow');
+  assert.equal(record.attempts, 2);
+  assert.equal(record.layer, 'session');
+  assert.equal(record.evidence, 'EV');
+  assert.equal(record.probes, 'read_file:ok');
+  assert.equal(record.configTag, 'a1b2c3d4e5f6');
+  assert.equal(record.origin, 'main', 'origin 取审查记录（在场优先）');
+  assert.deepEqual(instance.traceRecord('s1', 'missing'), { record: null });
+});
+
+testHost('traceRecord：旧格式行详情只在场才写补充键——不把 null 塞进 optional 字段（RPC 三处同步）', () => {
+  // 旧格式行：无 kind/approvalId，detail schema 的补充字段是 optional（不收 null），
+  // 全量投影会让旧记录点开详情必挂 zod 校验（盲审缺陷 1）。
+  const instance = service({
+    traceStore: traceStoreOf([
+      { reviewId: 's1:c2:5', callId: 'c2', toolName: 'edit', startedAt: 50, endedAt: 60, decision: 'allowed-once', reason: 'r', subject: 'edit a.ts' },
+    ]),
+  });
+  const { record } = instance.traceRecord('s1', 's1:c2:5');
+  assert.equal(record.approvalId, 's1:c2:5');
+  assert.equal(record.decision, 'allowed-once');
+  // 在场的字符串照常透出（reason 与 subject 都是列表字段，null 允许）。
+  assert.equal(record.subject, 'edit a.ts');
+  // 补充字段（详情 optional 键）一个都不该出现为 null：要么在场、要么键不存在。
+  for (const field of ['stage', 'layer', 'attempts', 'preset', 'tools', 'fieldsDefaulted', 'degraded', 'evidence', 'probes', 'configTag', 'policyTag', 'tokens', 'prompt', 'input', 'reasoning', 'output']) {
+    if (field in record) assert.notEqual(record[field], null, `旧格式详情的 ${field} 在场时不为 null`);
+  }
+  assert.equal(record.stage, undefined, '旧格式行不带 stage：键必须缺失而非 null');
+  assert.equal(record.evidence, undefined, '旧格式行不带 evidence：键必须缺失而非 null');
+  // 新格式详情的对照：结算侧行带 stage，仍按在场写键。
+  const rows = [{ reviewId: 's1:c1:settle:ap1', kind: 'settle', approvalId: 'ap1', callId: 'c1', toolName: 'pwsh', origin: 'main', startedAt: 1, endedAt: 2, outcome: 'rejected', source: 'timeout', stage: 'human', truncated: false }];
+  const fresh = service({ traceStore: traceStoreOf(rows) });
+  const { record: settleOnly } = fresh.traceRecord('s1', 'ap1');
+  assert.equal(settleOnly.stage, 'human');
+  assert.equal(settleOnly.attempts, undefined, '无审查记录时 attempts 键缺失（非 null）');
 });

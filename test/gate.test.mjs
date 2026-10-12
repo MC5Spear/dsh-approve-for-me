@@ -19,12 +19,18 @@ function baseConfig(overrides = {}) {
 
 /** 构造一次 gate 调用的运行时契约与可观测状态。 */
 function makeRt(cfg, options = {}) {
-  const state = { nextCalls: 0, nextResolvers: [], injections: [], audits: [], timers: [], cancels: [], aborts: [], pending: [] };
+  const state = { nextCalls: 0, nextResolvers: [], nextRejectors: [], injections: [], audits: [], timers: [], cancels: [], aborts: [], pending: [], settles: [] };
   const rt = {
     nextId: () => 'req-1',
     mode: () => options.mode ?? 'auto',
+    // §8.2 preset：接管命中的权限预设名（不提供时与生产「取不到」一致，记录里 preset 缺失）。
+    ...(options.preset === undefined ? {} : { preset: () => options.preset }),
     // R24：无头（委派子代理）请求的标记；缺省（旧形态）视为主会话。
     ...(options.isHeadless === undefined ? {} : { isHeadless: () => options.isHeadless }),
+    // §8.4 结算记录捕获：gate 是唯一写入者，每审批恰一条。
+    onSettle(entry) {
+      state.settles.push(entry);
+    },
     cfg: () => cfg,
     async configFor() {
       if (options.configThrows === true) throw new Error('cfg boom');
@@ -140,7 +146,10 @@ function makeRt(cfg, options = {}) {
   };
   const next = () => {
     state.nextCalls += 1;
-    return new Promise((resolve) => state.nextResolvers.push(resolve));
+    return new Promise((resolve, reject) => {
+      state.nextResolvers.push(resolve);
+      state.nextRejectors.push(reject);
+    });
   };
   return { rt, state, next };
 }
@@ -515,7 +524,7 @@ test('卡片状态（R12/R13）：reviewing 带审查时限，超时转人工时
   await promise;
 });
 
-test('审查时限与人工时限都为 0 时不写倒计时（deadlineAt=null）', async () => {
+test('VER-01：人工时限为 0 时不登记人工阶段卡片状态，交人工立即按拒绝结算', async () => {
   const { rt, state, next } = makeRt(
     baseConfig({ fallback: 'ask', reviewer: { timeoutMs: 0 }, human: { timeoutMs: 0, timeoutFrom: 'handoff' } }),
     { verdict: { decision: 'deny', reason: 'x', toolCalls: 0, fields: {} } },
@@ -523,12 +532,45 @@ test('审查时限与人工时限都为 0 时不写倒计时（deadlineAt=null�
   const promise = onApprovalRequest(request(), next, rt);
   await tick();
   await tick();
+  // 审查无上限的 reviewing 状态合法（deadlineAt=null）；
+  // 人工阶段零时限：不登记无截止时间的人工待决状态（§4.3），立即按拒绝结算。
   const sets = state.pending.filter((entry) => entry.op === 'set');
+  assert.equal(sets.length, 1, '只有 reviewing 一条，没有人工阶段状态');
+  assert.equal(sets[0].state, 'reviewing');
   assert.equal(sets[0].deadlineAt, null);
   assert.equal(sets[0].deadlineKind, null);
-  assert.equal(sets.at(-1).deadlineAt, null);
-  state.nextResolvers[0]('rejected');
-  await promise;
+  // 卡片在入口弹出（humanCardDuringReview 默认开）后立即被超时结算撤回：没有人工等待段。
+  assert.equal(state.nextCalls, 1);
+  const outcome = await promise;
+  assert.equal(outcome, 'rejected');
+});
+
+test('VER-01（盲审缺陷 2）：handoff 起算＋人工零时限＋关弹卡时不弹马上消失的卡片', async () => {
+  const { rt, state, next } = makeRt(
+    baseConfig({
+      fallback: 'ask',
+      reviewer: { timeoutMs: 0 },
+      human: { timeoutMs: 0, timeoutFrom: 'handoff' },
+      ui: { humanCardDuringReview: false },
+    }),
+    { verdict: { decision: 'deny', reason: 'x', toolCalls: 0, fields: {} } },
+  );
+  const promise = onApprovalRequest(request(), next, rt);
+  await tick();
+  await tick();
+  // 关闭「审查期间弹卡」＋handoff 起算＋人工时限 0：交人工即耗尽，一次都不该调 next()
+  // （弹了马上撤回＝需求 4.2 禁止的马上消失卡片），直接按人工超时结算。
+  assert.equal(state.nextCalls, 0, '零时限人工不弹卡：next() 一次都不调');
+  const outcome = await promise;
+  assert.equal(outcome, 'rejected');
+  const decide = state.audits.find((entry) => entry.phase === 'decide');
+  assert.equal(decide.source, 'timeout', '按人工超时结算');
+  assert.equal(state.audits.some((entry) => entry.phase === 'handoff'), false, '没有真的交人工：不写 handoff 行');
+  const settle = state.settles.at(-1);
+  assert.equal(settle.outcome, 'rejected');
+  assert.equal(settle.source, 'timeout');
+  assert.equal(settle.stage, 'human', '环节是人工（虽然未真的等待）');
+  assert.equal(settle.humanWaitMs, undefined, '未交人工：humanWaitMs 缺失');
 });
 
 test('排队超时（R10）：审查层标记 timedOut 与真实环节，注入写明排队超时及排队上限', async () => {
@@ -569,7 +611,7 @@ test('并发占满不冒充超时（R46）：queue-overflow 走通道故障文�
   assert.doesNotMatch(state.injections[0], /超时环节/u, 'queue-overflow 不是超时，不冒充超时文案');
 });
 
-// ── 无头路径（R24 / 设计 §20）：委派子代理没有人工通道 ──────────────────────────
+// ── 无头路径（R24 / 设计 §2.2）：委派子代理没有人工通道 ──────────────────────────
 
 test('R24 无头 allow：不调 next()、不写 pending 卡片态，放行注入直达发起者', async () => {
   const { rt, state, next } = makeRt(baseConfig(), { isHeadless: true });
@@ -914,12 +956,12 @@ test('R46⑤ 内部异常 catch 分支注入同样走通道故障模板（gate.i
   assert.equal(errorLine.source, 'error');
 });
 
-// ── R48：error 计入熔断（gate 接线层） ─────────────────────────────────────
+// ── R48：error 计入冷却（gate 接线层） ─────────────────────────────────────
 
-test('R48-① 连续 error 熔断打开：下一请求零 LLM 调用、注入通道故障模板（真调度器接线）', async () => {
+test('R48-① 连续 error 冷却打开：下一请求零 LLM 调用、注入通道故障模板（真调度器接线）', async () => {
   const { rt, state, next } = makeRt(baseConfig());
   // 与 lib/index.js 的 rt.review 同形接线：scheduler.run 包审查任务、record 在任务体内结算
-  // （dedupe 同 key 单次计数）、superseded 跳过、失败映射 error verdict（§23.3 决定 3）。
+  // （dedupe 同 key 单次计数）、superseded 跳过、失败映射 error verdict（§5.3 决定 3）。
   const scheduler = createScheduler({ max: 2 });
   let llmCalls = 0;
   rt.review = async (req, located, pre, cfg, opts) => {
@@ -943,21 +985,218 @@ test('R48-① 连续 error 熔断打开：下一请求零 LLM 调用、注入通
     }
     return result.value;
   };
-  // 前三个请求（不同 callId）：error 判定经 record 计数，第三次打开熔断（consecutiveDenials=3 缺省）。
+  // 前三个请求（不同 callId）：error 判定经 record 计数，第三次打开冷却（consecutiveDenials=3 缺省）。
   for (let index = 1; index <= 3; index += 1) {
     const outcome = await onApprovalRequest({ ...request(), callId: `c${index}` }, next, rt);
     assert.equal(outcome, 'rejected');
   }
   assert.equal(llmCalls, 3);
-  assert.equal(scheduler.state().breakerOpen, true, 'error 与 deny 同权：三次连发打开熔断');
+  assert.equal(scheduler.state().breakerOpen, true, 'error 与 deny 同权：三次连发打开冷却');
   // 第四个请求：零 LLM 调用（计数不增），注入通道故障模板并写明 breaker-open。
   const outcome = await onApprovalRequest({ ...request(), callId: 'c4' }, next, rt);
   assert.equal(outcome, 'rejected');
-  assert.equal(llmCalls, 3, '熔断打开后不得再发起 LLM 调用');
+  assert.equal(llmCalls, 3, '冷却打开后不得再发起 LLM 调用');
   const injected = state.injections[3];
   assert.match(injected, /通道故障/u);
   assert.match(injected, /breaker-open（冷却中，拒绝密集或故障密集）/u);
   assert.doesNotMatch(injected, /不要用等价手段绕过该拒绝/u);
   const decide = state.audits.filter((row) => row.phase === 'decide').at(-1);
   assert.equal(decide.inject, 'yes');
+});
+
+// ── §8.4 结算记录：每审批恰一条、全路径覆盖 ─────────────────────────────────
+
+/** 断言结算行公共骨架：kind/approvalId/起止/身份背景字段。 */
+function assertSettleShape(settle, { outcome, source }) {
+  assert.equal(settle.kind, 'settle');
+  assert.equal(settle.approvalId, 'req-1', '审批实例 id＝应答者入口生成的请求 id');
+  assert.equal(settle.sessionId, 's1');
+  assert.equal(settle.callId, 'call_1');
+  assert.equal(settle.toolName, 'pwsh');
+  assert.equal(settle.outcome, outcome);
+  assert.equal(settle.source, source);
+  assert.equal(Number.isFinite(settle.startedAt), true);
+  assert.equal(Number.isFinite(settle.endedAt), true);
+}
+
+test('结算记录：allow → allowed-once/llm，queueMs 与身份背景字段在场', async () => {
+  const { rt, state, next } = makeRt(baseConfig(), { preset: 'auto-approve' });
+  rt.review = async () => ({
+    decision: 'allow',
+    reason: 'ok',
+    toolCalls: 0,
+    queueMs: 7,
+    fields: { risk: 'low', auth: 'high', tools: 0, degraded: 'none' },
+  });
+  const outcome = await onApprovalRequest(request(), next, rt);
+  assert.equal(outcome, 'allowed-once');
+  assert.equal(state.settles.length, 1);
+  const settle = state.settles[0];
+  assertSettleShape(settle, { outcome: 'allowed-once', source: 'llm' });
+  assert.equal(settle.queueMs, 7, '排队观测随判定返回并进结算');
+  assert.equal(settle.origin, 'main');
+  assert.equal(settle.escalation, 'danger-full-access', '升权目标取 screen 的 fields.mode');
+  assert.equal(settle.preset, 'auto-approve');
+  assert.match(settle.reason, /ok/);
+  assert.match(settle.subject, /npm i/, '无审查记录路径也带 subject 摘要');
+  assert.equal(settle.humanWaitMs, undefined, '未交人工：humanWaitMs 缺失（§8.5）');
+  assert.equal(settle.stage, undefined, '非调度失败不写 stage');
+});
+
+test('结算记录：无头会话 origin=subagent；preset 取不到时缺失', async () => {
+  const { rt, state, next } = makeRt(baseConfig(), { isHeadless: true });
+  await onApprovalRequest(request(), next, rt);
+  assert.equal(state.settles.length, 1);
+  assert.equal(state.settles[0].origin, 'subagent');
+  assert.equal(state.settles[0].preset, undefined);
+});
+
+test('结算记录：规则直拒 → rejected/rule，subject/escalation 可查', async () => {
+  const { rt, state, next } = makeRt(baseConfig(), {
+    pre: { action: 'deny', why: 'pattern', reason: '命中拒绝模式', fields: { mode: 'danger-full-access', tool: 'pwsh' } },
+  });
+  const outcome = await onApprovalRequest(request(), next, rt);
+  assert.equal(outcome, 'rejected');
+  assert.equal(state.settles.length, 1);
+  const settle = state.settles[0];
+  assertSettleShape(settle, { outcome: 'rejected', source: 'rule' });
+  assert.equal(settle.escalation, 'danger-full-access');
+  assert.match(settle.reason, /命中拒绝模式/);
+  assert.match(settle.subject, /npm i/);
+});
+
+test('结算记录：审查超时 → rejected/timeout，stage=review', async () => {
+  const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 20 } }), {
+    reviewDelayMs: 100,
+    verdict: { decision: 'allow', reason: 'late', toolCalls: 0, fields: {} },
+  });
+  await onApprovalRequest(request(), next, rt);
+  assertSettleShape(state.settles[0], { outcome: 'rejected', source: 'timeout' });
+  assert.equal(state.settles[0].stage, 'review');
+});
+
+test('结算记录：排队超时 → timeout+stage=queue，queueMs 承载实际等待；队列已满/冷却 → llm+stage=queue', async () => {
+  const queueTimeout = makeRt(baseConfig({ concurrency: { queueTimeoutMs: 30000 } }));
+  queueTimeout.rt.review = async () => ({
+    decision: 'error',
+    reason: '审查未执行：queue-timeout',
+    toolCalls: 0,
+    timedOut: true,
+    timeoutStage: 'queue',
+    timeoutMs: 30000,
+    queueMs: 31,
+    stage: 'queue',
+    fields: { degraded: 'queue-timeout', tools: 0 },
+  });
+  await onApprovalRequest(request(), queueTimeout.next, queueTimeout.rt);
+  assertSettleShape(queueTimeout.state.settles[0], { outcome: 'rejected', source: 'timeout' });
+  assert.equal(queueTimeout.state.settles[0].stage, 'queue');
+  assert.equal(queueTimeout.state.settles[0].queueMs, 31);
+
+  const breaker = makeRt(baseConfig());
+  breaker.rt.review = async () => ({
+    decision: 'error',
+    reason: '审查未执行：breaker-open（冷却中，拒绝密集或故障密集）',
+    toolCalls: 0,
+    stage: 'queue',
+    fields: { degraded: 'breaker-open', tools: 0 },
+  });
+  await onApprovalRequest(request(), breaker.next, breaker.rt);
+  assertSettleShape(breaker.state.settles[0], { outcome: 'rejected', source: 'llm' });
+  assert.equal(breaker.state.settles[0].stage, 'queue');
+  assert.match(breaker.state.settles[0].reason, /审查未执行：breaker-open/);
+});
+
+test('结算记录：交人工后人工作答 → source=human，humanWaitMs 从交人工起算', async () => {
+  const { rt, state, next } = makeRt(baseConfig({ fallback: 'ask', reviewer: { timeoutMs: 0 }, human: { timeoutMs: 5000, timeoutFrom: 'handoff' } }), {
+    verdict: { decision: 'deny', reason: 'risky', toolCalls: 0, fields: {} },
+  });
+  const promise = onApprovalRequest(request(), next, rt);
+  await tick();
+  await delay(15);
+  state.nextResolvers[0]('rejected');
+  const outcome = await promise;
+  assert.equal(outcome, 'rejected');
+  assertSettleShape(state.settles[0], { outcome: 'rejected', source: 'human' });
+  assert.ok(Number.isFinite(state.settles[0].humanWaitMs) && state.settles[0].humanWaitMs >= 10, '等待段≥真实间隔');
+});
+
+test('结算记录：审查未收束即抢答 → source=human，humanWaitMs 缺失', async () => {
+  const { rt, state, next } = makeRt(baseConfig({ fallback: 'ask', reviewer: { timeoutMs: 0 } }), {
+    reviewDelayMs: 5000,
+  });
+  const promise = onApprovalRequest(request(), next, rt);
+  await tick();
+  state.nextResolvers[0]('allowed-once');
+  const outcome = await promise;
+  assert.equal(outcome, 'allowed-once');
+  assertSettleShape(state.settles[0], { outcome: 'allowed-once', source: 'human' });
+  assert.equal(state.settles[0].humanWaitMs, undefined, '抢答没有「确实交人工」的等待段');
+  assert.equal(state.settles.length, 1, '竞速分支重复到达只落一条结算');
+});
+
+test('结算记录：人工超时 → rejected/timeout，stage=human', async () => {
+  const { rt, state, next } = makeRt(baseConfig({ fallback: 'ask', human: { timeoutMs: 20, timeoutFrom: 'request' }, reviewer: { timeoutMs: 0 } }), {
+    verdict: { decision: 'deny', reason: 'needs human', toolCalls: 0, fields: {} },
+  });
+  await onApprovalRequest(request(), next, rt);
+  assertSettleShape(state.settles[0], { outcome: 'rejected', source: 'timeout' });
+  assert.equal(state.settles[0].stage, 'human');
+});
+
+test('结算记录：卡片关闭 → cancelled/gateway；请求取消 → cancelled/signal', async () => {
+  const closed = makeRt(baseConfig({ fallback: 'ask', reviewer: { timeoutMs: 0 }, human: { timeoutMs: 5000, timeoutFrom: 'handoff' } }), {
+    verdict: { decision: 'deny', reason: 'x', toolCalls: 0, fields: {} },
+  });
+  const closedPromise = onApprovalRequest(request(), closed.next, closed.rt);
+  await tick();
+  await tick();
+  // 人工通道以拒绝收尾＝卡片被关闭（gateway）；解析 undefined 只是「无结论的人工作答」。
+  closed.state.nextRejectors[0](new Error('card closed'));
+  assert.equal(await closedPromise, 'cancelled');
+  assertSettleShape(closed.state.settles[0], { outcome: 'cancelled', source: 'gateway' });
+
+  const controller = new AbortController();
+  const cancelled = makeRt(baseConfig({ fallback: 'ask', reviewer: { timeoutMs: 0 }, human: { timeoutMs: 5000, timeoutFrom: 'request' } }), {
+    verdict: { decision: 'deny', reason: 'x', toolCalls: 0, fields: {} },
+  });
+  const cancelledPromise = onApprovalRequest(request(controller.signal), cancelled.next, cancelled.rt);
+  await tick();
+  controller.abort();
+  assert.equal(await cancelledPromise, 'cancelled');
+  assertSettleShape(cancelled.state.settles[0], { outcome: 'cancelled', source: 'signal' });
+});
+
+test('结算记录：计时回调抛错 → rejected/error 且 stage 标注环节', async () => {
+  const { rt, state, next } = makeRt(
+    baseConfig({ fallback: 'ask', reviewer: { timeoutMs: 0 }, human: { timeoutMs: 15, timeoutFrom: 'handoff' } }),
+    { timerFireThrows: true, verdict: { decision: 'deny', reason: 'x', toolCalls: 0, fields: {} } },
+  );
+  await onApprovalRequest(request(), next, rt);
+  const settle = state.settles[0];
+  assertSettleShape(settle, { outcome: 'rejected', source: 'error' });
+  assert.equal(settle.stage, 'human', '人工计时回调抛错按 human 环节');
+  assert.match(settle.reason, /计时回调抛错/);
+});
+
+test('结算记录：应答者逃逸 → rejected/error，取不到的背景字段明确缺失', async () => {
+  const { rt, state, next } = makeRt(baseConfig(), { configThrows: true });
+  const outcome = await onApprovalRequest(request(), next, rt);
+  assert.equal(outcome, 'rejected');
+  const settle = state.settles[0];
+  assertSettleShape(settle, { outcome: 'rejected', source: 'error' });
+  assert.equal(settle.escalation, undefined, 'configFor 抛错：screen 未执行，escalation 缺失');
+  assert.equal(settle.preset, undefined);
+  assert.equal(settle.origin, 'main', 'origin 只看会话形态，不依赖配置');
+  assert.match(settle.reason, /审查器内部错误：/);
+});
+
+test('结算记录：onSettle 抛错不影响结算结果', async () => {
+  const { rt, state, next } = makeRt(baseConfig());
+  rt.onSettle = () => {
+    throw new Error('settle channel exploded');
+  };
+  const outcome = await onApprovalRequest(request(), next, rt);
+  assert.equal(outcome, 'allowed-once');
+  assert.equal(state.settles.length, 0);
 });

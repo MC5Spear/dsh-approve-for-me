@@ -344,7 +344,7 @@ test('逃逸异常注入文本按 language.agent 切换：zh 中文整句、en �
   // doesNotMatch 双红；若 language.agent 不再驱动注入语言（两档同文），两首行断言其一必红。
 });
 
-test('退役静态扫描：源码零补丁档位/旧宿主侧残留（设计 §17.0 判据）', async () => {
+test('退役静态扫描：源码零补丁档位/旧宿主侧残留（设计 §8.5 判据）', async () => {
   const { readFileSync, readdirSync } = await import('node:fs');
   const { join, dirname } = await import('node:path');
   const { fileURLToPath } = await import('node:url');
@@ -379,7 +379,7 @@ test('退役静态扫描：源码零补丁档位/旧宿主侧残留（设计 §1
     const hits = bannedIn(readFileSync(file, 'utf8'));
     if (hits.length > 0) offenders.push(`${file}: ${hits.join(', ')}`);
   }
-  assert.deepEqual(offenders, [], `退役残留必须为零（设计 §17.0）：\n${offenders.join('\n')}`);
+  assert.deepEqual(offenders, [], `退役残留必须为零（设计 §8.5）：\n${offenders.join('\n')}`);
 });
 
 // ── R34④/R36②：装配层接线（逃逸出口脱敏 + 热改现设） ────────────────────
@@ -415,15 +415,20 @@ test('R34④ 逃逸分支注入文本过脱敏：error 里的秘密被遮蔽后�
   assert.doesNotMatch(text, /sk-abc123secret/u, '逃逸注入不得裸带秘密');
 });
 
-test('R36② 装配接线：rt.review 内现设 toolTimeoutMs 与 redactPatterns，审计读取器并入脱敏清单（静态扫描）', async () => {
+test('R36②/R58 装配接线：rt.review 按请求构造工具上下文快照并随任务传入（静态扫描），审计读取器并入脱敏清单', async () => {
   const { readFileSync } = await import('node:fs');
   const source = readFileSync(new URL('../lib/index.js', import.meta.url), 'utf8');
-  // 反例先行：扫描对硬编码超时值必须命中（防恒真）。
-  assert.ok(source.includes('tools.setToolTimeoutMs'));
-  // 顺序：setLang 之后紧随两个 setter（与 setRoot/setLang 同一处审查回调内）。
+  // 反例先行：扫描对退回 setter 接线必须命中（防恒真）——R58 起 rt.review 内不得再出现四个 setter 调用。
+  assert.ok(!/tools\.set(Root|Lang|ToolTimeoutMs|RedactPatterns)\??\(/u.test(source), 'rt.review 不得再经共享 setter 现设（R58：并发下会改写在飞任务）');
+  // 上下文在进入调度器之前按本请求快照构造（rootDir/lang/超时/清单四字段齐）。
   const at = (token) => source.indexOf(token);
-  assert.ok(at('tools.setLang?.(agentLangOf(cfg))') < at('tools.setToolTimeoutMs?.(cfg.reviewer.toolTimeoutMs)'), 'setToolTimeoutMs 应与 setLang 同处现设');
-  assert.ok(at('tools.setLang?.(agentLangOf(cfg))') < at('tools.setRedactPatterns?.(cfg.context.redactPatterns)'), 'setRedactPatterns 应与 setLang 同处现设');
+  assert.ok(at('const toolContext = {') >= 0, '请求绑定的工具上下文必须构造');
+  assert.ok(at('const toolContext = {') < at('scheduler.run('), '快照须在进入调度器之前完成');
+  assert.ok(/rootDir:\s*located\?\.cwd/u.test(source) && /lang:\s*agentLang/u.test(source), '上下文含基准目录与文案语言');
+  assert.ok(/toolTimeoutMs:\s*cfg\.reviewer\.toolTimeoutMs/u.test(source) && /redactPatterns:\s*\[\.\.\.cfg\.context\.redactPatterns\]/u.test(source), '上下文含单工具超时与脱敏清单（清单持值拷贝，防原地改数组穿透）');
+  // 门面把上下文经 run 第 4 参显式传入，并以 opts.tools 交给审查循环。
+  assert.ok(source.includes('tools.run(toolName, toolArgs, signal, toolContext)'), '工具执行必须携带请求上下文');
+  assert.ok(source.includes('tools: taskTools'), '审查循环必须使用请求绑定门面');
   // R34：审计读取器并入 context.redactPatterns——全部 reason 出口在 createAudit 层统一覆盖。
   assert.ok(/redactPatterns:\s*current\(\)\?\.context\?\.redactPatterns/u.test(source), '审计读取器必须并入 context.redactPatterns');
 });
@@ -495,7 +500,7 @@ async function wiredEnv(options = {}) {
   return { host, env, state, answerer, makeRequest };
 }
 
-test('R48⑤ 真接线：有机 error ×3 打开熔断，第 4 个请求零流调用并注入通道故障＋breaker-open', async (t) => {
+test('R48⑤ 真接线：有机 error ×3 打开冷却，第 4 个请求零流调用并注入通道故障＋breaker-open', async (t) => {
   const { mkdtempSync, rmSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
@@ -523,7 +528,7 @@ test('R48⑤ 真接线：有机 error ×3 打开熔断，第 4 个请求零流�
     assert.equal(wired.state.streamCalls, 6, '每个请求整建重试两次流（REVIEW_MAX_ATTEMPTS=2）');
     const outcome = await wired.answerer(wired.makeRequest('c4'), next);
     assert.equal(outcome, 'rejected');
-    assert.equal(wired.state.streamCalls, 6, '熔断打开后零 LLM 调用');
+    assert.equal(wired.state.streamCalls, 6, '冷却打开后零 LLM 调用');
     const injectedText = wired.env.injected[3].content[0].text;
     assert.match(injectedText, /通道故障/u);
     assert.match(injectedText, /breaker-open（冷却中，拒绝密集或故障密集）/u);
@@ -569,12 +574,12 @@ test('R48⑤ 真接线：请求取消引发的中止 ×3 带 superseded 不计�
     }
     assert.equal(wired.state.streamCalls, 3, '每次取消前审查流已开始且被中止');
     assert.match(written.join(''), /degraded=superseded/u, '中止型 error 的 review 行必须可见跳过原因');
-    // 取消不计数：第 4 个请求仍完整审查（若被计数，3 连发已开熔断 → 零流调用）。
+    // 取消不计数：第 4 个请求仍完整审查（若被计数，3 连发已开冷却 → 零流调用）。
     wired.state.behavior = { delay: 0 };
     const outcome = await wired.answerer(wired.makeRequest('cx4'), next);
     assert.equal(outcome, 'rejected');
     assert.equal(wired.state.streamCalls, 5, '第 4 个请求照常发起审查（首次＋重试）');
-    assert.doesNotMatch(written.join(''), /breaker-open/u, '健康通道不得被人工响应速度误开熔断');
+    assert.doesNotMatch(written.join(''), /breaker-open/u, '健康通道不得被人工响应速度误开冷却');
   } finally {
     process.stderr.write = original;
     if (previousHome === undefined) delete process.env.DSH_HOME;
@@ -583,15 +588,18 @@ test('R48⑤ 真接线：请求取消引发的中止 ×3 带 superseded 不计�
   }
 });
 
-test('R48⑦ 真接线：dedupe 同 key 双投递共享在飞任务，record 恰一次（任务体内结算）', async (t) => {
+test('GAP-01 真接线：同 (sessionId, callId) 双投递各自执行完整审查，完成后再次到达不复用结果', async (t) => {
   const { mkdtempSync, rmSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const previousHome = process.env.DSH_HOME;
-  const home = mkdtempSync(join(tmpdir(), 'afm-r48-c-'));
+  const home = mkdtempSync(join(tmpdir(), 'afm-gap01-'));
   process.env.DSH_HOME = home;
+  const written = [];
+  const original = process.stderr.write;
+  process.stderr.write = (chunk) => { written.push(String(chunk)); return true; };
   try {
-    // 延迟失败让第二个应答者可靠地并入同一在飞任务。
+    // 延迟失败让第二个应答者在第一个仍在执行时到达（在飞并发窗口）。
     const wired = await wiredEnv({ behavior: { delay: 40 } });
     if (wired === undefined) {
       t.skip('宿主包不可解析（离线环境）');
@@ -599,29 +607,35 @@ test('R48⑦ 真接线：dedupe 同 key 双投递共享在飞任务，record 恰
     }
     // next＝人工通道替身：挂起不答（用户没碰卡片），让审查结论先结算。
     const next = () => new Promise(() => {});
-    // 三对同 callId 双投递：每对一次执行（含重试共 2 次流）＋恰一次 record。
-    for (let pair = 1; pair <= 3; pair += 1) {
-      const outcomes = await Promise.all([
-        wired.answerer(wired.makeRequest(`dup-${pair}`), next),
-        wired.answerer(wired.makeRequest(`dup-${pair}`), next),
-      ]);
-      assert.deepEqual(outcomes, ['rejected', 'rejected']);
-    }
-    assert.equal(wired.state.streamCalls, 6, '三对各一次执行（每次首试＋重试）；若 dedupe 失效或 record 在 await 点双计，此处或下一断言必红');
-    // 若 record 在共享结果的 await 点（旧接线），前两对已计 4 次 → 熔断已开 → 第三对零流调用。
-    // 任务体内结算：恰 3 次 record，第 4 个请求才遇到 breaker-open（零流调用）。
-    const outcome = await wired.answerer(wired.makeRequest('dup-4'), next);
-    assert.equal(outcome, 'rejected');
-    assert.equal(wired.state.streamCalls, 6, '恰在第 3 次 record 后打开：第 4 个请求零流调用');
+    // 1) 同一调用标识双投递：各自执行完整审查（每执行含重试共 2 次流）。
+    const outcomes = await Promise.all([
+      wired.answerer(wired.makeRequest('dup-1'), next),
+      wired.answerer(wired.makeRequest('dup-1'), next),
+    ]);
+    assert.deepEqual(outcomes, ['rejected', 'rejected']);
+    assert.equal(
+      wired.state.streamCalls,
+      4,
+      '双投递各自执行（2 执行 × 2 次流）；若结果复用回潮（在飞共享或 TTL 缓存），此处必红',
+    );
+    // 2) 两次执行都完成后，同一调用标识再次到达：不复用已完成结果，重走完整审查。
+    const again = await wired.answerer(wired.makeRequest('dup-1'), next);
+    assert.equal(again, 'rejected');
+    assert.equal(wired.state.streamCalls, 6, '完成后再次到达不读缓存，第 3 次完整执行（＋2 次流）');
+    // 3) 每次执行恰一条审查结论（record 口径不变）：三次 attempt 2/2 审计行。
+    const attemptLines = written.join('').match(/phase=review [^\n]*reason="attempt 2\/2: provider 500"/g) ?? [];
+    assert.equal(attemptLines.length, 3, '三次执行各留一条审查审计');
+    assert.doesNotMatch(written.join(''), /审查未执行/u, '全程无调度失败（并发足够，队列未满、冷却未开）');
   } finally {
+    process.stderr.write = original;
     if (previousHome === undefined) delete process.env.DSH_HOME;
     else process.env.DSH_HOME = previousHome;
     rmSync(home, { recursive: true, force: true });
   }
 });
 
-test('R57§28.3-2 真接线：预设残留防护 disposer——先于禁用早退注册，卸载判定时做贡献级清理', async (t) => {
-  const { mkdirSync, mkdtempSync, rmSync, readFileSync, writeFileSync } = await import('node:fs');
+test('GAP-02 真接线：装载→停用/卸载全程不解析、不改写用户 YAML——副本逐字节不变，无备用清理', async (t) => {
+  const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const host = await loadHost();
@@ -630,15 +644,14 @@ test('R57§28.3-2 真接线：预设残留防护 disposer——先于禁用早�
     return;
   }
   const previousHome = process.env.DSH_HOME;
-  const home = mkdtempSync(join(tmpdir(), 'afm-r57-guard-'));
+  const home = mkdtempSync(join(tmpdir(), 'afm-gap02-'));
   process.env.DSH_HOME = home;
-  // profile fixture：manifest 数组已不含本包（＝removeBundle 落盘后、reload 卸载中）；
-  // patch 带设置界面写出的 permission 覆盖行（presets＋defaultPreset: auto-approve），
-  // 形态＝宿主真实写路径产出（模板注释＋行块，无独立 `[]` 占位）。
+  // profile fixture：patch 带设置界面写出的 permission 覆盖行（presets＋defaultPreset: auto-approve），
+  // manifest 数组不含本包（＝removeBundle 落盘后、reload 卸载中形态）。
   const profileDir = join(home, 'profiles', 'web');
   mkdirSync(profileDir, { recursive: true });
   writeFileSync(join(profileDir, 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['dsh-base'] } } }), 'utf8');
-  writeFileSync(join(profileDir, 'cordis.patch.yml'), [
+  const yamlText = [
     '# Your patch layer for this dsh profile.',
     '- id: permission',
     "  name: '@deepseek-ai/dsh-permission-presets'",
@@ -647,7 +660,8 @@ test('R57§28.3-2 真接线：预设残留防护 disposer——先于禁用早�
     '      auto-approve:',
     '        sandbox: workspace-write',
     '    defaultPreset: auto-approve',
-  ].join('\n') + '\n', 'utf8');
+  ].join('\n') + '\n';
+  writeFileSync(join(profileDir, 'cordis.patch.yml'), yamlText, 'utf8');
   const written = [];
   const original = process.stderr.write;
   process.stderr.write = (chunk) => { written.push(String(chunk)); return true; };
@@ -667,23 +681,20 @@ test('R57§28.3-2 真接线：预设残留防护 disposer——先于禁用早�
     return { ctx, disposers };
   };
   try {
-    // 1) mode=off 早退形态下防护也必须注册（config-disabled 部署被移除时同样悬空）。
+    // 1) mode=off 早退形态：不注册任何 effect（防护已退役）。
     const offEnv = guardCtx({ profileContext: { dir: profileDir } });
     host.apply(offEnv.ctx, { mode: 'off' });
-    assert.equal(offEnv.disposers.length, 1, 'mode=off 早退前必须已注册防护 disposer');
-    // 2) 正常形态同样恰好一个防护 disposer（不随其他接线重复注册）。
+    assert.equal(offEnv.disposers.length, 0, 'mode=off 早退不注册 effect（默认预设悬空防护已退役）');
+    // 2) 正常形态同样不注册 effect（不随接线注册配置手术）。
     const env = guardCtx({ profileContext: { dir: profileDir }, sessions: { list: () => [] }, permissionPresets: {} });
     host.apply(env.ctx, { mode: 'rules', enabled: true });
-    assert.equal(env.disposers.length, 1, '防护 disposer 恰一个');
-    // 3) 执行 disposer＝卸载时点：覆盖行整行删除（悬空源与被拖入的 presets 残值一起）。
-    await env.disposers[0]();
+    assert.equal(env.disposers.length, 0, '正常接线不注册任何配置手术 effect');
+    // 3) 执行全部 disposer＝卸载时点：用户 YAML 逐字节不变。
+    for (const dispose of env.disposers) await dispose();
+    for (const dispose of offEnv.disposers) await dispose();
     const after = readFileSync(join(profileDir, 'cordis.patch.yml'), 'utf8');
-    assert.doesNotMatch(after, /permission|auto-approve|defaultPreset/u, '覆盖行必须整行删除');
-    assert.doesNotMatch(after, /^- /mu, '不得残留条目行');
-    // 可解析性：删空后恰好一个顶层数组占位（宿主 parsePatchList 拒绝 null 与双序列）。
-    assert.equal((after.match(/^\[\]\s*$/gmu) ?? []).length, 1, '手术后文档必须恰含一个 [] 占位');
-    assert.match(after, /# Your patch layer/u, '模板头保留');
-    assert.match(written.join(''), /预设残留防护/u, '复位动作落一行审计');
+    assert.equal(after, yamlText, '装卸全程用户 YAML 逐字节不变（不解析、不改写、不提供备用清理）');
+    assert.doesNotMatch(written.join(''), /预设残留防护/u, '不得再出现备用清理的审计动作');
   } finally {
     process.stderr.write = original;
     if (previousHome === undefined) delete process.env.DSH_HOME;
