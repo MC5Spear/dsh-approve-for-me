@@ -47,6 +47,7 @@ export const pendingStateResultSchema = z.object({
     z.object({
       callId: z.string(),
       state: z.string(),
+      cause: z.string(),
       reason: z.string(),
       startedAt: z.number(),
       deadlineAt: z.number().nullable(),
@@ -321,7 +322,7 @@ export const TYPERT = {
             signature: '@Remote("pendingState") pendingState(args: { sessionId: string }): PendingState',
             summary: 'List the in-flight auto-approval states of one session, for the approval card state line.',
             jsDoc:
-              '/**\n * List the in-flight auto-approval states of one session.\n * @param args - session id.\n * @returns the state entries the approval card renders.\n */',
+              '/**\n * List the in-flight auto-approval states of one session.\n * @param args - session id.\n * @returns the state entries the approval card renders; waiting-human entries carry a cause (deny/timeout/error) and the human deadline.\n */',
           },
           {
             kind: 'method',
@@ -371,7 +372,7 @@ export const TYPERT = {
           {
             name: 'PendingState',
             declaration:
-              'export interface PendingState { entries: { callId: string; state: string; reason: string; startedAt: number; deadlineAt: number | null; deadlineKind: string | null; updatedAt: number; }[]; }',
+              'export interface PendingState { entries: { callId: string; state: string; cause: string; reason: string; startedAt: number; deadlineAt: number | null; deadlineKind: string | null; updatedAt: number; }[]; }',
           },
           {
             name: 'PresetCatalog',

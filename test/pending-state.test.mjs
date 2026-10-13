@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createPendingState } from '../lib/pending-state.js';
+import { createPendingState, PENDING_STATES, PENDING_CAUSES } from '../lib/pending-state.js';
 
 /** 固定时钟，便于断言 `updatedAt`。 */
 const fixedNow = () => 1_700_000_000_000;
 
-test('写入-读回：一条记录带状态、理由与时限', () => {
+test('枚举定稿：状态闭集 reviewing/waiting-human，原因类别闭集 deny/timeout/error（design §7.4）', () => {
+  assert.deepEqual(PENDING_STATES, ['reviewing', 'waiting-human']);
+  assert.deepEqual(PENDING_CAUSES, ['deny', 'timeout', 'error']);
+});
+
+test('写入-读回：一条记录带状态、原因类别、理由与时限', () => {
   const pending = createPendingState({ now: fixedNow });
   pending.set('s1', { callId: 'c1', state: 'reviewing', deadlineAt: 1_700_000_090_000, deadlineKind: 'review' });
   const [entry] = pending.list('s1');
@@ -19,12 +24,14 @@ test('写入-读回：一条记录带状态、理由与时限', () => {
 test('同一 callId 覆盖写，不同 callId 并存；会话之间互不可见', () => {
   const pending = createPendingState({ now: fixedNow });
   pending.set('s1', { callId: 'c1', state: 'reviewing' });
-  pending.set('s1', { callId: 'c2', state: 'denied', reason: 'r' });
+  pending.set('s1', { callId: 'c2', state: 'waiting-human', cause: 'deny', reason: 'r' });
   pending.set('s2', { callId: 'c9', state: 'reviewing' });
   assert.deepEqual(pending.list('s1').map((entry) => entry.callId), ['c1', 'c2']);
   assert.deepEqual(pending.list('s2').map((entry) => entry.callId), ['c9']);
-  pending.set('s1', { callId: 'c1', state: 'timeout' });
-  assert.equal(pending.list('s1').find((entry) => entry.callId === 'c1').state, 'timeout');
+  pending.set('s1', { callId: 'c1', state: 'waiting-human', cause: 'timeout' });
+  const entry = pending.list('s1').find((item) => item.callId === 'c1');
+  assert.equal(entry.state, 'waiting-human');
+  assert.equal(entry.cause, 'timeout');
   assert.equal(pending.list('s1').length, 2);
 });
 
@@ -46,6 +53,18 @@ test('归一化：非法状态按 reviewing，缺时限时 deadlineAt/deadlineKi
   assert.equal(entry.reason, '');
   assert.equal(entry.deadlineAt, null);
   assert.equal(entry.deadlineKind, null);
+});
+
+test('cause 透传与归一化：三类合法值原样保留，写错或缺失按 error（design §7.4）', () => {
+  const pending = createPendingState({ now: fixedNow });
+  for (const cause of PENDING_CAUSES) {
+    pending.set('s1', { callId: `ok-${cause}`, state: 'waiting-human', cause });
+    assert.equal(pending.list('s1').find((entry) => entry.callId === `ok-${cause}`).cause, cause);
+  }
+  pending.set('s1', { callId: 'bad', state: 'waiting-human', cause: 'denied' });
+  assert.equal(pending.list('s1').find((entry) => entry.callId === 'bad').cause, 'error', "写错值 'denied' 应按 error 归一化");
+  pending.set('s1', { callId: 'missing', state: 'waiting-human' });
+  assert.equal(pending.list('s1').find((entry) => entry.callId === 'missing').cause, 'error', '缺失 cause 应按 error 归一化');
 });
 
 test('非法键不写入：空 sessionId 或空 callId 直接丢弃', () => {

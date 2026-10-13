@@ -27,12 +27,12 @@ function hasLine(label) {
   return dump.split('\n').some((line) => line.trim() === label);
 }
 
-/** 取「标签行 → 已覆盖/恢复默认」的邻接读数（覆盖组紧跟标签行，§1 逐字文本）。 */
+/** 取「标签行 → 已单独设置/恢复默认」的邻接读数（覆盖组紧跟标签行与说明按钮，§1 逐字文本）。 */
 function hasOverrideNear(label, maxDistance = 3) {
   const lines = dump.split('\n').map((l) => l.trim());
   const idx = lines.indexOf(label);
   if (idx === -1) return false;
-  return lines.slice(idx + 1, idx + 1 + maxDistance).includes('已覆盖') && lines.slice(idx + 1, idx + 1 + maxDistance).includes('恢复默认');
+  return lines.slice(idx + 1, idx + 1 + maxDistance).includes('已单独设置') && lines.slice(idx + 1, idx + 1 + maxDistance).includes('恢复默认');
 }
 
 test('dump 留档存在且含页面身份与采集元数据', () => {
@@ -55,9 +55,15 @@ const pageText = (() => {
 
 test('退役件零命中——重置全部覆盖、当前生效值、分区标题、旧操作区', () => {
   // 反恒真防线：围栏解析失败时 pageText 为空串，零命中断言会恒绿——先证明文本块真的取到了。
-  assert.ok(pageText.includes('接管预设') && pageText.includes('保存'), '§1 逐字文本块缺失或为空（围栏解析失败会让零命中断言恒真）');
+  assert.ok(pageText.includes('启用自动审批的权限预设') && pageText.includes('保存'), '§1 逐字文本块缺失或为空（围栏解析失败会让零命中断言恒真）');
   assert.equal(pageText.includes('重置全部覆盖'), false, '「重置全部覆盖」应零命中');
   assert.equal(pageText.includes('当前生效值'), false, '「当前生效值」灰字行应零命中');
+  // §11 迁移：退役话术在页面文本零命中。
+  assert.equal(pageText.includes('跟随模型默认'), false, '「跟随模型默认」应零命中（effort.default＝自动选择）');
+  assert.equal(pageText.includes('已覆盖'), false, '「已覆盖」应零命中（card.override＝已单独设置）');
+  assert.equal(pageText.includes('主模型'), false, '「主模型」用户可见字样应零命中（执行助手模型）');
+  assert.equal(pageText.includes('档位'), false, '「档位」用户可见字样应零命中（推理强度）');
+  assert.equal(pageText.includes('跳过（不接管）'), false, '旧选项文案「跳过（不接管）」应零命中');
   // 分区标题退役：正文里不得出现独立的「触发」「高级」行（「审查模型」是映射表列头，按类清单判）。
   assert.equal(hasLine('触发'), false, '分区标题「触发」应退役');
   assert.equal(hasLine('高级'), false, '分区标题「高级」应退役');
@@ -71,27 +77,27 @@ test('退役件零命中——重置全部覆盖、当前生效值、分区标�
 
 test('逐项等价：表单字段集与 config schema 的 UI 面一致（21 字段，竖排无分区）', () => {
   const fields = [
-    '接管预设',
-    '预设不可判定处置',
-    '逐次写跳过审计',
+    '启用自动审批的权限预设',
+    '无法识别权限预设时',
+    '逐条记录预设不匹配的审批',
     '默认审查模型',
-    '按主模型映射',
-    '跟随主模型',
-    '用户文案语言',
-    'Agent 提示语言',
-    '审查超时 (ms)',
-    '输出上限 (token)',
-    '审查期间弹出人工卡片',
-    '人工超时 (ms)',
-    '人工计时起点',
+    '按执行助手的模型选择审查模型',
+    '无可用审查模型时使用执行助手的模型',
+    '插件界面语言',
+    '发送给模型的文本语言',
+    '自动审查等待上限（毫秒）',
+    '审查输出上限（token）',
+    '审查期间显示人工审批卡片',
+    '人工作答等待上限（毫秒）',
+    '人工作答等待起算点',
     '模式',
-    '自动放行上限',
-    '命令缺失处置',
-    '审查未放行处置',
-    '会话页注入',
-    '注入字节上限',
-    '接管工具名单（每行一个）',
-    '规则拒绝清单（每行一条正则）',
+    '可自动批准的最高权限',
+    '无法识别本次操作时',
+    '自动审查未允许时',
+    '给执行助手的审批通知',
+    '通知长度上限（字节）',
+    '纳入自动审批的工具',
+    '文本拒绝规则（每行一条正则表达式）',
   ];
   const missing = fields.filter((f) => !hasLine(f));
   assert.deepEqual(missing, [], '设置表单丢字段（对照 lib/config.js 的 UI 面）');
@@ -100,22 +106,22 @@ test('逐项等价：表单字段集与 config schema 的 UI 面一致（21 字�
   assert.match(dump, /数字字段 4 个走官方组件标记，合计 21/u, '21 字段＝17 自绘壳＋4 官方数字字段');
 });
 
-test('覆盖组「已覆盖＋恢复默认」与用户层键一一对应', () => {
+test('覆盖组「已单独设置＋恢复默认」与用户层键一一对应', () => {
   assert.match(dump, /恰好 3 组/u, '自绘覆盖组应恰好 3 组（reviewer.model/language.ui/language.agent）');
-  // 自绘字段：标签行后 3 行内出现「已覆盖」与「恢复默认」。
-  for (const label of ['默认审查模型', '用户文案语言', 'Agent 提示语言']) {
+  // 自绘字段：标签行后 3 行内出现「说明」「已单独设置」与「恢复默认」。
+  for (const label of ['默认审查模型', '插件界面语言', '发送给模型的文本语言']) {
     assert.ok(hasOverrideNear(label), `${label} 缺覆盖组`);
   }
   // 数字字段：覆盖组在官方 SettingsValueField 内部（§1 文本仍逐字可见）。
   // human.timeoutMs 无用户层键（profile 的 human 为空节，300000＝默认值），
   // 官方组件内覆盖组只剩 reviewer.timeoutMs 一处。
-  for (const label of ['审查超时 (ms)']) {
+  for (const label of ['自动审查等待上限（毫秒）']) {
     assert.ok(hasOverrideNear(label, 3), `${label} 缺官方组件内的覆盖组`);
   }
   // 未覆盖字段不得误报：无用户层键的字段旁不得出现覆盖组。
   assert.equal(hasOverrideNear('模式'), false, 'mode 无用户层键，不应有覆盖组');
-  assert.equal(hasOverrideNear('人工计时起点'), false, 'human.timeoutFrom 无用户层键，不应有覆盖组');
-  assert.equal(hasOverrideNear('人工超时 (ms)'), false, 'human.timeoutMs 无用户层键（profile 的 human 为空节，300000＝默认值），不应有覆盖组');
+  assert.equal(hasOverrideNear('人工作答等待起算点'), false, 'human.timeoutFrom 无用户层键，不应有覆盖组');
+  assert.equal(hasOverrideNear('人工作答等待上限（毫秒）'), false, 'human.timeoutMs 无用户层键（profile 的 human 为空节，300000＝默认值），不应有覆盖组');
 });
 
 test('暂存语义：保存按钮三态与「只有保存才写」的行为差异', () => {
@@ -133,19 +139,28 @@ test('配置区容器无自绘卡片外壳（计算样式）', () => {
   assert.match(dump, /background=`rgba\(0, 0, 0, 0\)`/u, '不应有成片底色');
 });
 
-test('帮助点击展开，aria-expanded/aria-controls 成对', () => {
-  assert.match(dump, /帮助按钮 17 个，全部带 aria-controls 与 aria-label，初始 aria-expanded=false/u, '帮助按钮应 17 个且 aria 成对');
+test('说明入口（§7.2.1）：21 个按钮带可见文字，aria 成对，展开文本为新总开关文案', () => {
+  assert.match(dump, /说明按钮 21 个（17 自绘壳＋4 官方数字字段平铺行 `\.dsafm_f_help`）/u, '说明按钮应 21 个（含数字字段平铺行）');
+  assert.match(dump, /按钮带可见文字「说明／收起说明」（`\.dsafm_helpbtn_text`）/u, '说明按钮应带可见文字');
+  assert.match(dump, /`aria-label`＝「字段名：说明」、Enter\/Space 键盘可达/u, '无障碍名格式与键盘可达应在档');
   assert.match(dump, /点击 mode 字段后：aria-expanded=`true`、展开区在场=`true`、同屏展开区数量=1/u, '点击后应展开且仅展开一个');
-  assert.match(dump, /展开文本首段＝「总开关：rules＝规则强制检查 \+ LLM 审查；off＝完全不管审批（等同于未安装）。」/u, '帮助文本应进入 DOM');
+  assert.match(dump, /展开文本首段＝「总开关：规则检查＋LLM 审查＝正常接管；完全不接管＝等同未安装，宿主审批流程不受影响。」/u, '展开文本应为定稿总开关文案（design §7.2.1）');
+  assert.match(dump, /开合不触碰草稿\/保存计划（纯展示状态）/u, '开合纯展示语义应在档');
+  // §1 逐字文本：每个字段名行后紧跟「说明」按钮文字（21 处＝21 字段）。
+  assert.equal((pageText.split('\n').filter((l) => l.trim() === '说明').length), 21, '§1 中「说明」按钮文字应恰 21 处');
 });
 
 test('交付 CSS 串失效令牌零命中（收窄到本包 style 元素）', () => {
   assert.match(dump, /`--dsw-alias-state-warning-primary`×0、`--dsw-alias-label-error`×0、`--dsw-alias-bg-layer-4`×0/u, '三个失效令牌应零命中');
-  assert.match(dump, /本包注入样式 8732 字符/u, '扫描对象应为本包注入样式串');
+  assert.match(dump, /本包注入样式 9413 字符（98 条规则）/u, '扫描对象应为本包注入样式串（新说明行样式计入）');
   assert.match(dump, /\.dsafm_form\{display:flex;flex-direction:column;/u, '外壳规则应无边框/圆角/底色');
   assert.match(dump, /\.dsafm_save\{[^}]*border-radius:8px;padding:5px 14px;/u, '保存按钮应取官方规格');
-  assert.match(dump, /\.dsafm_helpbtn\{[^}]*width:24px;height:24px;/u, '帮助按钮应为 24×24');
+  assert.match(dump, /\.dsafm_helpbtn\{[^}]*min-width:24px;min-height:24px;/u, '说明按钮应为 24×24 最小命中区（文字按钮，design §7.2.1）');
   assert.match(dump, /\.dsafm_input\{[^}]*height:34px;padding:0 12px;border:\.5px solid var\(--dsw-alias-border-l4\);border-radius:8px;/u, '输入应取官方规格');
+  // 分隔线选择器组（design §7.2.1）：两条规则原文在档。
+  assert.match(dump, /\.dsafm_f_sec \+ div:not\(\.dsafm_field\):not\(\.dsafm_f_help\)\{border-top:\.5px solid var\(--dsw-alias-border-l2\)\}/u, '秒数行后继排除说明行');
+  assert.match(dump, /\.dsafm_f_help \+ div:not\(\.dsafm_field\)\{border-top:\.5px solid var\(--dsw-alias-border-l2\)\}/u, '说明行作锚恢复分隔线');
+  assert.match(dump, /\.dsafm_f_help\{margin:-12px 0 12px\}/u, '平铺说明行负边距应在档');
 });
 
 test('控件清单：生效值就在控件里，id 挂在控件上', () => {
@@ -237,18 +252,19 @@ test('毫秒字段换算读数常驻（生效值＝控件值、样式与分隔�
   // 行样式与官方 .hint 同规格：12px／三级色；上边距 -12px 抵官方字段底 padding（贴住说明行），
   // 下边距 12px 还给后继分隔线（同官方字段底部节奏）。
   assert.match(dump, /fontSize=`12px`、color=`rgb\(129, 133, 140\)`、marginTop=`-12px`/u, '读数行应为 12px 三级色＋-12px 负边距（贴住说明行不隔行）');
-  // Fragment 平铺后分隔线恢复：官方后继字段有边框、自绘后继字段无边框。
-  // 宿主 CSS 模块哈希随宿主版本变化（ui-primitives 改版后为 `_field_bjqpo_3`，0.2.0-rc.2 实测未变）；
-  // 宿主升级后复核本档 DOM。
-  assert.match(dump, /后继节点 class=`_field_bjqpo_3`、borderTopWidth=`1px`/u, '官方后继字段应恢复分隔线');
-  assert.match(dump, /后继节点 class=`dsafm_field`、borderTopWidth=`0px`/u, '自绘后继字段应无分隔线');
+  // Fragment 平铺＋平铺说明行（design §7.2.1）：秒数行的后继是本字段的说明行（无边框）；
+  // 说明行之后才恢复分隔线（官方字段容器 1px；自绘字段 1px）。宿主 CSS 模块哈希随宿主版本变化
+  // （ui-primitives 改版后为 `_field_bjqpo_3`，0.2.0-rc.2 实测未变）；宿主升级后复核本档 DOM。
+  assert.match(dump, /后继节点 class=`dsafm_f_help`、borderTopWidth=`0px`/u, '秒数行的直接后继是平铺说明行，不分隔');
+  assert.match(dump, /class=`_field_bjqpo_3`、borderTopWidth=`1px`/u, '说明行后的官方字段应恢复分隔线');
+  assert.match(dump, /class=`dsafm_field`、borderTopWidth=`1px`/u, '说明行后的自绘字段应恢复分隔线');
   // 实时性取证指针在档。
   assert.match(dump, /实时性（键入即换算、占位、非法、保存重开、en 档单位）见/u, '实时性取证指针应在档');
 });
 
 test('反恒真对照：匹配器能命中（正向）、表单无幽灵字段（反向）', () => {
   // 正向对照：同一匹配器命中确定在场的行——证明匹配器本身没有恒真/恒假。
-  assert.ok(hasLine('接管预设'), '正向对照失败：匹配器连在场字段都找不到');
+  assert.ok(hasLine('启用自动审批的权限预设'), '正向对照失败：匹配器连在场字段都找不到');
   // 反向：这些从未是 config 字段，出现在表单上反而说明漂移。
   assert.equal(hasLine('系统提示词'), false, '「系统提示词」不是 config 字段，表单出现即为漂移');
   assert.equal(dump.includes('Tooltip'), false, '设置界面不应再出现 Tooltip（帮助改为内联展开）');

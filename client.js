@@ -53,21 +53,21 @@ window.__ModuleLoader__.load({
 
 		const zh = {
 			"card.unset": "未设置",
-			"card.map.parent": "主模型",
+			"card.map.parent": "执行助手模型",
 			"card.map.add": "添加一行",
 			"card.map.remove": "删除",
-			"card.map.col.parent": "主模型",
+			"card.map.col.parent": "执行助手模型",
 			"card.map.col.reviewer": "审查模型",
-			"card.map.col.effort": "档位",
+			"card.map.col.effort": "推理强度",
 			"card.map.col.action": "操作",
 			"card.map.custom": "自定义…",
-			"card.map.placeholder.parent": "主模型 id",
+			"card.map.placeholder.parent": "执行助手模型 id",
 			"card.field.defaultModel": "默认审查模型",
-			"card.field.byParentModel": "按主模型映射",
-			"card.field.followParent": "跟随主模型",
+			"card.field.byParentModel": "按执行助手的模型选择审查模型",
+			"card.field.followParent": "无可用审查模型时使用执行助手的模型",
 			"card.effort.unsupported": "（模型不支持）",
-			"effort.default": "跟随模型默认",
-			"card.override": "已覆盖",
+			"effort.default": "自动选择",
+			"card.override": "已单独设置",
 			"card.resetField": "恢复默认",
 			"card.save": "保存",
 			"card.saving": "保存中…",
@@ -78,68 +78,71 @@ window.__ModuleLoader__.load({
 			"seconds.unit": "秒",
 			"warn.noLimit": "风险：审查模型挂起、工具或其他异常可能使请求无限停在自动审批；插件不会自动恢复时限，取消与其他人工路径按各自条件生效。",
 			"card.readonly": "当前页面不可写入设置（非 loopback），可用 profile patch 配置。",
-			"help.trigger.presets": "哪些权限预设下由本插件接管审批。默认只在「自动审批」预设下接管；其他预设保持原有的人工审批行为。",
-			"help.trigger.unknown": "读不到会话权限预设时的处置：跳过＝不接管（保持原行为）；接管＝视为已开启自动审批。宿主服务缺失时才会发生。",
-			"help.trigger.auditEverySkip": "开启后，每次因预设不匹配而跳过都写一行审计；关闭时同一会话同一预设只写一行，避免刷屏。",
-			"help.reviewer.byParentModel": "全局级·按主模型映射：主模型 id（`provider/model` 里 `/` 之后的部分）对应到审查模型与档位。比默认审查模型更具体，优先命中。",
-			"help.reviewer.model": "全局级·默认审查模型与档位：模型形如 provider/model；档位留空表示跟随模型默认。未配置时跟随会话当前模型（见下方「跟随主模型」）。",
-			"help.reviewer.followParent": "上面两级都没有可用值时，是否直接用主模型自己来审查。关掉则模型解析失败时直接拒绝。",
-			"help.reviewer.timeoutMs": "单次审查的时限（毫秒）。超时按审查失败处理（默认直接拒绝）。0 表示不限时。",
-			"help.reviewer.maxTokens": "审查请求的输出上限（token）。0 或留空 = 本插件不设上限，由模型自己的默认值决定（与 codex 一致，推荐）。思考型模型会先吃掉这份预算：小上限会让正文为空（本次审查直接判失败），2048 一档在最高档位下余量也很小。",
-			"help.human.timeoutMs": "仅在「审查未放行处置 = 交人工」时生效：人工卡片等待多久后自动拒绝（毫秒）。0 表示立即拒绝。",
-			"help.human.timeoutFrom": "人工计时的起点：request＝从审批请求进来开始算；handoff＝从交给人工那一刻开始算。",
-			"help.mode": "总开关：rules＝规则强制检查 + LLM 审查；off＝完全不管审批（等同于未安装）。",
-			"help.allowEscalationTo": "允许自动放行的最宽权限：danger-full-access＝允许升到完全权限（默认）；workspace-write＝超过工作区内修改的升权一律不放行。",
-			"help.unknownSubject": "回查不到原始命令时的处置：拒绝＝直接拒绝（无证据不放行）；审查＝只带工具名与理由继续审查。",
-			"help.fallback": "审查未放行（拒绝/超时/失败）时的处置：拒绝＝直接拒绝并把理由交给主模型；交人工＝弹出原生审批卡片等用户决定。",
-			"help.ui.inject": "会话页里自动审批留痕的范围：全部＝放行与拒绝都写一条上下文注入；仅拒绝；不注入（只在审计里留痕）。",
-			"help.ui.injectMaxBytes": "单条注入文本的字节上限，超出会截断并附截断标记，避免长命令把上下文撑大。",
-			"help.tools": "留空 = 对所有工具生效；填了则只接管名单内工具的审批请求，其余工具仍走原有人工审批。",
-			"help.denyPatterns": "规则拒绝清单（每行一条正则，大小写不敏感，作用于完整命令）：默认留空＝不启用规则检查；显式写入后命中即拒绝，不调 LLM，人工也不能推翻。出厂参考清单见 README，抄写进配置即恢复。",
+			"help.expand": "说明",
+			"help.collapse": "收起说明",
+			"help.trigger.presets": "会话使用清单内权限预设时，插件按接管规则处理升权审批；其他预设保持宿主原审批流程。清单为空时，任何已知预设都不接管；无法识别的预设按「无法识别权限预设时」的设置处置。选择接管范围不等于授予任意权限。",
+			"help.trigger.unknown": "读不到会话权限预设时的处置。保持宿主原审批流程＝不接管；继续自动审查＝视为命中接管范围。可能原因包括服务缺失、读取失败或没有可用预设信息。",
+			"help.trigger.auditEverySkip": "开启后，每次因预设不匹配而跳过的审批都逐条记录；关闭时同一会话同一原因只记录一条。只改变跳过记录的数量，不影响接管与审批本身，也不表示所有审批都被审查。",
+			"help.reviewer.byParentModel": "按执行助手的模型选择审查模型：执行助手所用模型（纯模型 id）对应到审查模型与推理强度，比全局默认更具体，命中即生效；未命中按其余层级解析（顺序见上方「默认审查模型」）。",
+			"help.reviewer.model": "全局默认的审查模型与推理强度。模型引用形如 provider/model；推理强度留空表示自动选择：模型支持 `low` 就使用 `low`，否则不指定、由模型默认值决定，不承诺所有模型都支持或采用相同强度。解析顺序为会话选择 → 按执行助手的模型映射 → 全局默认 → 跟随执行助手模型。",
+			"help.reviewer.followParent": "仅在会话选择、按执行助手的模型映射、全局默认都不可用时生效：使用与执行助手相同的模型，独立发起一次审查调用——这是「使用相同模型」，不是由执行助手自己审批。关闭后，全部层级不可用时按审查故障拒绝。",
+			"help.reviewer.timeoutMs": "自动审查的等待上限（毫秒），涵盖等待本次审查结论的全过程，内部重试不另计时。超时按拒绝处理并说明发生环节，不是危险判定。0 表示取消审查时限：审查模型挂起、工具或其他异常可能使请求无限停在自动审批，插件不自动恢复时限；取消与其他人工路径仍按各自条件生效（常驻风险提醒同此）。",
+			"help.reviewer.maxTokens": "审查输出上限（token）。0 表示不向模型传输出上限，由模型或供应商默认值决定。推理模型可能先把额度用于推理：上限过小可能导致没有有效结论（正文为空，按审查故障处理）；具体数值因模型与推理强度而异，不以个别模型的测量结果作通用保证。",
+			"help.human.timeoutMs": "人工作答等待上限（毫秒），仅在「自动审查未允许时＝交给人工决定」时使用。0 表示立即拒绝，不是无限等待。到点按拒绝结算，原因写明人工作答超时。",
+			"help.human.timeoutFrom": "人工作答计时的起点：从审批请求起算＝交人工只使用剩余时间；从交人工起算＝交人工时重新开始计时。",
+			"help.mode": "总开关：规则检查＋LLM 审查＝正常接管；完全不接管＝等同未安装，宿主审批流程不受影响。",
+			"help.allowEscalationTo": "可自动批准的最高权限，只限制可送审或允许的升权范围；范围内仍须通过规则检查与模型审查，不等于自动批准全部操作。完全访问（默认）＝最宽；工作区内修改＝超出工作区写入的升权不放行。",
+			"help.unknownSubject": "无法辨认本次实际操作（如回查不到命令或参数）时的处置。直接拒绝＝不调用模型、立即拒绝；带缺失说明继续审查＝携带已取得的参数与上下文继续审查，缺失明确标记，不把缺失当作安全。",
+			"help.fallback": "自动审查未允许（拒绝、超时或故障）时的处置。直接拒绝＝按拒绝结算并通知执行助手；交给人工决定＝显示人工审批卡片等待你作答，人工作答等待上限到点按拒绝结算。子代理没有人工通道：未允许一律拒绝。",
+			"help.ui.inject": "发给执行助手（发起工具操作的 Agent）的审批通知范围：允许、拒绝、超时和故障＝四类都发送；仅拒绝、超时和故障＝允许不发送；选择「不发送」＝一条都不发送。审查记录视图的显示不受本开关影响。",
+			"help.ui.injectMaxBytes": "发给执行助手的单条通知的字节上限，超出截断并附截断标记；0 不裁剪。限制对象只是通知，审查记录按会话独立保留，与该上限无关。",
+			"help.tools": "纳入自动审批的工具名单，每行一个工具名。空清单覆盖所有工具的升权审批；填写后只处理名单内工具的升权请求，其余工具保持宿主原流程。",
+			"help.denyPatterns": "文本拒绝规则，每行一条正则表达式（正则表达式是文本匹配规则，不是完整命令语义分析）。匹配对象是受支持深度内的全部字符串参数值，不只命令字段；包含危险词的说明文本也可能命中。普通正则默认忽略大小写；写成 /source/flags 形式时按所填标志匹配，未写标志时与普通正则一样忽略大小写。命中即直接拒绝：不调用模型、不交人工，模型和人工都不能推翻。空清单只关闭这层文本匹配，可自动批准的最高权限、无法识别操作等其他检查不受影响；不可编译的行跳过，不构成有效保护。",
 			"composer.label": "审查模型",
 			"composer.followGlobal": "跟随全局（清除本会话选择）",
 			"composer.followGlobalShort": "跟随全局",
-			"composer.title": "本会话的审查模型；点开可以只给这个会话指定",
+			"composer.title": "本会话的审查模型；独立于执行助手调用，点开可只给这个会话指定",
 			"composer.empty": "没有可选模型",
 			"composer.failed": "切换失败",
 			"composer.pendingSession": "会话尚未开始；现在设置的值会在会话开始后生效",
 			"composer.section.model": "模型",
-			"composer.section.effort": "档位",
-			"card.presets.label": "接管预设",
+			"composer.section.effort": "推理强度",
+			"card.presets.label": "启用自动审批的权限预设",
 			"card.presets.empty": "未选择任何预设",
 			"card.presets.count": "已选 {n} 个",
 			"card.presets.default": "默认",
-			"card.presets.none": "至少选一个预设，否则插件不会接管任何审批",
+			"card.presets.none": "清单为空时，已知预设都不会接管审批；无法识别的预设按「无法识别权限预设时」的设置处置。",
 			"card.presets.missing": "配置中存在但当前预设表里没有：",
-			"card.presets.missing.remedy": "该预设由插件安装包自带（bundle patch），插件停用或宿主版本不兼容时预设表会缺它：重新启用插件并重启宿主即恢复；若已卸载且配置仍选着 auto-approve，请改选标准档位（或重装）。",
-			"card.presets.unavailable": "读不到预设目录；请用 settings.yaml 编辑，或确认权限预设服务已挂载。",
+			"card.presets.missing.remedy": "该预设不在宿主当前预设表中。可依次检查：插件是否已停用、宿主版本是否兼容、预设是否为自定义。重新启用插件或重启宿主可能恢复，不保证一定恢复；插件已卸载且配置仍选择该预设时，可改选标准权限档。插件不解析、不改写用户 YAML，不建议手工清理。",
+			"card.presets.unavailable": "读不到预设目录。可能原因：服务缺失、读取失败或没有可用预设信息；可确认权限预设服务可用后重试。",
 			"card.bool.on": "开启（true）",
 			"card.bool.off": "关闭（false）",
 			"card.value.unset": "未设置（跟随默认）",
-			"option.trigger.unknown.skip": "跳过（不接管）",
-			"option.trigger.unknown.review": "视为已开启自动审批",
+			"option.trigger.unknown.skip": "保持宿主原审批流程",
+			"option.trigger.unknown.review": "继续自动审查",
 			"option.human.timeoutFrom.request": "从审批请求起算",
 			"option.human.timeoutFrom.handoff": "从交人工起算",
 			"option.mode.rules": "规则检查 + LLM 审查",
 			"option.mode.off": "完全不接管",
 			"option.allowEscalationTo.workspace-write": "工作区内修改",
 			"option.allowEscalationTo.danger-full-access": "完全访问",
-			"option.unknownSubject.reject": "直接拒绝（无证据不放行）",
-			"option.unknownSubject.review": "继续审查（只带工具名与理由）",
+			"option.unknownSubject.reject": "直接拒绝",
+			"option.unknownSubject.review": "带缺失说明继续审查",
 			"option.fallback.reject": "直接拒绝",
-			"option.fallback.ask": "交人工",
-			"option.ui.inject.all": "放行与拒绝都注入",
-			"option.ui.inject.reject": "只注入拒绝",
-			"option.ui.inject.off": "都不注入",
-			"help.ui.humanCardDuringReview": "开启时，自动审查进行中就把原生审批卡片弹出来（你可以随时抢先决定，人工结论优先）。关闭时审查期间不弹卡片：只有审查未放行且「审查未放行处置 = 交人工」时才弹出，卡片上标明是超时还是拒绝。",
+			"option.fallback.ask": "交给人工决定",
+			"option.ui.inject.all": "允许、拒绝、超时和故障",
+			"option.ui.inject.reject": "仅拒绝、超时和故障",
+			"option.ui.inject.off": "不发送",
+			"help.ui.humanCardDuringReview": "开启时，自动审查进行中即显示人工审批卡片：你可以在审批未完成时抢先作答，人工结果优先；已完成的结果不能由迟到点击推翻。关闭时，仅在确实交给人工后显示卡片。",
 			"cardstate.reviewing": "正在自动审批",
-			"cardstate.timeout": "自动审批超时，已转人工；请决定是否放行",
-			"cardstate.denied": "自动审批拒绝；原因：{reason}",
-			"cardstate.denied.noreason": "自动审批拒绝",
+			"cardstate.waiting": "等待你决定",
+			"cardstate.waiting.deny": "自动审查结论为拒绝：{reason}",
+			"cardstate.waiting.timeout": "自动审查超时，未取得有效结论",
+			"cardstate.waiting.error": "自动审查未取得有效结论：{reason}",
 			"countdown.seconds": "剩余 {n} 秒后自动拒绝",
 			"countdown.minutes": "剩余 {m} 分 {s} 秒后自动拒绝",
 			"countdown.review": "审查时限剩余 {n} 秒",
-			"countdown.unlimited": "审查不限时",
+			"countdown.unlimited": "审查无时限",
 			"view.review": "审查记录",
 			"view.needSession": "请先打开一个会话",
 			"view.empty": "本会话还没有自动审批记录",
@@ -149,6 +152,10 @@ window.__ModuleLoader__.load({
 			"view.refresh": "刷新",
 			"view.disabled": "审查记录视图已关闭（ui.trace.ownView = false）",
 			"view.readFailed": "记录读取失败或不完整，列表可能缺少条目",
+			"view.retention": "记录跟随产生它的会话；每会话回读最近一个窗口（默认 200 条，随 `ui.trace.maxRecords` 可配置），磁盘最多保留 50 个会话文件（固定上限），超限删除最旧；减少采集不删除已有记录。",
+			"list.outcome": "最终审批：{v}",
+			"list.decision": "模型结论：{v}",
+			"view.noOutcome": "未记录最终审批结果",
 			"decision.allow": "放行（allow）",
 			"decision.allowed-once": "放行（allowed-once）",
 			"decision.deny": "拒绝（deny）",
@@ -163,19 +170,19 @@ window.__ModuleLoader__.load({
 			"time.review": "审查 {n}",
 			"time.human": "人工 {n}",
 			"detail.title": "单次审查",
-			"detail.outcome": "最终结算",
-			"detail.decision": "审查判定",
-			"detail.source": "结算来源",
+			"detail.outcome": "最终审批结果",
+			"detail.decision": "模型结论",
+			"detail.source": "决定方式",
 			"detail.stage": "环节",
 			"detail.model": "模型",
-			"detail.effort": "档位",
-			"detail.layer": "解析层级",
+			"detail.effort": "推理强度",
+			"detail.layer": "模型选择来源",
 			"detail.attempts": "尝试次数",
-			"detail.tokens": "思维链 token",
+			"detail.tokens": "推理 token 用量",
 			"detail.risk": "风险",
 			"detail.auth": "授权",
-			"detail.fieldsDefaulted": "解析补全",
-			"detail.degraded": "降级标记",
+			"detail.fieldsDefaulted": "自动补全的字段",
+			"detail.degraded": "缺失或异常情况",
 			"detail.preset": "接管预设",
 			"detail.origin": "归属",
 			"detail.escalation": "升权目标",
@@ -186,11 +193,35 @@ window.__ModuleLoader__.load({
 			"detail.reason": "理由",
 			"detail.prompt": "提示词",
 			"detail.input": "输入",
-			"detail.reasoning": "思维链",
+			"detail.reasoning": "模型返回的推理文本",
 			"detail.output": "输出",
-			"detail.notCaptured": "未采集（capture 档为 summary）",
 			"detail.truncated": "已截断",
-			"detail.absent": "缺失",
+			"absent.noContext": "未取上下文",
+			"absent.noProbes": "未调用取证工具",
+			"absent.modelNotProvided": "模型未提供",
+			"absent.notFullCapture": "未开启全文采集",
+			"absent.unknown": "本次未记录此项",
+			"layer.session": "会话选择（session）",
+			"layer.parent-map": "按执行助手的模型映射（parent-map）",
+			"layer.global": "全局默认（global）",
+			"layer.follow-parent": "跟随执行助手模型（follow-parent）",
+			"layer.unavailable": "全部层级不可用（unavailable）",
+			"fieldsDefaulted.risk": "风险分级（risk）",
+			"fieldsDefaulted.auth": "授权分级（auth）",
+			"fieldsDefaulted.reason": "理由（reason）",
+			"degraded.command": "无法辨认本次操作（command）",
+			"degraded.cwd": "会话目录缺失（cwd）",
+			"degraded.transcript": "上下文读取失败或截断（transcript）",
+			"degraded.entry": "单条证据截断（entry:…）",
+			"degraded.all": "模型选择全部不可用（all）",
+			"degraded.output-truncated": "输出截断（output-truncated）",
+			"degraded.output-empty": "空输出（output-empty）",
+			"degraded.superseded": "已被其他路径先结算（superseded）",
+			"degraded.queue-overflow": "队列已满（queue-overflow）",
+			"degraded.queue-timeout": "排队超时（queue-timeout）",
+			"degraded.breaker-open": "冷却中未执行（breaker-open）",
+			"degraded.inject-fail": "通知失败（inject-fail）",
+			"enum.unknown": "{v}（含义未知）",
 			"source.rule": "规则（rule）",
 			"source.llm": "审查（llm）",
 			"source.human": "人工（human）",
@@ -208,23 +239,23 @@ window.__ModuleLoader__.load({
 			"legacy.outcome.rejected": "拒绝",
 			"legacy.outcome.cancelled": "取消",
 			"legacy.outcome.unavailable": "不可用",
-			"field.trigger.unknown": "预设不可判定处置",
-			"field.trigger.auditEverySkip": "逐次写跳过审计",
-			"field.reviewer.timeoutMs": "审查超时 (ms)",
-			"field.reviewer.maxTokens": "输出上限 (token)",
-			"field.ui.humanCardDuringReview": "审查期间弹出人工卡片",
-			"field.human.timeoutMs": "人工超时 (ms)",
-			"field.human.timeoutFrom": "人工计时起点",
+			"field.trigger.unknown": "无法识别权限预设时",
+			"field.trigger.auditEverySkip": "逐条记录预设不匹配的审批",
+			"field.reviewer.timeoutMs": "自动审查等待上限（毫秒）",
+			"field.reviewer.maxTokens": "审查输出上限（token）",
+			"field.ui.humanCardDuringReview": "审查期间显示人工审批卡片",
+			"field.human.timeoutMs": "人工作答等待上限（毫秒）",
+			"field.human.timeoutFrom": "人工作答等待起算点",
 			"field.mode": "模式",
-			"field.allowEscalationTo": "自动放行上限",
-			"field.unknownSubject": "命令缺失处置",
-			"field.fallback": "审查未放行处置",
-			"field.ui.inject": "会话页注入",
-			"field.ui.injectMaxBytes": "注入字节上限",
-			"field.tools": "接管工具名单（每行一个）",
-			"field.denyPatterns": "规则拒绝清单（每行一条正则）",
-			"field.language.ui": "用户文案语言",
-			"field.language.agent": "Agent 提示语言",
+			"field.allowEscalationTo": "可自动批准的最高权限",
+			"field.unknownSubject": "无法识别本次操作时",
+			"field.fallback": "自动审查未允许时",
+			"field.ui.inject": "给执行助手的审批通知",
+			"field.ui.injectMaxBytes": "通知长度上限（字节）",
+			"field.tools": "纳入自动审批的工具",
+			"field.denyPatterns": "文本拒绝规则（每行一条正则表达式）",
+			"field.language.ui": "插件界面语言",
+			"field.language.agent": "发送给模型的文本语言",
 			"validate.number": "{label} 需要非负整数",
 			"validate.option": "{label} 取值非法",
 			"option.language.ui.auto": "跟随界面",
@@ -232,47 +263,47 @@ window.__ModuleLoader__.load({
 			"option.language.ui.en": "英文",
 			"option.language.agent.zh": "中文",
 			"option.language.agent.en": "英文",
-			"help.language.ui": "插件自有界面文案的语言：auto 跟随宿主界面语言，zh/en 强制。切换即热生效。",
-			"help.language.agent": "送给审查模型与注入主模型的全部文本的语言（系统提示、工具说明、注入文案、轮次指令）；默认 en，判定调用链不受语言影响。",
-			"hint.trigger.presets": "哪些权限预设下由本插件接管审批。",
+			"help.language.ui": "插件界面文案的语言：跟随宿主界面（auto）或强制中文／英文。保存后下一次渲染生效，不改变发送给模型的文本语言。",
+			"help.language.agent": "发给模型的全部文本的语言（系统提示、策略、工具说明、轮次指引）与给执行助手的通知语言。默认英文。判定与授权规则不随语言改变；与插件界面语言互不影响。",
+			"hint.trigger.presets": "会话使用清单内权限预设时，由本插件接管升权审批。",
 			"hint.trigger.unknown": "读不到会话权限预设时的处置。",
-			"hint.trigger.auditEverySkip": "预设不匹配的跳过是否每次都写审计。",
-			"hint.reviewer.model": "全局默认的审查模型与档位。",
-			"hint.reviewer.byParentModel": "主模型 → 审查模型的映射表。",
-			"hint.reviewer.followParent": "两级都没取到时是否用主模型自审。",
-			"hint.language.ui": "插件界面文案的语言档。",
-			"hint.language.agent": "送给模型的文本语言。",
-			"hint.reviewer.timeoutMs": "单次审查的时限（毫秒）。",
-			"hint.reviewer.maxTokens": "审查输出的上限（token）。",
-			"hint.ui.humanCardDuringReview": "审查进行中是否先弹出人工卡片。",
-			"hint.human.timeoutMs": "转人工后的等待时限（毫秒）。",
-			"hint.human.timeoutFrom": "人工计时的起点。",
-			"hint.mode": "rules＝规则＋审查；off＝不接管。",
-			"hint.allowEscalationTo": "自动放行的最宽权限。",
-			"hint.unknownSubject": "回查不到原始命令时的处置。",
-			"hint.fallback": "审查未放行时的处置。",
-			"hint.ui.inject": "会话页注入留痕的范围。",
-			"hint.ui.injectMaxBytes": "单条注入文本的字节上限。",
-			"hint.tools": "接管的工具名单，每行一个。",
-			"hint.denyPatterns": "规则强制拒绝清单，每行一条正则；留空＝不启用规则强制检查，出厂参考清单见 README，抄写进配置即恢复。",
+			"hint.trigger.auditEverySkip": "因预设不匹配跳过的审批是否逐条记录。",
+			"hint.reviewer.model": "全局默认的审查模型与推理强度。",
+			"hint.reviewer.byParentModel": "按执行助手模型选择审查模型的映射表。",
+			"hint.reviewer.followParent": "更高优先级的选择都不可用时，改用执行助手的模型独立审查。",
+			"hint.language.ui": "插件界面文案的语言。",
+			"hint.language.agent": "发给审查模型的文本与给执行助手的通知，两者使用的语言。",
+			"hint.reviewer.timeoutMs": "自动审查的等待上限（毫秒）；0 取消时限，有常驻风险提醒。",
+			"hint.reviewer.maxTokens": "审查输出的 token 上限；0 不设上限。",
+			"hint.ui.humanCardDuringReview": "审查期间是否提前显示人工审批卡片。",
+			"hint.human.timeoutMs": "人工作答的等待上限（毫秒）；0 立即拒绝。",
+			"hint.human.timeoutFrom": "人工作答从何时开始计时：审批请求发出时，或交人工时。",
+			"hint.mode": "总开关；关闭后插件完全不接管。",
+			"hint.allowEscalationTo": "插件可自动授予的最高权限档；更高的升权不会被自动批准。",
+			"hint.unknownSubject": "无法辨认本次实际操作时的处置。",
+			"hint.fallback": "自动审查未允许时的处置。",
+			"hint.ui.inject": "发给执行助手的审批通知范围。",
+			"hint.ui.injectMaxBytes": "单条通知的字节上限；0 不裁剪。",
+			"hint.tools": "纳入自动审批的工具，每行一个；空清单覆盖全部工具。",
+			"hint.denyPatterns": "每行一条正则表达式；命中即直接拒绝，模型与人工都不能推翻。",
 		};
 		const en = {
 			"card.unset": "Not set",
-			"card.map.parent": "Main model",
+			"card.map.parent": "Agent's model",
 			"card.map.add": "Add row",
 			"card.map.remove": "Remove",
-			"card.map.col.parent": "Main model",
+			"card.map.col.parent": "Agent's model",
 			"card.map.col.reviewer": "Reviewer model",
 			"card.map.col.effort": "Effort",
 			"card.map.col.action": "Actions",
 			"card.map.custom": "Custom…",
-			"card.map.placeholder.parent": "Main model id",
+			"card.map.placeholder.parent": "Agent model id",
 			"card.field.defaultModel": "Default reviewer model",
-			"card.field.byParentModel": "By main model",
-			"card.field.followParent": "Follow the main model",
+			"card.field.byParentModel": "Reviewer model by the agent's model",
+			"card.field.followParent": "Use the agent's model when no reviewer is available",
 			"card.effort.unsupported": " (unsupported by this model)",
-			"effort.default": "Model default",
-			"card.override": "Overridden",
+			"effort.default": "Automatic",
+			"card.override": "Set individually",
 			"card.resetField": "Reset to default",
 			"card.save": "Save",
 			"card.saving": "Saving…",
@@ -283,64 +314,67 @@ window.__ModuleLoader__.load({
 			"seconds.unit": "s",
 			"warn.noLimit": "Risk: a hung review model, a tool failure or another error can leave the request stuck in auto-approval forever; the plugin does not restore the limit automatically — cancel and other human paths still apply per their conditions.",
 			"card.readonly": "Settings are read-only on this page (non-loopback). Use a profile patch instead.",
-			"help.trigger.presets": "Permission presets this plugin takes over. By default only Auto-approve; other presets keep the original human approval flow.",
-			"help.trigger.unknown": "What to do when the session preset cannot be read: skip keeps the original behaviour; review treats it as auto-approve. Only happens when the host service is missing.",
-			"help.trigger.auditEverySkip": "When on, every skipped request writes an audit line; when off, one line per session and preset.",
-			"help.reviewer.byParentModel": "Global map from the main model id (the part after / in provider/model) to the reviewer model and its effort. More specific than the default reviewer model.",
-			"help.reviewer.model": "Global default reviewer model and effort: the model reads provider/model, and an empty effort follows the model default. When empty, the session model follows the main model (see Follow the main model).",
-			"help.reviewer.followParent": "When neither layer is usable, review with the main model itself. Turn it off to reject instead.",
-			"help.reviewer.timeoutMs": "Deadline for one review (ms). A timeout counts as review failure (rejected by default). 0 disables the deadline.",
-			"help.reviewer.maxTokens": "Output cap for one review request (tokens). 0 or empty means this plugin sets none, so the model default applies (same as codex, recommended). Thinking models spend this budget on reasoning first: a small cap can leave the reply empty (the review then fails), and 2048 leaves little room at the highest effort.",
-			"help.human.timeoutMs": "Only used when Fallback is Ask: how long the native card waits before auto-rejecting (ms). 0 rejects immediately.",
-			"help.human.timeoutFrom": "When the human deadline starts: request counts from the approval request, handoff from the moment the card is handed to the user.",
-			"help.mode": "Master switch: rules runs the mandatory rule check plus the LLM review; off leaves approvals untouched.",
-			"help.allowEscalationTo": "Widest escalation that may be auto-approved: danger-full-access (default) or workspace-write.",
-			"help.unknownSubject": "When the original command cannot be located: reject refuses without evidence; review continues with the tool name only.",
-			"help.fallback": "What happens when the review does not approve: reject injects the reason and fails the tool; ask hands over to the native card.",
-			"help.ui.inject": "What the session page keeps: all writes an injected note for approvals and rejections, reject only for rejections, off keeps audit lines only.",
-			"help.ui.injectMaxBytes": "Byte cap for one injected note; longer text is truncated with a marker.",
-			"help.tools": "Tools taken over (one per line). Leave empty to apply to all tools; when set, only approval requests of the listed tools are taken over, and other tools keep the original human approval.",
-			"help.denyPatterns": "Mandatory deny list (one regex per line, case-insensitive, matched against the full command). Empty by default = rule check disabled; once written, a hit is rejected without calling the LLM. Factory reference list in README.",
+			"help.expand": "Details",
+			"help.collapse": "Hide details",
+			"help.trigger.presets": "When a session uses a preset from this list, the plugin handles its escalation approvals; other presets keep the host approval flow. With an empty list no known preset is taken over; presets that cannot be identified follow \"When the preset cannot be identified\". Choosing the take-over range is not a grant of arbitrary permission.",
+			"help.trigger.unknown": "What to do when the session permission preset cannot be read. Keep the host approval flow skips take-over; continue with automatic review treats it as in-range. Possible causes: a missing service, a read failure, or no preset information available.",
+			"help.trigger.auditEverySkip": "When on, every approval skipped for a preset mismatch is logged; when off, one line per session and cause. This changes only the amount of skip logging — not take-over, not the approval itself, and never a claim that every request was reviewed.",
+			"help.reviewer.byParentModel": "Reviewer model by the agent's model: map the model the agent uses (the bare model id) to the reviewer model and its effort; more specific than the global default and effective on a hit. On a miss, resolution continues through the remaining layers (order under \"Default reviewer model\" above).",
+			"help.reviewer.model": "Global default reviewer model and effort. The model reads provider/model; an empty effort means automatic: use `low` when the model supports it, otherwise send none and let the model default apply — support and strength vary by model and are not guaranteed. Resolution: session choice → by the agent's model → global default → follow the agent's model.",
+			"help.reviewer.followParent": "Effective only when session choice, the by-agent-model map and the global default are all unavailable: call the same model as the agent for a separate review — using the same model, not the agent approving itself. When off, resolution failure settles as a review failure (rejected).",
+			"help.reviewer.timeoutMs": "Auto-review wait limit (ms), covering the whole wait for this review's conclusion; internal retries do not get a fresh window. Expiry settles as a rejection citing the stage — never a danger finding. 0 removes the review deadline: a hung review model, a tool failure or another error can leave the request stuck in auto-approval forever; the plugin never restores the limit silently, while cancellation and other human paths still apply (same as the standing note).",
+			"help.reviewer.maxTokens": "Review output cap (tokens). 0 sends no cap, leaving the model or provider default. Reasoning models may spend the budget on reasoning first: too small a cap can leave no usable conclusion (empty body, treated as a review failure); the threshold varies by model and effort, so no single measurement is a general promise.",
+			"help.human.timeoutMs": "Human-answer wait limit (ms), used only when the fallback is Ask. 0 rejects immediately, not an endless wait. Expiry settles as a rejection citing the human timeout.",
+			"help.human.timeoutFrom": "Where the human timer starts: from the approval request (the handoff only gets the remainder), or from the handoff itself.",
+			"help.mode": "Master switch: rules = mandatory checks plus LLM review; off = as if not installed, the host approval flow is untouched.",
+			"help.allowEscalationTo": "The widest permission auto-approval may grant. It bounds what may be reviewed or allowed; everything in range still passes the rule checks and the review — it is not a blanket approval. Full access (default) is widest; workspace write rejects wider escalations.",
+			"help.unknownSubject": "When the actual action cannot be identified (say, no command or arguments could be recovered): reject refuses at once without the model; keep reviewing submits what was recovered with explicit missing-action marks — missing never counts as safe.",
+			"help.fallback": "What happens when the review does not approve (deny, timeout or failure): reject settles at once and notifies the agent; ask shows the human card until you answer or the human limit rejects. Subagents have no human channel — not allowed always means rejected.",
+			"help.ui.inject": "Which approval notices reach the acting agent (the one that issued the tool call): allow, deny, timeout and failures sends all four; deny, timeout and failures skips allow notices; send none sends no notices. The review-log view is unaffected by this switch.",
+			"help.ui.injectMaxBytes": "Byte cap for one notice to the agent; longer text is trimmed with a marker, 0 does not trim. Only notices are capped — review records are kept per session and ignore this limit.",
+			"help.tools": "Tools under auto-approval, one name per line. Empty covers every tool's escalations; once filled, only listed tools are handled and the rest keep the host flow.",
+			"help.denyPatterns": "Text deny rules, one regex per line (a regex is a text-matching rule, not command semantics). Every string argument within the supported depth is matched, not just the command; harmless prose containing a dangerous word can hit too. Plain patterns are case-insensitive by default; in /source/flags form the given flags apply, and with no flags given it stays case-insensitive like a plain pattern. A hit rejects outright — no model, no human, no override. An empty list disables only this text check; the escalation ceiling and unknown-action handling stay. Uncompilable lines are skipped and protect nothing.",
 			"composer.label": "Reviewer model",
 			"composer.followGlobal": "Follow global (clear this session)",
 			"composer.followGlobalShort": "Follow global",
-			"composer.title": "Reviewer model for this session; pick one to override only here",
+			"composer.title": "This session's reviewer model — called independently of the agent; pick one to override it for this session only",
 			"composer.empty": "No selectable model",
 			"composer.failed": "Switch failed",
 			"composer.pendingSession": "This session has not started yet; the value applies once it does",
 			"composer.section.model": "Model",
 			"composer.section.effort": "Effort",
-			"card.presets.label": "Take-over presets",
+			"card.presets.label": "Presets that enable auto-approval",
 			"card.presets.empty": "No preset selected",
 			"card.presets.count": "{n} selected",
 			"card.presets.default": "default",
-			"card.presets.none": "Keep at least one preset, or the plugin takes over no approval at all",
+			"card.presets.none": "With an empty list no known preset is taken over; presets that cannot be identified follow \"When the preset cannot be identified\".",
 			"card.presets.missing": "Configured but absent from the current preset table:",
-			"card.presets.missing.remedy": "This preset ships with the plugin package (bundle patch); the preset table misses it while the plugin is disabled or the host version is incompatible: re-enable the plugin and restart the host to restore it; if the plugin was uninstalled and the config still selects auto-approve, pick a standard tier instead (or reinstall).",
-			"card.presets.unavailable": "The preset catalog is unavailable; edit settings.yaml instead, or check that the permission preset service is mounted.",
+			"card.presets.missing.remedy": "The preset is absent from the host's current table. Check in turn: a disabled plugin, an incompatible host version, or a custom preset. Re-enabling or restarting may restore it, with no guarantee; if the plugin is uninstalled while the config still selects it, pick a standard tier. The plugin never parses or rewrites user YAML, and manual cleanup is not recommended.",
+			"card.presets.unavailable": "The preset catalog is unavailable. Possible causes: a missing service, a read failure, or no preset information; check the permission preset service and retry.",
 			"card.bool.on": "On (true)",
 			"card.bool.off": "Off (false)",
 			"card.value.unset": "Not set (follows the default)",
-			"option.trigger.unknown.skip": "Skip (no take-over)",
-			"option.trigger.unknown.review": "Treat as auto-approve",
+			"option.trigger.unknown.skip": "Keep the host approval flow",
+			"option.trigger.unknown.review": "Continue with automatic review",
 			"option.human.timeoutFrom.request": "From the approval request",
 			"option.human.timeoutFrom.handoff": "From the handoff to the human",
 			"option.mode.rules": "Rule check + LLM review",
 			"option.mode.off": "Do not take over",
 			"option.allowEscalationTo.workspace-write": "Workspace write",
 			"option.allowEscalationTo.danger-full-access": "Full access",
-			"option.unknownSubject.reject": "Reject (no evidence, no approval)",
-			"option.unknownSubject.review": "Keep reviewing (tool name and reason only)",
+			"option.unknownSubject.reject": "Reject",
+			"option.unknownSubject.review": "Keep reviewing with missing-action notes",
 			"option.fallback.reject": "Reject directly",
 			"option.fallback.ask": "Ask the human",
-			"option.ui.inject.all": "Inject approvals and rejections",
-			"option.ui.inject.reject": "Inject rejections only",
-			"option.ui.inject.off": "Inject nothing",
-			"help.ui.humanCardDuringReview": "When on, the native approval card appears while the review is still running (you may decide first; the human answer wins). When off, no card appears during the review: it shows only when the review did not approve and Fallback is Ask, labelled with the outcome (timeout or denial).",
+			"option.ui.inject.all": "Allow, deny, timeout and failures",
+			"option.ui.inject.reject": "Deny, timeout and failures only",
+			"option.ui.inject.off": "Send none",
+			"help.ui.humanCardDuringReview": "On: the human card shows while the review runs — you may answer first and the human answer wins; a settled result cannot be overturned by a late click. Off: the card appears only once the request is truly handed over.",
 			"cardstate.reviewing": "Auto-reviewing",
-			"cardstate.timeout": "Auto-approval timed out, handed to you; decide whether to allow",
-			"cardstate.denied": "Auto-approval denied; reason: {reason}",
-			"cardstate.denied.noreason": "Auto-approval denied",
+			"cardstate.waiting": "Waiting for your decision",
+			"cardstate.waiting.deny": "The review concluded deny: {reason}",
+			"cardstate.waiting.timeout": "The review timed out without a conclusion",
+			"cardstate.waiting.error": "The review failed without a conclusion: {reason}",
 			"countdown.seconds": "Auto-rejects in {n}s",
 			"countdown.minutes": "Auto-rejects in {m}m {s}s",
 			"countdown.review": "Review deadline in {n}s",
@@ -354,6 +388,10 @@ window.__ModuleLoader__.load({
 			"view.refresh": "Refresh",
 			"view.disabled": "The review-log view is disabled (ui.trace.ownView = false)",
 			"view.readFailed": "Record read failed or incomplete; entries may be missing",
+			"view.retention": "Records follow the session that produced them. Each session reads back the most recent window (200 entries by default, configurable via `ui.trace.maxRecords`); at most 50 session files are kept on disk (a fixed cap), the oldest deleted first. Reducing capture never deletes existing records.",
+			"list.outcome": "Final approval: {v}",
+			"list.decision": "Model conclusion: {v}",
+			"view.noOutcome": "No final outcome recorded",
 			"decision.allow": "Allowed (allow)",
 			"decision.allowed-once": "Allowed (allowed-once)",
 			"decision.deny": "Denied (deny)",
@@ -368,19 +406,19 @@ window.__ModuleLoader__.load({
 			"time.review": "review {n}",
 			"time.human": "human {n}",
 			"detail.title": "Review detail",
-			"detail.outcome": "Final outcome",
-			"detail.decision": "Review decision",
-			"detail.source": "Outcome source",
+			"detail.outcome": "Final approval",
+			"detail.decision": "Model conclusion",
+			"detail.source": "Decided by",
 			"detail.stage": "Stage",
 			"detail.model": "Model",
 			"detail.effort": "Effort",
-			"detail.layer": "Resolution layer",
+			"detail.layer": "Model selection source",
 			"detail.attempts": "Attempts",
-			"detail.tokens": "thinking tokens",
+			"detail.tokens": "Reasoning tokens",
 			"detail.risk": "Risk",
 			"detail.auth": "Authorization",
-			"detail.fieldsDefaulted": "Defaulted fields",
-			"detail.degraded": "Degradation marks",
+			"detail.fieldsDefaulted": "Auto-filled fields",
+			"detail.degraded": "Missing or degraded conditions",
 			"detail.preset": "Take-over preset",
 			"detail.origin": "Origin",
 			"detail.escalation": "Escalation target",
@@ -391,11 +429,35 @@ window.__ModuleLoader__.load({
 			"detail.reason": "Reason",
 			"detail.prompt": "Prompt",
 			"detail.input": "Input",
-			"detail.reasoning": "Reasoning",
+			"detail.reasoning": "Model-returned reasoning",
 			"detail.output": "Output",
-			"detail.notCaptured": "Not captured (capture level is summary)",
 			"detail.truncated": "truncated",
-			"detail.absent": "absent",
+			"absent.noContext": "No context collected",
+			"absent.noProbes": "No evidence tools called",
+			"absent.modelNotProvided": "Not provided by the model",
+			"absent.notFullCapture": "Full-text capture was off",
+			"absent.unknown": "Not recorded for this approval",
+			"layer.session": "Session choice (session)",
+			"layer.parent-map": "By the agent's model (parent-map)",
+			"layer.global": "Global default (global)",
+			"layer.follow-parent": "Follow the agent's model (follow-parent)",
+			"layer.unavailable": "No layer available (unavailable)",
+			"fieldsDefaulted.risk": "Risk level (risk)",
+			"fieldsDefaulted.auth": "Authorization level (auth)",
+			"fieldsDefaulted.reason": "Rationale (reason)",
+			"degraded.command": "Action cannot be identified (command)",
+			"degraded.cwd": "Working directory missing (cwd)",
+			"degraded.transcript": "Context read failure or truncation (transcript)",
+			"degraded.entry": "Single evidence entry truncated (entry:…)",
+			"degraded.all": "No model layer available (all)",
+			"degraded.output-truncated": "Output truncated (output-truncated)",
+			"degraded.output-empty": "Empty output (output-empty)",
+			"degraded.superseded": "Settled first by another path (superseded)",
+			"degraded.queue-overflow": "Queue full (queue-overflow)",
+			"degraded.queue-timeout": "Queue wait timeout (queue-timeout)",
+			"degraded.breaker-open": "Skipped during cooldown (breaker-open)",
+			"degraded.inject-fail": "Notice delivery failure (inject-fail)",
+			"enum.unknown": "{v} (unknown meaning)",
 			"source.rule": "rule",
 			"source.llm": "review (llm)",
 			"source.human": "human",
@@ -413,23 +475,23 @@ window.__ModuleLoader__.load({
 			"legacy.outcome.rejected": "rejected",
 			"legacy.outcome.cancelled": "cancelled",
 			"legacy.outcome.unavailable": "unavailable",
-			"field.trigger.unknown": "Undecidable-preset action",
-			"field.trigger.auditEverySkip": "Skip audit per occurrence",
-			"field.reviewer.timeoutMs": "Review timeout (ms)",
-			"field.reviewer.maxTokens": "Output cap (tokens)",
+			"field.trigger.unknown": "When the preset cannot be identified",
+			"field.trigger.auditEverySkip": "Log every preset-mismatch skip",
+			"field.reviewer.timeoutMs": "Auto-review wait limit (ms)",
+			"field.reviewer.maxTokens": "Review output cap (tokens)",
 			"field.ui.humanCardDuringReview": "Human card during review",
-			"field.human.timeoutMs": "Human timeout (ms)",
-			"field.human.timeoutFrom": "Human timer starts at",
+			"field.human.timeoutMs": "Human-answer wait limit (ms)",
+			"field.human.timeoutFrom": "Human timer starts",
 			"field.mode": "Mode",
-			"field.allowEscalationTo": "Auto-allow ceiling",
-			"field.unknownSubject": "Missing-subject action",
-			"field.fallback": "Not-approved action",
-			"field.ui.inject": "Session-page injection",
-			"field.ui.injectMaxBytes": "Injection byte cap",
-			"field.tools": "Managed tools (one per line)",
-			"field.denyPatterns": "Deny-pattern list (one regex per line)",
-			"field.language.ui": "UI text language",
-			"field.language.agent": "Agent prompt language",
+			"field.allowEscalationTo": "Highest auto-approvable permission",
+			"field.unknownSubject": "When the action cannot be identified",
+			"field.fallback": "When the review does not approve",
+			"field.ui.inject": "Approval notices to the agent",
+			"field.ui.injectMaxBytes": "Notice length cap (bytes)",
+			"field.tools": "Tools under auto-approval",
+			"field.denyPatterns": "Text deny rules (one regex per line)",
+			"field.language.ui": "Plugin UI language",
+			"field.language.agent": "Language of model-facing texts",
 			"validate.number": "{label} requires a non-negative integer",
 			"validate.option": "{label} has an invalid value",
 			"option.language.ui.auto": "Follow UI",
@@ -437,29 +499,29 @@ window.__ModuleLoader__.load({
 			"option.language.ui.en": "English",
 			"option.language.agent.zh": "Chinese",
 			"option.language.agent.en": "English",
-			"help.language.ui": "Language of this plugin's own UI text: auto follows the host UI, zh/en force it. Hot-swappable.",
-			"help.language.agent": "Language of every text sent to the reviewer model and injected into the main model (system prompt, tool descriptions, injected texts, round instructions); defaults to en. The decision pipeline is language-independent.",
-			"hint.trigger.presets": "Permission presets this plugin takes over.",
+			"help.language.ui": "Language of the plugin's own UI copy: follow the host (auto) or force zh/en. Takes effect on the next render and never touches model-facing texts.",
+			"help.language.agent": "Language of every model-facing text (system prompt, policy, tool descriptions, round instructions) and of the notices to the agent. Defaults to English. Rules and authorization never change with the language; the plugin UI language does not affect it.",
+			"hint.trigger.presets": "Escalation approvals are taken over for presets in this list.",
 			"hint.trigger.unknown": "What to do when the session preset cannot be read.",
-			"hint.trigger.auditEverySkip": "Whether every preset-mismatch skip writes an audit line.",
+			"hint.trigger.auditEverySkip": "Whether every preset-mismatch skip is logged.",
 			"hint.reviewer.model": "Global default reviewer model and effort.",
-			"hint.reviewer.byParentModel": "Main model to reviewer model mapping.",
-			"hint.reviewer.followParent": "Whether to review with the main model when nothing else matches.",
+			"hint.reviewer.byParentModel": "Reviewer model mapping by the agent's model.",
+			"hint.reviewer.followParent": "Fall back to an independent review with the agent's model when no higher choice exists.",
 			"hint.language.ui": "Language of this plugin's UI copy.",
-			"hint.language.agent": "Language of model-facing texts.",
-			"hint.reviewer.timeoutMs": "Per-review time limit in milliseconds.",
-			"hint.reviewer.maxTokens": "Review output cap in tokens.",
-			"hint.ui.humanCardDuringReview": "Whether the human card appears during review.",
-			"hint.human.timeoutMs": "Wait limit after handoff to a human, in milliseconds.",
-			"hint.human.timeoutFrom": "When the human timer starts.",
-			"hint.mode": "rules = checks plus review; off = never take over.",
-			"hint.allowEscalationTo": "Widest permission auto-approval may grant.",
-			"hint.unknownSubject": "What to do when the command cannot be looked up.",
-			"hint.fallback": "What happens when the review does not allow.",
-			"hint.ui.inject": "Which decisions are injected into the session page.",
-			"hint.ui.injectMaxBytes": "Byte cap per injected note.",
-			"hint.tools": "Tools taken over, one per line.",
-			"hint.denyPatterns": "Mandatory-deny patterns, one regex per line; empty = rule check disabled (factory reference list in README).",
+			"hint.language.agent": "Language of texts to the review model and notices to the agent.",
+			"hint.reviewer.timeoutMs": "Auto-review wait limit in ms; 0 removes the limit, with a standing risk note.",
+			"hint.reviewer.maxTokens": "Token cap for review output; 0 sends no cap.",
+			"hint.ui.humanCardDuringReview": "Whether the human card shows early during review.",
+			"hint.human.timeoutMs": "Human-answer wait limit in ms; 0 rejects at once.",
+			"hint.human.timeoutFrom": "When the human timer starts: at the request, or at the handoff.",
+			"hint.mode": "Master switch; off means the plugin never takes over.",
+			"hint.allowEscalationTo": "The highest tier this plugin may auto-grant; wider escalations are never auto-approved.",
+			"hint.unknownSubject": "What to do when the actual action cannot be identified.",
+			"hint.fallback": "What happens when the review does not approve.",
+			"hint.ui.inject": "Which approval notices reach the agent.",
+			"hint.ui.injectMaxBytes": "Byte cap per notice; 0 does not trim.",
+			"hint.tools": "Tools under auto-approval, one per line; empty covers all tools.",
+			"hint.denyPatterns": "One regex per line; a hit rejects outright — no model, no human override.",
 		};
 
 		/** 字段按 FIELDS 的 section 标记（trigger/advanced）分组排序；审查模型三行与「接管预设」由专用控件渲染；不渲染分区标题（requirements §6.1）。 */
@@ -501,25 +563,29 @@ window.__ModuleLoader__.load({
 			".dsafm_f_head{display:flex;align-items:center;gap:8px}",
 			".dsafm_labelgroup{display:flex;align-items:center;gap:4px;flex:1;min-width:0}",
 			".dsafm_f_label{font-size:13px;font-weight:500;line-height:1.5;color:var(--dsw-alias-label-primary)}",
-			// 帮助按钮：24×24 命中区、点击展开；hover 只把图标从三级色转二级色（官方 .helpButton:hover
-			// 引用的底色别名在 0.1.7 令牌表不存在，不得照抄）。
-			".dsafm_helpbtn{display:inline-flex;align-items:center;justify-content:center;flex:none;width:24px;height:24px;padding:0;border:0;border-radius:6px;background:none;color:var(--dsw-alias-label-tertiary);cursor:pointer}",
-			".dsafm_helpbtn:hover,.dsafm_helpbtn[aria-expanded='true']{color:var(--dsw-alias-label-secondary)}",
+			// 说明按钮（design §7.2.1）：图标＋可见文字「说明／收起说明」，命中区不小于 24×24，
+			// 依 label-secondary→primary 取色（官方 .helpButton:hover 引用的底色别名在 0.1.7 令牌表不存在，不得照抄）。
+			".dsafm_helpbtn{display:inline-flex;align-items:center;gap:4px;justify-content:center;flex:none;min-width:24px;min-height:24px;padding:0 8px;border:0;border-radius:6px;background:none;color:var(--dsw-alias-label-secondary);cursor:pointer;font-family:inherit;font-size:12px;line-height:1.5}",
+			".dsafm_helpbtn:hover,.dsafm_helpbtn[aria-expanded='true']{color:var(--dsw-alias-label-primary)}",
 			".dsafm_helpbtn:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}",
 			".dsafm_helpregion{padding:10px 0 0;font-size:12px;line-height:1.6;color:var(--dsw-alias-label-secondary);overflow-wrap:anywhere}",
-			// 覆盖组：胶囊「已覆盖」（primitives.Tag 自带样式）＋「恢复默认」文本按钮。
+			// 覆盖组：胶囊「已单独设置」（primitives.Tag 自带样式）＋「恢复默认」文本按钮。
 			".dsafm_badges{display:inline-flex;align-items:center;gap:8px}",
-			// 行内勾选（跟随主模型一类）：贴标签行右端（标签组 flex:1 把它推到控制列位置），24px 命中区与帮助按钮同规格。
+			// 行内勾选（跟随执行助手模型一类）：贴标签行右端（标签组 flex:1 把它推到控制列位置），24px 命中区与说明按钮同规格。
 			".dsafm_inlinecheck{display:inline-flex;align-items:center;flex:none;min-width:24px;min-height:24px;justify-content:center;margin-left:auto}",
 			".dsafm_reset{border:none;background:none;padding:0;font:inherit;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-secondary);cursor:pointer}",
 			".dsafm_reset:hover:not(:disabled){color:var(--dsw-alias-label-primary)}",
 			".dsafm_reset:disabled{cursor:default}",
 			".dsafm_f_hint{margin:0;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary);overflow-wrap:anywhere}",
 			// 毫秒字段的秒数读数行——自绘在官方组件之外（官方 hint 在字段非法时被非法文案顶掉）。
-			// 负 margin 把它拉进官方字段自己的 12px 底部内边距区，与官方字段内 6px 间隙对齐（视觉归属该字段）；
-			// 平铺会插进官方相邻字段选择器之间，第二条恢复后继官方字段的 0.5px 分隔线（自绘字段后本就无分隔线）。
+			// 负 margin 把它拉进官方字段自己的 12px 底部内边距区，与官方字段内 6px 间隙对齐（视觉归属该字段）。
 			".dsafm_f_sec{margin:-12px 0 12px;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary);overflow-wrap:anywhere}",
-			".dsafm_f_sec + div:not(.dsafm_field){border-top:.5px solid var(--dsw-alias-border-l2)}",
+			// 分隔线选择器组（design §7.2.1）：第一条在秒数行后排除说明行（不加分隔线）；
+			// 第二条以说明行为锚恢复后继字段的 0.5px 分隔线（覆盖毫秒与非毫秒两种顺序）。
+			".dsafm_f_sec + div:not(.dsafm_field):not(.dsafm_f_help){border-top:.5px solid var(--dsw-alias-border-l2)}",
+			".dsafm_f_help + div:not(.dsafm_field){border-top:.5px solid var(--dsw-alias-border-l2)}",
+			// 数字字段的平铺说明行（design §7.2.1）：与秒数读数行同一负边距，视觉归属该字段。
+			".dsafm_f_help{margin:-12px 0 12px}",
 			".dsafm_sec_invalid{color:var(--dsw-alias-state-error-primary)}",
 			".dsafm_sec_warn{display:block;margin-top:2px;color:var(--dsw-alias-state-warn-primary,#b8860b)}",
 			// 控件本体：官方输入规格（34px/0 12px/0.5px border-l4/8px/bg-layer-3；聚焦与非法边框）。
@@ -733,7 +799,7 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 展示用的主模型引用：键已是全引用时原样返回，否则用目录拼上 provider（design §7.2）。
+		 * 展示用的执行助手模型引用：键已是全引用时原样返回，否则用目录拼上 provider（design §7.2）。
 		 * @param {string} key - 映射键。
 		 * @param {object | null} catalog - 模型目录。
 		 * @returns {string} 展示引用。
@@ -747,7 +813,7 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 档位下拉的选项：首项固定为空串（跟随模型默认）；当前档位不被模型支持时保留该项并置灰（design §7.2）。
+		 * 档位下拉的选项：首项固定为空串（自动选择）；当前档位不被模型支持时保留该项并置灰（design §7.2）。
 		 * 模型未选定或未取到档位时只剩首项且不可写。
 		 * @param {{efforts: {id: string}[]} | undefined} entry - 该模型的档位表。
 		 * @param {string} current - 当前档位。
@@ -851,6 +917,18 @@ window.__ModuleLoader__.load({
 			if (typeof decision !== "string" || decision.length === 0) return null;
 			if (["allow", "allowed-once", "deny", "rejected", "timed-out", "error", "cancelled"].includes(decision)) return `decision.${decision}`;
 			return null;
+		}
+
+		/**
+		 * 双标注方向谓词（design §8.5.1）：allow 系（allow/allowed-once）与 deny 系（deny/rejected）同向；
+		 * error、cancelled 与其余取值没有方向。同向的模型结论与最终审批不并列标注。
+		 * @param {unknown} decision - 判定值。
+		 * @returns {"allow" | "deny" | undefined} 方向。
+		 */
+		function directionOf(decision) {
+			if (decision === "allow" || decision === "allowed-once") return "allow";
+			if (decision === "deny" || decision === "rejected") return "deny";
+			return undefined;
 		}
 
 		/**
@@ -998,7 +1076,7 @@ window.__ModuleLoader__.load({
 				return undefined;
 			}, [presetKey, sessionId]);
 
-			// 档位段的数据源：对当前生效模型调一次 `modelEfforts`；失败时该段只留「跟随模型默认」（design §7.3）。
+			// 档位段的数据源：对当前生效模型调一次 `modelEfforts`；失败时该段只留「自动选择」（design §7.3）。
 			react.useEffect(() => {
 				const ref = typeof state?.effective === "string" ? state.effective : "";
 				if (ref.length === 0) return undefined;
@@ -1354,27 +1432,43 @@ window.__ModuleLoader__.load({
 
 			if (entry === undefined) return command === undefined || command === null ? null : command;
 
-			const stateText =
-				entry.state === "timeout"
-					? t("cardstate.timeout")
-					: entry.state === "denied"
-						? (entry.reason === "" ? t("cardstate.denied.noreason") : t("cardstate.denied").replace("{reason}", entry.reason))
-						: t("cardstate.reviewing");
-			const remaining = entry.deadlineAt === null ? null : Math.max(0, Math.ceil((entry.deadlineAt - now) / 1000));
-			// 倒计时文案（design §7.4）：只在审查状态且截止为 null 时显示「审查不限时」；非审查状态的
-			// null 截止不渲染任何无时限等待文案，只显示状态与原因（零时限立即结算，无瞬态倒计时）。
+			// 状态行（design §7.4）：`reviewing` →「正在自动审批」；`waiting-human` →「等待你决定 · 原因子句」。
+			// 原因子句明确归属自动审查（deny/timeout/error），不冠「最终」字样——人工未决不是最终拒绝；
+			// deny 且理由为空时省略冒号与理由；cause 缺失或写错按 error（与 pending-state 归一化同向）。
+			const causeOf = () => (entry.cause === "deny" || entry.cause === "timeout" ? entry.cause : "error");
+			const causeText =
+				entry.state === "waiting-human"
+					? causeOf() === "timeout"
+						? t("cardstate.waiting.timeout")
+						: causeOf() === "deny" && (entry.reason ?? "") === ""
+							? t("cardstate.waiting.deny").replace(/[:：]\s*\{reason\}/u, "")
+							: t(`cardstate.waiting.${causeOf()}`).replace("{reason}", entry.reason ?? "")
+					: null;
+			const stateText = entry.state === "waiting-human" ? `${t("cardstate.waiting")} · ${causeText}` : t("cardstate.reviewing");
+			// 倒计时按 deadlineKind 分派（design §7.4）：reviewing 读审查截止（review），waiting-human 读人工
+			// 截止（human），两类时限不得互串；审查截止为 null →「审查无时限」（审查时限配置为 0 时，
+			// 承接层对该形态写 null/null），人工阶段 null 截止不渲染倒计时（零时限立即结算，无瞬态）。
+			// deadlineKind 缺失或非法时按状态回退推断，不让倒计时整段消失。
+			const deadlineKind =
+				entry.deadlineKind === "review" || entry.deadlineKind === "human" ? entry.deadlineKind : entry.state === "waiting-human" ? "human" : "review";
+			const remaining = entry.deadlineAt === null || deadlineKind === null ? null : Math.max(0, Math.ceil((entry.deadlineAt - now) / 1000));
 			const countdown =
-				remaining === null
-					? entry.state === "reviewing"
+				deadlineKind === "review"
+					? remaining === null
 						? t("countdown.unlimited")
-						: null
-					: entry.state === "reviewing"
-						? t("countdown.review").replace("{n}", String(remaining))
-						: remaining >= 60
+						: t("countdown.review").replace("{n}", String(remaining))
+					: deadlineKind === "human" && remaining !== null
+						? remaining >= 60
 							? t("countdown.minutes").replace("{m}", String(Math.floor(remaining / 60))).replace("{s}", String(remaining % 60))
-							: t("countdown.seconds").replace("{n}", String(remaining));
+							: t("countdown.seconds").replace("{n}", String(remaining))
+						: null;
+			// 色阶沿用旧观感的等价迁移：cause=deny 沿用拒绝警示色，其余交人工态用弱警示色（等待你行动）。
 			const stateClass =
-				entry.state === "denied" ? "dsafm_state dsafm_state_deny" : entry.state === "timeout" ? "dsafm_state dsafm_state_warn" : "dsafm_state";
+				entry.state === "waiting-human" && causeOf() === "deny"
+					? "dsafm_state dsafm_state_deny"
+					: entry.state === "waiting-human"
+						? "dsafm_state dsafm_state_warn"
+						: "dsafm_state";
 
 			return jsxRuntime.jsxs(
 				"span",
@@ -1546,11 +1640,13 @@ window.__ModuleLoader__.load({
 					jsxRuntime.jsx("button", { type: "button", className: "dsafm_button", onClick: refresh, children: t("view.refresh") }),
 				],
 			});
-			if (records === null) return jsxRuntime.jsx("div", { className: "dsafm_review", children: bar });
+			// 保留范围说明（design §8.5.1）：列表条数行下方常驻，不因列表为空或读取降级消失。
+			const retentionLine = jsxRuntime.jsx("div", { className: "dsafm_review_hint", children: t("view.retention") });
+			if (records === null) return jsxRuntime.jsxs("div", { className: "dsafm_review", children: [bar, retentionLine] });
 			if (records.length === 0) {
 				return jsxRuntime.jsxs("div", {
 					className: "dsafm_review",
-					children: [bar, jsxRuntime.jsx("div", { className: "dsafm_review_hint", children: t("view.empty") })],
+					children: [bar, retentionLine, jsxRuntime.jsx("div", { className: "dsafm_review_hint", children: t("view.empty") })],
 				});
 			}
 
@@ -1581,13 +1677,14 @@ window.__ModuleLoader__.load({
 			};
 
 			/**
-			 * 详情的一段全文：缺段显示「未采集」说明而不是空白；`truncated` 标注已截断。
+			 * 详情的一段全文：缺段按分派出的 absent 键显示说明而不是空白；`truncated` 标注已截断。
 			 * @param {string} titleKey - 段标题的字典键。
+			 * @param {string} absentKey - 缺段说明的字典键（由 `absentKeyOf` 按 design §8.5.1 三级分派）。
 			 * @param {unknown} value - 字段值（只有字符串算采到了）。
 			 * @param {boolean} truncated - 记录级截断标记。
 			 * @returns {object} 段元素。
 			 */
-			const sectionOf = (titleKey, value, truncated) => {
+			const sectionOf = (titleKey, absentKey, value, truncated) => {
 				const present = typeof value === "string";
 				return jsxRuntime.jsxs("div", {
 					children: [
@@ -1600,7 +1697,7 @@ window.__ModuleLoader__.load({
 						}),
 						present
 							? jsxRuntime.jsx("div", { className: "dsafm_review_text", children: value })
-							: jsxRuntime.jsx("div", { className: "dsafm_review_absent", children: t("detail.notCaptured") }),
+							: jsxRuntime.jsx("div", { className: "dsafm_review_absent", children: t(absentKey) }),
 					],
 				});
 			};
@@ -1608,28 +1705,88 @@ window.__ModuleLoader__.load({
 			// 旧在后 → 新在前展示。
 			const rows = [...records].reverse().map((record) => {
 				const open = record.approvalId === openId;
-				// 主判定＝最终结算 outcome（design §8.5）；旧格式行没有 outcome，回落 decision；两者都缺原样展示。
-				const primary = typeof record.outcome === "string" && record.outcome.length > 0 ? record.outcome : record.decision;
-				const primaryKey = decisionKeyOf(primary);
+				// 双标注方向谓词（design §8.5.1）：allow 系（allow/allowed-once）与 deny 系（deny/rejected）同向；
+				// decision=error、最终 cancelled 或两值方向相反 → 并列；decision 缺失不渲染次级标注。
+				const hasOutcome = typeof record.outcome === "string" && record.outcome.length > 0;
+				const hasDecision = typeof record.decision === "string" && record.decision.length > 0;
+				const outcomeDir = hasOutcome ? directionOf(record.outcome) : undefined;
+				const decisionDir = hasDecision ? directionOf(record.decision) : undefined;
+				const decisionKey = decisionKeyOf(record.decision);
+				const outcomeKey = decisionKeyOf(record.outcome);
+				// 主位：有最终审批结果 →「最终审批：{v}」；旧格式行（outcome 缺失）→「模型结论：{v}」；
+				// 两者都缺原样展示（不猜）。色阶跟随主位值。
+				const primaryValue = hasOutcome ? record.outcome : record.decision;
+				const primaryKey = decisionKeyOf(primaryValue);
+				const primaryText = hasOutcome
+					? t("list.outcome").replace("{v}", outcomeKey === null ? String(record.outcome) : t(outcomeKey))
+					: hasDecision
+						? t("list.decision").replace("{v}", decisionKey === null ? String(record.decision) : t(decisionKey))
+						: String(primaryValue ?? "-");
 				const decisionClass =
 					primaryKey === "decision.allow" || primaryKey === "decision.allowed-once"
 						? "dsafm_review_decision dsafm_review_decision_allow"
 						: primaryKey === "decision.deny" || primaryKey === "decision.rejected" || primaryKey === "decision.error"
 							? "dsafm_review_decision dsafm_review_decision_deny"
 							: "dsafm_review_decision";
-				const decisionKey = decisionKeyOf(record.decision);
 				const truncated = detail?.truncated === true;
+				// 全文段任一在场即证实 capture=full（design §8.5.1 分派链第二级的依据）。
+				const fullTextPresent =
+					typeof detail?.prompt === "string" || typeof detail?.input === "string" || typeof detail?.output === "string";
 				/**
-				 * 枚举字段的文案：闭集词汇走字典（附原始 id），未知值原样返回，缺失返回 null（不渲染该段）。
-				 * @param {string} prefix - 字典键前缀（如 `source`）。
+				 * 缺段说明的三级分派（design §8.5.1）：①读取失败在场 → 一律「本次未记录此项」；
+				 * ②全文采集证实（任一全文段在场）：evidence→未取上下文、probes→未调用取证工具、
+				 * reasoning→模型未提供、output 缺且结算为故障类（decision=error）→模型未提供；
+				 * ③全文段均不在场：全文段（prompt/input/output）与 reasoning 显示「未开启全文采集」；
+				 * 其余缺段（reason；全文采集下的 input）→「本次未记录此项」。
+				 * @param {string} segment - 段名（reason/evidence/probes/prompt/input/reasoning/output）。
+				 * @returns {string} absent 字典键。
+				 */
+				const absentKeyOf = (segment) => {
+					if (readFailed) return "absent.unknown";
+					if (segment === "evidence") return "absent.noContext";
+					if (segment === "probes") return "absent.noProbes";
+					if (fullTextPresent) {
+						if (segment === "reasoning") return "absent.modelNotProvided";
+						if (segment === "output" && record.decision === "error") return "absent.modelNotProvided";
+						return "absent.unknown";
+					}
+					if (segment === "prompt" || segment === "input" || segment === "output" || segment === "reasoning") return "absent.notFullCapture";
+					return "absent.unknown";
+				};
+				/**
+				 * 枚举字段的文案（design §8.5.1 探测式取词）：键在字典则取，不在则用 `enum.unknown` 按
+				 * 原值展示——强制语言档缺键会抛错使整条视图失败，先经 try/catch 探测，缺键不得外抛。
+				 * @param {string} prefix - 字典键前缀（如 `layer`）。
 				 * @param {unknown} value - 字段值。
 				 * @returns {string | null} 文案。
 				 */
 				const enumText = (prefix, value) => {
 					if (typeof value !== "string" || value.length === 0) return null;
 					const key = `${prefix}.${value}`;
-					const text = t(key);
-					return text === key ? value : text;
+					let text = null;
+					try {
+						const candidate = t(key);
+						if (candidate !== key) text = candidate;
+					} catch {
+						// 强制语言档缺键：按含义未知展示，不中断视图。
+					}
+					return text ?? t("enum.unknown").replace("{v}", value);
+				};
+				/**
+				 * 多值枚举串（design §8.5.1）：存储为逗号连接（与 inject-fail 组合用 `+` 连接），
+				 * 逐项按探测式取词后以顿号连接；`entry:<事件类型>` 是前缀族，不逐事件类型落键，
+				 * 按前缀映射为「单条证据截断」并保留完整原值。
+				 * @param {string} prefix - 字典键前缀（`fieldsDefaulted` / `degraded`）。
+				 * @param {unknown} value - 字段值。
+				 * @returns {string | null} 文案。
+				 */
+				const multiEnumText = (prefix, value) => {
+					if (typeof value !== "string" || value.length === 0) return null;
+					return value
+						.split(/[,+]/u)
+						.filter((item) => item.length > 0)
+						.map((item) => (item.startsWith("entry:") ? t("degraded.entry").replace("entry:…", item) : enumText(prefix, item)))
+						.join("、");
 				};
 				// 详情元信息段：只列在场字段（design §8.4「取不到明确缺失」——缺失段不显示假占位）。
 				const metaParts = [];
@@ -1643,6 +1800,7 @@ window.__ModuleLoader__.load({
 					}
 					metaParts.push(`${t(titleKey)}: ${String(value)}`);
 				};
+				metaOf("detail.outcome", record.outcome, (value) => (decisionKeyOf(value) === null ? String(value) : t(decisionKeyOf(value))));
 				metaOf("detail.decision", record.decision, (value) => (decisionKey === null ? String(value) : t(decisionKey)));
 				metaOf("detail.source", record.source, (value) => enumText("source", value));
 				metaOf("detail.stage", detail?.stage, (value) => enumText("stage", value));
@@ -1651,13 +1809,14 @@ window.__ModuleLoader__.load({
 				metaOf("detail.preset", detail?.preset);
 				metaOf("detail.model", record.model);
 				metaOf("detail.effort", record.effort);
-				metaOf("detail.layer", detail?.layer);
+				metaOf("detail.layer", detail?.layer, (value) => enumText("layer", value));
 				metaOf("detail.attempts", detail?.attempts);
 				metaOf("detail.tokens", detail?.tokens);
 				metaOf("detail.risk", record.risk);
 				metaOf("detail.auth", record.auth);
-				metaOf("detail.fieldsDefaulted", detail?.fieldsDefaulted);
-				metaOf("detail.degraded", detail?.degraded);
+				metaOf("detail.fieldsDefaulted", detail?.fieldsDefaulted, (value) => multiEnumText("fieldsDefaulted", value));
+				// degraded 的 `none` 是「无异常情况」标记（design §8.2）＝无标记：不列该段，与缺失同处置。
+				metaOf("detail.degraded", detail?.degraded, (value) => (value === "none" ? null : multiEnumText("degraded", value)));
 				metaOf("detail.configTag", detail?.configTag);
 				metaOf("detail.policyTag", detail?.policyTag);
 				return jsxRuntime.jsxs(
@@ -1674,11 +1833,19 @@ window.__ModuleLoader__.load({
 									jsxRuntime.jsx("span", { className: "dsafm_review_tool", children: typeof record.toolName === "string" && record.toolName.length > 0 ? record.toolName : "-" }),
 									jsxRuntime.jsx("span", {
 										className: decisionClass,
-										children: primaryKey === null ? String(primary ?? "-") : t(primaryKey),
+										children: primaryText,
 									}),
-									// 审查判定与最终结算并存且不同（人工推翻、超时、取消）：次级徽标并排可分辨（design §8.5）。
-									decisionKey !== null && record.decision !== record.outcome
-										? jsxRuntime.jsx("span", { className: "dsafm_review_decision_sub", children: t(decisionKey) })
+									// 双标注（design §8.5.1）：模型结论与最终审批方向不一致（人工推翻、超时、取消、
+									// 模型故障）时并列可分辨；同向（allow→allowed-once、deny→rejected）不重复标注。
+									hasOutcome && hasDecision && !(decisionDir !== undefined && decisionDir === outcomeDir)
+										? jsxRuntime.jsx("span", {
+												className: "dsafm_review_decision_sub",
+												children: t("list.decision").replace("{v}", decisionKey === null ? String(record.decision) : t(decisionKey)),
+											})
+										: null,
+									// 旧格式行（无最终审批结果）：主位即模型结论，另附「未记录最终审批结果」。
+									!hasOutcome && hasDecision
+										? jsxRuntime.jsx("span", { className: "dsafm_review_decision_sub", children: t("view.noOutcome") })
 										: null,
 									jsxRuntime.jsx("span", { className: "dsafm_review_subject", children: typeof record.subject === "string" && record.subject.length > 0 ? record.subject : null }),
 									jsxRuntime.jsx("span", { className: "dsafm_review_meta", children: formatClock(record.startedAt) }),
@@ -1704,13 +1871,13 @@ window.__ModuleLoader__.load({
 														].join(""),
 													}),
 													metaParts.length === 0 ? null : jsxRuntime.jsx("div", { className: "dsafm_review_meta", children: metaParts.join(" · ") }),
-													sectionOf("detail.reason", detail.reason, truncated),
-													sectionOf("detail.evidence", detail.evidence, truncated),
-													sectionOf("detail.probes", detail.probes, truncated),
-													sectionOf("detail.prompt", detail.prompt, truncated),
-													sectionOf("detail.input", detail.input, truncated),
-													sectionOf("detail.reasoning", detail.reasoning, truncated),
-													sectionOf("detail.output", detail.output, truncated),
+													sectionOf("detail.reason", absentKeyOf("reason"), detail.reason, truncated),
+													sectionOf("detail.evidence", absentKeyOf("evidence"), detail.evidence, truncated),
+													sectionOf("detail.probes", absentKeyOf("probes"), detail.probes, truncated),
+													sectionOf("detail.prompt", absentKeyOf("prompt"), detail.prompt, truncated),
+													sectionOf("detail.input", absentKeyOf("input"), detail.input, truncated),
+													sectionOf("detail.reasoning", absentKeyOf("reasoning"), detail.reasoning, truncated),
+													sectionOf("detail.output", absentKeyOf("output"), detail.output, truncated),
 												],
 											}),
 									],
@@ -1724,7 +1891,7 @@ window.__ModuleLoader__.load({
 
 			return jsxRuntime.jsxs("div", {
 				className: "dsafm_review",
-				children: [bar, jsxRuntime.jsx("div", { className: "dsafm_review_list", children: rows })],
+				children: [bar, retentionLine, jsxRuntime.jsx("div", { className: "dsafm_review_list", children: rows })],
 			});
 		}
 
@@ -1886,7 +2053,7 @@ window.__ModuleLoader__.load({
 		 *
 		 * 外观照官方设置表单重绘（规格与自绘落点见 docs/design.md）——无卡片外壳与分区标题、字段竖排、
 		 * 覆盖＝胶囊「已覆盖」＋「恢复默认」、说明常驻＋帮助点击展开、底部唯一「保存」且无改动/非法/保存中置灰；
-		 * 一切编辑（含接管预设、模型/档位、映射表、跟随主模型）先暂存，只有「保存」写库，离开页面丢弃（requirements §6.1）。
+		 * 一切编辑（含接管预设、模型/档位、映射表、跟随执行助手模型）先暂存，只有「保存」写库，离开页面丢弃（requirements §6.1）。
 		 * 嵌套路径沿用 `mutate` 的路径操作；数字字段直接用官方 `SettingsValueField`，其余控件按官方输入规格自绘。
 		 * 写通道注意：控制器的 `mutate` 对「宿主拒绝」解析 `false` 而不抛错，保存后按返回值定相位并依赖订阅回读快照。
 		 * @param {object} props - 注入的 `scope`（configForms 控制器）、`rpcCall`、`t` 与页面主的 `view`。
@@ -2011,7 +2178,7 @@ window.__ModuleLoader__.load({
 			};
 
 			/**
-			 * 结构化字段的显示值与暂存入口（模型选择、行表、跟随主模型、预设数组）。
+			 * 结构化字段的显示值与暂存入口（模型选择、行表、跟随执行助手模型、预设数组）。
 			 * @param {readonly string[]} path - 字段路径。
 			 * @param {(seed: unknown, baseSeed: unknown) => unknown} [normalize] - 种子归一化。
 			 * @returns {{display: unknown, set: (next: unknown) => void}} 显示值与暂存函数。
@@ -2119,7 +2286,46 @@ window.__ModuleLoader__.load({
 			 * @param {object} options - `label`/`path`/`hint`/`helpText`/`onReset` 与 `control(controlId, describedby)`。
 			 * @returns {object} 元素。
 			 */
-			const fieldShell = (options) => {
+			/**
+		 * 说明开关（design §7.2.1）：图标与可见文字「说明／收起说明」同置按钮内，Enter 与 Space
+		 * 键盘路径承载同一开合动作（`preventDefault` 防 Space 滚动与双触发）；展开区 `role="region"`、
+		 * 无障碍名与按钮一致。字段外壳与数字字段的平铺说明行共用同一实现。
+		 * @param {object} options - `label`/`helpId`/`open`/`setOpen`/`helpText`。
+		 * @returns {object[]} 二元组 `[按钮, 展开区]`（收起时展开区为 null）。
+		 */
+		const helpToggleOf = (options) => {
+			const { label, helpId, open, setOpen, helpText } = options;
+			const toggle = () => setOpen((state) => !state);
+			// 无障碍名＝「字段名：说明／收起说明」；分隔符随语言档：文案含 CJK 取全角冒号，否则半角冒号加空格。
+			const nameOf = (isOpen) => {
+				const word = t(isOpen ? "help.collapse" : "help.expand");
+				const colon = /[\u3400-\u9fff]/u.test(word) ? "：" : ": ";
+				return `${label}${colon}${word}`;
+			};
+			const button = jsxRuntime.jsxs("button", {
+				type: "button",
+				className: "dsafm_helpbtn",
+				"aria-label": nameOf(open),
+				"aria-expanded": open,
+				"aria-controls": helpId,
+				onClick: toggle,
+				onKeyDown: (event) => {
+					if (event.key !== "Enter" && event.key !== " ") return;
+					event.preventDefault();
+					toggle();
+				},
+				children: [
+					jsxRuntime.jsx(primitives.IconInfoOutlineRegular, { size: 12 }),
+					jsxRuntime.jsx("span", { className: "dsafm_helpbtn_text", children: open ? t("help.collapse") : t("help.expand") }),
+				],
+			});
+			const region = open
+				? jsxRuntime.jsx("div", { id: helpId, className: "dsafm_helpregion", role: "region", "aria-label": nameOf(true), children: helpText })
+				: null;
+			return [button, region];
+		};
+
+		const fieldShell = (options) => {
 				const { label, path, hint, helpText, onReset, control } = options;
 				// 直接调用（非组件引用）：钩子顺序＝字段固定次序，真 React 与测试替身都稳定。
 				const [open, setOpen] = react.useState(false);
@@ -2130,6 +2336,7 @@ window.__ModuleLoader__.load({
 				const describedby = [hintId, open ? helpId : ""].filter(Boolean).join(" ");
 				// 行内控件（布尔勾选类）：控件进标签行右端，不再单独占一行（勾孤悬在标签下方会被当成误置元素）。
 				const inline = options.inlineControl === true ? control(controlId, describedby) : null;
+			const [helpButton, helpRegion] = helpToggleOf({ label, helpId, open, setOpen, helpText });
 				return jsxRuntime.jsxs("div", {
 					className: "dsafm_field",
 					children: [
@@ -2140,15 +2347,7 @@ window.__ModuleLoader__.load({
 									className: "dsafm_labelgroup",
 									children: [
 										jsxRuntime.jsx("label", { className: "dsafm_f_label", htmlFor: controlId, children: label }),
-										jsxRuntime.jsx("button", {
-											type: "button",
-											className: "dsafm_helpbtn",
-											"aria-label": helpText,
-											"aria-expanded": open,
-											"aria-controls": helpId,
-											onClick: () => setOpen((state) => !state),
-											children: jsxRuntime.jsx(primitives.IconInfoOutlineRegular, { size: 12 }),
-										}),
+										helpButton,
 									],
 								}),
 								overriddenOf(path)
@@ -2171,22 +2370,14 @@ window.__ModuleLoader__.load({
 						}),
 						inline === null ? control(controlId, describedby) : null,
 						jsxRuntime.jsx("p", { id: hintId, className: "dsafm_f_hint", children: hint }),
-						open
-							? jsxRuntime.jsx("div", {
-									id: helpId,
-									className: "dsafm_helpregion",
-									role: "region",
-									"aria-label": helpText,
-									children: helpText,
-								})
-							: null,
+						helpRegion,
 					],
 				});
 			};
 
 			/**
-			 * 纯数字字段直接用官方 `SettingsValueField`（自带标签行/帮助/覆盖组/非法文案全套，其 CSS 无失效令牌）。
-			 * 毫秒字段（`unit:"ms"`）在其后平铺一行秒数读数（requirements §6.1）：Fragment 不引入包装 DOM，
+			 * 纯数字字段直接用官方 `SettingsValueField`（自带标签行/覆盖组/非法文案全套，其 CSS 无失效令牌；官方组件不传 help——纯图标按钮无法承载文字，design §7.2.1）。
+			 * 说明入口改为官方字段之后平铺一行自绘说明行（毫秒字段顺序＝官方字段 → 秒数读数行 → 说明行，非毫秒字段说明行紧随官方字段，design §7.2.1）。
 			 * 读数自绘在官方组件之外——官方 hint 在字段非法时被非法文案整段顶掉，拼进去会让生效值读数消失。
 			 * @param {object} field - 字段定义。
 			 * @returns {object} 元素。
@@ -2199,7 +2390,6 @@ window.__ModuleLoader__.load({
 					id: `${NS}-ctl-${key.replace(/\./gu, "-")}`,
 					label: t(field.labelKey),
 					hint: t(`hint.${key}`),
-					help: { label: t(`help.${key}`), content: t(`help.${key}`) },
 					overriddenLabel: t("card.override"),
 					resetLabel: t("card.resetField"),
 					invalidLabel: t("card.invalidNumber"),
@@ -2211,8 +2401,14 @@ window.__ModuleLoader__.load({
 					onEdit: (text) => stageText(field, text),
 					onReset: () => stageClear(field.path),
 				});
-				if (field.unit !== "ms") return control;
-				return jsxRuntime.jsxs(react.Fragment, { children: [control, secondsLine(field)] });
+				// 说明入口平铺（design §7.2.1）：官方组件不传 help（纯图标按钮无法承载文字），钩子顺序＝
+				// 数字字段固定次序（每个数字字段恰一次 useState），真 React 与测试替身都稳定。
+				const [open, setOpen] = react.useState(false);
+				const helpId = `${NS}-help-${key.replace(/\./gu, "-")}`;
+				const [helpButton, helpRegion] = helpToggleOf({ label: t(field.labelKey), helpId, open, setOpen, helpText: t(`help.${key}`) });
+				const helpLine = jsxRuntime.jsxs("div", { className: "dsafm_f_help", children: [helpButton, helpRegion] });
+				if (field.unit !== "ms") return jsxRuntime.jsxs(react.Fragment, { children: [control, helpLine] });
+				return jsxRuntime.jsxs(react.Fragment, { children: [control, secondsLine(field), helpLine] });
 			};
 
 			/**
@@ -2279,7 +2475,7 @@ window.__ModuleLoader__.load({
 				});
 
 			/**
-			 * 档位下拉：首项固定「跟随模型默认」；模型未选定或未取到档位时置灰不可写（design §7.2）。
+			 * 档位下拉：首项固定「自动选择」；模型未选定或未取到档位时置灰不可写（design §7.2）。
 			 * @param {string} ref - 所属模型引用。
 			 * @param {string} current - 当前档位。
 			 * @param {(effort: string) => void} onChange - 选择回调。
@@ -2429,7 +2625,7 @@ window.__ModuleLoader__.load({
 			};
 
 			/**
-			 * 映射行：主模型（下拉，列【模型】里注册的全部模型；另留「自定义…」兼顾手输）→
+			 * 映射行：执行助手模型（下拉，列【模型】里注册的全部模型；另留「自定义…」兼顾手输）→
 			 * 审查模型 → 档位 → 删除。四列布局由 `.dsafm_map_row` 的 grid 定义，整表占满卡片宽度；
 			 * 每个下拉的 `title` 取当前完整值，长引用可悬停看全。键仍取纯模型 id，与解析侧一致（design §7.2）。
 			 */
@@ -2505,7 +2701,7 @@ window.__ModuleLoader__.load({
 						}),
 				});
 
-			/** 按主模型映射行（字段外壳＋全宽四列表，增删改只暂存）。 */
+			/** 按执行助手模型映射行（字段外壳＋全宽四列表，增删改只暂存）。 */
 			const mapRow = () =>
 				fieldShell({
 					label: t("card.field.byParentModel"),
@@ -2540,7 +2736,7 @@ window.__ModuleLoader__.load({
 						}),
 				});
 
-			/** 跟随主模型行（字段外壳＋复选框，勾选只暂存；复选框置于标签行右端）。 */
+			/** 跟随执行助手模型行（字段外壳＋复选框，勾选只暂存；复选框置于标签行右端）。 */
 			const followParentRow = () =>
 				fieldShell({
 					label: t("card.field.followParent"),
@@ -2582,7 +2778,7 @@ window.__ModuleLoader__.load({
 				});
 
 			// 打开即见＋字段顺序（design §7.2「21 字段」清单，无分区标题）：
-			// 接管预设 → 触发两行 → 默认审查模型 → 映射 → 跟随主模型 → 高级其余行；插件标题/描述由宿主页面自己画。
+			// 接管预设 → 触发两行 → 默认审查模型 → 映射 → 跟随执行助手模型 → 高级其余行；插件标题/描述由宿主页面自己画。
 			return jsxRuntime.jsxs("div", {
 				className: "dsafm_form",
 				children: [

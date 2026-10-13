@@ -488,10 +488,14 @@ test('关闭弹卡：deny + ask 时交人工才调 next()，且只调一次', as
   await tick();
   assert.equal(state.nextCalls, 1, '交人工时调用 next()');
   assert.ok(state.audits.some((entry) => entry.phase === 'handoff' && entry.decision === 'ask'));
-  // 状态表先写 reviewing，再在交人工时改写成 denied 并带上理由。
-  const states = state.pending.filter((entry) => entry.op === 'set').map((entry) => entry.state);
-  assert.deepEqual(states, ['reviewing', 'denied']);
-  assert.equal(state.pending.filter((entry) => entry.op === 'set')[1].reason, 'risky');
+  // 状态表先写 reviewing，再在交人工时改写成 waiting-human 并带上原因类别与理由（design §7.4）。
+  const sets = state.pending.filter((entry) => entry.op === 'set');
+  const states = sets.map((entry) => entry.state);
+  assert.deepEqual(states, ['reviewing', 'waiting-human']);
+  assert.equal(sets[1].cause, 'deny', '模型判定拒绝交人工：cause=deny');
+  assert.equal(sets[1].reason, 'risky');
+  assert.equal(sets[1].deadlineKind, 'human', '交人工后倒计时按人工截止时间分派');
+  assert.ok(sets[1].deadlineAt - Date.now() > 0, '人工时限为正数');
   state.nextResolvers[0]('rejected');
   const outcome = await promise;
   assert.equal(outcome, 'rejected');
@@ -528,9 +532,27 @@ test('卡片状态（requirements §6.3／design §7.4）：reviewing 带审查�
   await delay(40);
   await tick();
   const second = state.pending.filter((entry) => entry.op === 'set')[1];
-  assert.equal(second.state, 'timeout', '审查超时后状态转 timeout');
+  assert.equal(second.state, 'waiting-human', '审查超时后状态转 waiting-human（design §7.4）');
+  assert.equal(second.cause, 'timeout', '审查超时交人工：cause=timeout');
   assert.equal(second.deadlineKind, 'human');
   assert.ok(second.deadlineAt - Date.now() > 0, '人工时限为正数');
+  state.nextResolvers[0]('rejected');
+  await promise;
+});
+
+test('卡片状态 cause=error（design §7.4）：通道故障交人工时 cause=error 并带故障理由', async () => {
+  const { rt, state, next } = makeRt(
+    baseConfig({ fallback: 'ask', reviewer: { timeoutMs: 0 }, human: { timeoutMs: 5000, timeoutFrom: 'handoff' } }),
+    { verdict: { decision: 'error', reason: 'empty output', toolCalls: 0, fields: {} } },
+  );
+  const promise = onApprovalRequest(request(), next, rt);
+  await tick();
+  await tick();
+  const sets = state.pending.filter((entry) => entry.op === 'set');
+  assert.equal(sets[1].state, 'waiting-human');
+  assert.equal(sets[1].cause, 'error', 'error 判定（未超时）交人工：cause=error');
+  assert.equal(sets[1].reason, 'empty output', '通道故障理由随状态透传');
+  assert.equal(sets[1].deadlineKind, 'human');
   state.nextResolvers[0]('rejected');
   await promise;
 });
@@ -1364,8 +1386,7 @@ test('requirements §4.1 gate catch 自含：生效配置读取抛错不外抛�
   rt.cfg = () => {
     throw new Error('cfg read boom');
   };
-  // 修复前：catch 分支的 rt.cfg?.() 把异常抛出 onApprovalRequest（I2 承接层自身外逃）；
-  // 修复后：读取按未取得配置处理，语言回落 en、注入上限回落 2048，fail-closed 照常。
+  // 现行行为：读取按未取得配置处理，语言回落 en、注入上限回落 2048，fail-closed 照常。
   const outcome = await onApprovalRequest(request(), next, rt);
   assert.equal(outcome, 'rejected');
   assert.equal(state.injections.length, 1, '逃逸仍注入（通道故障模板）');

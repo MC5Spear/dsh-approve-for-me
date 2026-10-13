@@ -446,7 +446,7 @@ test('设置表单首屏：字段竖排、覆盖组在场、保存置灰、无�
   assert.doesNotMatch(serialized, /card\.readonly/);
 });
 
-test('跟随主模型复选框行内落在标签行右端，不单独占一行', () => {
+test('跟随执行助手模型复选框行内落在标签行右端，不单独占一行', () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
@@ -464,7 +464,7 @@ test('跟随主模型复选框行内落在标签行右端，不单独占一行',
   const form = render(card.component, { t: (key) => key, scope: env.scope });
   const fields = findAllByClass(form, 'dsafm_field');
   const field = fields.find((node) => JSON.stringify(node).includes('card.field.followParent'));
-  assert.ok(field, '跟随主模型字段应在场');
+  assert.ok(field, '跟随执行助手模型字段应在场');
   // 勾在标签行（.dsafm_f_head → .dsafm_inlinecheck）内，且全字段唯一一个复选框——不孤悬在标签下方。
   const head = findAllByClass(field, 'dsafm_f_head')[0];
   assert.ok(head, '字段应有标签行');
@@ -479,7 +479,7 @@ test('跟随主模型复选框行内落在标签行右端，不单独占一行',
   // 勾选只暂存：onChange 后保存按钮才解除置灰（启用条件同上，不因行内化回退成选中即写）。
 });
 
-test('帮助点击展开：aria-expanded/aria-controls 成对，文本进入 DOM', async () => {
+test('说明入口（§10.2）：21 个字段全覆盖，图标＋可见文字，aria 成对，键盘 Enter/Space 可达', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx();
@@ -487,35 +487,89 @@ test('帮助点击展开：aria-expanded/aria-controls 成对，文本进入 DOM
   const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
   const props = { t: (key) => key, scope: env.scope };
   const first = render(card.component, props);
-  // 每个自绘字段壳都有一个帮助按钮：aria-expanded=false + aria-controls 指向展开区 id。
+  // 21 字段全覆盖：17 个自绘壳 ＋ 4 个官方数字字段的平铺说明行（design §7.2.1）。
   const buttons = findAllByClass(first, 'dsafm_helpbtn');
-  assert.equal(buttons.length, 17, `自绘字段的帮助按钮应 17 个（21 字段－4 个官方数字字段），实际 ${buttons.length}`);
+  assert.equal(buttons.length, 21, `说明按钮应 21 个（17 自绘＋4 平铺），实际 ${buttons.length}`);
   const iconNodes = findAllNodes(first, (node) => node.type === primitivesStub.IconInfoOutlineRegular);
-  assert.equal(iconNodes.length, 17, '帮助按钮图标统一用官方 IconInfoOutlineRegular');
+  assert.equal(iconNodes.length, 21, '说明按钮图标统一用官方 IconInfoOutlineRegular（size=12）');
   assert.equal(JSON.stringify(first).includes('Tooltip'), false, '设置界面不应再用 Tooltip');
   for (const button of buttons) {
     assert.equal(button.props['aria-expanded'], false, '初始未展开');
-    assert.ok(button.props['aria-controls'], '帮助按钮必须带 aria-controls');
-    assert.ok(button.props['aria-label'], '帮助按钮必须带 aria-label');
+    assert.ok(button.props['aria-controls'], '说明按钮必须带 aria-controls');
+    assert.ok(button.props['aria-label'], '说明按钮必须带 aria-label（无障碍名含字段名与状态）');
+    assert.equal(typeof button.props.onKeyDown, 'function', '键盘路径必须可达（Enter/Space，design §7.2.1）');
+    // 可见文字与图标同置按钮内（help.expand/collapse），不再是纯图标按钮。
+    const textSpan = (button.props.children ?? []).find((child) => child?.props?.className === 'dsafm_helpbtn_text');
+    assert.ok(textSpan, '说明按钮必须带可见文字 span');
+    assert.match(String(textSpan.props.children), /^help\.(expand|collapse)$/);
   }
-  // 点击 mode 字段的帮助：重渲染后 aria-expanded=true，帮助文本进入 DOM。
+  // 无障碍名格式「字段名：说明」：字段名与文案间的分隔符由文案语言决定（CJK 全角冒号／半角冒号加空格）。
   const modeButton = buttons.find((button) => button.props['aria-controls'] === 'approve-for-me-help-mode');
-  assert.ok(modeButton, 'mode 字段的帮助按钮应在场');
+  assert.ok(modeButton, 'mode 字段的说明按钮应在场');
+  assert.match(modeButton.props['aria-label'], /^field\.mode[:：]\s*help\.expand$/);
+  // 点击展开：aria-expanded=true，展开区 role=region 且无障碍名与按钮一致，文本进入 DOM。
   modeButton.props.onClick();
   hookIndex = 0;
   const open = render(card.component, props);
   const openButtons = findAllByClass(open, 'dsafm_helpbtn');
   const reopened = openButtons.find((button) => button.props['aria-controls'] === 'approve-for-me-help-mode');
   assert.equal(reopened.props['aria-expanded'], true, '点击后应 aria-expanded=true');
+  assert.match(reopened.props['aria-label'], /^field\.mode[:：]\s*help\.collapse$/);
+  assert.match(String((reopened.props.children ?? []).find((child) => child?.props?.className === 'dsafm_helpbtn_text').props.children), /^help\.collapse$/);
   const regions = findAllByClass(open, 'dsafm_helpregion');
   assert.equal(regions.length, 1, '只展开被点击的字段');
   assert.equal(regions[0].props.id, 'approve-for-me-help-mode');
-  assert.match(JSON.stringify(regions[0].props.children), /help\.mode/, '帮助文本应进入 DOM');
-  // 再点一次收起。
-  reopened.props.onClick();
+  assert.equal(regions[0].props.role, 'region');
+  assert.match(String(regions[0].props['aria-label']), /^field\.mode[:：]\s*help\.collapse$/);
+  assert.match(JSON.stringify(regions[0].props.children), /help\.mode/, '说明文本应进入 DOM');
+  // 键盘路径与点击等价：Space 键 preventDefault 后同一开合动作（不触发滚动/双击）。
+  reopened.props.onKeyDown({ key: ' ', preventDefault: () => {} });
   hookIndex = 0;
   const closed = render(card.component, props);
-  assert.equal(findAllByClass(closed, 'dsafm_helpregion').length, 0, '再次点击应收起');
+  assert.equal(findAllByClass(closed, 'dsafm_helpregion').length, 0, 'Space 应收起展开区');
+  const closedButton = findAllByClass(closed, 'dsafm_helpbtn').find((button) => button.props['aria-controls'] === 'approve-for-me-help-mode');
+  closedButton.props.onKeyDown({ key: 'Enter', preventDefault: () => {} });
+  hookIndex = 0;
+  assert.equal(findAllByClass(render(card.component, props), 'dsafm_helpregion').length, 1, 'Enter 应再次展开');
+});
+
+test('说明入口（§10.2）：开合不改动草稿、保存计划与常驻提示（纯展示状态）', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    snapshot: {
+      status: 'ready',
+      value: { fallback: 'ask', reviewer: { timeoutMs: 95000 } },
+      base: { fallback: 'reject', reviewer: { timeoutMs: 60000 } },
+      user: { fallback: 'ask' },
+      revision: 2,
+      writable: true,
+    },
+  });
+  client.apply(env.ctx);
+  const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
+  const props = { t: (key) => key, scope: env.scope };
+  const first = render(card.component, props);
+  const saveBefore = findByClass(first, 'dsafm_save').props.disabled;
+  const marker = 'approve-for-me-help-mode';
+  const buttonBefore = findAllByClass(first, 'dsafm_helpbtn').find((node) => node.props['aria-controls'] === marker);
+  // 连续开合数次（不同字段、含数字字段平铺行）。
+  buttonBefore.props.onClick();
+  hookIndex = 0;
+  const mid = render(card.component, props);
+  const humanButton = findAllByClass(mid, 'dsafm_helpbtn').find((node) => node.props['aria-controls'] === 'approve-for-me-help-human-timeoutMs');
+  assert.ok(humanButton, '数字字段的平铺说明按钮应在场');
+  humanButton.props.onClick();
+  hookIndex = 0;
+  const mid2 = render(card.component, props);
+  const again = findAllByClass(mid2, 'dsafm_helpbtn').find((node) => node.props['aria-controls'] === marker);
+  again.props.onClick();
+  hookIndex = 0;
+  const after = render(card.component, props);
+  // 保存按钮启停状态不变（无暂存变更）、无残留展开区、快照零写入。
+  assert.equal(findByClass(after, 'dsafm_save').props.disabled, saveBefore, '开合说明不得触碰保存计划');
+  assert.equal(env.writes.length, 0, '开合说明不得写库');
+  assert.equal(findAllByClass(after, 'dsafm_helpregion').length, 1, '其他字段的展开区保持不动');
 });
 
 test('非 loopback（不可写）时卡片显示只读提示', () => {
@@ -619,7 +673,7 @@ test('设置表单不自带标题块：插件名与描述由宿主详情页渲�
   assert.equal(flat.includes('dsafm_desc'), false, '卡片自带描述已移除');
 });
 
-test('默认审查模型行：模型与档位两个下拉，换模型只暂存、保存才写 scope', async () => {
+test('默认审查模型行：模型与推理强度两个下拉，换模型只暂存、保存才写 scope', async () => {
   resetHooks();
   const client = loadClient();
   const calls = [];
@@ -652,9 +706,9 @@ test('默认审查模型行：模型与档位两个下拉，换模型只暂存�
   assert.ok(modelSelect, '未渲染模型下拉');
   assert.equal(modelSelect.props.value, 'zai/glm-5.3');
   const effortSelect = findByClass(tree, 'dsafm_effort');
-  assert.ok(effortSelect, '未渲染档位下拉');
+  assert.ok(effortSelect, '未渲染推理强度下拉');
   assert.deepEqual(effortSelect.props.children.map((option) => option.props.value), ['', 'low', 'high']);
-  assert.equal(effortSelect.props.children[0].props.children, 'effort.default', '首项应当是跟随模型默认');
+  assert.equal(effortSelect.props.children[0].props.children, 'effort.default', '首项应当是自动选择');
   assert.ok(
     calls.some(([endpoint, args]) => endpoint === 'approveForMe/modelEfforts' && args.model === 'glm-5.3'),
     '未按当前模型请求档位',
@@ -682,7 +736,7 @@ test('默认审查模型行：模型与档位两个下拉，换模型只暂存�
   assert.deepEqual(written[written.length - 1], { model: 'zai/glm-4.6', effort: '' }, '保存应一次写入模型选择');
 });
 
-test('按主模型映射：键为纯 id 时展示全引用，增删行只暂存、保存写入键仍是纯 id', async () => {
+test('按执行助手模型映射：键为纯 id 时展示全引用，增删行只暂存、保存写入键仍是纯 id', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
@@ -720,7 +774,7 @@ test('按主模型映射：键为纯 id 时展示全引用，增删行只暂存�
     ['card.map.col.parent', 'card.map.col.reviewer', 'card.map.col.effort', 'card.map.col.action'],
   );
   const mapRow = findAllByClass(tree, 'dsafm_map_row')[0];
-  assert.equal(findByClass(mapRow, 'dsafm_map_parent').props.title, 'deepseek/deepseek-chat', '主模型下拉的 title 应当是完整引用');
+  assert.equal(findByClass(mapRow, 'dsafm_map_parent').props.title, 'deepseek/deepseek-chat', '执行助手模型下拉的 title 应当是完整引用');
   assert.equal(findByClass(mapRow, 'dsafm_model').props.title, 'zai/glm-5.3', '审查模型下拉的 title 应当是当前值');
   assert.equal(findByClass(mapRow, 'dsafm_effort').props.title, 'low', '档位下拉的 title 应当是当前档位');
   assert.match(String(findByClass(mapRow, 'dsafm_map_del').props.className), /dsafm_button/, '删除按钮沿用 dsafm_button');
@@ -760,21 +814,21 @@ test('接管工具名单：label 走字典键 field.tools，help.tools 中英同
   const env = makeCtx();
   client.apply(env.ctx);
   const dicts = env.dictionaries[0].dicts;
-  assert.equal(dicts.zh['help.tools'], '留空 = 对所有工具生效；填了则只接管名单内工具的审批请求，其余工具仍走原有人工审批。');
-  assert.match(dicts.en['help.tools'], /Tools taken over \(one per line\)/);
+  assert.equal(dicts.zh['help.tools'], '纳入自动审批的工具名单，每行一个工具名。空清单覆盖所有工具的升权审批；填写后只处理名单内工具的升权请求，其余工具保持宿主原流程。');
+  assert.match(dicts.en['help.tools'], /Tools under auto-approval, one name per line/u);
   // 字段标签进字典：zh 保留现名，en 有对译；两语言必须同键同在。
-  assert.equal(dicts.zh['field.tools'], '接管工具名单（每行一个）');
-  assert.equal(dicts.en['field.tools'], 'Managed tools (one per line)');
+  assert.equal(dicts.zh['field.tools'], '纳入自动审批的工具');
+  assert.equal(dicts.en['field.tools'], 'Tools under auto-approval');
 
   const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
   const tree = await expandCard(card.component, { t: (key) => key, scope: env.scope, rpcCall: env.rpcCall });
   const serialized = JSON.stringify(tree);
   assert.match(serialized, /field\.tools/, '无 locale.bind 时行标签渲染字典键（与 help 键同口径）');
   assert.doesNotMatch(serialized, /工具白名单/);
-  assert.doesNotMatch(serialized, /接管工具名单（每行一个）/, '标签文本不得再硬编码在渲染树里');
+  assert.doesNotMatch(serialized, /纳入自动审批的工具/, '标签文本不得再硬编码在渲染树里');
   // 用真字典取词渲染时，标签是 zh 现名（行为差异断言，不是存在性）。
   const treeZh = await expandCard(card.component, { t: (key) => dicts.zh[key] ?? key, scope: env.scope, rpcCall: env.rpcCall });
-  assert.match(JSON.stringify(treeZh), /接管工具名单（每行一个）/);
+  assert.match(JSON.stringify(treeZh), /纳入自动审批的工具/);
 });
 
 test('用户文案三档：auto 沿用宿主绑定，zh/en 直查字典且互不相同，非法值回落 auto', async () => {
@@ -795,8 +849,8 @@ test('用户文案三档：auto 沿用宿主绑定，zh/en 直查字典且互不
   // zh 强制：直查 zh 字典；en 强制：同一键给英文（两档互不相同＝行为差异，不是存在性）。
   const zh = make('zh');
   const en = make('en');
-  assert.equal(zh.t('field.tools'), '接管工具名单（每行一个）');
-  assert.equal(en.t('field.tools'), 'Managed tools (one per line)');
+  assert.equal(zh.t('field.tools'), '纳入自动审批的工具');
+  assert.equal(en.t('field.tools'), 'Tools under auto-approval');
   assert.notEqual(zh.t('field.tools'), en.t('field.tools'));
   assert.equal(zh.t('card.save'), '保存');
   assert.equal(en.t('card.save'), 'Save');
@@ -859,7 +913,7 @@ test('composer 下拉：两段式菜单，档位项来自 modelEfforts', async (
   const menu = findNode(tree, primitivesStub.Menu);
   assert.ok(menu, '未渲染 Menu');
   const ids = menu.props.items.filter((item) => typeof item.id === 'string').map((item) => item.id);
-  assert.ok(ids.includes('__effort__'), '缺「跟随模型默认」档位项');
+  assert.ok(ids.includes('__effort__'), '缺「自动选择」推理强度项');
   assert.ok(ids.includes('__effort__:low') && ids.includes('__effort__:high'), '缺模型支持的档位项');
   assert.match(JSON.stringify(menu.props.anchor.props.children), /zai\/glm-5\.3 · low/, '触发器应显示模型与档位');
 
@@ -1066,7 +1120,7 @@ test('composer 下拉：写入失败时触发器出现 dsafm_badge 错误徽标�
   assert.match(JSON.stringify(seat.props.children), /composer\.failed/, '徽标文案用 composer.failed');
 });
 
-test('按主模型映射：多斜杠输入取末段为键，暂存后由保存写入（design §6.2）', async () => {
+test('按执行助手模型映射：多斜杠输入取末段为键，暂存后由保存写入（design §6.2）', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
@@ -1390,7 +1444,7 @@ test('审批卡片状态条：显示状态行与倒计时，并自己渲染关�
       currentSession: 's1',
       call: async (endpoint) => {
         if (endpoint === 'approveForMe/pendingState') {
-          return { ok: true, value: { entries: [{ callId: 'call_1', state: 'denied', reason: '删除系统目录', startedAt: clock, deadlineAt: clock + 90_000, deadlineKind: 'human', updatedAt: clock }] } };
+          return { ok: true, value: { entries: [{ callId: 'call_1', state: 'waiting-human', cause: 'deny', reason: '删除系统目录', startedAt: clock, deadlineAt: clock + 90_000, deadlineKind: 'human', updatedAt: clock }] } };
         }
         return { ok: true, value: {} };
       },
@@ -1400,7 +1454,10 @@ test('审批卡片状态条：显示状态行与倒计时，并自己渲染关�
     // `t` 用真实中文模板（带 `{reason}` 占位符），否则状态行里的原因替换不会发生。
     const t = (key) =>
       ({
-        'cardstate.denied': '自动审批拒绝；原因：{reason}',
+        'cardstate.waiting': '等待你决定',
+        'cardstate.waiting.deny': '自动审查结论为拒绝：{reason}',
+        'cardstate.waiting.timeout': '自动审查超时，未取得有效结论',
+        'cardstate.waiting.error': '自动审查未取得有效结论：{reason}',
         'countdown.seconds': '剩余 {n} 秒后自动拒绝',
         'countdown.minutes': '剩余 {m} 分 {s} 秒后自动拒绝',
         'cardstate.reviewing': '正在自动审批',
@@ -1416,9 +1473,9 @@ test('审批卡片状态条：显示状态行与倒计时，并自己渲染关�
     hookIndex = 0;
     const tree = render(detail.component, props);
     const text = JSON.stringify(tree);
-    assert.match(text, /自动审批拒绝/, '缺少「自动审批拒绝」状态行');
-    assert.match(text, /删除系统目录/, '状态行必须带拒绝原因');
-    assert.match(text, /剩余 1 分 30 秒后自动拒绝/, '缺少倒计时（90 秒 → 分秒格式）');
+    assert.match(text, /等待你决定/, '缺少「等待你决定」状态行');
+    assert.match(text, /自动审查结论为拒绝：删除系统目录/, '原因子句必须点明自动审查结论并带理由');
+    assert.match(text, /剩余 1 分 30 秒后自动拒绝/, '缺少倒计时（90 秒 → 分秒格式，按人工截止时间分派）');
     assert.match(text, /rm -rf \/tmp\/x/, '接管 seat 后必须自己渲染关联命令');
   } finally {
     Date.now = realNow;
@@ -1489,25 +1546,26 @@ test('审批卡片状态条：审查中显示审查时限，无时限时说明�
 test('审批卡片状态条：非审查状态的 null 截止不渲染任何无时限等待文案（design §7.4）', async () => {
   resetHooks();
   const client = loadClient();
-  // 人工零时限立即结算：理论上不该出现该状态；万一出现（denied/timeout + null 截止），
+  // 人工零时限立即结算：理论上不该出现该状态；万一出现（waiting-human + null 截止），
   // 也不得显示「无时限等待」——只显示状态与原因（design §7.4）。
   const env = makeCtx({
     currentSession: 's1',
-    call: async () => ({ ok: true, value: { entries: [{ callId: 'call_1', state: 'denied', reason: '风险高', startedAt: 1, deadlineAt: null, deadlineKind: null, updatedAt: 1 }] } }),
+    call: async () => ({ ok: true, value: { entries: [{ callId: 'call_1', state: 'waiting-human', cause: 'error', reason: '风险高', startedAt: 1, deadlineAt: null, deadlineKind: null, updatedAt: 1 }] } }),
   });
   client.apply(env.ctx);
   const detail = env.registrations.find((entry) => entry.options.name === 'conversation.approval.detail');
-  const t = (key) => ({ 'cardstate.denied': '自动审批拒绝；原因：{reason}', 'countdown.unlimited': '审查不限时', 'countdown.none': '无自动拒绝时限，将一直等待你的决定' })[key] ?? key;
+  const t = (key) => ({ 'cardstate.waiting': '等待你决定', 'cardstate.waiting.error': '自动审查未取得有效结论：{reason}', 'cardstate.waiting.deny': '自动审查结论为拒绝：{reason}', 'countdown.unlimited': '审查无时限', 'countdown.none': '无自动拒绝时限，将一直等待你的决定' })[key] ?? key;
   const props = { callId: 'call_1', t, useChat: () => 'rm x', ...detail.options.inject() };
   render(detail.component, props);
   await tick();
   hookIndex = 0;
   const text = JSON.stringify(render(detail.component, props));
-  assert.match(text, /自动审批拒绝/);
+  assert.match(text, /等待你决定/);
   assert.match(text, /风险高/);
-  assert.ok(!text.includes('审查不限时'), '非审查状态的 null 截止不得显示无上限文案');
+  assert.ok(!text.includes('审查无时限'), '非审查状态的 null 截止不得显示无上限文案');
   assert.ok(!text.includes('无自动拒绝时限'), '已移除的 countdown.none 文案不得出现');
-  assert.ok(!text.includes(' · '), '没有倒计时时不得残留时间分隔段');
+  assert.ok(!text.includes('后自动拒绝'), '没有倒计时时不得渲染自动拒绝倒计时文案');
+  assert.ok(!text.includes('dsafm_state_time'), '没有倒计时时不得残留时间槽位');
 });
 
 /** 审查视图用的字典映射：返回真实模板，等式与文案才能断言替换结果。 */
@@ -1516,31 +1574,38 @@ const REVIEW_TEXT = {
   'view.empty': '本会话还没有自动审批记录',
   'view.count': '共 {n} 条',
   'view.readFailed': '记录读取失败或不完整，列表可能缺少条目',
+  'view.retention': '记录跟随产生它的会话；每会话回读最近一个窗口（默认 200 条，随 `ui.trace.maxRecords` 可配置），磁盘最多保留 50 个会话文件（固定上限），超限删除最旧；减少采集不删除已有记录。',
+  'list.outcome': '最终审批：{v}',
+  'list.decision': '模型结论：{v}',
+  'view.noOutcome': '未记录最终审批结果',
   'decision.allow': '放行（allow）',
   'decision.allowed-once': '放行（allowed-once）',
   'decision.deny': '拒绝（deny）',
   'decision.rejected': '拒绝（rejected）',
+  'decision.error': '失败（error）',
   'time.total': '工具总计 {x} = 执行 {y} + 审批 {z}',
   'time.approvalOnly': '审批 {z}',
   'time.unmatched': '未匹配到工具行',
   'time.queue': '排队 {n}',
   'time.review': '审查 {n}',
   'time.human': '人工 {n}',
-  'detail.decision': '审查判定',
-  'detail.source': '结算来源',
+  'detail.title': '单次审查',
+  'detail.outcome': '最终审批结果',
+  'detail.decision': '模型结论',
+  'detail.source': '决定方式',
   'detail.stage': '环节',
   'detail.origin': '归属',
   'detail.escalation': '升权目标',
   'detail.preset': '接管预设',
   'detail.model': '模型',
-  'detail.effort': '档位',
-  'detail.layer': '解析层级',
+  'detail.effort': '推理强度',
+  'detail.layer': '模型选择来源',
   'detail.attempts': '尝试次数',
-  'detail.tokens': '思维链 token',
+  'detail.tokens': '推理 token 用量',
   'detail.risk': '风险',
   'detail.auth': '授权',
-  'detail.fieldsDefaulted': '解析补全',
-  'detail.degraded': '降级标记',
+  'detail.fieldsDefaulted': '自动补全的字段',
+  'detail.degraded': '缺失或异常情况',
   'detail.configTag': '配置标识',
   'detail.policyTag': '策略标识',
   'detail.evidence': '上下文证据',
@@ -1548,10 +1613,35 @@ const REVIEW_TEXT = {
   'detail.reason': '理由',
   'detail.prompt': '提示词',
   'detail.input': '输入',
-  'detail.reasoning': '思维链',
+  'detail.reasoning': '模型返回的推理文本',
   'detail.output': '输出',
-  'detail.notCaptured': '未采集（capture 档为 summary）',
   'detail.truncated': '已截断',
+  'absent.noContext': '未取上下文',
+  'absent.noProbes': '未调用取证工具',
+  'absent.modelNotProvided': '模型未提供',
+  'absent.notFullCapture': '未开启全文采集',
+  'absent.unknown': '本次未记录此项',
+  'layer.session': '会话选择（session）',
+  'layer.parent-map': '按执行助手的模型映射（parent-map）',
+  'layer.global': '全局默认（global）',
+  'layer.follow-parent': '跟随执行助手模型（follow-parent）',
+  'layer.unavailable': '全部层级不可用（unavailable）',
+  'fieldsDefaulted.risk': '风险分级（risk）',
+  'fieldsDefaulted.auth': '授权分级（auth）',
+  'fieldsDefaulted.reason': '理由（reason）',
+  'degraded.command': '无法辨认本次操作（command）',
+  'degraded.cwd': '会话目录缺失（cwd）',
+  'degraded.transcript': '上下文读取失败或截断（transcript）',
+  'degraded.entry': '单条证据截断（entry:…）',
+  'degraded.all': '模型选择全部不可用（all）',
+  'degraded.output-truncated': '输出截断（output-truncated）',
+  'degraded.output-empty': '空输出（output-empty）',
+  'degraded.superseded': '已被其他路径先结算（superseded）',
+  'degraded.queue-overflow': '队列已满（queue-overflow）',
+  'degraded.queue-timeout': '排队超时（queue-timeout）',
+  'degraded.breaker-open': '冷却中未执行（breaker-open）',
+  'degraded.inject-fail': '通知失败（inject-fail）',
+  'enum.unknown': '{v}（含义未知）',
   'source.llm': '审查（llm）',
   'source.human': '人工（human）',
   'source.timeout': '超时（timeout）',
@@ -1649,9 +1739,12 @@ test('审查视图：合并行主判定为 outcome、判定与结算并存可分
   // 新在前（C 在上）；共 3 条；subject 摘要在场。
   assert.match(listText, /npm run build/, 'subject 摘要进列表行');
   assert.match(listText, /共 3 条/);
-  // A 行：主判定＝结算 outcome（人工推翻审查放行）→ 拒绝（rejected）为主、放行（allow）为次级徽标。
-  assert.match(listText, /拒绝（rejected）/, 'outcome 是主判定');
-  assert.match(listText, /放行（allow）/, '审查判定为次级徽标（两者可分辨，design §8.5）');
+  // A 行：主位＝最终审批（人工推翻审查放行）→「最终审批：拒绝（rejected）」，次级并列「模型结论：放行（allow）」
+  // （方向相反才并列，design §8.5.1）；B 行 decision=deny 与 outcome=rejected 同向 → 不并列次级标注。
+  assert.match(listText, /最终审批：拒绝（rejected）/, 'outcome 进主位并带前缀（design §8.5.1）');
+  assert.match(listText, /模型结论：放行（allow）/, '方向相反时模型结论为次级并列标注');
+  assert.equal((listText.match(/模型结论：/g) ?? []).length, 1, '同向行（deny→rejected）不得重复并列次级标注');
+  assert.ok(!listText.includes('未记录最终审批结果'), '有 outcome 的行不得出现旧格式回退标注');
   // C 行（只有结算）：Z 无任何在场分段 → 0ms 由在场分段求和得出。
   assert.match(listText, /npm run build/);
   assert.match(listText, /审批 0 ms/, '无在场分段时 Z=0（求和口径）');
@@ -1669,13 +1762,20 @@ test('审查视图：合并行主判定为 outcome、判定与结算并存可分
   const allowText = JSON.stringify(render(view.component, props));
   assert.match(allowText, /工具总计 5\.0 s = 执行 2\.5 s \+ 审批 2\.5 s/);
   assert.ok(!allowText.includes('未匹配到工具行'), '匹配上时不应再显示未标注');
-  // A：input/reasoning 与 evidence/probes 四段缺（capture=summary）。
-  assert.equal((allowText.match(/未采集（capture 档为 summary）/g) ?? []).length, 4, '四段缺各显示一次未采集说明');
+  // A：全文段在场（prompt/output 有值）证实全文采集，四段缺按 §8.5.1 分派链各归其类：
+  // evidence→未取上下文、probes→未调用取证工具、reasoning→模型未提供、input→本次未记录此项。
+  assert.equal((allowText.match(/未取上下文/g) ?? []).length, 1, 'evidence 缺失 → 未取上下文');
+  assert.equal((allowText.match(/未调用取证工具/g) ?? []).length, 1, 'probes 缺失 → 未调用取证工具');
+  assert.equal((allowText.match(/模型未提供/g) ?? []).length, 1, 'reasoning 缺失（全文采集下）→ 模型未提供');
+  assert.equal((allowText.match(/本次未记录此项/g) ?? []).length, 1, 'input 缺失（全文采集下）→ 本次未记录此项');
+  assert.ok(!allowText.includes('未开启全文采集'), '全文段在场时不得误报未开启全文采集');
   assert.match(allowText, /PROMPT-A/);
   assert.match(allowText, /OUTPUT-A/);
-  // 详情元信息：结算来源/环节/层级/尝试次数/标识在场（§8.2 详情补充字段）。
-  assert.match(allowText, /结算来源: 人工（human）/);
-  assert.match(allowText, /解析层级: session/);
+  // 详情元信息：最终审批结果/决定方式/模型选择来源/尝试次数/标识在场（§8.5.1 详情字段定稿名）。
+  assert.match(allowText, /最终审批结果: 拒绝（rejected）/);
+  assert.match(allowText, /模型结论: 放行（allow）/);
+  assert.match(allowText, /决定方式: 人工（human）/);
+  assert.match(allowText, /模型选择来源: 会话选择（session）/);
   assert.match(allowText, /尝试次数: 1/);
   assert.match(allowText, /接管预设: auto-approve/);
   assert.match(allowText, /配置标识: a1b2c3d4e5f6/);
@@ -1695,13 +1795,16 @@ test('审查视图：合并行主判定为 outcome、判定与结算并存可分
   const cText = JSON.stringify(render(view.component, props));
   assert.match(cText, /排队 — · 审查 — · 人工 —/, '缺失段显示 —，不按 0 计');
   assert.match(cText, /环节: 排队（queue）/);
-  assert.match(cText, /降级标记: queue-overflow/);
+  assert.match(cText, /缺失或异常情况: 队列已满（queue-overflow）/);
   assert.match(cText, /审查未执行：queue-overflow/, '理由段携带固定前缀原文');
   assert.ok(!cText.includes('工具总计'), '匹配不上时不得显示等式');
   assert.match(cText, /未匹配到工具行/, '匹配不上时必须标注，不猜 X');
   assert.match(cText, /审批 0 ms/, '无在场分段时 Z=0（求和口径）');
-  // C 六段全文/取证缺（理由段在场）。
-  assert.equal((cText.match(/未采集（capture 档为 summary）/g) ?? []).length, 6, '六段缺各显示一次未采集说明');
+  // C 六段缺（全文段均不在场 → 证实未开启全文采集，design §8.5.1 分派链第三级）：
+  // evidence/probes 仍归第一级专键；prompt/input/reasoning/output 四段 → 未开启全文采集。
+  assert.equal((cText.match(/未开启全文采集/g) ?? []).length, 4, '四个全文段缺失各显示一次未开启全文采集');
+  assert.ok(!cText.includes('模型未提供'), '全文未采集时 reasoning 缺失不得归为模型未提供');
+  assert.ok(!cText.includes('最终审批结果: null'), 'C 行 decision 缺失时模型结论段不渲染');
 });
 
 test('审查视图：readFailed=true 时显示读取降级提示，不伪装成「没有记录」（design §8.3）', async () => {
@@ -1724,6 +1827,167 @@ test('审查视图：readFailed=true 时显示读取降级提示，不伪装成�
   hookIndex = 0;
   const text = JSON.stringify(render(view.component, props));
   assert.match(text, /记录读取失败或不完整，列表可能缺少条目/);
+  // 保留范围说明常驻（§10.2）：读取降级不吞掉它。
+  assert.match(text, /记录跟随产生它的会话/, '读取降级时保留范围说明仍在场');
+});
+
+test('审查视图 §10.2：enum 探测式取词、多值顿号连接、entry 前缀族、degraded=none 不列段', async () => {
+  resetHooks();
+  const client = loadClient();
+  const rows = [{ ...TRACE_ROWS[0], approvalId: 'apX', decision: 'deny', outcome: 'rejected' }];
+  const details = {
+    apX: {
+      ...rows[0],
+      humanWaitMs: 0,
+      layer: 'made-up-layer',
+      fieldsDefaulted: 'risk,auth',
+      degraded: 'queue-overflow,entry:tool-call',
+      evidence: 'EV',
+    },
+  };
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint, args) => {
+      if (endpoint === 'approveForMe/traceRecords') return { ok: true, value: { records: rows, readFailed: false } };
+      if (endpoint === 'approveForMe/traceRecord') return { ok: true, value: { record: details[args?.approvalId] ?? null } };
+      if (endpoint === 'approveForMe/getState') return { ok: true, value: { trace: { capture: 'summary', ownView: true, turnSummary: true } } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const view = env.registrations.find((entry) => entry.options.name === 'conversation.view');
+  const props = { t: reviewT, ...view.options.inject() };
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  findAllByClass(render(view.component, props), 'dsafm_review_head')[0].props.onClick();
+  hookIndex = 0;
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const text = JSON.stringify(render(view.component, props));
+  // enum 探测（§10.2）：字典没有 layer.made-up-layer → 不抛错，按 enum.unknown 展示原值。
+  assert.match(text, /模型选择来源: made-up-layer（含义未知）/, '未知枚举按「原值（含义未知）」展示');
+  // fieldsDefaulted 多值：逐项映射后以顿号连接。
+  assert.match(text, /自动补全的字段: 风险分级（risk）、授权分级（auth）/);
+  // degraded 多值：逐项映射＋entry 前缀族按 degraded.entry 映射并保留完整原值。
+  assert.match(text, /缺失或异常情况: 队列已满（queue-overflow）、单条证据截断（entry:tool-call）/);
+});
+
+test('审查视图 §10.2：degraded=none 表示无标记，不渲染该段', async () => {
+  resetHooks();
+  const client = loadClient();
+  const rows = [{ ...TRACE_ROWS[0], approvalId: 'apN' }];
+  const detail = { ...rows[0], humanWaitMs: 0, degraded: 'none' };
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint, args) => {
+      if (endpoint === 'approveForMe/traceRecords') return { ok: true, value: { records: rows, readFailed: false } };
+      if (endpoint === 'approveForMe/traceRecord') return { ok: true, value: { record: args?.approvalId === 'apN' ? detail : null } };
+      if (endpoint === 'approveForMe/getState') return { ok: true, value: { trace: { capture: 'summary', ownView: true, turnSummary: true } } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const view = env.registrations.find((entry) => entry.options.name === 'conversation.view');
+  const props = { t: reviewT, ...view.options.inject() };
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  findAllByClass(render(view.component, props), 'dsafm_review_head')[0].props.onClick();
+  hookIndex = 0;
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const text = JSON.stringify(render(view.component, props));
+  assert.ok(!text.includes('缺失或异常情况'), 'degraded=none（无标记语义，design §8.2）不渲染该 meta 段');
+  assert.ok(!text.includes('none（含义未知）'), 'none 不得按未知枚举展示');
+});
+
+test('审批卡片状态条 §10.2：三类原因子句与 deny 空理由省略冒号', async () => {
+  resetHooks();
+  const client = loadClient();
+  const dict = {
+    'cardstate.waiting': '等待你决定',
+    'cardstate.waiting.deny': '自动审查结论为拒绝：{reason}',
+    'cardstate.waiting.timeout': '自动审查超时，未取得有效结论',
+    'cardstate.waiting.error': '自动审查未取得有效结论：{reason}',
+  };
+  const renderEntry = async (entry) => {
+    resetHooks();
+    const env = makeCtx({ currentSession: 's1', call: async () => ({ ok: true, value: { entries: [entry] } }) });
+    client.apply(env.ctx);
+    const detail = env.registrations.find((item) => item.options.name === 'conversation.approval.detail');
+    const t = (key) => dict[key] ?? key;
+    const props = { callId: 'call_1', t, useChat: () => 'x', ...detail.options.inject() };
+    render(detail.component, props);
+    await tick();
+    hookIndex = 0;
+    return JSON.stringify(render(detail.component, props));
+  };
+  // deny 且理由为空：省略冒号与理由（design §7.4）。
+  const denyEmpty = await renderEntry({ callId: 'call_1', state: 'waiting-human', cause: 'deny', reason: '', startedAt: 1, deadlineAt: null, deadlineKind: null, updatedAt: 1 });
+  assert.match(denyEmpty, /等待你决定 · 自动审查结论为拒绝/, 'deny 空理由时省略冒号与理由');
+  // timeout：固定文案，不带理由位。
+  const timeout = await renderEntry({ callId: 'call_1', state: 'waiting-human', cause: 'timeout', reason: 'ignored', startedAt: 1, deadlineAt: null, deadlineKind: null, updatedAt: 1 });
+  assert.match(timeout, /等待你决定 · 自动审查超时，未取得有效结论/);
+  // 客户端防御（§10.2）：cause 缺失按 error 展示，不裸抛、渲染树里不出现 undefined 原文。
+  const noCause = await renderEntry({ callId: 'call_1', state: 'waiting-human', reason: 'boom', startedAt: 1, deadlineAt: null, deadlineKind: null, updatedAt: 1 });
+  assert.match(noCause, /等待你决定 · 自动审查未取得有效结论：boom/, 'cause 缺失按 error 文案兜底');
+  assert.ok(!noCause.includes('undefined'));
+});
+
+test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx();
+  client.apply(env.ctx);
+  const { zh, en } = env.dictionaries[0].dicts;
+  const zhKeys = Object.keys(zh).sort();
+  const enKeys = Object.keys(en).sort();
+  assert.deepEqual(zhKeys, enKeys, '中英字典必须同键成对（§10.2 名称表）');
+  // 状态机与原因（§7.4）。
+  assert.equal(zh['cardstate.reviewing'], '正在自动审批');
+  assert.equal(zh['cardstate.waiting'], '等待你决定');
+  assert.equal(zh['cardstate.waiting.deny'], '自动审查结论为拒绝：{reason}');
+  assert.equal(zh['cardstate.waiting.timeout'], '自动审查超时，未取得有效结论');
+  assert.equal(zh['countdown.unlimited'], '审查无时限');
+  assert.equal(en['countdown.unlimited'], 'No review deadline');
+  // 列表双标注主槽与回退（§8.5.1）。
+  assert.equal(zh['list.outcome'], '最终审批：{v}');
+  assert.equal(zh['list.decision'], '模型结论：{v}');
+  assert.equal(zh['view.noOutcome'], '未记录最终审批结果');
+  // 说明入口（§7.2.1）。
+  assert.equal(zh['help.expand'], '说明');
+  assert.equal(zh['help.collapse'], '收起说明');
+  assert.equal(en['help.expand'], 'Details');
+  assert.equal(en['help.collapse'], 'Hide details');
+  // 术语定稿抽查（§7.2.2）：执行助手模型/推理强度/自动选择/已单独设置。
+  assert.equal(zh['card.map.parent'], '执行助手模型');
+  assert.equal(zh['card.map.col.effort'], '推理强度');
+  assert.equal(zh['effort.default'], '自动选择');
+  assert.equal(en['effort.default'], 'Automatic');
+  assert.equal(zh['card.override'], '已单独设置');
+  assert.equal(en['card.override'], 'Set individually');
+  // 缺段五键与枚举回退（§8.5.1）。
+  for (const key of ['absent.noContext', 'absent.noProbes', 'absent.modelNotProvided', 'absent.notFullCapture', 'absent.unknown']) {
+    assert.ok(zh[key], `缺段键应在场：${key}`);
+    assert.ok(en[key], `缺段键中英成对：${key}`);
+  }
+  assert.equal(zh['enum.unknown'], '{v}（含义未知）');
+  assert.equal(en['enum.unknown'], '{v} (unknown meaning)');
+  // 详情段定稿名（§8.5.1）与保留范围（§8.5）。
+  assert.equal(zh['detail.outcome'], '最终审批结果');
+  assert.equal(zh['detail.decision'], '模型结论');
+  assert.equal(zh['detail.source'], '决定方式');
+  assert.equal(zh['detail.effort'], '推理强度');
+  assert.equal(zh['detail.layer'], '模型选择来源');
+  assert.equal(zh['detail.tokens'], '推理 token 用量');
+  assert.ok(zh['view.retention'].length > 0, '保留范围文案应在场');
 });
 
 test('审查视图：详情匹配 PTC 子调用行；truncated 标注已截断；拿不到 useTrajectory 时只显示 Z', async () => {
@@ -2264,10 +2528,32 @@ test('静态扫描：退役文案与失效令牌零命中、外壳类退役', as
   assert.equal(/border(?!-top)/u.test(formRule), false, '.dsafm_form 不应再带边框');
   assert.equal(formRule.includes('border-radius'), false, '.dsafm_form 不应再带圆角');
   assert.equal(formRule.includes('background'), false, '.dsafm_form 不应再带成片底色');
-  // 官方规格落点：34px 输入、24×24 帮助按钮、保存按钮实心与置灰透明度。
+  // 官方规格落点：34px 输入、说明按钮 24×24 最小命中区（文字按钮，内容可撑大）、保存按钮实心与置灰透明度。
   assert.ok(SOURCE.includes('height:34px'), '输入应取官方 34px 规格');
-  assert.ok(SOURCE.includes('width:24px;height:24px'), '帮助按钮应为 24×24 命中区');
+  assert.ok(SOURCE.includes('min-width:24px;min-height:24px'), '说明按钮应为 24×24 最小命中区（design §7.2.1）');
   assert.ok(SOURCE.includes('.dsafm_save:disabled{opacity:.4'), '保存置灰应为官方 opacity .4');
+  // 说明按钮（§10.2）：文字按钮继承字体、次级标签色，悬停/展开与聚焦可见（双主题走语义别名）。
+  const helpBtnRule = /\.dsafm_helpbtn\{[^}]*\}/u.exec(SOURCE)?.[0] ?? '';
+  assert.ok(helpBtnRule.length > 0, '应有 .dsafm_helpbtn 规则');
+  assert.equal(/min-width:24px;min-height:24px/.test(helpBtnRule), true, '命中区 24×24');
+  assert.equal(helpBtnRule.includes('color:var(--dsw-alias-label-secondary)'), true, '静息态用次级标签色');
+  assert.equal(helpBtnRule.includes('font-family:inherit;font-size:12px'), true, '文字随表单字体');
+  assert.ok(SOURCE.includes(".dsafm_helpbtn:hover,.dsafm_helpbtn[aria-expanded='true']{color:var(--dsw-alias-label-primary)}"), '悬停/展开转主标签色');
+  assert.ok(SOURCE.includes('.dsafm_helpbtn:focus-visible{outline:2px solid var(--dsw-alias-brand-primary)'), '键盘聚焦轮廓用品牌色');
+  // 分隔线选择器组（§10.2）：秒数行后的下一字段不画线（说明行可能插在中间）；说明行后的字段恢复 0.5px 线。
+  assert.ok(
+    SOURCE.includes('.dsafm_f_sec + div:not(.dsafm_field):not(.dsafm_f_help){border-top:.5px solid var(--dsw-alias-border-l2)}'),
+    '秒数行的后继排除说明行（design §7.2.1）',
+  );
+  assert.ok(
+    SOURCE.includes('.dsafm_f_help + div:not(.dsafm_field){border-top:.5px solid var(--dsw-alias-border-l2)}'),
+    '说明行作为锚恢复后继字段的分隔线',
+  );
+  assert.ok(SOURCE.includes('.dsafm_f_help{margin:-12px 0 12px}'), '平铺说明行与秒数行同一负边距');
+  // 退役文案（§11 迁移清单）：旧键与旧话术在源码零命中。
+  for (const word of ['cardstate.timeout', 'cardstate.denied', 'detail.notCaptured', 'detail.absent', '跟随模型默认', '上面两级']) {
+    assert.equal(SOURCE.includes(word), false, `退役字样零命中：${word}`);
+  }
 });
 
 test('近似行：legacyRow 开启时等 uiConversation 并注册定义；缺字段按关处理', async () => {
