@@ -10,7 +10,8 @@
  *   指纹  —— 全部跟踪文本文件零命中本机指纹（开发根、用户目录、宿主安装目录、
  *            实例端口、服务名、主机名……）。
  *   引用  —— 全部跟踪文本文件零命中未随仓公开的内部引用（事实登记簿指针、
- *            事实/问题编号引用形态、过程稿文件名、证据与临时区指针）。
+ *            事实/问题编号引用形态、退役需求编号（R 锚）、过程稿文件名、
+ *            证据与临时区指针）。
  *
  * 用法：
  *   node tools/check-public-surface.mjs              # 全绿退出 0，有违规退出 1
@@ -42,7 +43,7 @@ export const FINGERPRINTS = [
   { id: 'instance-dev', label: '开发实例端口', re: /(?<!\d)38200(?!\d)/gu },
   { id: 'service-name', label: '本机服务名', re: /(?<![A-Za-z0-9-])dsh-web(?![A-Za-z0-9-])/gu },
   { id: 'deploy-script', label: '本机部署脚本', re: /deploy-38114/gu },
-  // 主机名至少含一位数字：`DESKTOP-session` 这类普通英文组合不算指纹（曾误报）。
+  // 主机名至少含一位数字：`DESKTOP-session` 这类普通英文组合不算指纹。
   { id: 'hostname', label: '本机主机名', re: /DESKTOP-(?=[A-Z0-9]*\d)[A-Z0-9]{4,}/giu },
 ];
 
@@ -50,12 +51,14 @@ export const FINGERPRINTS = [
  * 未随仓公开的内部引用。公开范围必须自包含：所依赖的事实写在文档内部，不得把读者指向
  * 仓外的东西。**代码注释一并受检**——读者读 `lib/` 或 `client.js` 时同样解不开
  * 「事实编号」「问题编号」这类标记，它们和文档里的悬空引用是同一类毛病。
+ * 退役编号体系（R 锚）同样解不开——现行锚点是 docs 的 § 章节号。
  */
 export const INTERNAL_REFS = [
   { id: 'ledger-md', label: '事实登记簿指针', re: /facts\.md/gu },
   { id: 'codex-facts', label: 'codex 事实档指针', re: /codex-review-facts/gu },
   { id: 'fact-id', label: '事实编号引用', re: /\bF\d{1,3}(?:-\d+)?\b/gu },
   { id: 'question-id', label: '问题编号引用', re: /\bQ\d{1,3}\b/gu },
+  { id: 'retired-req-id', label: '退役需求编号锚', re: /\bR\d{1,2}(?:-\d+)?[a-z]?\b/gu },
   {
     id: 'process-doc',
     label: '过程稿文件名',
@@ -73,10 +76,6 @@ export const INTERNAL_REFS = [
  * `audit` 决定该文件是否进「发布前待办」段：判据自身按设计承载禁用形态（它的规则表就是
  * 那些正则源码），**不是**泄漏，故 `audit: false`。这个区分不是洁癖：把规则表与真泄漏
  * 混在一起报，真待办会被定义性噪声淹掉。
- *
- * 临时工单 `OPENSOURCE-PREP.md` 曾在此列（它完工前合法地躺在仓里）。现已归档进
- * `.local/docs/`，**豁免随之撤销**——留着豁免只会让「有人再把它放回公开层」变成静默通过；
- * 撤掉之后，它一旦重新出现就是 60 处直接判红，而不是一段可以忽略的提示。
  */
 export const EXEMPT = new Map([
   ['tools/check-public-surface.mjs', { reason: '判据自身必然承载禁用形态（规则表即正则源码）', audit: false }],
@@ -137,8 +136,7 @@ export function trackedFiles(root = ROOT) {
  * 遍历目录（enumerateTracked 的回退路径）。
  *
  * 跳过 `.local` **及其一切变体**（`.local.bak` 之类）：本机侧是唯一例外目录，
- * 它的临时改名不该把整片本机内容灌进受检范围——实测踩过：改名演练时检查器把
- * `.local.bak` 当成公开范围扫，报出 11k 处「违规」。
+ * 它的临时改名不该把整片本机内容灌进受检范围。
  */
 function walk(root, dir = root, out = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -268,13 +266,8 @@ export function runCheck(root = ROOT) {
  * 豁免件的「发布前待办」审计。
  *
  * 豁免的本意是让判据对准**发布范围**（临时工单在完工前合法地躺在仓里，不该让整条判据变红）。
- * 但豁免有个危险副作用：**被豁免的文件只要还被 git 跟踪，就会随仓发布**——豁免于是成了
- * 一颗盖住泄漏的盖子。实测踩到过：`OPENSOURCE-PREP.md`（临时工单）被豁免，而它当时是被
- * 跟踪的，正文里带着 60 处命中、其中 12 处是本机指纹（开发根、用户目录、宿主安装目录、
- * 两个实例端口、服务名、部署脚本名）——按原实现，这些永远不会出现在任何读数里。
- *
- * 所以豁免件每次运行都要把命中数报出来，且**与主判据分开陈述**：主判据说的是「发布范围干净」，
- * 这一段说的是「发布范围之外还躺着什么」。文件已移出公开层（读不到）＝待办已清。
+ * 但豁免有个危险副作用：豁免文件若仍被 git 跟踪会随仓发布；故豁免文件每次运行报出命中数，
+ * 与主判据分开陈述。
  * @param {string} root - 仓库根。
  * @returns {Array<{file: string, reason: string, hits: number}>} 待办列表。
  */
