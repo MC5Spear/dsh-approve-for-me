@@ -516,9 +516,9 @@ test('连败至上限：两次尝试后 error，reason 与审计 review 行都�
 
 test('预算权威：signal 已中止（gate 计时器先到/请求取消）不再开始下一次尝试', async () => {
   const aborted = new AbortController();
-  // 用 gate 计时器的真实 reason 形状（design §4.2 的超时标记）。
+  // 用 gate 计时器的真实 reason 形状（design §4.3 的超时中止标记）。
   aborted.abort(new Error(REVIEW_TIMEOUT_ABORT_MESSAGE));
-  // 第二轮次本可成功：预算已耗尽时不许再烧——超时结算由 gate 计时器决定（design §4.2，优先于重试）。
+  // 第二轮次本可成功：预算已耗尽时不许再烧——超时结算由 gate 计时器决定（design §4.3，优先于重试）。
   const h = harness([
     { throws: 'first failure' },
     { blocks: [text('{"outcome":"allow","risk_level":"low","user_authorization":"high","rationale":"too late"}')] },
