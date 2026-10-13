@@ -150,17 +150,30 @@ test('说明入口（§7.2.1）：21 个按钮带可见文字，aria 成对，�
   assert.equal((pageText.split('\n').filter((l) => l.trim() === '说明').length), 21, '§1 中「说明」按钮文字应恰 21 处');
 });
 
-test('交付 CSS 串失效令牌零命中（收窄到本包 style 元素）', () => {
+test('交付 CSS 串失效令牌零命中（收窄到本包 style 元素）；长度与规则数对账实算', () => {
   assert.match(dump, /`--dsw-alias-state-warning-primary`×0、`--dsw-alias-label-error`×0、`--dsw-alias-bg-layer-4`×0/u, '三个失效令牌应零命中');
-  assert.match(dump, /本包注入样式 9413 字符（98 条规则）/u, '扫描对象应为本包注入样式串（新说明行样式计入）');
+  // 数字不自证（盲审 I-1）：fixture 声称的字符数与规则数必须与 client.js CSS 块实算一致——
+  // 同一口径＝取 `const CSS = [...]` 数组、`join("")` 后的注入串长度与数组元素数（含 @media 整条计 1）。
+  const clientSource = readFileSync(join(import.meta.dirname, '..', 'client.js'), 'utf8');
+  const cssAt = clientSource.indexOf('const CSS = [');
+  assert.ok(cssAt !== -1, 'client.js 应有 CSS 数组');
+  const cssEnd = clientSource.indexOf('].join("")', cssAt);
+  assert.ok(cssEnd !== -1, 'CSS 数组应 join 为注入串');
+  const cssRules = new Function(`return ${clientSource.slice(cssAt + 'const CSS = '.length, cssEnd + 1)}`)();
+  const cssLength = cssRules.join('').length;
+  const claimed = new RegExp(`本包注入样式 (\\d+) 字符（(\\d+) 条规则）`).exec(dump);
+  assert.ok(claimed !== null, 'fixture 应声明注入样式字符数与规则数');
+  assert.equal(Number(claimed[1]), cssLength, `fixture 字符数应与实算一致（实算 ${cssLength}）`);
+  assert.equal(Number(claimed[2]), cssRules.length, `fixture 规则数应与实算一致（实算 ${cssRules.length}）`);
   assert.match(dump, /\.dsafm_form\{display:flex;flex-direction:column;/u, '外壳规则应无边框/圆角/底色');
   assert.match(dump, /\.dsafm_save\{[^}]*border-radius:8px;padding:5px 14px;/u, '保存按钮应取官方规格');
   assert.match(dump, /\.dsafm_helpbtn\{[^}]*min-width:24px;min-height:24px;/u, '说明按钮应为 24×24 最小命中区（文字按钮，design §7.2.1）');
   assert.match(dump, /\.dsafm_input\{[^}]*height:34px;padding:0 12px;border:\.5px solid var\(--dsw-alias-border-l4\);border-radius:8px;/u, '输入应取官方规格');
-  // 分隔线选择器组（design §7.2.1）：两条规则原文在档。
+  // 分隔线选择器组（design §7.2.1）：两条规则原文在档，且在实算注入串中原样在场（档案↔源码双向对账）。
   assert.match(dump, /\.dsafm_f_sec \+ div:not\(\.dsafm_field\):not\(\.dsafm_f_help\)\{border-top:\.5px solid var\(--dsw-alias-border-l2\)\}/u, '秒数行后继排除说明行');
   assert.match(dump, /\.dsafm_f_help \+ div:not\(\.dsafm_field\)\{border-top:\.5px solid var\(--dsw-alias-border-l2\)\}/u, '说明行作锚恢复分隔线');
   assert.match(dump, /\.dsafm_f_help\{margin:-12px 0 12px\}/u, '平铺说明行负边距应在档');
+  assert.ok(cssRules.join('').includes('.dsafm_f_help{margin:-12px 0 12px}'), '平铺说明行规则应在实算注入串中');
 });
 
 test('控件清单：生效值就在控件里，id 挂在控件上', () => {

@@ -218,7 +218,7 @@ approve-for-me
 
 ## 6. 交付 CSS 串失效令牌零命中（收窄到本包 style 元素）
 
-本包注入样式 9413 字符（98 条规则）：`--dsw-alias-state-warning-primary`×0、`--dsw-alias-label-error`×0、`--dsw-alias-bg-layer-4`×0（页面级命中来自宿主/其它包样式，不属本包交付串）。
+本包注入样式 9357 字符（92 条规则）：`--dsw-alias-state-warning-primary`×0、`--dsw-alias-label-error`×0、`--dsw-alias-bg-layer-4`×0（页面级命中来自宿主/其它包样式，不属本包交付串）。数字口径＝client.js CSS 数组 `join("")` 后的注入串长度与数组元素数，实算对账见 `test/settings-dom-dump.test.mjs`（档案不自证，随源漂移由测试把关）。
 关键规则原文：`.dsafm_form{display:flex;flex-direction:column;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary)}`；`.dsafm_save{appearance:none;border:1px solid transparent;border-radius:8px;padding:5px 14px;font-family:inherit;font-size:13px;line-height:1.5;cursor:pointer;background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3)}`；`.dsafm_helpbtn{display:inline-flex;align-items:center;gap:4px;justify-content:center;flex:none;min-width:24px;min-height:24px;padding:0 8px;border:0;border-radius:6px;background:none;color:var(--dsw-alias-label-secondary);cursor:pointer;font-family:inherit;font-size:12px;line-height:1.5}`；`.dsafm_input{flex:1;min-width:0;width:100%;height:34px;padding:0 12px;border:.5px solid var(--dsw-alias-border-l4);border-radius:8px;background:var(--dsw-alias-bg-layer-3);font-family:inherit;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-primary)}`。
 分隔线选择器组（design §7.2.1）：`.dsafm_f_sec + div:not(.dsafm_field):not(.dsafm_f_help){border-top:.5px solid var(--dsw-alias-border-l2)}` 与 `.dsafm_f_help + div:not(.dsafm_field){border-top:.5px solid var(--dsw-alias-border-l2)}`；平铺说明行 `.dsafm_f_help{margin:-12px 0 12px}`。
 

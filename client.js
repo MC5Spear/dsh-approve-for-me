@@ -316,21 +316,21 @@ window.__ModuleLoader__.load({
 			"card.readonly": "Settings are read-only on this page (non-loopback). Use a profile patch instead.",
 			"help.expand": "Details",
 			"help.collapse": "Hide details",
-			"help.trigger.presets": "When a session uses a preset from this list, the plugin handles its escalation approvals; other presets keep the host approval flow. With an empty list no known preset is taken over; presets that cannot be identified follow \"When the preset cannot be identified\". Choosing the take-over range is not a grant of arbitrary permission.",
-			"help.trigger.unknown": "What to do when the session permission preset cannot be read. Keep the host approval flow skips take-over; continue with automatic review treats it as in-range. Possible causes: a missing service, a read failure, or no preset information available.",
-			"help.trigger.auditEverySkip": "When on, every approval skipped for a preset mismatch is logged; when off, one line per session and cause. This changes only the amount of skip logging — not take-over, not the approval itself, and never a claim that every request was reviewed.",
-			"help.reviewer.byParentModel": "Reviewer model by the agent's model: map the model the agent uses (the bare model id) to the reviewer model and its effort; more specific than the global default and effective on a hit. On a miss, resolution continues through the remaining layers (order under \"Default reviewer model\" above).",
-			"help.reviewer.model": "Global default reviewer model and effort. The model reads provider/model; an empty effort means automatic: use `low` when the model supports it, otherwise send none and let the model default apply — support and strength vary by model and are not guaranteed. Resolution: session choice → by the agent's model → global default → follow the agent's model.",
-			"help.reviewer.followParent": "Effective only when session choice, the by-agent-model map and the global default are all unavailable: call the same model as the agent for a separate review — using the same model, not the agent approving itself. When off, resolution failure settles as a review failure (rejected).",
-			"help.reviewer.timeoutMs": "Auto-review wait limit (ms), covering the whole wait for this review's conclusion; internal retries do not get a fresh window. Expiry settles as a rejection citing the stage — never a danger finding. 0 removes the review deadline: a hung review model, a tool failure or another error can leave the request stuck in auto-approval forever; the plugin never restores the limit silently, while cancellation and other human paths still apply (same as the standing note).",
+			"help.trigger.presets": "Sessions on a listed preset hand escalation approvals to this plugin; other presets keep the host flow. An empty list takes over no known preset; unidentifiable presets follow \"When the preset cannot be identified\". Choosing the take-over range grants no extra permissions.",
+			"help.trigger.unknown": "What to do when the session preset cannot be read: keep the host flow means no take-over; continue means treat it as covered. Causes include a missing service, a read failure, or no preset information.",
+			"help.trigger.auditEverySkip": "On: every preset-mismatch skip is logged; off: one line per session and reason. This only changes the number of skip lines, never the take-over itself, and does not imply every approval is reviewed.",
+			"help.reviewer.byParentModel": "Picks the reviewer by the model the acting agent uses: the agent's plain model id maps to a reviewer model and effort, overriding the global default; misses fall through to the remaining layers (see Default reviewer model).",
+			"help.reviewer.model": "Global default reviewer model and effort. The reference reads provider/model; an empty effort is automatic: use `low` when the model supports it, otherwise let the model default decide — no promise that every model supports it or matches the same intensity. Resolution: session choice, by the agent's model, global default, then follow the agent's model.",
+			"help.reviewer.followParent": "Applies only when the session choice, the agent-model map and the global default are all unusable: the reviewer then runs on the same model as the agent, as an independent call — the same model, never the agent approving itself. Off: total resolution failure is rejected as a review failure.",
+			"help.reviewer.timeoutMs": "Auto-review wait limit (ms), covering the whole wait for this review's conclusion; internal retries get no fresh budget. A timeout rejects with its stage named — not a danger verdict. 0 removes the limit: a hung model or tooling failure can leave the request stuck in auto-approval forever; the plugin never restores the limit silently, while cancellation and other human paths still apply (same as the standing note).",
 			"help.reviewer.maxTokens": "Review output cap (tokens). 0 sends no cap, leaving the model or provider default. Reasoning models may spend the budget on reasoning first: too small a cap can leave no usable conclusion (empty body, treated as a review failure); the threshold varies by model and effort, so no single measurement is a general promise.",
 			"help.human.timeoutMs": "Human-answer wait limit (ms), used only when the fallback is Ask. 0 rejects immediately, not an endless wait. Expiry settles as a rejection citing the human timeout.",
 			"help.human.timeoutFrom": "Where the human timer starts: from the approval request (the handoff only gets the remainder), or from the handoff itself.",
-			"help.mode": "Master switch: rules = mandatory checks plus LLM review; off = as if not installed, the host approval flow is untouched.",
+			"help.mode": "Master switch: rule check plus LLM review takes over as configured; off behaves as if uninstalled, leaving host approvals untouched.",
 			"help.allowEscalationTo": "The widest permission auto-approval may grant. It bounds what may be reviewed or allowed; everything in range still passes the rule checks and the review — it is not a blanket approval. Full access (default) is widest; workspace write rejects wider escalations.",
 			"help.unknownSubject": "When the actual action cannot be identified (say, no command or arguments could be recovered): reject refuses at once without the model; keep reviewing submits what was recovered with explicit missing-action marks — missing never counts as safe.",
 			"help.fallback": "What happens when the review does not approve (deny, timeout or failure): reject settles at once and notifies the agent; ask shows the human card until you answer or the human limit rejects. Subagents have no human channel — not allowed always means rejected.",
-			"help.ui.inject": "Which approval notices reach the acting agent (the one that issued the tool call): allow, deny, timeout and failures sends all four; deny, timeout and failures skips allow notices; send none sends no notices. The review-log view is unaffected by this switch.",
+			"help.ui.inject": "Which approval notices reach the acting agent: allow, deny, timeout and failures sends all four; deny, timeout and failures skips allow notices; send none sends no notices. The review-log view is unaffected by this switch.",
 			"help.ui.injectMaxBytes": "Byte cap for one notice to the agent; longer text is trimmed with a marker, 0 does not trim. Only notices are capped — review records are kept per session and ignore this limit.",
 			"help.tools": "Tools under auto-approval, one name per line. Empty covers every tool's escalations; once filled, only listed tools are handled and the rest keep the host flow.",
 			"help.denyPatterns": "Text deny rules, one regex per line (a regex is a text-matching rule, not command semantics). Every string argument within the supported depth is matched, not just the command; harmless prose containing a dangerous word can hit too. Plain patterns are case-insensitive by default; in /source/flags form the given flags apply, and with no flags given it stays case-insensitive like a plain pattern. A hit rejects outright — no model, no human, no override. An empty list disables only this text check; the escalation ceiling and unknown-action handling stay. Uncompilable lines are skipped and protect nothing.",
@@ -500,28 +500,28 @@ window.__ModuleLoader__.load({
 			"option.language.agent.zh": "Chinese",
 			"option.language.agent.en": "English",
 			"help.language.ui": "Language of the plugin's own UI copy: follow the host (auto) or force zh/en. Takes effect on the next render and never touches model-facing texts.",
-			"help.language.agent": "Language of every model-facing text (system prompt, policy, tool descriptions, round instructions) and of the notices to the agent. Defaults to English. Rules and authorization never change with the language; the plugin UI language does not affect it.",
-			"hint.trigger.presets": "Escalation approvals are taken over for presets in this list.",
-			"hint.trigger.unknown": "What to do when the session preset cannot be read.",
-			"hint.trigger.auditEverySkip": "Whether every preset-mismatch skip is logged.",
+			"help.language.agent": "Language of every model-facing text (system prompt, policy, tool descriptions, round instructions) and of the notices to the agent. Defaults to English. Rules and authorization never change with the language; the plugin UI language is independent.",
+			"hint.trigger.presets": "Sessions on a listed permission preset hand escalations to this plugin.",
+			"hint.trigger.unknown": "What happens when the session preset cannot be read.",
+			"hint.trigger.auditEverySkip": "Whether approvals skipped for a preset mismatch are each logged.",
 			"hint.reviewer.model": "Global default reviewer model and effort.",
-			"hint.reviewer.byParentModel": "Reviewer model mapping by the agent's model.",
-			"hint.reviewer.followParent": "Fall back to an independent review with the agent's model when no higher choice exists.",
-			"hint.language.ui": "Language of this plugin's UI copy.",
-			"hint.language.agent": "Language of texts to the review model and notices to the agent.",
-			"hint.reviewer.timeoutMs": "Auto-review wait limit in ms; 0 removes the limit, with a standing risk note.",
-			"hint.reviewer.maxTokens": "Token cap for review output; 0 sends no cap.",
-			"hint.ui.humanCardDuringReview": "Whether the human card shows early during review.",
-			"hint.human.timeoutMs": "Human-answer wait limit in ms; 0 rejects at once.",
-			"hint.human.timeoutFrom": "When the human timer starts: at the request, or at the handoff.",
-			"hint.mode": "Master switch; off means the plugin never takes over.",
-			"hint.allowEscalationTo": "The highest tier this plugin may auto-grant; wider escalations are never auto-approved.",
-			"hint.unknownSubject": "What to do when the actual action cannot be identified.",
+			"hint.reviewer.byParentModel": "Map from the agent's model to a reviewer model.",
+			"hint.reviewer.followParent": "When no higher-priority choice works, review with the agent's model.",
+			"hint.language.ui": "Language of the plugin's UI copy.",
+			"hint.language.agent": "Language shared by the texts sent to the reviewer and the notices sent to the agent.",
+			"hint.reviewer.timeoutMs": "Auto-review wait limit (ms); 0 removes it, with a standing risk note.",
+			"hint.reviewer.maxTokens": "Review output cap in tokens; 0 sets none.",
+			"hint.ui.humanCardDuringReview": "Whether the human card appears early during review.",
+			"hint.human.timeoutMs": "Human-answer wait limit (ms); 0 rejects immediately.",
+			"hint.human.timeoutFrom": "Where the human-answer timing starts: at the approval request, or at the handoff.",
+			"hint.mode": "Master switch; off means no take-over at all.",
+			"hint.allowEscalationTo": "The highest permission tier auto-approval may grant; wider escalations are never auto-approved.",
+			"hint.unknownSubject": "What happens when the action cannot be identified.",
 			"hint.fallback": "What happens when the review does not approve.",
 			"hint.ui.inject": "Which approval notices reach the agent.",
 			"hint.ui.injectMaxBytes": "Byte cap per notice; 0 does not trim.",
-			"hint.tools": "Tools under auto-approval, one per line; empty covers all tools.",
-			"hint.denyPatterns": "One regex per line; a hit rejects outright — no model, no human override.",
+			"hint.tools": "Tools under auto-approval, one per line; empty covers all.",
+			"hint.denyPatterns": "One regex per line; a hit rejects outright, beyond model or human.",
 		};
 
 		/** 字段按 FIELDS 的 section 标记（trigger/advanced）分组排序；审查模型三行与「接管预设」由专用控件渲染；不渲染分区标题（requirements §6.1）。 */
@@ -1445,13 +1445,13 @@ window.__ModuleLoader__.load({
 							: t(`cardstate.waiting.${causeOf()}`).replace("{reason}", entry.reason ?? "")
 					: null;
 			const stateText = entry.state === "waiting-human" ? `${t("cardstate.waiting")} · ${causeText}` : t("cardstate.reviewing");
-			// 倒计时按 deadlineKind 分派（design §7.4）：reviewing 读审查截止（review），waiting-human 读人工
-			// 截止（human），两类时限不得互串；审查截止为 null →「审查无时限」（审查时限配置为 0 时，
-			// 承接层对该形态写 null/null），人工阶段 null 截止不渲染倒计时（零时限立即结算，无瞬态）。
-			// deadlineKind 缺失或非法时按状态回退推断，不让倒计时整段消失。
-			const deadlineKind =
-				entry.deadlineKind === "review" || entry.deadlineKind === "human" ? entry.deadlineKind : entry.state === "waiting-human" ? "human" : "review";
-			const remaining = entry.deadlineAt === null || deadlineKind === null ? null : Math.max(0, Math.ceil((entry.deadlineAt - now) / 1000));
+			// 倒计时分派（design §7.4）：reviewing 状态读审查截止（review），waiting-human 读人工
+			// 截止（human），两类时限不得互串——deadlineKind 与状态矛盾（如交人工却标 review）属
+			// 归一化错误，按状态锚定，不让倒计时整段消失或串显另一类时限；审查截止为 null →
+			// 「审查无时限」（审查时限配置为 0 时承接层对该形态写 null/null），人工阶段 null 截止
+			// 不渲染倒计时（零时限立即结算，无瞬态）。
+			const deadlineKind = entry.state === "waiting-human" ? "human" : "review";
+			const remaining = entry.deadlineAt === null ? null : Math.max(0, Math.ceil((entry.deadlineAt - now) / 1000));
 			const countdown =
 				deadlineKind === "review"
 					? remaining === null
@@ -1800,7 +1800,13 @@ window.__ModuleLoader__.load({
 					}
 					metaParts.push(`${t(titleKey)}: ${String(value)}`);
 				};
-				metaOf("detail.outcome", record.outcome, (value) => (decisionKeyOf(value) === null ? String(value) : t(decisionKeyOf(value))));
+				// 旧格式详情（有模型结论、无最终结果）按 design §8.5 同样说明结果缺失——outcome 缺失
+				// 且 decision 在场时显式标注，不静默跳过；其余字段仍按 §8.4「取不到明确缺失」不设假占位。
+				if ((record.outcome === undefined || record.outcome === null || record.outcome === "") && typeof record.decision === "string" && record.decision.length > 0) {
+					metaParts.push(`${t("detail.outcome")}: ${t("view.noOutcome")}`);
+				} else {
+					metaOf("detail.outcome", record.outcome, (value) => (decisionKeyOf(value) === null ? String(value) : t(decisionKeyOf(value))));
+				}
 				metaOf("detail.decision", record.decision, (value) => (decisionKey === null ? String(value) : t(decisionKey)));
 				metaOf("detail.source", record.source, (value) => enumText("source", value));
 				metaOf("detail.stage", detail?.stage, (value) => enumText("stage", value));
