@@ -1,7 +1,7 @@
 /**
  * dsh-approve-for-me — 对运行中的 dsh web 实例做只读 RPC 探针。
  *
- * 用途：验证真实部署实例上插件的 Typert 端点是否可用、返回形状是否符合设计「接口增量（TYPERT）」。
+ * 用途：验证真实部署实例上插件的 Typert 端点是否可用、返回形状是否符合 design §7.1 的接口表。
  * 认证：读实例的启动 token 文件（服务托管方落盘的 `?token=` 行），先换一次 cookie 再调 `/api`。
  * 本探针不写任何状态（只调 getState / modelEfforts / modelCatalog / pendingState / presetCatalog）。
  *

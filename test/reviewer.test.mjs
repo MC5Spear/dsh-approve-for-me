@@ -4,7 +4,7 @@ import { createReviewer, finishDegraded, finishTag, parseAssessment, retryableOu
 import { REVIEW_SUPERSEDED, REVIEW_TIMEOUT_ABORT_MESSAGE } from '../lib/gate.js';
 
 /**
- * 假组装器：模拟 `BlockAssembler` 的对外行为，含 `finish` / `usage` 访问器（设计「截断与空输出的判定（宿主 FinishReason 是唯一判据）」）。
+ * 假组装器：模拟 `BlockAssembler` 的对外行为，含 `finish` / `usage` 访问器（design §3.7）。
  * `finish` 由本次流的最后一个 `{type:'finish', reason}` 决定，与宿主一致。
  */
 class FakeAssembler {
@@ -64,7 +64,7 @@ const call = (id, name, args) => ({ type: 'tool-call', id, name, arguments: args
 /**
  * 构造一次审查调用的全部依赖。
  * @param {Array<{blocks: object[], finish?: object, usage?: object, throws?: string}>} turns - 每次 `llm.stream`
- *   返回的块序列（可选流末原因与用量）；`throws` 让该次流一开始迭代就抛错（R47 网络错替身）。
+ *   返回的块序列（可选流末原因与用量）；`throws` 让该次流一开始迭代就抛错（网络错替身，design §5.2）。
  * @param {object} [options] - 覆盖项：工具实现、配置、onReview 回调。
  * @returns {{review: Function, requests: object[], audits: object[], toolRuns: object[]}} 测试句柄。
  */
@@ -159,7 +159,7 @@ test('parseAssessment：空 payload / 畸形 JSON / 非法 outcome 一律 error'
   assert.equal(parseAssessment('{"risk_level":"low"}').decision, 'error');
 });
 
-test('parseAssessment：缺省填充记为 fieldsDefaulted，与审计行截断无关（设计「两处需要额外说明的取值」）', () => {
+test('parseAssessment：缺省填充记为 fieldsDefaulted，与审计行截断无关（design §8.2）', () => {
   assert.equal(parseAssessment('{"outcome":"allow","risk_level":"low","user_authorization":"high"}').fieldsDefaulted, false);
   assert.equal(parseAssessment('{"outcome":"allow"}').fieldsDefaulted, true);
   assert.equal(parseAssessment('').fieldsDefaulted, false);
@@ -227,7 +227,7 @@ test('review：工具抛错视为无证据，循环继续', async () => {
   assert.match(result.content[0].text, /tool exploded/);
 });
 
-test('review：回喂错误文本按 language.agent 切换——参数非法与工具失败两路径（G2/N2 两语言行为差异）', async () => {
+test('review：回喂错误文本按 language.agent 切换——参数非法与工具失败两路径（两语言行为差异）', async () => {
   // 一轮内两条回喂路径同时触发：c1 参数合法但工具抛错（execFailed）、c2 参数非合法 JSON（argsJsonInvalid）。
   const turns = [
     { blocks: [call('c1', 'read_file', '{"path":"a"}'), call('c2', 'grep', 'not-json')] },
@@ -257,18 +257,18 @@ test('review：回喂错误文本按 language.agent 切换——参数非法与�
     assert.doesNotMatch(message.content[0].text, /失败：/u, 'en 档不得残留 zh 档模板');
   }
   assert.doesNotMatch(zh[0].content[0].text, /failed:/u, 'zh 档不得残留 en 档模板');
-  // 变红判据：若回喂退回硬编码 zh（N2 修正前形态），en 档整句等值断言与两条
+  // 变红判据：若回喂退回硬编码 zh，en 档整句等值断言与两条
   // doesNotMatch 双红；若 cfg.language.agent 不再驱动回喂语言（两档同文），zh[0]/en[0]
   // 的整句断言其一必红（两档文本不可能同时等于两种模板）。
 });
 
-test('review：工具轮次超限后追加「请直接给出结论」且不再带工具（R28 缺省 en，zh 档可切）', async () => {
+test('review：工具轮次超限后追加「请直接给出结论」且不再带工具（requirements §5.4 缺省 en，zh 档可切）', async () => {
   const turns = [
     { blocks: [call('c1', 'read_file', '{"path":"a"}')] },
     { blocks: [call('c2', 'read_file', '{"path":"b"}')] },
     { blocks: [text('{"outcome":"deny","rationale":"budget"}')] },
   ];
-  // 未配置 language 时 Agent 提示回落 en（＝schema 默认档；回落谓词单源 agentLangOf，R32-3）。
+  // 未配置 language 时 Agent 提示回落 en（＝schema 默认档；回落谓词单源 agentLangOf）。
   const h = harness(turns, { cfg: { reviewer: { maxTokens: 512, temperature: 0, maxToolSteps: 2, reasoningEffort: 'low', timeoutMs: 1000 } } });
   const verdict = await h.review();
   assert.equal(verdict.decision, 'deny');
@@ -295,7 +295,7 @@ test('review：无模型可用时不发起请求，返回 error 并记录 degrad
   assert.equal(verdict.fields.degraded, 'all');
 });
 
-test('review：Verdict.fields 是审计字段的唯一投影（N16）', async () => {
+test('review：Verdict.fields 是审计字段的唯一投影（design §8.2 词汇表）', async () => {
   const h = harness([
     {
       blocks: [text('{"outcome":"allow","risk_level":"low","user_authorization":"high","rationale":"fine"}')],
@@ -333,7 +333,7 @@ test('review：截断的 JSON 仍判 error（既有行为保留）', async () =>
   assert.equal(verdict.fields.degraded, 'output-truncated');
 });
 
-test('review：max-tokens 截断时即使正文是合法 JSON 也不采信（设计「截断与空输出的判定（宿主 FinishReason 是唯一判据）」）', async () => {
+test('review：max-tokens 截断时即使正文是合法 JSON 也不采信（design §3.7）', async () => {
   const h = harness([
     {
       blocks: [text('{"outcome":"allow","risk_level":"low","user_authorization":"high","rationale":"truncated but parses"}')],
@@ -351,12 +351,12 @@ test('review：max-tokens 截断时即使正文是合法 JSON 也不采信（设
   assert.equal(reviewLine.decision, 'error');
 });
 
-test('review：空响应（EMPTY_RESPONSE）记 degraded=output-empty 并 fail-closed（设计「截断与空输出的判定（宿主 FinishReason 是唯一判据）」）', async () => {
+test('review：空响应（EMPTY_RESPONSE）记 degraded=output-empty 并 fail-closed（design §3.7）', async () => {
   const h = harness([
     { blocks: [], finish: { kind: 'error', failure: { code: 'EMPTY_RESPONSE', message: 'no content' } } },
   ]);
   const verdict = await h.review();
-  // R47：EMPTY_RESPONSE 属可重试类——同款失败重试一次后仍失败，reason 带尝试进度。
+  // EMPTY_RESPONSE 属可重试类（design §5.2）——同款失败重试一次后仍失败，reason 带尝试进度。
   assert.equal(h.requests.length, 2);
   assert.equal(verdict.decision, 'error');
   assert.equal(verdict.reason, 'attempt 2/2: empty payload');
@@ -369,7 +369,7 @@ test('review：空响应（EMPTY_RESPONSE）记 degraded=output-empty 并 fail-c
 test('review：普通 stop 但模型没给正文时记为空 payload（无 finish 降级标记）', async () => {
   const h = harness([{ blocks: [] }]);
   const verdict = await h.review();
-  // R47：空输出（finish 正常收尾、无文本块）同样整建重试一次；替身重复同款轮次，仍空。
+  // 空输出（finish 正常收尾、无文本块）同样整建重试一次；替身重复同款轮次，仍空。
   assert.equal(h.requests.length, 2);
   assert.equal(verdict.decision, 'error');
   assert.equal(verdict.reason, 'attempt 2/2: empty payload');
@@ -388,7 +388,7 @@ test('finishTag / finishDegraded：宿主 FinishReason 的收敛规则', () => {
   assert.equal(finishDegraded(undefined), undefined);
 });
 
-test('review：maxTokens=0 时不向宿主传该字段（设计「输出预算：默认不设上限（与 codex 同构）」）', async () => {
+test('review：maxTokens=0 时不向宿主传该字段（design §3.6）', async () => {
   const h = harness(
     [{ blocks: [text('{"outcome":"allow"}')] }],
     { cfg: { reviewer: { maxTokens: 0, temperature: 0, maxToolSteps: 4, timeoutMs: 1000 } } },
@@ -406,9 +406,9 @@ test('review：maxTokens>0 时原样传给宿主（显式覆盖仍可用）', as
   assert.equal(h.requests[0].maxTokens, 4096);
 });
 
-// ── R39/R44：迟到结论观测与流中途抛错 ────────────────────────────────────
+// ── 迟到结论观测与流中途抛错 ────────────────────────────────────────────────
 
-test('R39 迟到结论观测：signal 已中止 → finish 行 late=yes；正常完成 → late=no', async () => {
+test('迟到结论观测：signal 已中止 → finish 行 late=yes；正常完成 → late=no（design §8.1）', async () => {
   // gate 的抢先结算路径（人工先答/人工超时/取消）都先 abort 审查信号——signal 状态是「迟到」的权威标记。
   const aborted = new AbortController();
   aborted.abort();
@@ -423,7 +423,7 @@ test('R39 迟到结论观测：signal 已中止 → finish 行 late=yes；正常
   assert.equal(onTimeLine.late, 'no');
 });
 
-test('R44③ 审查流中途抛错：error 结算 + finish 审计照写，不外抛', async () => {
+test('审查流中途抛错：error 结算 + finish 审计照写，不外抛（requirements §4.1）', async () => {
   const audits = [];
   const reviewer = createReviewer({
     llm: {
@@ -458,9 +458,9 @@ test('R44③ 审查流中途抛错：error 结算 + finish 审计照写，不外
   assert.ok(audits.some((row) => row.phase === 'review' && row.decision === 'error'), 'finish 审计行必须照写');
 });
 
-// ── R47：审查调用的有限重试 ────────────────────────────────────────────────
+// ── 审查调用的有限重试（requirements §4.4／design §5.2） ────────────────────
 
-test('retryableOutcome：可重试类分类表（R47 单一谓词直测）', () => {
+test('retryableOutcome：可重试类分类表（单一谓词直测）', () => {
   // 流抛错（网络/供应商异常）→ 可重试。
   assert.equal(retryableOutcome(undefined, new Error('network reset')), true);
   // finish.kind='error'（宿主收敛的供应商侧失败码，含 INVALID_REQUEST、EMPTY_RESPONSE）→ 可重试。
@@ -479,7 +479,7 @@ test('retryableOutcome：可重试类分类表（R47 单一谓词直测）', () 
   assert.equal(REVIEW_MAX_ATTEMPTS, 2, '首次＋1 次重试（具名常量）');
 });
 
-test('R47① 首败次成：网络错后整建重试成功，判定取第二次，工具计数跨尝试累计', async () => {
+test('首败次成：网络错后整建重试成功，判定取第二次，工具计数跨尝试累计', async () => {
   const h = harness([
     // 尝试 1：先回喂一轮工具，再在第二轮流上抛网络错——留下「残缺消息序列」的诱饵。
     { blocks: [call('c1', 'read_file', '{"path":"a"}')] },
@@ -499,7 +499,7 @@ test('R47① 首败次成：网络错后整建重试成功，判定取第二次�
   assert.equal(verdict.fields.tools, 1);
 });
 
-test('R47② 连败至上限：两次尝试后 error，reason 与审计 review 行都带尝试进度', async () => {
+test('连败至上限：两次尝试后 error，reason 与审计 review 行都带尝试进度', async () => {
   const h = harness([{ throws: 'provider 500' }]);
   const verdict = await h.review();
   assert.equal(verdict.decision, 'error');
@@ -514,11 +514,11 @@ test('R47② 连败至上限：两次尝试后 error，reason 与审计 review �
   assert.equal(h.audits.filter((row) => row.phase === 'review').length, 1);
 });
 
-test('R47③ 预算权威：signal 已中止（gate 计时器先到/请求取消）不再开始下一次尝试', async () => {
+test('预算权威：signal 已中止（gate 计时器先到/请求取消）不再开始下一次尝试', async () => {
   const aborted = new AbortController();
-  // 用 gate 计时器的真实 reason 形状（§5.3 决定 2 的超时标记）。
+  // 用 gate 计时器的真实 reason 形状（design §4.2 的超时标记）。
   aborted.abort(new Error(REVIEW_TIMEOUT_ABORT_MESSAGE));
-  // 第二轮次本可成功：预算已耗尽时不许再烧——超时结算由 gate 计时器决定（R10 优先于重试）。
+  // 第二轮次本可成功：预算已耗尽时不许再烧——超时结算由 gate 计时器决定（design §4.2，优先于重试）。
   const h = harness([
     { throws: 'first failure' },
     { blocks: [text('{"outcome":"allow","risk_level":"low","user_authorization":"high","rationale":"too late"}')] },
@@ -527,13 +527,13 @@ test('R47③ 预算权威：signal 已中止（gate 计时器先到/请求取消
   assert.equal(h.requests.length, 1, '中止信号下不得开始第二次尝试');
   assert.equal(verdict.decision, 'error');
   assert.equal(verdict.reason, 'first failure', '未发生重试，不带尝试前缀');
-  assert.equal(verdict.superseded, undefined, '审查计时器的中止计入冷却（§5.3 决定 2）');
+  assert.equal(verdict.superseded, undefined, '审查计时器的中止计入冷却（design §5.3）');
   const reviewLine = h.audits.find((row) => row.phase === 'review');
   assert.equal(reviewLine.late, 'yes');
   assert.equal(reviewLine.degraded, 'none');
 });
 
-test('R47④ 不可重试类零重试：max-tokens 截断与 layer=unavailable', async () => {
+test('不可重试类零重试：max-tokens 截断与 layer=unavailable', async () => {
   const truncated = harness([
     { blocks: [text('{"outcome":"allow"')], finish: { kind: 'max-tokens' } },
   ]);
@@ -545,10 +545,10 @@ test('R47④ 不可重试类零重试：max-tokens 截断与 layer=unavailable',
     cfg: { resolution: { layer: 'unavailable', effort: 'none', degraded: 'all' } },
   });
   await unavailable.review();
-  assert.equal(unavailable.requests.length, 0, '模型解析失败零重试（既有用例的 R47 视角复读）');
+  assert.equal(unavailable.requests.length, 0, '模型解析失败零重试');
 });
 
-test('R47 留痕：失败尝试的 finish 摘要只在 capture=full 档进 trace details，记录按请求一份', async () => {
+test('留痕：失败尝试的 finish 摘要只在 capture=full 档进 trace details，记录按请求一份', async () => {
   const full = [];
   // full 档：先 EMPTY_RESPONSE（finish 摘要），再网络错（error 摘要），最终仍网络错。
   const fullHarness = harness(
@@ -570,7 +570,7 @@ test('R47 留痕：失败尝试的 finish 摘要只在 capture=full 档进 trace
   assert.deepEqual(full[0].failedAttempts, [
     { finish: 'error:EMPTY_RESPONSE' },
   ], '失败尝试的摘要按失败顺序落 details.failedAttempts');
-  assert.equal(full[0].attempts, 2, '§8.2 attempts＝总尝试次数');
+  assert.equal(full[0].attempts, 2, 'design §8.2 attempts＝总尝试次数');
 
   // 非 full 档：不收集失败尝试摘要（off/summary 下这些字段不落盘，提前拼是白做功）。
   const summary = [];
@@ -581,9 +581,9 @@ test('R47 留痕：失败尝试的 finish 摘要只在 capture=full 档进 trace
   assert.equal(summary[0].attempts, 2, '总尝试次数与档位无关，恒在场');
 });
 
-// ── R48 计数口径：abort 型 error 的 superseded 分类（实现审查 r46 P2-1 修正） ──
+// ── 计数口径：abort 型 error 的 superseded 分类（design §5.3） ──────────────
 
-test('R48 分类：gate 他路先结算的中止（REVIEW_SUPERSEDED 标记/宿主取消 reason）→ verdict 带 superseded', async () => {
+test('分类：gate 他路先结算的中止（REVIEW_SUPERSEDED 标记/宿主取消 reason）→ verdict 带 superseded（design §5.3）', async () => {
   // 场景一：gate 的标记 reason（人工先答/卡片关闭/人工超时竞速获胜/回调抛错路径）。
   const marked = new AbortController();
   marked.abort(REVIEW_SUPERSEDED);
@@ -609,7 +609,7 @@ test('R48 分类：gate 他路先结算的中止（REVIEW_SUPERSEDED 标记/宿�
   assert.match(cancelledVerdict.reason, /aborted（gate 他路先结算，非通道故障）：stream torn down/u);
 });
 
-test('R48 分类：审查计时器的中止（reason＝REVIEW_TIMEOUT_ABORT_MESSAGE）→ 无 superseded，照旧计数', async () => {
+test('分类：审查计时器的中止（reason＝REVIEW_TIMEOUT_ABORT_MESSAGE）→ 无 superseded，照旧计数', async () => {
   const timer = new AbortController();
   timer.abort(new Error(REVIEW_TIMEOUT_ABORT_MESSAGE));
   const h = harness([
@@ -619,34 +619,34 @@ test('R48 分类：审查计时器的中止（reason＝REVIEW_TIMEOUT_ABORT_MESS
   const verdict = await h.review({ signal: timer.signal });
   assert.equal(h.requests.length, 1);
   assert.equal(verdict.decision, 'error');
-  assert.equal(verdict.superseded, undefined, '慢通道也是不可信通道：超时中止计入冷却（§5.3 决定 2）');
+  assert.equal(verdict.superseded, undefined, '慢通道也是不可信通道：超时中止计入冷却（design §5.3）');
   assert.equal(verdict.reason, 'stream torn down');
   const reviewLine = h.audits.find((row) => row.phase === 'review');
   assert.equal(reviewLine.degraded, 'none');
 });
 
-// ── r46 P3-2/P3-3：full 档留痕的归属与条目内容 ──
+// ── full 档留痕的归属与条目内容（design §8.2） ──
 
-test('R47 full 档：跨尝试的思维链拼界带 attempt 分隔行（r46 P3-2）', async () => {
+test('full 档：跨尝试的思维链拼界带 attempt 分隔行', async () => {
   const entries = [];
   const h = harness(
     [
       {
-        blocks: [{ type: 'reasoning', text: 'R1' }],
+        blocks: [{ type: 'reasoning', text: '第一段' }],
         finish: { kind: 'error', failure: { code: 'PROVIDER_500', message: 'x' } },
       },
       {
-        blocks: [{ type: 'reasoning', text: 'R2' }, text('{"outcome":"deny","risk_level":"high","rationale":"second"}')],
+        blocks: [{ type: 'reasoning', text: '第二段' }, text('{"outcome":"deny","risk_level":"high","rationale":"second"}')],
       },
     ],
     { onReview: (entry) => entries.push(entry), cfg: { ui: { trace: { capture: 'full' } } } },
   );
   const verdict = await h.review();
   assert.equal(verdict.decision, 'deny', '重试成功的判定照常取第二次');
-  assert.equal(entries[0].reasoning, 'R1\n[attempt 2]\nR2', '两段思维链必须可按行归属到具体尝试');
+  assert.equal(entries[0].reasoning, '第一段\n[attempt 2]\n第二段', '两段思维链必须可按行归属到具体尝试');
 });
 
-test('R47 full 档：空输出可重试的失败尝试条目自带 error 字段，不落缺信息条目（r46 P3-3）', async () => {
+test('full 档：空输出可重试的失败尝试条目自带 error 字段，不落缺信息条目', async () => {
   const entries = [];
   const h = harness(
     [

@@ -1,7 +1,7 @@
 /**
  * 回归测试：注入消息的源形状必须通过 0.1.7 会话格式 v4 的真准入校验。
  *
- * 2026-09-25 事故：`agent.inject()` 用 v3 退役的插件源包装构造消息，审批判决后注入，
+ * 0.1.7 会话格式 v4 退役了 v3 的插件源包装：`agent.inject()` 若用旧包装构造消息，
  * `session.append` 的行准入抛 `format v4 message requires a producer-owned source kind`，
  * 当轮中断、会话卡死。本文件用 0.1.7 树导出的真校验器 `assertV4RowAdmission`
  * （经 `tools/_host-resolve.mjs` 锚定）守住 `lib/source.js` 的形状：

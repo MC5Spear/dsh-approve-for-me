@@ -1,5 +1,5 @@
 /**
- * r33 zh 注入归属字节核对（requirements §4 R28 ②「实证局限」的补课）。
+ * zh 注入归属字节核对。
  *
  * 用法：node tools/probe-r33-zh-bytes.mjs <session.v4.jsonl.zstd> <审计 injectBytes>
  *
@@ -8,7 +8,7 @@
  *  2) 注入文本与 `allowText(fields,'zh')` 逐字节相等（head/工具/命令/理由/tail 模板结构核验）；
  *  3) 同 fields 的 en 模板与之不等（语言方向证明：不是 en 文本在凑数）；
  *  4) 注入文本 UTF-8 字节数＝审计行 `injectBytes`（无截断直存）；
- *  5) 该会话存在 turn/end（注入后本轮完成——r40 增补的判据）。
+ *  5) 该会话存在 turn/end（注入后本轮完成）。
  */
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';

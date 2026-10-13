@@ -1,13 +1,13 @@
 /**
  * 回归测试：设置界面 DOM dump 留档（夹具 test/fixtures/settings-dom-dump.txt）。
  *
- * 判定口径（requirements §4）：0.1.7 上宣称成立的条目必须以真实实例实测为准；
+ * 判定口径（requirements §6.1；实测口径 design §10.3）：0.1.7 上宣称成立的条目必须以真实实例实测为准；
  * 可用性判据是本包详情页的页面 DOM 与计算样式（注入表命中不算）。
- * 本测试把采集的 dump 变成常驻断言：R29 判据①–⑥ 的回归（重置按钮回潮、覆盖组丢失、
- * 保存门控失守、卡片外壳回潮、帮助折叠回潮、失效令牌混入）与 R30 换算读数
+ * 本测试把采集的 dump 变成常驻断言：结构判据（requirements §6.1）的回归（重置按钮回潮、覆盖组丢失、
+ * 保存按钮启用状态失守、卡片外壳回潮、帮助折叠回潮、失效令牌混入）与毫秒换算读数
  * （读数行丢失、生效值与控件值脱钩、样式漂移）都在这里先红。
- * ISS-1（P1 设置表单全空）教训：结构断言抓不到取值整片为空——新增字段取值逐项
- * 等于生效值的核对（decode 失败→snapshot.value 空→每个控件值不匹配→红）。
+ * 结构断言抓不到取值整片为空——字段取值逐项等于生效值的核对在此常驻
+ * （decode 失败→snapshot.value 空→每个控件值不匹配→红）。
  *
  * 能失败性：①正向对照——匹配器能命中已知在场字段；②反例——表单不该出现的字段
  * （如「系统提示词」，从未是 config schema 字段）必须不命中；③变异验证——临时篡改
@@ -38,23 +38,22 @@ function hasOverrideNear(label, maxDistance = 3) {
 test('dump 留档存在且含页面身份与采集元数据', () => {
   assert.ok(dump.length > 1500, 'dump 过短，疑似截断或误删');
   assert.match(dump, /data-plugin-detail="dsh-approve-for-me"/u, '页面身份应为 bundle 级 data-plugin-detail');
-  assert.match(dump, /CSS 收窄扫描（scoped 段，只读本包注入的 `style\[data-plugin-css="dsh-approve-for-me"\]`）并入同一脚本/u, 'R30 起 CSS 收窄扫描并入主取证脚本（scoped 段）');
-  assert.match(dump, /style\[data-plugin-css="dsh-approve-for-me"\]/u, '判据⑥扫描口径应收窄到本包注入样式');
+  assert.match(dump, /CSS 收窄扫描（scoped 段，只读本包注入的 `style\[data-plugin-css="dsh-approve-for-me"\]`）并入同一脚本/u, 'CSS 收窄扫描并入主取证脚本（scoped 段）');
+  assert.match(dump, /style\[data-plugin-css="dsh-approve-for-me"\]/u, '扫描口径应收窄到本包注入样式');
   // 来源可追性：夹具必须交代自己是怎么来的。采集工具链随仓发布（tools/browser-shot.mjs 驱动、
   // tools/build-dom-dump.mjs 汇编），档里点名；本轮的步骤场景脚本属开发期工件、不随仓发布。
   assert.match(dump, /采集工具链随仓发布（`tools\/browser-shot\.mjs` 驱动取证、`tools\/build-dom-dump\.mjs` 汇编成档）/u, '夹具须声明采集来源口径');
 });
 
-/** §1 的逐字页面文本（```text 围栏内）——判据①的零命中断言只针对页面本体，不扫元数据。 */
+/** §1 的逐字页面文本（```text 围栏内）——零命中断言只针对页面本体，不扫元数据。 */
 const pageText = (() => {
-  // 行尾容忍：仓库里存的是 LF，但检出时可能被 core.autocrlf 转成 CRLF。
-  // 原先这里写死了 `\n`——开发机上恰好是 LF 所以一直是绿的，而干净检出（CRLF）里必红。
-  // 这类「只在自己机器上绿」的缺陷正是干净检出验证要抓的东西（见 .local 证据报告）。
+  // 行尾容忍：仓库里存的是 LF，检出时可能被 core.autocrlf 转成 CRLF；围栏解析两种行尾都认。
+  // 这类「只在自己机器上绿」的缺陷正是干净检出验证要抓的缺陷形态。
   const match = /```text\r?\n([\s\S]*?)\r?\n```/u.exec(dump);
   return match === null ? '' : match[1].replace(/\r\n/gu, '\n');
 })();
 
-test('判据①：退役件零命中——重置全部覆盖、当前生效值、分区标题、旧操作区', () => {
+test('退役件零命中——重置全部覆盖、当前生效值、分区标题、旧操作区', () => {
   // 反恒真防线：围栏解析失败时 pageText 为空串，零命中断言会恒绿——先证明文本块真的取到了。
   assert.ok(pageText.includes('接管预设') && pageText.includes('保存'), '§1 逐字文本块缺失或为空（围栏解析失败会让零命中断言恒真）');
   assert.equal(pageText.includes('重置全部覆盖'), false, '「重置全部覆盖」应零命中');
@@ -101,14 +100,14 @@ test('逐项等价：表单字段集与 config schema 的 UI 面一致（21 字�
   assert.match(dump, /数字字段 4 个走官方组件标记，合计 21/u, '21 字段＝17 自绘壳＋4 官方数字字段');
 });
 
-test('判据②：覆盖组「已覆盖＋恢复默认」与用户层键一一对应', () => {
+test('覆盖组「已覆盖＋恢复默认」与用户层键一一对应', () => {
   assert.match(dump, /恰好 3 组/u, '自绘覆盖组应恰好 3 组（reviewer.model/language.ui/language.agent）');
   // 自绘字段：标签行后 3 行内出现「已覆盖」与「恢复默认」。
   for (const label of ['默认审查模型', '用户文案语言', 'Agent 提示语言']) {
     assert.ok(hasOverrideNear(label), `${label} 缺覆盖组`);
   }
   // 数字字段：覆盖组在官方 SettingsValueField 内部（§1 文本仍逐字可见）。
-  // r53 起 human.timeoutMs 无用户层键（profile 的 human: {} 是空节，300000＝默认值），
+  // human.timeoutMs 无用户层键（profile 的 human 为空节，300000＝默认值），
   // 官方组件内覆盖组只剩 reviewer.timeoutMs 一处。
   for (const label of ['审查超时 (ms)']) {
     assert.ok(hasOverrideNear(label, 3), `${label} 缺官方组件内的覆盖组`);
@@ -116,10 +115,10 @@ test('判据②：覆盖组「已覆盖＋恢复默认」与用户层键一一�
   // 未覆盖字段不得误报：无用户层键的字段旁不得出现覆盖组。
   assert.equal(hasOverrideNear('模式'), false, 'mode 无用户层键，不应有覆盖组');
   assert.equal(hasOverrideNear('人工计时起点'), false, 'human.timeoutFrom 无用户层键，不应有覆盖组');
-  assert.equal(hasOverrideNear('人工超时 (ms)'), false, 'human.timeoutMs 无用户层键（r53 现场为默认值），不应有覆盖组');
+  assert.equal(hasOverrideNear('人工超时 (ms)'), false, 'human.timeoutMs 无用户层键（profile 的 human 为空节，300000＝默认值），不应有覆盖组');
 });
 
-test('判据③＋暂存语义：保存门控三态与「只有保存才写」的行为差异', () => {
+test('暂存语义：保存按钮三态与「只有保存才写」的行为差异', () => {
   assert.match(dump, /初始（无改动）：保存 disabled=`true`/u, '初始应置灰');
   assert.match(dump, /点 language\.ui「恢复默认」（只暂存）：控件值 `auto`、保存 disabled=`false`/u, '暂存后应可点');
   assert.match(dump, /重开页面（不保存）：控件值回到 `zh`、覆盖组回 3 组、保存 disabled=`true`——暂存丢弃、写库没发生/u, '重开读旧值＝没写库');
@@ -127,20 +126,20 @@ test('判据③＋暂存语义：保存门控三态与「只有保存才写」�
   assert.match(dump, /取证后复原（设回 zh＋保存）：控件值 `zh`、覆盖组 3 组/u, '取证后现场应复原');
 });
 
-test('判据④：配置区容器无自绘卡片外壳（计算样式）', () => {
+test('配置区容器无自绘卡片外壳（计算样式）', () => {
   assert.match(dump, /borderStyle=`none`/u, 'border-style 应为 none');
   assert.match(dump, /borderWidth=`0px`/u, '边框宽度应为 0');
   assert.match(dump, /borderRadius=`0px`/u, '圆角应 <12px（实测 0）');
   assert.match(dump, /background=`rgba\(0, 0, 0, 0\)`/u, '不应有成片底色');
 });
 
-test('判据⑤：帮助点击展开，aria-expanded/aria-controls 成对', () => {
+test('帮助点击展开，aria-expanded/aria-controls 成对', () => {
   assert.match(dump, /帮助按钮 17 个，全部带 aria-controls 与 aria-label，初始 aria-expanded=false/u, '帮助按钮应 17 个且 aria 成对');
   assert.match(dump, /点击 mode 字段后：aria-expanded=`true`、展开区在场=`true`、同屏展开区数量=1/u, '点击后应展开且仅展开一个');
   assert.match(dump, /展开文本首段＝「总开关：rules＝规则强制检查 \+ LLM 审查；off＝完全不管审批（等同于未安装）。」/u, '帮助文本应进入 DOM');
 });
 
-test('判据⑥：交付 CSS 串失效令牌零命中（收窄到本包 style 元素）', () => {
+test('交付 CSS 串失效令牌零命中（收窄到本包 style 元素）', () => {
   assert.match(dump, /`--dsw-alias-state-warning-primary`×0、`--dsw-alias-label-error`×0、`--dsw-alias-bg-layer-4`×0/u, '三个失效令牌应零命中');
   assert.match(dump, /本包注入样式 8732 字符/u, '扫描对象应为本包注入样式串');
   assert.match(dump, /\.dsafm_form\{display:flex;flex-direction:column;/u, '外壳规则应无边框/圆角/底色');
@@ -163,7 +162,7 @@ test('控件清单：生效值就在控件里，id 挂在控件上', () => {
   assert.match(dump, /接管预设为多选 picker（button \+ aria-expanded），不计入本表/u, 'picker 不应计入 input 清单');
 });
 
-// ── ISS-1 常驻判据：字段取值逐项等于生效值（结构断言抓不到整片为空） ──────────
+// ── 取值逐项等于生效值（结构断言抓不到整片为空） ─────────────────────────────
 // 夹具＝真实部署的 profile patch 的 approve-for-me 用户层逐字（cordis.patch.yml :129-143）。
 const REAL_PROFILE = {
   reviewer: { model: { model: 'zai/glm-5.3-flash', effort: 'high' }, timeoutMs: 300000 },
@@ -194,7 +193,7 @@ const CTL_PATHS = {
   denyPatterns: 'denyPatterns',
 };
 
-test('ISS-1 判据：控件取值逐项等于生效值（profile 用户层＋默认合并的产物）', () => {
+test('控件取值逐项等于生效值（profile 用户层＋默认合并的产物）', () => {
   const effective = normalizeConfig(REAL_PROFILE);
   const at = (path) => path.split('.').reduce((node, key) => node?.[key], effective);
   const rows = [...dump.matchAll(/^\| \d+ \| (\w+) \| [\w-]+ \| approve-for-me-ctl-([\w.-]+) \| (.+) \|$/gmu)];
@@ -222,12 +221,12 @@ test('ISS-1 判据：控件取值逐项等于生效值（profile 用户层＋默
   }
 });
 
-test('R49 纪律：失败登录计数在阈值内留档', () => {
-  assert.match(dump, /采集前 `BadPasswordAttempts=未读`，采集后 `=未读`/u, '失败登录计数应留档（R49 轮：Get-LocalUser 的 BadPasswordAttempts 非提升与提升查询均返回 null，如实留档未读；无头 Edge 启动次数以 shots-manifest 记录表为准）');
+test('失败登录计数在阈值内留档', () => {
+  assert.match(dump, /采集前 `BadPasswordAttempts=未读`，采集后 `=未读`/u, '失败登录计数应留档（Get-LocalUser 的 BadPasswordAttempts 非提升与提升查询均返回 null，如实留档未读；无头 Edge 启动次数以 shots-manifest 记录表为准）');
 });
 
-test('R30 §10：毫秒字段换算读数常驻（生效值＝控件值、样式与分隔线恢复）', () => {
-  // 读数行恰两行，且生效值读数与 §7 控件表同字段值一致（300000→300 秒 ×2，r53 现场）。
+test('毫秒字段换算读数常驻（生效值＝控件值、样式与分隔线恢复）', () => {
+  // 读数行恰两行，且生效值读数与 §7 控件表同字段值一致（300000→300 秒 ×2）。
   assert.match(dump, /读数行 2 行（恰两个 ms 字段各一行；字节\/令牌字段不做换算）/u, '读数行应恰 2 行');
   for (const row of [
     '`approve-for-me-sec-reviewer-timeoutMs`：`生效：300 秒 · 草稿：300 秒`（生效＝`生效：300 秒`、草稿＝`草稿：300 秒`、draftInvalid=false）',
@@ -235,13 +234,12 @@ test('R30 §10：毫秒字段换算读数常驻（生效值＝控件值、样式
   ]) {
     assert.ok(dump.includes(row), `换算读数行缺失或漂移：${row}`);
   }
-  // 行样式与官方 .hint 同规格：12px／三级色；R30b 起上边距 -12px 抵官方字段底 padding（贴住说明行），
+  // 行样式与官方 .hint 同规格：12px／三级色；上边距 -12px 抵官方字段底 padding（贴住说明行），
   // 下边距 12px 还给后继分隔线（同官方字段底部节奏）。
   assert.match(dump, /fontSize=`12px`、color=`rgb\(129, 133, 140\)`、marginTop=`-12px`/u, '读数行应为 12px 三级色＋-12px 负边距（贴住说明行不隔行）');
   // Fragment 平铺后分隔线恢复：官方后继字段有边框、自绘后继字段无边框。
-  // 宿主 CSS 模块哈希随版变化：0.1.7＝_field_1k6pq_3（r53 档）、0.2.0-rc.1＝_field_bjqpo_3（r49 档，ui-primitives 改版）、
-  // 0.2.0-rc.2 实测未变（R55：rc.2 dsh-web-frontend tarball dist/assets 实测 _field_bjqpo_3 唯一命中
-  // ——资产名已变 index-Dy0OhsZ5→index-5SrrfWpU，Field 哈希稳定；宿主升级后该档 DOM 复核）。
+  // 宿主 CSS 模块哈希随宿主版本变化（ui-primitives 改版后为 `_field_bjqpo_3`，0.2.0-rc.2 实测未变）；
+  // 宿主升级后复核本档 DOM。
   assert.match(dump, /后继节点 class=`_field_bjqpo_3`、borderTopWidth=`1px`/u, '官方后继字段应恢复分隔线');
   assert.match(dump, /后继节点 class=`dsafm_field`、borderTopWidth=`0px`/u, '自绘后继字段应无分隔线');
   // 实时性取证指针在档。

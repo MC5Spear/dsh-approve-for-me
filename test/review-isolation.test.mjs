@@ -1,9 +1,9 @@
 /**
- * R58 并发审查的取证上下文隔离（判据①–④；判据⑤＝既有并发/取消/冷却回归全绿）。
+ * 并发审查的取证上下文隔离（requirements §3.2／design §6.1；其余判据＝既有并发/取消/冷却回归全绿）。
  *
  * 路线一：真实 `apply` 接线（官方消息构造器＋替身流＋真实文件系统）复现交错——
  * A 暂停、B 进入完成、A 恢复；断言以实际送审消息（含回喂的工具结果文本）判定，不以调用计数判定。
- * 路线二：`tools.run` 上下文参数直测（R43 的 invoke 注入点驱动真实超时）。
+ * 路线二：`tools.run` 上下文参数直测（invoke 注入点驱动真实超时，design §3.4）。
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -93,7 +93,7 @@ function twoRoundStream({ beforeYield, observations, label }) {
 
 const ARGS = { command: 'Set-Content target.txt', sandbox_permissions: 'danger-full-access' };
 
-test('R58① A 暂停、B 完成、A 恢复：A 只读 A 目录、B 只读 B 目录', async () => {
+test('A 暂停、B 完成、A 恢复：A 只读 A 目录、B 只读 B 目录', async () => {
   const { a, b } = makePair();
   const observations = {};
   let releaseA;
@@ -124,7 +124,7 @@ test('R58① A 暂停、B 完成、A 恢复：A 只读 A 目录、B 只读 B 目
   assert.ok(!observations.B?.includes('A_TARGET_ACTUAL'), 'B 的取证不得读到 A 目录内容');
 });
 
-test('R58② 反向交错：B 暂停、A 完成、B 恢复同样各读各目录', async () => {
+test('反向交错：B 暂停、A 完成、B 恢复同样各读各目录', async () => {
   const { a, b } = makePair();
   const observations = {};
   let releaseB;
@@ -153,7 +153,7 @@ test('R58② 反向交错：B 暂停、A 完成、B 恢复同样各读各目录'
   assert.ok(observations.A?.includes('A_TARGET_ACTUAL') && !observations.A?.includes('B_OTHER_TARGET'));
 });
 
-test('R58② 同会话后到请求排队：跨会话插队不改在飞与排队任务的取证目录', async () => {
+test('同会话后到请求排队：跨会话插队不改在飞与排队任务的取证目录', async () => {
   const { a, b } = makePair();
   const observations = {};
   const order = [];
@@ -199,7 +199,7 @@ test('R58② 同会话后到请求排队：跨会话插队不改在飞与排队�
   }
 });
 
-test('R58③④ 热改不串扰：在飞任务按进入时快照，下一请求按新值', async () => {
+test('热改不串扰：在飞任务按进入时快照，下一请求按新值', async () => {
   const { a, b } = makePair();
   writeFileSync(`${a}/both.txt`, 'AAA=LEAK_AAA BBB=LEAK_BBB');
   writeFileSync(`${b}/both.txt`, 'AAA=LEAK_AAA BBB=LEAK_BBB');
@@ -251,7 +251,7 @@ test('R58③④ 热改不串扰：在飞任务按进入时快照，下一请求�
   assert.ok(observations.B.includes('未知工具') && !observations.B.includes('Unknown tool'), 'B 的模型侧文案按热改后的新语言');
 });
 
-test('R58③ 超时隔离（直测，双向）：上下文超时压过实例值（小压大不拖住、大压小不误杀）', async () => {
+test('超时隔离（直测，双向）：上下文超时压过实例值（小压大不拖住、大压小不误杀）', async () => {
   // 方向一：实例大超时 60000，上下文小超时 30 → 必须按上下文掐断。
   const small = createReadonlyTools({
     rootDir: process.cwd(),
@@ -273,7 +273,7 @@ test('R58③ 超时隔离（直测，双向）：上下文超时压过实例值�
   assert.equal(slow.text, 'slow-ok');
 });
 
-test('R58⑤ 回查目录缺失：动作证据标注 degraded=cwd，工具按本次 process.cwd() 快照解析', async () => {
+test('回查目录缺失：动作证据标注 degraded=cwd，工具按本次 process.cwd() 快照解析', async () => {
   const observations = {};
   const w = wired({
     config: { language: { agent: 'zh' } },
@@ -325,7 +325,7 @@ test('R58⑤ 回查目录缺失：动作证据标注 degraded=cwd，工具按本
   assert.ok(!observations.round2.includes('D:/synthetic'), '不得把进程目录冒充为会话目录');
 });
 
-test('R58③ 脱敏快照持值拷贝：宿主原地改数组不穿透在飞任务', async () => {
+test('脱敏快照持值拷贝：宿主原地改数组不穿透在飞任务', async () => {
   const { a } = makePair();
   writeFileSync(`${a}/both.txt`, 'AAA=LEAK_AAA BBB=LEAK_BBB');
   const observations = {};
@@ -363,7 +363,7 @@ test('R58③ 脱敏快照持值拷贝：宿主原地改数组不穿透在飞任�
   assert.ok(observations.A.includes('LEAK_BBB'), '原地追加的脱敏模式不穿透在飞任务（BBB 仍可见）');
 });
 
-test('R58③ 语言隔离（直测）：run 的上下文语言优先于实例状态', async () => {
+test('语言隔离（直测）：run 的上下文语言优先于实例状态', async () => {
   const tools = createReadonlyTools({ rootDir: process.cwd() });
   tools.setLang('zh');
   const en = await tools.run('no_such_tool', {}, undefined, { rootDir: process.cwd(), lang: 'en', toolTimeoutMs: 0, redactPatterns: [] });
@@ -372,7 +372,7 @@ test('R58③ 语言隔离（直测）：run 的上下文语言优先于实例状
   assert.match(zh.text, /未知工具/u);
 });
 
-test('R58③ 超时隔离（直测，真实超时）：上下文小超时生效，实例大超时不拖住', async () => {
+test('超时隔离（直测，真实超时）：上下文小超时生效，实例大超时不拖住', async () => {
   const tools = createReadonlyTools({
     rootDir: process.cwd(),
     timeoutMs: 60000,
@@ -385,7 +385,7 @@ test('R58③ 超时隔离（直测，真实超时）：上下文小超时生效�
   assert.ok(ms < 350, `超时应按上下文 30ms 结束（实测 ${ms}ms）`);
 });
 
-test('R58③ 超时隔离（直测）：未传上下文时回落实例状态（既有直测路径不变）', async () => {
+test('超时隔离（直测）：未传上下文时回落实例状态（既有直测路径不变）', async () => {
   const tools = createReadonlyTools({
     rootDir: process.cwd(),
     timeoutMs: 30,
@@ -398,7 +398,7 @@ test('R58③ 超时隔离（直测）：未传上下文时回落实例状态（�
   assert.ok(ms < 350, `实例超时仍生效（实测 ${ms}ms）`);
 });
 
-test('R58③ 脱敏隔离（直测）：上下文清单优先于实例清单', async () => {
+test('脱敏隔离（直测）：上下文清单优先于实例清单', async () => {
   // 生产装配给 readonly-tools 注入的就是 transcript 的 redact；直测同款（缺省注入是恒等函数）。
   const tools = createReadonlyTools({
     rootDir: process.cwd(),
@@ -410,7 +410,7 @@ test('R58③ 脱敏隔离（直测）：上下文清单优先于实例清单', a
   assert.ok(out.text.includes('AAA=1') && !out.text.includes('BBB=2'), '按上下文清单遮 BBB、放 AAA');
 });
 
-test('R58③ 基准目录隔离（直测）：相对路径按上下文基准解析', async () => {
+test('基准目录隔离（直测）：相对路径按上下文基准解析', async () => {
   const { a, b } = makePair();
   const tools = createReadonlyTools({ rootDir: a });
   tools.setRoot(b);

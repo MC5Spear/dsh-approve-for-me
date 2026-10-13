@@ -364,7 +364,7 @@ test('index 接线：record 收到 sessionId/callId/toolName，配置签名变�
     assert.equal(first[0].effort, 'low');
     assert.equal(first[0].origin, 'main');
     assert.equal(first[0].preset, 'auto-approve', '接管命中的权限预设名（事件折叠回退）');
-    assert.equal(first[0].attempts, 2, '同步抛错属可重试错误类：R47 整建重试一次后仍失败（尝试次数 2）');
+    assert.equal(first[0].attempts, 2, '同步抛错属可重试错误类：整建重试一次后仍失败（尝试次数 2）');
     assert.match(first[0].configTag, /^[0-9a-f]{12}$/);
     assert.equal(Number.isFinite(first[0].startedAt), true);
     assert.equal(Number.isFinite(first[0].reviewMs), true);

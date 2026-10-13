@@ -1,12 +1,8 @@
 /**
- * Shared reader for dsh session logs.
- *
- * A `session.jsonl.zstd` file is a concatenated-frame Zstandard container: the
- * persistence backend appends one independently decodable, checksummed frame per
- * header / durable event batch. Node's one-shot `zstdDecompressSync` decodes only
- * the first frame, so this module scans frame boundaries first and decodes each
- * frame on its own. The scanner mirrors the container parser in
- * `@deepseek-ai/dsh-session-persistence-jsonl` (`scanZstdFrames`).
+ * dsh 会话日志的共用读取器。`session.jsonl.zstd` 是拼接帧的 Zstandard 容器：持久化后端按
+ * 每个头部／持久事件批次追加一个独立可解码、带校验的帧。Node 的一次性 `zstdDecompressSync`
+ * 只解码第一帧，因此本模块先扫帧边界、再逐帧解码。扫描器与
+ * `@deepseek-ai/dsh-session-persistence-jsonl` 的容器解析器（`scanZstdFrames`）保持同一形状。
  * @module tools/session-log
  */
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
@@ -16,10 +12,9 @@ import { zstdDecompressSync } from 'node:zlib';
 const ZSTD_MAGIC = 4247762216;
 
 /**
- * Locate every structurally complete frame in a concatenated-frame container.
- * @param buffer - the complete bytes currently present in the artifact.
- * @returns `{ frames, tornStart? }` — frame ranges plus the start of an
- * incomplete final frame when the file was captured mid-append.
+ * 在拼接帧容器中定位每个结构完整的帧。
+ * @param buffer - 工件当前已有的完整字节。
+ * @returns `{ frames, tornStart? }`——帧区间列表；文件在追加中途被截断时，附带末尾不完整帧的起点。
  */
 export function scanZstdFrames(buffer) {
   const frames = [];
@@ -71,9 +66,9 @@ export function scanZstdFrames(buffer) {
 }
 
 /**
- * Decode a whole session log to UTF-8 text.
- * @param file - absolute path of a `session.jsonl.zstd` file.
- * @returns the concatenated plaintext of every complete frame.
+ * 把整份会话日志解码为 UTF-8 文本。
+ * @param file - `session.jsonl.zstd` 文件的绝对路径。
+ * @returns 全部完整帧拼接出的明文。
  */
 export function readSessionLog(file) {
   const buffer = readFileSync(file);
@@ -86,9 +81,9 @@ export function readSessionLog(file) {
 }
 
 /**
- * Enumerate every session log under a dsh sessions root.
- * @param sessionsRoot - absolute path of `<DSH_HOME>/sessions`.
- * @returns `{ workspace, session, file }` entries.
+ * 枚举 dsh sessions 根目录下的全部会话日志。
+ * @param sessionsRoot - `<DSH_HOME>/sessions` 的绝对路径。
+ * @returns `{ workspace, session, file }` 条目列表。
  */
 export function listSessionLogs(sessionsRoot) {
   const found = [];

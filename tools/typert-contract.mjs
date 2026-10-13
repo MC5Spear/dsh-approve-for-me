@@ -10,8 +10,7 @@
  *     本仓库约定该返回值必须是 zod v4 实例（判据 `'_zod' in 返回值`）。
  *
  * 消费方：`test/typert-manifest.test.mjs`（套件常驻断言）与 `tools/check-typert-manifest.mjs`
- * （离线检查器）。两处不得再各自维护判据副本——检查器曾按 rc.6 时代的 `codec.schema`
- * 字段名校验，与套件判据漂移出 18 条假红（r33 修正）。
+ * （离线检查器）。两处不得再各自维护判据副本。
  */
 
 /**

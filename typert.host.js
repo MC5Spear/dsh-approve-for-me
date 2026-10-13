@@ -2,7 +2,7 @@
  * dsh-approve-for-me — Typert host 清单。
  *
  * `dsh-typert-loader` 通过包的 `exports['./typert']` 找到本文件并注册进 `ctx.typert`，
- * 网关随后把 `approveForMe/getState` 等端点路由到 `ApproveForMeService`（设计「状态通道（供 composer 下拉）」、设计「接口」）。
+ * 网关随后把 `approveForMe/getState` 等端点路由到 `ApproveForMeService`（design §7.1）。
  * schema 必须是 zod v4 实例（loader 校验 `_zod`）。
  * @module dsh-approve-for-me/typert
  */
@@ -23,7 +23,7 @@ export const getStateResultSchema = z.object({
   layer: z.string(),
   preset: z.string().nullable(),
   active: z.boolean(),
-  /** 轨迹集成（设计 §8.5）：自有视图开关与采集档；0.1.7 起档位开关已退役（§8.5）。 */
+  /** 轨迹集成（design §8.5）：自有视图开关与采集档；只做插件自有呈现。 */
   trace: z.object({ capture: z.string(), ownView: z.boolean(), turnSummary: z.boolean(), legacyRow: z.boolean() }),
 });
 
@@ -64,7 +64,7 @@ export const presetCatalogResultSchema = z.object({
   configured: z.array(z.string()),
 });
 
-/** `traceRecords` 结果：某会话的审查与结算合并行（§8.2 摘要字段词汇表；详情按 `approvalId` 经 `traceRecord` 拉取）。 */
+/** `traceRecords` 结果：某会话的审查与结算合并行（design §8.2 摘要字段词汇表；详情按 `approvalId` 经 `traceRecord` 拉取）。 */
 export const traceRecordsResultSchema = z.object({
   records: z.array(
     z.object({

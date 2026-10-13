@@ -280,7 +280,7 @@ test('reviews/ 文件数超 maxSessions 删最旧', async (t) => {
   }
 
   assert.deepEqual(readdirSync(dir).sort(), ['c.jsonl', 'd.jsonl']);
-  // R41：内存侧与磁盘侧同数量级口径——被淘汰会话的窗口一并回收，文件已删、重放为空；
+  // 内存侧与磁盘侧同数量级口径（design §8.3）——被淘汰会话的窗口一并回收，文件已删、重放为空；
   // 留在限内的会话照常可查。
   assert.equal(store.list('a').length, 0);
   assert.equal(store.list('c').length, 1);
@@ -308,7 +308,7 @@ test('读失败：返回空列表、审计 read-failed 且 degraded 为真；末
   const broken = createTraceStore({ dir, onDegrade: readSink.onDegrade });
   assert.deepEqual(broken.list('s1'), []);
   assert.equal(readSink.rows.filter((row) => row.degraded === 'read-failed').length, 1);
-  assert.equal(broken.degraded('s1'), true, 'VER-02：读失败必须可观测');
+  assert.equal(broken.degraded('s1'), true, '读失败必须可观测（design §8.3）');
 
   // 末行撕裂：跨进程短写被打断的残迹，跳过该行、保留前面的完整行。
   writeFileSync(
@@ -321,7 +321,7 @@ test('读失败：返回空列表、审计 read-failed 且 degraded 为真；末
   const rows = store.list('s2');
   assert.deepEqual(rows.map((row) => row.reviewId), ['s2:c1:1']);
   assert.equal(tornSink.rows.filter((row) => row.degraded === 'torn-line').length, 1);
-  assert.equal(store.degraded('s2'), true, 'VER-02：撕裂后窗口可能不完整');
+  assert.equal(store.degraded('s2'), true, '撕裂后窗口可能不完整');
   // 撕裂行不挡后续写入：追加前先补换行自愈，新记录不粘进残行，重放也不丢；
   // 但降级标记只在整文件重写成功后解除。
   assert.equal(await store.record(makeEntry({ sessionId: 's2', approvalId: 'a3' })), true);
@@ -331,7 +331,7 @@ test('读失败：返回空列表、审计 read-failed 且 degraded 为真；末
   assert.equal(store.degraded('s2'), true, '追加自愈不清降级标记');
 });
 
-test('整文件重写成功后解除读取降级（VER-02）', async (t) => {
+test('整文件重写成功后解除读取降级（design §8.3）', async (t) => {
   const dir = makeDir(t);
   writeFileSync(
     join(dir, 's1.jsonl'),
@@ -384,14 +384,14 @@ test('参数非法的 record 不落盘也不抛错', async (t) => {
   assert.deepEqual(readdirSync(dir), []);
 });
 
-test('R41 内存侧会话键对齐 maxSessions：淘汰防「文件已删、内存残留」的重录漂移', async (t) => {
+test('内存侧会话键对齐 maxSessions（design §8.3）：淘汰防「文件已删、内存残留」的重录漂移', async (t) => {
   const dir = makeDir(t);
   const store = createTraceStore({ dir, maxSessions: 2 });
   for (const key of ['a', 'b', 'c']) {
     await store.record(makeEntry({ sessionId: key, approvalId: 'a1' }));
     await store.flush();
   }
-  // c 建档触发磁盘清扫删 a、内存同步淘汰 a。现在重录 a：若内存残留（无 R41），行数记 2
+  // c 建档触发磁盘清扫删 a、内存同步淘汰 a。现在重录 a：若内存残留，行数记 2
   // → 不触发「首行清扫」→ 文件数超上限；内存已淘汰则 ensureLoaded 重读（无文件＝0 行）→ 首行 → 清扫照跑。
   await store.record(makeEntry({ sessionId: 'a', approvalId: 'a2' }));
   await store.flush();

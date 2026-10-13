@@ -28,7 +28,7 @@ import { browserPath, instance, missingNotice, outputDir } from './local-config.
 
 /**
  * CDP 端口：spawn 模式下随机取（固定端口会被上一次没杀干净的 headless Edge 占住，
- * 于是 CDP 连到旧浏览器、`Page.navigate` 挂死——实测踩过）；--cdp 附加模式下改写为指定端口。
+ * 于是 CDP 连到旧浏览器、`Page.navigate` 挂死）；--cdp 附加模式下改写为指定端口。
  */
 let PORT = 9333 + Math.floor(Math.random() * 200);
 
@@ -94,8 +94,7 @@ class Session {
     this.pending = new Map();
     /**
      * 页面控制台与未捕获异常（`Runtime.consoleAPICalled` / `Runtime.exceptionThrown`）。
-     * 存在理由：客户端插件装载失败时页面**不报错也不渲染**（静默），只有控制台里有原因；
-     * 2026-09-24 排查 `plugins.row.config` 卡片不渲染时，缺了这条通道只能靠猜。
+     * 存在理由：客户端插件装载失败时页面静默，只有控制台里有原因。
      */
     this.logs = [];
     this.socket = new WebSocket(url);
@@ -223,7 +222,7 @@ globalThis.__dsafm = {
  */
 async function run() {
   const opts = await options();
-  // --cdp <port>：附加模式（2026-09-28，r46 端到端）——沙箱会拦 node 直接 spawn Edge，
+  // --cdp <port>：附加模式——沙箱会拦 node 直接 spawn Edge，
   // 由 pwsh 侧先把 headless Edge 拉起来，本工具只连接现成 CDP 端口（不建 profile）。
   let child = null;
   let profile = '';
@@ -424,7 +423,7 @@ async function run() {
           /**
            * 元素级裁切截图 + 可见性探针。
            * 存在理由：`Page.captureScreenshot` 带 `captureBeyondViewport` 时**不绘制固定定位覆盖层**
-           * （2026-09-25 实测：审批卡在 DOM 里、读数正常，全页截图却拍不到卡片），
+           * （实测：审批卡在 DOM 里、读数正常，全页截图却拍不到卡片），
            * 因此判"卡片是否真的渲染"必须同时量 rect / 计算样式，并按 rect 裁切抓图。
            */
           const spec = typeof step.shotClip === 'string'
@@ -491,7 +490,7 @@ async function run() {
     process.stdout.write(failed.length === 0 ? 'RESULT: PASS — 全部步骤成功\n' : `RESULT: PARTIAL — ${failed.length} 步失败\n`);
   } finally {
     // 先请浏览器自己退出（CDP Browser.close 会带走整棵进程树），再做回退清理：
-    // 只 kill 根进程在 Windows 上会留下一堆 renderer/gpu 孤儿（实测 35 个）。
+    // 只 kill 根进程在 Windows 上会留下一堆 renderer/gpu 孤儿（实测）。
     try {
       await session?.send('Browser.close', {}, 5000);
     } catch {
@@ -524,8 +523,7 @@ async function run() {
 await main();
 
 /**
- * 主流程加看护计时：CDP 或页面任何一步挂死都必须退出，绝不留住 headless Edge
- * （上一个版本的探针在 `Page.navigate` 上挂死，留下了 55 个孤儿进程）。
+ * 主流程加看护计时：CDP 或页面任何一步挂死都必须退出，绝不留住 headless Edge。
  * @returns {Promise<void>} 无返回。
  */
 async function main() {

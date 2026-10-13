@@ -108,17 +108,17 @@ test('compilePattern 接受普通源串、字面量与非法输入', () => {
   assert.equal(compilePattern('['), undefined);
 });
 
-// ── R35：deny 锚定放宽与主体全量过检 ─────────────────────────────────────
+// ── deny 锚定放宽与主体全量过检（requirements §3.4／design §3.5） ───────────
 
-test('R35① 引号/斜杠包裹的危险词仍命中（前锚＝非字母数字边界）', () => {
-  // 旧锚 (^|[;&|\s]) 下这三例的包裹字符（'、"、/）都不在锚类里 → 放行进审查；放宽后统一命中。
+test('引号/斜杠包裹的危险词仍命中（前锚＝非字母数字边界）', () => {
+  // 反面参照：锚若只认 (^|[;&|\s])，这三例的包裹字符（'、"、/）都不在锚类里 → 放行进审查；现锚统一命中。
   for (const command of ["bash -c 'mkfs /dev/sda1'", 'cmd /c "format c:"', '/sbin/mkfs /dev/sda1']) {
     const verdict = screen(escalation(), located({ command }), baseConfig);
     assert.equal(verdict.action, 'deny', `应拒止：${command}（${verdict.why}）`);
   }
 });
 
-test('R35② 主体全量过检：毒在后位键或嵌套键同样 deny 且 reason 写明键路径', () => {
+test('主体全量过检：毒在后位键或嵌套键同样 deny 且 reason 写明键路径', () => {
   const back = screen(escalation(), located({ command: 'ls', script: 'rm -rf /' }), baseConfig);
   assert.equal(back.action, 'deny');
   assert.match(back.why, /key "script"/);
@@ -128,35 +128,35 @@ test('R35② 主体全量过检：毒在后位键或嵌套键同样 deny 且 rea
   assert.equal(nested.action, 'deny', '嵌套对象里的字符串也要过检');
   assert.match(nested.reason, /env\.PAYLOAD/);
 
-  // R52（r49 P3-5）：规则层真实产物 reason 也须含「命中模式」——不止 gate 侧 stub 与真机实测。
+  // 规则层真实产物 reason 也须含「命中模式」（design §8.1）——不只在 gate 侧 stub 与真机实测。
   assert.match(back.reason, /命中模式/, '规则层 reason 应含模式命中原语');
   assert.match(nested.reason, /命中模式/, '规则层 reason 应含模式命中原语');
 });
 
-test('R35③④ 误伤口径钉住：词内命中 deny、更长标识符的真后缀放行', () => {
+test('误伤口径钉住：词内命中 deny、更长标识符的真后缀放行', () => {
   assert.equal(screen(escalation(), located({ command: 'grep mkfs readme.md' }), baseConfig).action, 'deny');
   assert.equal(screen(escalation(), located({ command: 'mymkfs --help' }), baseConfig).action, 'review');
 });
 
-test('R35⑤ 回归：既有命中形态仍拒止（锚定只收紧不放松）', () => {
+test('回归：既有命中形态仍拒止（锚定只收紧不放松）', () => {
   for (const command of ['rm -rf /', 'mkfs.ext4 /dev/sda1', 'shutdown now', 'dd if=/dev/zero of=/dev/sda']) {
     const verdict = screen(escalation(), located({ command }), baseConfig);
     assert.equal(verdict.action, 'deny', `应继续拒止：${command}（${verdict.why}）`);
   }
 });
 
-// ── R51：denyPatterns 出厂默认清空（规则墙降位为用户可选黑名单） ──────────
+// ── denyPatterns 出厂默认清空（requirements §5.3：规则墙降位为用户可选黑名单）──
 // baseConfig 显式展开 `[...DEFAULT_DENY_PATTERNS]`＝显式配置部署；上面的既有命中用例
-// 在默认值清空后不受影响，天然构成判据④（显式配置行为不变）的回归。
+// 在默认值清空后不受影响，天然构成显式配置行为不变的回归。
 
-test('R51① 未配置实例的生效配置 denyPatterns 为空数组；显式写入出厂参考清单后命中恢复 deny', () => {
+test('未配置实例的生效配置 denyPatterns 为空数组；显式写入出厂参考清单后命中恢复 deny', () => {
   assert.deepEqual(normalizeConfig().denyPatterns, []);
   // 恢复段（防「删掉 deny 路径」的假实现）：清单显式写入配置 → 命中路径完整可用。
   const restored = screen(escalation(), located({ command: 'rm -rf /' }), { ...baseConfig, denyPatterns: [...DEFAULT_DENY_PATTERNS] });
   assert.equal(restored.action, 'deny');
 });
 
-test('R51② 场景回归：提交说明含出厂清单样例文本的 git commit 默认进审查', () => {
+test('场景回归：提交说明含出厂清单样例文本的 git commit 默认进审查', () => {
   const command = 'git commit -m "docs: warn about Remove-Item -Recurse -Force on C:\\Users\\ dirs"';
   // 默认侧走真 normalizeConfig()（未配置实例的生效配置），使「默认改回出厂清单」变异可检出。
   assert.equal(screen(escalation(), located({ command }), normalizeConfig()).action, 'review');
@@ -164,7 +164,7 @@ test('R51② 场景回归：提交说明含出厂清单样例文本的 git commi
   assert.equal(screen(escalation(), located({ command }), baseConfig).action, 'deny');
 });
 
-test('R51③ 误伤范围判据翻转钉住（§3.5 判据③）：默认进审查、显式配置恢复 deny', () => {
+test('误伤范围翻转钉住（design §3.5）：默认进审查、显式配置恢复 deny', () => {
   for (const command of ["bash -c 'mkfs /dev/sda1'", 'grep mkfs readme.md']) {
     const byDefault = screen(escalation(), located({ command }), normalizeConfig());
     assert.equal(byDefault.action, 'review', `默认配置应进审查：${command}`);

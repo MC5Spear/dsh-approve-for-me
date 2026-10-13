@@ -3,8 +3,7 @@
  *
  * 为什么需要它：设置页要列出"部署里所有工具"，而设置页与会话无关；这条承重假设成立与否
  * 决定了"无会话读工具目录"是否可能。
- * 初版结论（`agentPresets.standingKeyFor` → `ctx.tools.schemas`）已被动态插件实测推翻，
- * 但动态插件的 `tools` 是受限门面（`dsh-cordis-host-runner/lib/index.js:582-583` 把两个方法
+ * 动态插件的 `tools` 是受限门面（`dsh-cordis-host-runner/lib/index.js:582-583` 把两个方法
  * 钉死在沙箱自己的 scope 上），所以**动态探针证明不了宿主侧插件的可见性**。
  *
  * 本探针在**离线但真实**的宿主结构上回答三个问题：

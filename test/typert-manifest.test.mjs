@@ -3,7 +3,7 @@
  *
  * 判据单源：rc.1 契约的检查函数住在 `tools/typert-contract.mjs`，本文件与
  * `tools/check-typert-manifest.mjs` 共用同一份——两处各自维护会在离线检查器一侧漂移
- * （检查器曾按 rc.6 的 `codec.schema` 字段校验，漂出 18 条假红，r33 收敛为单源）。
+ * （按 rc.6 的 `codec.schema` 字段校验会漂出 18 条假红，故收敛为单源）。
  * 契约依据：`dsh-typert-loader/lib/index.js:153-212`（注册期校验）与
  * `dsh-typert-registry/lib/index.js:509-518`（`create()` 返回值即 schema，须为 zod v4 实例）。
  */
@@ -39,7 +39,7 @@ test('TYPERT 清单：端点 id 唯一且与 service/namespace/method 自洽', (
 });
 
 test('TYPERT 清单：checkCodec 本身能失败（对照，防恒真）', () => {
-  // 反面对照：缺 create 的 codec 必须被判不合规——正是 2026-09-24 装载失败的形状。
+  // 反面对照：缺 create 的 codec 必须被判不合规——正是装载失败的形状。
   const legacy = { mode: 'strict', typeSymbol: 'x#y', schema: {} };
   assert.deepEqual(checkCodec(legacy), ['create 缺失或不是函数（rc.1 要求 create() 工厂）']);
   assert.ok(checkCodec({ mode: 'strict', typeSymbol: 'x#y', create: () => ({}) }).some((item) => item.includes('_zod')));

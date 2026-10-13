@@ -4,7 +4,7 @@
 - 入口路径：侧栏「插件」→ `dsh-approve-for-me` → 本包详情页；页面身份 `[data-plugin-detail="dsh-approve-for-me"]`。
 - 常驻断言：`test/settings-dom-dump.test.mjs` 读本文件逐项核对（变异验证：篡改本文件对应断言变红）。
 
-## 1. 详情页 DOM 文本（innerText，逐字；判据①：零命中「重置全部覆盖」与「当前生效值」）
+## 1. 详情页 DOM 文本（innerText，逐字；零命中「重置全部覆盖」与「当前生效值」）
 
 ```text
 插件列表
@@ -173,20 +173,20 @@ approve-for-me
 运行中
 ```
 
-## 2. 判据④：配置区容器计算样式（无自绘卡片外壳）
+## 2. 配置区容器计算样式（无自绘卡片外壳）
 
 `.dsafm_form` getComputedStyle：borderStyle=`none`、borderWidth=`0px`、borderRadius=`0px`、background=`rgba(0, 0, 0, 0)`（判据＝none/0 且 radius<12px）。
 
-## 3. 判据②：覆盖组与字段结构
+## 3. 覆盖组与字段结构
 
 自绘覆盖组（`.dsafm_badges`＝Tag「已覆盖」＋文本按钮「恢复默认」）恰好 3 组：已覆盖 恢复默认｜已覆盖 恢复默认｜已覆盖 恢复默认（默认审查模型、用户文案语言、Agent 提示语言——与 profile patch 用户层键一一对应；数字字段「已覆盖/恢复默认」在官方 SettingsValueField 内部，见 §1 文本）。
 字段壳 `dsafm_field`＝17（自绘），数字字段 4 个走官方组件标记，合计 21＝21 字段。
 
-## 4. 判据⑤：帮助点击展开（aria 成对）
+## 4. 帮助点击展开（aria 成对）
 
 帮助按钮 17 个，全部带 aria-controls 与 aria-label，初始 aria-expanded=false；点击 mode 字段后：aria-expanded=`true`、展开区在场=`true`、同屏展开区数量=1、展开文本首段＝「总开关：rules＝规则强制检查 + LLM 审查；off＝完全不管审批（等同于未安装）。」。
 
-## 5. 判据③＋暂存语义：保存门控与「只有保存才写」
+## 5. 暂存语义：保存按钮三态与「只有保存才写」
 
 初始（无改动）：保存 disabled=`true`。
 点 language.ui「恢复默认」（只暂存）：控件值 `auto`、保存 disabled=`false`、该字段覆盖组消失（剩 2 组）。
@@ -194,7 +194,7 @@ approve-for-me
 再暂存＋点保存：控件值 `auto`、覆盖组 2 组、保存 disabled=`true`——unset 落库、覆盖消失。
 取证后复原（设回 zh＋保存）：控件值 `zh`、覆盖组 3 组——现场回到采集前（profile patch `language: {agent: en, ui: zh}` 复核过）。
 
-## 6. 判据⑥：交付 CSS 串失效令牌零命中（收窄到本包 style 元素）
+## 6. 交付 CSS 串失效令牌零命中（收窄到本包 style 元素）
 
 本包注入样式 8732 字符：`--dsw-alias-state-warning-primary`×0、`--dsw-alias-label-error`×0、`--dsw-alias-bg-layer-4`×0（页面级命中来自宿主/其它包样式，不属本包交付串）。
 关键规则原文：`.dsafm_form{display:flex;flex-direction:column;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary)}`；`.dsafm_save{appearance:none;border:1px solid transparent;border-radius:8px;padding:5px 14px;font-family:inherit;font-size:13px;line-height:1.5;cursor:pointer;background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3)}`；`.dsafm_helpbtn{display:inline-flex;align-items:center;justify-content:center;flex:none;width:24px;height:24px;padding:0;border:0;border-radius:6px;background:none;color:var(--dsw-alias-label-tertiary);cursor:pointer}`；`.dsafm_input{flex:1;min-width:0;width:100%;height:34px;padding:0 12px;border:.5px solid var(--dsw-alias-border-l4);border-radius:8px;background:var(--dsw-alias-bg-layer-3);font-family:inherit;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-primary)}`。
@@ -236,12 +236,12 @@ dsafm_form / dsafm_field / dsafm_f_head / dsafm_labelgroup / dsafm_f_label / dsa
 
 - 采集前 `BadPasswordAttempts=未读`，采集后 `=未读`（本轮无头 Edge 启动次数见 开发期图证记录表（不随仓发布） 记录表；窗口阈值 10/10min，纪律 ≤5 次/10min）。
 
-## 10. R30 换算读数（.dsafm_f_sec，干净页＝无暂存）
+## 10. 毫秒字段换算读数（.dsafm_f_sec，干净页＝无暂存）
 
 读数行 2 行（恰两个 ms 字段各一行；字节/令牌字段不做换算）：
 
 - `approve-for-me-sec-reviewer-timeoutMs`：`生效：300 秒 · 草稿：300 秒`（生效＝`生效：300 秒`、草稿＝`草稿：300 秒`、draftInvalid=false）；行样式 fontSize=`12px`、color=`rgb(129, 133, 140)`、marginTop=`-12px`；后继节点 class=`_field_bjqpo_3`、borderTopWidth=`1px`（官方字段恢复 0.5px 分隔线，自绘字段后无分隔线）。
 - `approve-for-me-sec-human-timeoutMs`：`生效：300 秒 · 草稿：300 秒`（生效＝`生效：300 秒`、草稿＝`草稿：300 秒`、draftInvalid=false）；行样式 fontSize=`12px`、color=`rgb(129, 133, 140)`、marginTop=`-12px`；后继节点 class=`dsafm_field`、borderTopWidth=`0px`（官方字段恢复 0.5px 分隔线，自绘字段后无分隔线）。
 
-判据①：生效值读数与控件值一致（§7 控件表同 id 行）；初始草稿＝生效值文本。实时性（键入即换算、占位、非法、保存重开、en 档单位）见 `开发期读数档（不随仓发布）`（`开发期采集脚本（不随仓发布）` 取证）。
+生效值读数与控件值一致（§7 控件表同 id 行）；初始草稿＝生效值文本。实时性（键入即换算、占位、非法、保存重开、en 档单位）见 `开发期读数档（不随仓发布）`（`开发期采集脚本（不随仓发布）` 取证）。
 

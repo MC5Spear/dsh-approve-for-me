@@ -106,7 +106,7 @@ test('apply 注册 prepend 应答者并写一行启动审计', async (t) => {
     assert.equal(listener.prepend, true);
     const startup = written.join('');
     assert.match(startup, /answerer registered/);
-    // R52：启动行版本号与审计版本常量同源（期望值从 lib/audit.js 导入，不盯字面量——
+    // 启动行版本号与审计版本常量同源（design §8.1；期望值从 lib/audit.js 导入，不盯字面量——
     // 实现若回退为硬编码，改常量即红）。
     assert.match(startup, new RegExp(`v=${AUDIT_VERSION} phase=screen`));
   } finally {
@@ -177,9 +177,9 @@ test('mode=off 时不注册应答者', async (t) => {
   }
 });
 
-// ── R24 子代理覆盖的接线断言（实现审查 S2-1）────────────────────────────────
+// ── 子代理覆盖的接线断言（requirements §2.2／design §2.2）──────────────────
 
-test('R24 接线：rules 模式挂 session/created 监听且装载补扫翻可覆盖子会话；off 模式都不挂', async (t) => {
+test('接线：rules 模式挂 session/created 监听且装载补扫翻可覆盖子会话；off 模式都不挂', async (t) => {
   const host = await loadHost();
   if (host === undefined) {
     t.skip('宿主包不可解析（离线环境）');
@@ -190,7 +190,7 @@ test('R24 接线：rules 模式挂 session/created 监听且装载补扫翻可�
   const envOn = makeCtx({ mode: 'rules' }, wiring.services);
   host.apply(envOn.ctx, { mode: 'rules' });
   const created = envOn.listeners.find((entry) => entry.event === 'session/created');
-  assert.ok(created, 'rules 模式未注册 session/created 监听（R24）');
+  assert.ok(created, 'rules 模式未注册 session/created 监听');
   assert.equal(wiring.appendCalls.length, 1, '装载补扫没有翻活表里的可覆盖委派子会话');
   assert.equal(wiring.appendCalls[0].type, 'approval/policy');
   assert.deepEqual(wiring.appendCalls[0].data, { policy: 'ask' });
@@ -208,7 +208,7 @@ test('R24 接线：rules 模式挂 session/created 监听且装载补扫翻可�
   assert.equal(wiringOff.appendCalls.length, 0, 'off 模式不该发生任何翻策略');
 });
 
-test('R24 接线：监听器回退吞掉 append 异常，不外抛（双保险的外层）', async (t) => {
+test('接线：监听器回退吞掉 append 异常，不外抛（双保险的外层）', async (t) => {
   const host = await loadHost();
   if (host === undefined) {
     t.skip('宿主包不可解析（离线环境）');
@@ -222,11 +222,11 @@ test('R24 接线：监听器回退吞掉 append 异常，不外抛（双保险�
   assert.doesNotThrow(() => created.handler(throwing.child), '监听器外抛会回滚宿主的会话挂载');
 });
 
-test('R24 静态扫描：lib/subagents.js 不触碰 ctx（依赖全部注入，实现审查 S2-2）', async () => {
+test('静态扫描：lib/subagents.js 不触碰 ctx（依赖全部注入）', async () => {
   const { readFileSync } = await import('node:fs');
   const source = readFileSync(new URL('../lib/subagents.js', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /\bctx\./, 'subagents.js 出现 ctx 直接访问：覆盖判定依赖必须经 deps 注入');
-  assert.doesNotMatch(source, /\bpermissionPresets\.set\b/, '禁止整预设写入（R24：会改写委派沙箱）');
+  assert.doesNotMatch(source, /\bpermissionPresets\.set\b/, '禁止整预设写入（会改写委派沙箱）');
   assert.match(source, /append\('approval\/policy', \{ policy: 'ask' \}\)/, '唯一写路径必须是追加 ask 事件');
 });
 
@@ -248,7 +248,7 @@ test('normalizeConfig 补齐缺省分节，设置服务缺失时下游仍能读�
 
   const nested = config.normalizeConfig({ reviewer: { model: 'zai/glm-5.3' } });
   assert.equal(nested.reviewer.model, 'zai/glm-5.3');
-  assert.equal(nested.reviewer.maxTokens, 0, '默认 0 = 不把 maxTokens 放进审查请求（设计「输出预算：默认不设上限（与 codex 同构）」）');
+  assert.equal(nested.reviewer.maxTokens, 0, '默认 0 = 不把 maxTokens 放进审查请求（design §3.6）');
   assert.equal(config.normalizeConfig({ reviewer: { maxTokens: 0 } }).reviewer.maxTokens, 0, '显式 0 必须原样保留');
   assert.equal(config.normalizeConfig({ reviewer: { maxTokens: 4096 } }).reviewer.maxTokens, 4096, '显式值必须原样保留');
 });
@@ -280,7 +280,7 @@ test('normalizeConfig 深度解包 volatile 引用（要求 schemastery ≥3.18.
   assert.equal(config.normalizeConfig({ reviewer: { timeoutMs: nestedRef } }).reviewer.timeoutMs, 120000, '嵌套分节内的引用应解包');
 });
 
-// ── G1（r31 ⑤缺口 / N1）：index 层逃逸注入文本的两语言行为断言 ────────────────
+// ── index 层逃逸注入文本的两语言行为断言（design §4.4）──────────────────────
 
 /**
  * 构造一次「应答者逃逸异常」请求：`request.agent.session.id` 的 getter 抛错。
@@ -321,13 +321,13 @@ async function runEscape(language) {
   return { outcome, texts: injected.map((message) => message.content[0].text), nextCalls };
 }
 
-test('逃逸通知走通道故障模板并按 language.agent 切换：zh 中文整句、en 英文整句（G1/N1 两语言行为差异；§4.4）', async (t) => {
+test('逃逸通知走通道故障模板并按 language.agent 切换：zh 中文整句、en 英文整句（两语言行为差异；design §4.4）', async (t) => {
   const host = await loadHost();
   if (host === undefined) {
     t.skip('宿主包不可解析（离线环境）');
     return;
   }
-  // zh 档：首行与关键字按字节核对（口径同 requirements R28 判据②），fail-closed 为 rejected；
+  // zh 档：首行与关键字按字节核对（口径同 requirements §5.4），fail-closed 为 rejected；
   // 首行是通道故障模板头（§4.4：逃逸通知与内部异常通知同构，不另维护逃逸专用正文）。
   const zh = await runEscape({ agent: 'zh' });
   assert.equal(zh.outcome, 'rejected');
@@ -342,7 +342,7 @@ test('逃逸通知走通道故障模板并按 language.agent 切换：zh 中文�
   assert.equal(en.texts[0].split('\n')[0], '[approve-for-me] Automatic approval channel failure; this escalation request is treated as rejected.');
   assert.match(en.texts[0], /Reason: an exception escaped the answerer: Error: session id boom/u);
   assert.doesNotMatch(en.texts[0], /自动审批通道故障/u, 'en 档不得残留 zh 档短语');
-  // 变红判据：若逃逸注入退回硬编码 zh（N1 修正前形态），en 档首行等值断言与
+  // 变红判据：若逃逸注入退回硬编码 zh，en 档首行等值断言与
   // doesNotMatch 双红；若 language.agent 不再驱动注入语言（两档同文），两首行断言其一必红；
   // 若逃逸通知退回专用拒绝正文（缺通道故障要素），两首行断言双红。
 });
@@ -385,9 +385,9 @@ test('退役静态扫描：源码零补丁档位/旧宿主侧残留（设计 §8
   assert.deepEqual(offenders, [], `退役残留必须为零（设计 §8.5）：\n${offenders.join('\n')}`);
 });
 
-// ── R34④/R36②：装配层接线（逃逸出口脱敏 + 热改现设） ────────────────────
+// ── 装配层接线：逃逸出口脱敏＋热改现设（requirements §5.2／design §8.1）──────
 
-test('R34④ 逃逸分支注入文本过脱敏：error 里的秘密被遮蔽后才注入', async (t) => {
+test('逃逸分支注入文本过脱敏：error 里的秘密被遮蔽后才注入', async (t) => {
   const host = await loadHost();
   if (host === undefined) {
     t.skip('宿主包不可解析（离线环境）');
@@ -418,11 +418,11 @@ test('R34④ 逃逸分支注入文本过脱敏：error 里的秘密被遮蔽后�
   assert.doesNotMatch(text, /sk-abc123secret/u, '逃逸注入不得裸带秘密');
 });
 
-test('R36②/R58 装配接线：rt.review 按请求构造工具上下文快照并随任务传入（静态扫描），审计读取器并入脱敏清单', async () => {
+test('装配接线：rt.review 按请求构造工具上下文快照并随任务传入（静态扫描），审计读取器并入脱敏清单', async () => {
   const { readFileSync } = await import('node:fs');
   const source = readFileSync(new URL('../lib/index.js', import.meta.url), 'utf8');
-  // 反例先行：扫描对退回 setter 接线必须命中（防恒真）——R58 起 rt.review 内不得再出现四个 setter 调用。
-  assert.ok(!/tools\.set(Root|Lang|ToolTimeoutMs|RedactPatterns)\??\(/u.test(source), 'rt.review 不得再经共享 setter 现设（R58：并发下会改写在飞任务）');
+  // 反例先行：扫描对退回 setter 接线必须命中（防恒真）——rt.review 内不得出现四个 setter 调用。
+  assert.ok(!/tools\.set(Root|Lang|ToolTimeoutMs|RedactPatterns)\??\(/u.test(source), 'rt.review 不得经共享 setter 现设（并发下会改写在飞任务，design §6.1）');
   // 上下文在进入调度器之前按本请求快照构造（rootDir/lang/超时/清单四字段齐）。
   const at = (token) => source.indexOf(token);
   assert.ok(at('const toolContext = {') >= 0, '请求绑定的工具上下文必须构造');
@@ -432,11 +432,11 @@ test('R36②/R58 装配接线：rt.review 按请求构造工具上下文快照�
   // 门面把上下文经 run 第 4 参显式传入，并以 opts.tools 交给审查循环。
   assert.ok(source.includes('tools.run(toolName, toolArgs, signal, toolContext)'), '工具执行必须携带请求上下文');
   assert.ok(source.includes('tools: taskTools'), '审查循环必须使用请求绑定门面');
-  // R34：审计读取器并入 context.redactPatterns——全部 reason 出口在 createAudit 层统一覆盖。
+  // 审计读取器并入 context.redactPatterns——全部 reason 出口在 createAudit 层统一覆盖。
   assert.ok(/redactPatterns:\s*current\(\)\?\.context\?\.redactPatterns/u.test(source), '审计读取器必须并入 context.redactPatterns');
 });
 
-// ── R48 计数接线（真 seam，实现审查 r46 P2-1/P3-1/P3-4 修正）───────────────────
+// ── 冷却计数接线（真 seam；requirements §4.4／design §5.3）─────────────────
 // apply 注册真应答者 → 真 gate → 真 reviewer（llm.stream 替身）→ 真 scheduler → record。
 // 三个测试共用一套装配：流替身可切「延迟后抛 provider 500」（有机故障，重试一次后 error）
 // 或「挂起到 signal 中止」（中止型，模拟宿主流对 abort 的传播）。
@@ -503,7 +503,7 @@ async function wiredEnv(options = {}) {
   return { host, env, state, answerer, makeRequest, config };
 }
 
-test('R48⑤ 真接线：有机 error ×3 打开冷却，第 4 个请求零流调用并注入通道故障＋breaker-open', async (t) => {
+test('真接线：有机 error ×3 打开冷却，第 4 个请求零流调用并注入通道故障＋breaker-open', async (t) => {
   const { mkdtempSync, rmSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
@@ -546,7 +546,7 @@ test('R48⑤ 真接线：有机 error ×3 打开冷却，第 4 个请求零流�
   }
 });
 
-test('R48⑤ 真接线：请求取消引发的中止 ×3 带 superseded 不计数，第 4 个请求照常完整审查', async (t) => {
+test('真接线：请求取消引发的中止 ×3 带 superseded 不计数，第 4 个请求照常完整审查', async (t) => {
   const { mkdtempSync, rmSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
@@ -591,7 +591,7 @@ test('R48⑤ 真接线：请求取消引发的中止 ×3 带 superseded 不计�
   }
 });
 
-test('GAP-01 真接线：同 (sessionId, callId) 双投递各自执行完整审查，完成后再次到达不复用结果', async (t) => {
+test('真接线：同 (sessionId, callId) 双投递各自执行完整审查，完成后再次到达不复用结果（design §5.1）', async (t) => {
   const { mkdtempSync, rmSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
@@ -637,7 +637,7 @@ test('GAP-01 真接线：同 (sessionId, callId) 双投递各自执行完整审�
   }
 });
 
-test('GAP-02 真接线：装载→停用/卸载全程不解析、不改写用户 YAML——副本逐字节不变，无备用清理', async (t) => {
+test('真接线：装载→停用/卸载全程不解析、不改写用户 YAML——副本逐字节不变，无备用清理（design §9.2）', async (t) => {
   const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
@@ -706,7 +706,7 @@ test('GAP-02 真接线：装载→停用/卸载全程不解析、不改写用户
   }
 });
 
-// ── ISS-6/ISS-7：配置不可读的逃逸出口与同一对象再派发（真接线） ─────────────
+// ── 配置不可读的逃逸出口与同一对象再派发（真接线） ──────────────────────────
 
 test('§4.1 配置不可读时逃逸出口自含：不外抛、恰一条结算记录、审计行照写、通知走通道故障模板（en 回退）', async (t) => {
   const { mkdtempSync, readFileSync, readdirSync, rmSync } = await import('node:fs');
@@ -855,7 +855,7 @@ test('§4.1 逃逸出口的结算记录（getter 触发逃逸）：结算记录�
   const home = mkdtempSync(join(tmpdir(), 'afm-escape-record-'));
   process.env.DSH_HOME = home;
   try {
-    // session.id 的 getter 抛错触发逃逸（G1/N1 同款）：背景读取防抛后，结算记录不得丢失，
+    // session.id 的 getter 抛错触发逃逸：背景读取防抛后，结算记录不得丢失，
     // 会话 id 按缺省会话 '-'（与 rt.review 的约定一致）归档。
     const config = { mode: 'rules', language: { agent: 'zh' } };
     const env = makeCtx(config);

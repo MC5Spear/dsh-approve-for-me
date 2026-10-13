@@ -88,7 +88,7 @@ testHost('getState：非接管预设下 active=false', () => {
   assert.equal(instance.getState('s1').preset, 'workspace-write');
 });
 
-testHost('getState：非活会话用 defaultPreset 判定，控件在会话开始前也能显隐（R15）', () => {
+testHost('getState：非活会话用 defaultPreset 判定，控件在会话开始前也能显隐（design §7.3）', () => {
   const instance = service({
     session: undefined,
     service: { current: () => 'auto-approve', defaultPreset: 'auto-approve' },
@@ -174,13 +174,13 @@ testHost('createSessionChoiceReader：文件条目的 model:null 按清除处理
   assert.deepEqual(bridge.createSessionChoiceReader(set)({ id: 's1' }), { kind: 'set', model: 'zai/glm-5.3', effort: 'max' });
 });
 
-testHost('setSessionModel（R14）：会话在宿主里不存在时仍按传入 id 落盘', () => {
+testHost('setSessionModel（requirements §6.2）：会话在宿主里不存在时仍按传入 id 落盘', () => {
   const instance = service({ session: undefined });
   assert.deepEqual(instance.setSessionModel('s-not-live', 'zai/glm-5.3', 'max'), { ok: true });
   assert.deepEqual(instance.writes, [{ id: 's-not-live', model: 'zai/glm-5.3', effort: 'max' }]);
 });
 
-testHost('setSessionModel（R14）：活会话用会话对象自己的 id 落盘', () => {
+testHost('setSessionModel：活会话用会话对象自己的 id 落盘', () => {
   const instance = service({ session: { id: 's-live' } });
   assert.deepEqual(instance.setSessionModel('s-live', 'zai/glm-5.3', 'high'), { ok: true });
   assert.deepEqual(instance.writes, [{ id: 's-live', model: 'zai/glm-5.3', effort: 'high' }]);
@@ -213,7 +213,7 @@ testHost('setSessionModel：落盘失败时不报成功，并记一行降级审�
   assert.equal(audit.action, 'skip');
 });
 
-testHost('getState（R14）：非活会话也读得到已落盘的选择，层级为 session', () => {
+testHost('getState：非活会话也读得到已落盘的选择，层级为 session', () => {
   const instance = service({
     session: undefined,
     stored: { s1: { model: 'zai/glm-5.3', effort: 'max' } },
@@ -227,7 +227,7 @@ testHost('getState（R14）：非活会话也读得到已落盘的选择，层�
   assert.equal(state.layer, 'session');
 });
 
-testHost('getState（R14）：清除条目后回落全局层，而不是仍报 session', () => {
+testHost('getState：清除条目后回落全局层，而不是仍报 session', () => {
   const instance = service({
     session: undefined,
     stored: { s1: { model: null, effort: '' } },
@@ -320,7 +320,7 @@ testHost('traceRecords：同一审批两类记录按 approvalId 合并，旧格�
   assert.equal(legacy.outcome, null, '旧格式行没有 outcome');
 });
 
-testHost('traceRecords：readFailed=true 透传（VER-02）；traceRecord 按 approvalId 给合并详情', () => {
+testHost('traceRecords：readFailed=true 透传（design §8.3）；traceRecord 按 approvalId 给合并详情', () => {
   const degradedStore = traceStoreOf([], true);
   const degradedInstance = service({ traceStore: degradedStore });
   assert.deepEqual(degradedInstance.traceRecords('s1'), { records: [], readFailed: true });
@@ -349,7 +349,7 @@ testHost('traceRecords：readFailed=true 透传（VER-02）；traceRecord 按 ap
 
 testHost('traceRecord：旧格式行详情只在场才写补充键——不把 null 塞进 optional 字段（RPC 三处同步）', () => {
   // 旧格式行：无 kind/approvalId，detail schema 的补充字段是 optional（不收 null），
-  // 全量投影会让旧记录点开详情必挂 zod 校验（盲审缺陷 1）。
+  // 全量投影会让旧记录点开详情必挂 zod 校验。
   const instance = service({
     traceStore: traceStoreOf([
       { reviewId: 's1:c2:5', callId: 'c2', toolName: 'edit', startedAt: 50, endedAt: 60, decision: 'allowed-once', reason: 'r', subject: 'edit a.ts' },

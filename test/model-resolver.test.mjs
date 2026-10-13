@@ -117,7 +117,7 @@ test('层级 3：全局默认先于跟随父模型', async () => {
   assert.equal(cfg.resolution.model, 'deepseek-v4-pro');
 });
 
-test('层级 4：两级都未配置时跟随父模型', async () => {
+test('层级 4：前三层都未配置时跟随父模型', async () => {
   const { resolver } = harness({
     snapshot: { revision: 1, value: { reviewer: { followParent: true } }, base: {}, user: {} },
   });
@@ -126,7 +126,7 @@ test('层级 4：两级都未配置时跟随父模型', async () => {
   assert.equal(cfg.resolution.model, 'deepseek-v4-flash');
 });
 
-test('followParent=false 且两级未配置 → unavailable', async () => {
+test('followParent=false 且前三层都未配置 → unavailable', async () => {
   const { resolver, audits } = harness({
     snapshot: { revision: 1, value: { reviewer: { followParent: false } }, base: {}, user: {} },
   });
@@ -142,7 +142,7 @@ test('非法值逐层降级并留审计，最终命中可用层', async () => {
   const cfg = await resolver.configFor({ agent: { session: session() } });
   assert.equal(cfg.resolution.layer, 'unavailable');
   assert.deepEqual(calls, []);
-  // 审计的 degraded 与返回值同源，必须带层名前缀（设计「非法值降级」「两处需要额外说明的取值」）。
+  // 审计的 degraded 与返回值同源，必须带层名前缀（design §6.2 逐层校验留原因／§8.2 词汇表）。
   const degrade = audits.find((entry) => entry.degraded === 'global:unknown provider ghost');
   assert.equal(degrade.layer, 'global');
   // 所有层都失败时，返回值的标记是聚合值 `all`；逐层原因在审计行里（每层一行）。
@@ -187,7 +187,7 @@ test('未指定档位时按 codex 规则：支持 low 就用 low', async () => {
   assert.equal(cfg.resolution.effort, 'low');
 });
 
-test('显式档位不被支持时不传并记 degraded（带层名前缀，设计「两处需要额外说明的取值」）', async () => {
+test('显式档位不被支持时不传并记 degraded（带层名前缀，design §8.2）', async () => {
   const { resolver, audits } = harness({
     efforts: [{ id: 'high' }],
     snapshot: { revision: 8, value: { reviewer: { model: { model: 'zai/glm-5.3', effort: 'low' } } }, base: {}, user: {} },
@@ -201,7 +201,7 @@ test('显式档位不被支持时不传并记 degraded（带层名前缀，设�
   );
 });
 
-test('normalizeModelChoice：字符串 / 对象 / 空值 / 非字符串非对象（设计「模型选择对象化（档位与模型绑定）」）', () => {
+test('normalizeModelChoice：字符串 / 对象 / 空值 / 非字符串非对象（requirements §5.1）', () => {
   assert.deepEqual(normalizeModelChoice(' zai/glm-5.3 '), { model: 'zai/glm-5.3', effort: '' });
   assert.deepEqual(normalizeModelChoice({ model: ' zai/glm-5.3 ', effort: ' high ' }), { model: 'zai/glm-5.3', effort: 'high' });
   assert.deepEqual(normalizeModelChoice({ model: 'zai/glm-5.3' }), { model: 'zai/glm-5.3', effort: '' });
@@ -216,7 +216,7 @@ test('normalizeModelChoice：字符串 / 对象 / 空值 / 非字符串非对象
   assert.equal(normalizeModelChoice(7), undefined);
 });
 
-test('pickEffort：显式支持用显式、显式不支持记降级、缺省按 codex 取 low（设计「档位缺省语义（与 codex 同构）」）', () => {
+test('pickEffort：显式支持用显式、显式不支持记降级、缺省按 codex 取 low（requirements §5.1）', () => {
   assert.deepEqual(pickEffort([{ id: 'low' }, { id: 'high' }], 'high'), { effort: 'high', degraded: false });
   assert.deepEqual(pickEffort([{ id: 'low' }], 'high'), { effort: 'none', degraded: true });
   assert.deepEqual(pickEffort([{ id: 'low' }, { id: 'high' }], ''), { effort: 'low', degraded: false });
@@ -259,7 +259,7 @@ test('缓存命中、会话级值参与 key、失效后重算', async () => {
   assert.equal(calls.length, 1);
   assert.equal(resolver.cacheSize(), 1);
 
-  // 会话级选择进入缓存 key：同一会话切模型后立即生效（设计「缓存与失效」）。
+  // 会话级选择进入缓存 key：同一会话切模型后立即生效（design §6.2）。
   const chosen = { agent: { session: session({ sessionModel: 'deepseek-official/deepseek-v4-pro' }) } };
   const cfg = await resolver.configFor(chosen);
   assert.equal(cfg.resolution.layer, 'session');

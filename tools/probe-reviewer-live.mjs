@@ -1,5 +1,5 @@
 /**
- * 真实调用链探针（M0/M1）：用 DeepSeek 的 OpenAI 兼容接口跑一次完整的审查循环。
+ * 真实调用链探针：用 DeepSeek 的 OpenAI 兼容接口跑一次完整的审查循环。
  *
  * 它把本插件的 `ctx.llm.stream` 请求映射成 `/chat/completions` 的 SSE 流，再用一个最小组装器
  * 把 delta 还原成内容块，验证 `lib/reviewer.js` 的消息序列（assistant tool_calls + role:'tool' 回喂）

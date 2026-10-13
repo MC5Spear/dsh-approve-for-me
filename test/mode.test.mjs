@@ -135,7 +135,7 @@ test('resolveActivation：活会话读服务，非活会话回退默认预设', 
     session(),
   );
   assert.deepEqual(live, { preset: 'auto-approve', active: true, resolved: true, unknown: false });
-  // 非活会话（无 session）：用 defaultPreset，控件在新会话开始前也能判定显隐（R15）。
+  // 非活会话（无 session）：用 defaultPreset，控件在新会话开始前也能判定显隐（design §7.3）。
   const fresh = resolveActivation(
     { permissionPresets: () => ({ current: () => 'auto-approve', defaultPreset: 'auto-approve' }), trigger },
     undefined,
@@ -178,9 +178,9 @@ test('resolveActivation：连 defaultPreset 都取不到时 resolved=false 且�
   assert.equal(result.active, false);
 });
 
-// ── R40：gate 跳过路径的审计去重通道 ─────────────────────────────────────
+// ── gate 跳过路径的审计去重通道（requirements §5.3／design §8.1） ────────────
 
-test('R40 gateSkip：同 (会话, 因) 首行放行，异因/异会话照常', () => {
+test('gateSkip：同 (会话, 因) 首行放行，异因/异会话照常', () => {
   const { gateSkip } = harness();
   assert.equal(gateSkip('s1', 'why-a'), true);
   assert.equal(gateSkip('s1', 'why-a'), false, '同因第二行应被去重');
@@ -190,7 +190,7 @@ test('R40 gateSkip：同 (会话, 因) 首行放行，异因/异会话照常', (
   assert.equal(typeof gateSkip('-', 'mode=off'), 'boolean');
 });
 
-test('R40 gateSkip：auditEverySkip=true 时全量放行', () => {
+test('gateSkip：auditEverySkip=true 时全量放行', () => {
   const { gateSkip } = harness({
     config: { trigger: { presets: ['auto-approve'], unknown: 'skip', auditEverySkip: true } },
   });
@@ -198,7 +198,7 @@ test('R40 gateSkip：auditEverySkip=true 时全量放行', () => {
   assert.equal(gateSkip('s1', 'w'), true, '全量口径下不去重');
 });
 
-test('R40 gateSkip 容量：超过 1000 个键后最旧淘汰', () => {
+test('gateSkip 容量：超过 1000 个键后最旧淘汰', () => {
   const { gateSkip } = harness();
   gateSkip('k0', 'w');
   for (let index = 1; index <= 1000; index += 1) gateSkip(`k${index}`, 'w');
@@ -207,9 +207,9 @@ test('R40 gateSkip 容量：超过 1000 个键后最旧淘汰', () => {
   assert.equal(gateSkip('k2', 'w'), false, 'k2 仍在记忆中');
 });
 
-// ── R41：mode 登记集的容量上限 ──────────────────────────────────────────
+// ── mode 登记集的容量上限（design §8.3） ──────────────────────────────────
 
-test('R41 mode 登记集容量：skipWritten / reviewWritten 超 1000 会话淘汰最旧', () => {
+test('mode 登记集容量：skipWritten / reviewWritten 超 1000 会话淘汰最旧', () => {
   const skip = harness({ service: { current: () => 'workspace-write' } });
   for (let index = 0; index < 1001; index += 1) skip.mode(ask(session({ id: `s${index}` })));
   assert.equal(skip.audits.length, 1001, '每个新会话各写一行 skip');

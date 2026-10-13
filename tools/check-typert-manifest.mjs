@@ -2,8 +2,7 @@
  * 离线校验 `typert.host.js` 清单：复刻 `dsh-typert-loader` 的注册期字段检查，不连网、不改宿主。
  *
  * 判据单源：invocation/codec 契约住在 `tools/typert-contract.mjs`，与
- * `test/typert-manifest.test.mjs` 共用同一份——两处各自维护会在本文件一侧漂移
- * （曾按 rc.6 的 `codec.schema` 字段校验，漂出 18 条假红，r33 收敛为单源）。
+ * `test/typert-manifest.test.mjs` 共用同一份——两处各自维护会在本文件一侧漂移。
  *
  * 用法：node --import ./tools/_host-resolve.mjs tools/check-typert-manifest.mjs
  * 通过打印 `PASS`；任一项失败打印缺陷并退出 1。

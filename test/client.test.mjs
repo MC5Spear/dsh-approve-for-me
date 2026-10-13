@@ -89,7 +89,7 @@ const primitivesStub = {
   Menu: function Menu(props) {
     return { type: 'Menu', props };
   },
-  // R29：设置界面的三个新基元——官方数字字段、胶囊 Tag、信息图标（Tooltip/问号图标已退役）。
+  // 设置界面的三个基元——官方数字字段、胶囊 Tag、信息图标（requirements §6.1／design §7.2）。
   SettingsValueField: function SettingsValueField(props) {
     return { type: 'SettingsValueField', props };
   },
@@ -291,7 +291,7 @@ function findByClass(node, className) {
  * @returns {Promise<object>} 展开后的元素树。
  */
 async function expandCard(component, props) {
-  // R27 后表单恒渲染，无折叠可展开：保留原有渲染/时钟节奏，仅去掉折叠头点击。
+  // 表单恒渲染，无折叠可展开：保留原有渲染/时钟节奏，仅去掉折叠头点击。
   render(component, props);
   await tick();
   hookIndex = 0;
@@ -317,7 +317,7 @@ test('注册四个挂点：设置卡片、composer 下拉、审批卡片状态�
   const names = env.registrations.map((entry) => entry.options.name);
   assert.deepEqual(names, ['plugins.bundle.config', 'conversation.input.left', 'conversation.approval.detail', 'conversation.view']);
   assert.equal(env.injected.length, 4);
-  // 设置表单走 keyed 槽（R27「落点唯一」）：键 = 包名；控制器以行 id（不是槽位键）获取，不注册 `plugins.row.config`。
+  // 设置表单走 keyed 槽（落点唯一）：键 = 包名；控制器以行 id（不是槽位键）获取，不注册 `plugins.row.config`。
   const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
   assert.equal(card.options.key, 'dsh-approve-for-me');
   assert.deepEqual(env.servedWatches, [['approve-for-me']], 'whileServed 应只看守本命名空间');
@@ -340,7 +340,7 @@ test('注册四个挂点：设置卡片、composer 下拉、审批卡片状态�
   assert.equal(typeof view.component, 'function');
 });
 
-test('中英字典齐备：每个字段都有 help 与 hint 键，覆盖组文案成对（R29）', async () => {
+test('中英字典齐备：每个字段都有 help 与 hint 键，覆盖组文案成对', async () => {
   const client = loadClient();
   const env = makeCtx();
   client.apply(env.ctx);
@@ -363,19 +363,19 @@ test('中英字典齐备：每个字段都有 help 与 hint 键，覆盖组文�
   for (const key of Object.keys(dicts.zh)) {
     assert.equal(key.startsWith('card.help.'), false, `前缀写错的 help 键：${key}`);
   }
-  // R29 覆盖组文案（官方词表）：「已覆盖」「恢复默认」与数字非法提示，中英成对。
+  // 覆盖组文案（官方词表）：「已覆盖」「恢复默认」与数字非法提示，中英成对。
   for (const key of ['card.override', 'card.resetField', 'card.invalidNumber']) {
     assert.ok(dicts.zh[key], `缺中文 ${key}`);
     assert.ok(dicts.en[key], `缺英文 ${key}`);
   }
-  // R29 判据①（字典侧）：退役键零命中——分区标题、全局重置、当前生效值、已保存横幅。
+  // 退役键零命中（字典侧）——分区标题、全局重置、当前生效值、已保存横幅。
   for (const key of ['card.resetAll', 'card.resolved', 'card.saved', 'card.invalid', 'card.section.trigger', 'card.section.model', 'card.section.advanced']) {
     assert.equal(dicts.zh[key], undefined, `退役键不应再存在：${key}`);
     assert.equal(dicts.en[key], undefined, `英文退役键不应再存在：${key}`);
   }
 });
 
-test('设置卡数据源：configForms 以行 id 取控制器，whileServed 门控挂载', () => {
+test('设置卡数据源：configForms 以行 id 取控制器，whileServed 管理挂载生命周期', () => {
   const client = loadClient();
   const env = makeCtx();
   client.apply(env.ctx);
@@ -387,7 +387,7 @@ test('设置卡数据源：configForms 以行 id 取控制器，whileServed 门�
   assert.equal(typeof injectedProps.rpcCall, 'function');
 });
 
-test('宿主未服务命名空间时不挂设置卡（whileServed 门控），其余挂点不受影响', async () => {
+test('宿主未服务命名空间时不挂设置卡（whileServed 管理生命周期），其余挂点不受影响', async () => {
   const client = loadClient();
   const env = makeCtx({ unserved: true });
   client.apply(env.ctx);
@@ -400,7 +400,7 @@ test('宿主未服务命名空间时不挂设置卡（whileServed 门控），�
   }
 });
 
-test('设置表单首屏：字段竖排、覆盖组在场、保存置灰、无退役键（R29 判据①②③）', () => {
+test('设置表单首屏：字段竖排、覆盖组在场、保存置灰、无退役键', () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
@@ -420,7 +420,7 @@ test('设置表单首屏：字段竖排、覆盖组在场、保存置灰、无�
   // 无折叠：一次渲染即字段与保存控件全在场。
   assert.equal(serialized.includes('dsafm_head'), false, '折叠头已移除，不应再有 dsafm_head');
   assert.equal(serialized.includes('dsafm_card'), false, '折叠外壳已移除，不应再有 dsafm_card');
-  // R29 判据①：退役键在渲染树里零命中（删除重置按钮/分区标题/生效值行后这些断言把关）。
+  // 退役键在渲染树里零命中（删除重置按钮/分区标题/生效值行后这些断言把关）。
   assert.equal(serialized.includes('card.resetAll'), false, '不应再有「重置全部覆盖」');
   assert.equal(serialized.includes('card.section.'), false, '不应再有分区标题');
   assert.equal(serialized.includes('card.resolved'), false, '不应再有「当前生效值」灰字行');
@@ -437,7 +437,7 @@ test('设置表单首屏：字段竖排、覆盖组在场、保存置灰、无�
   assert.match(JSON.stringify(fallbackField), /card\.resetField/, '覆盖组必须带「恢复默认」');
   const fallbackSelect = findAllByClass(fallbackField, 'dsafm_input').find((node) => node.type === 'select');
   assert.equal(fallbackSelect?.props.value, 'ask', '控件值就是生效值');
-  // R29 判据③：无改动时保存禁用（变异验证：把 disabled 门控删掉本断言变红）。
+  // 保存按钮启用条件（requirements §6.1）：无改动时保存禁用（变异验证：删掉 disabled 条件本断言变红）。
   const save = findByClass(form, 'dsafm_save');
   assert.ok(save, '底部应有唯一保存按钮');
   assert.equal(save.props.disabled, true, '无改动时保存应 disabled');
@@ -446,7 +446,7 @@ test('设置表单首屏：字段竖排、覆盖组在场、保存置灰、无�
   assert.doesNotMatch(serialized, /card\.readonly/);
 });
 
-test('跟随主模型复选框行内落在标签行右端，不单独占一行（用户报告勾位误置的修复）', () => {
+test('跟随主模型复选框行内落在标签行右端，不单独占一行', () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
@@ -476,10 +476,10 @@ test('跟随主模型复选框行内落在标签行右端，不单独占一行�
   assert.ok(JSON.stringify(head).includes('approve-for-me-ctl-reviewer-followParent'), '复选框必须在标签行内');
   assert.equal(checkbox[0].props.checked, true, '勾选态就是生效值');
   assert.equal(typeof checkbox[0].props.onChange, 'function', '勾选仍走暂存通道');
-  // 勾选只暂存：onChange 后保存按钮才解除置灰（沿用 R29 门控，不因行内化回退成选中即写）。
+  // 勾选只暂存：onChange 后保存按钮才解除置灰（启用条件同上，不因行内化回退成选中即写）。
 });
 
-test('帮助点击展开：aria-expanded/aria-controls 成对，文本进入 DOM（R29 判据⑤）', async () => {
+test('帮助点击展开：aria-expanded/aria-controls 成对，文本进入 DOM', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx();
@@ -498,7 +498,7 @@ test('帮助点击展开：aria-expanded/aria-controls 成对，文本进入 DOM
     assert.ok(button.props['aria-controls'], '帮助按钮必须带 aria-controls');
     assert.ok(button.props['aria-label'], '帮助按钮必须带 aria-label');
   }
-  // 点击 mode 字段的帮助：重渲染后 aria-expanded=true，帮助文本进入 DOM（判据⑤）。
+  // 点击 mode 字段的帮助：重渲染后 aria-expanded=true，帮助文本进入 DOM。
   const modeButton = buttons.find((button) => button.props['aria-controls'] === 'approve-for-me-help-mode');
   assert.ok(modeButton, 'mode 字段的帮助按钮应在场');
   modeButton.props.onClick();
@@ -597,7 +597,7 @@ test('composer 下拉：有当前会话时渲染 Menu 并可清除本会话选�
   );
 });
 
-test('设置表单不自带标题块：插件名与描述由宿主详情页渲染（R27）', () => {
+test('设置表单不自带标题块：插件名与描述由宿主详情页渲染', () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx();
@@ -619,7 +619,7 @@ test('设置表单不自带标题块：插件名与描述由宿主详情页渲�
   assert.equal(flat.includes('dsafm_desc'), false, '卡片自带描述已移除');
 });
 
-test('默认审查模型行：模型与档位两个下拉，换模型只暂存、保存才写 scope（R29）', async () => {
+test('默认审查模型行：模型与档位两个下拉，换模型只暂存、保存才写 scope', async () => {
   resetHooks();
   const client = loadClient();
   const calls = [];
@@ -659,7 +659,7 @@ test('默认审查模型行：模型与档位两个下拉，换模型只暂存�
     calls.some(([endpoint, args]) => endpoint === 'approveForMe/modelEfforts' && args.model === 'glm-5.3'),
     '未按当前模型请求档位',
   );
-  // R29 判据③：无改动时保存置灰。
+  // 无改动时保存置灰（启用条件见首屏用例）。
   assert.equal(findByClass(tree, 'dsafm_save').props.disabled, true, '无改动时保存应 disabled');
 
   // 换到只支持 high 的模型：原档位 low 不受支持，暂存清空档位，但尚未写库。
@@ -682,7 +682,7 @@ test('默认审查模型行：模型与档位两个下拉，换模型只暂存�
   assert.deepEqual(written[written.length - 1], { model: 'zai/glm-4.6', effort: '' }, '保存应一次写入模型选择');
 });
 
-test('按主模型映射：键为纯 id 时展示全引用，增删行只暂存、保存写入键仍是纯 id（R29）', async () => {
+test('按主模型映射：键为纯 id 时展示全引用，增删行只暂存、保存写入键仍是纯 id', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
@@ -754,7 +754,7 @@ test('按主模型映射：键为纯 id 时展示全引用，增删行只暂存�
   assert.deepEqual(mapped[mapped.length - 1].value, {}, '删除全部行应写入空映射');
 });
 
-test('接管工具名单：label 走字典键 field.tools，help.tools 中英同步（R28）', async () => {
+test('接管工具名单：label 走字典键 field.tools，help.tools 中英同步（requirements §5.4）', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx();
@@ -762,7 +762,7 @@ test('接管工具名单：label 走字典键 field.tools，help.tools 中英同
   const dicts = env.dictionaries[0].dicts;
   assert.equal(dicts.zh['help.tools'], '留空 = 对所有工具生效；填了则只接管名单内工具的审批请求，其余工具仍走原有人工审批。');
   assert.match(dicts.en['help.tools'], /Tools taken over \(one per line\)/);
-  // 字段标签进字典（R28）：zh 保留现名，en 有对译；两语言必须同键同在。
+  // 字段标签进字典：zh 保留现名，en 有对译；两语言必须同键同在。
   assert.equal(dicts.zh['field.tools'], '接管工具名单（每行一个）');
   assert.equal(dicts.en['field.tools'], 'Managed tools (one per line)');
 
@@ -777,7 +777,7 @@ test('接管工具名单：label 走字典键 field.tools，help.tools 中英同
   assert.match(JSON.stringify(treeZh), /接管工具名单（每行一个）/);
 });
 
-test('R28 用户文案三档：auto 沿用宿主绑定，zh/en 直查字典且互不相同，非法值回落 auto', async () => {
+test('用户文案三档：auto 沿用宿主绑定，zh/en 直查字典且互不相同，非法值回落 auto', async () => {
   resetHooks();
   const client = loadClient();
   const base = { status: 'ready', value: {}, base: {}, user: {}, revision: 1, writable: true };
@@ -913,7 +913,7 @@ test('composer 下拉：没有生效模型时档位段不出现', async () => {
   assert.match(JSON.stringify(menu.props.anchor), /composer\.followGlobalShort/, '未配置时触发器应当显示跟随全局');
 });
 
-test('composer 下拉：宿主里没有该会话时仍可写（会话开始前即可设置，R14）', async () => {
+test('composer 下拉：宿主里没有该会话时仍可写（会话开始前即可设置，requirements §6.2）', async () => {
   resetHooks();
   const client = loadClient();
   const calls = [];
@@ -970,7 +970,7 @@ test('composer 下拉：宿主里没有该会话时仍可写（会话开始前�
   );
 });
 
-test('composer 下拉：非接管预设（active=false）时不渲染控件（R15）', async () => {
+test('composer 下拉：非接管预设（active=false）时不渲染控件（design §7.3）', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
@@ -1011,7 +1011,7 @@ test('composer 下拉：非接管预设（active=false）时不渲染控件（R1
   assert.equal(findNode(tree, primitivesStub.Menu), undefined, '非接管预设下不得渲染下拉');
 });
 
-test('composer 下拉：写入失败时触发器出现 dsafm_badge 错误徽标（设计「遗留缺陷与修法」）', async () => {
+test('composer 下拉：写入失败时触发器出现 dsafm_badge 错误徽标（design §7.3）', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
@@ -1066,7 +1066,7 @@ test('composer 下拉：写入失败时触发器出现 dsafm_badge 错误徽标�
   assert.match(JSON.stringify(seat.props.children), /composer\.failed/, '徽标文案用 composer.failed');
 });
 
-test('按主模型映射：多斜杠输入取末段为键，暂存后由保存写入（设计「映射键的客户端归一化」＋R29）', async () => {
+test('按主模型映射：多斜杠输入取末段为键，暂存后由保存写入（design §6.2）', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
@@ -1108,7 +1108,7 @@ test('按主模型映射：多斜杠输入取末段为键，暂存后由保存�
   assert.deepEqual(Object.keys(mapped[mapped.length - 1].value), ['c'], '多斜杠输入应当只取末段作键');
 });
 
-test('接管预设：多选下拉的选项来自宿主目录，勾选暂存、保存写 trigger.presets（R16＋R29）', async () => {
+test('接管预设：多选下拉的选项来自宿主目录，勾选暂存、保存写 trigger.presets（requirements §6.1）', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
@@ -1148,7 +1148,7 @@ test('接管预设：多选下拉的选项来自宿主目录，勾选暂存、�
   assert.equal(trigger.props.id, 'approve-for-me-ctl-trigger-presets', '字段外壳的控件 id 应挂在触发器上');
   assert.match(JSON.stringify(trigger.props.children), /自动审批/);
   assert.doesNotMatch(JSON.stringify(trigger.props.children), /dsafm_map_parent/, '不应退化成文本输入');
-  // R57：预设无缺失时补救指引行不得出现（指引服务于缺失态，不是常驻文案——设计 §9.1）。
+  // 预设无缺失时补救指引行不得出现（指引服务于缺失态，不是常驻文案——requirements §6.1／design §9.2）。
   assert.doesNotMatch(JSON.stringify(tree), /card\.presets\.missing\.remedy/, 'missing 为空时指引行不应渲染');
   assert.equal(findByClass(tree, 'dsafm_save').props.disabled, true, '无改动时保存应 disabled');
 
@@ -1200,11 +1200,11 @@ test('接管预设：目录不可用时提示改用 settings.yaml，并把未知
   assert.match(text, /card\.presets\.unavailable/);
   assert.match(text, /card\.presets\.missing/);
   assert.match(text, /ghost/);
-  // R57：缺失态附补救指引（设计 §9.1）——missing 行与指引行成对出现，指引不出现即红。
+  // 缺失态附补救指引（requirements §6.1／design §9.2）——missing 行与指引行成对出现，指引不出现即红。
   assert.match(text, /card\.presets\.missing\.remedy/, '缺失态必须渲染补救指引行');
 });
 
-test('设置项文案：每个 select/bool 字段的选项都有中文标签键（R17）', async () => {
+test('设置项文案：每个 select/bool 字段的选项都有中文标签键（requirements §6.1）', async () => {
   const client = loadClient();
   const env = makeCtx();
   client.apply(env.ctx);
@@ -1258,7 +1258,7 @@ test('composer 下拉：旧宿主没有 active 字段时照常渲染（混合部
   assert.ok(findNode(tree, primitivesStub.Menu), '缺 active 字段时不应隐藏控件');
 });
 
-test('composer 下拉：权限预设一变就立即重拉（R21，不再等轮询）', async () => {
+test('composer 下拉：权限预设一变就立即重拉（design §7.3，不再等轮询）', async () => {
   resetHooks();
   const client = loadClient();
   const realSetInterval = globalThis.setInterval;
@@ -1486,11 +1486,11 @@ test('审批卡片状态条：审查中显示审查时限，无时限时说明�
   }
 });
 
-test('审批卡片状态条（VER-01）：非审查状态的 null 截止不渲染任何无时限等待文案', async () => {
+test('审批卡片状态条：非审查状态的 null 截止不渲染任何无时限等待文案（design §7.4）', async () => {
   resetHooks();
   const client = loadClient();
   // 人工零时限立即结算：理论上不该出现该状态；万一出现（denied/timeout + null 截止），
-  // 也不得显示「无时限等待」——只显示状态与原因（§7.4）。
+  // 也不得显示「无时限等待」——只显示状态与原因（design §7.4）。
   const env = makeCtx({
     currentSession: 's1',
     call: async () => ({ ok: true, value: { entries: [{ callId: 'call_1', state: 'denied', reason: '风险高', startedAt: 1, deadlineAt: null, deadlineKind: null, updatedAt: 1 }] } }),
@@ -1651,7 +1651,7 @@ test('审查视图：合并行主判定为 outcome、判定与结算并存可分
   assert.match(listText, /共 3 条/);
   // A 行：主判定＝结算 outcome（人工推翻审查放行）→ 拒绝（rejected）为主、放行（allow）为次级徽标。
   assert.match(listText, /拒绝（rejected）/, 'outcome 是主判定');
-  assert.match(listText, /放行（allow）/, '审查判定为次级徽标（GAP-04：两者可分辨）');
+  assert.match(listText, /放行（allow）/, '审查判定为次级徽标（两者可分辨，design §8.5）');
   // C 行（只有结算）：Z 无任何在场分段 → 0ms 由在场分段求和得出。
   assert.match(listText, /npm run build/);
   assert.match(listText, /审批 0 ms/, '无在场分段时 Z=0（求和口径）');
@@ -1683,7 +1683,7 @@ test('审查视图：合并行主判定为 outcome、判定与结算并存可分
   assert.match(allowText, /归属: 主会话（main）/);
   assert.match(allowText, /升权目标: danger-full-access/);
 
-  // 收起 A、点开 C（只有结算）：全部分段缺失显示 —，不按 0 计（GAP-05）。
+  // 收起 A、点开 C（只有结算）：全部分段缺失显示 —，不按 0 计（design §8.5）。
   const headsC = findAllByClass(render(view.component, props), 'dsafm_review_head');
   const headC = headsC.find((entry) => JSON.stringify(entry).includes('npm run build'));
   headC.props.onClick();
@@ -1704,7 +1704,7 @@ test('审查视图：合并行主判定为 outcome、判定与结算并存可分
   assert.equal((cText.match(/未采集（capture 档为 summary）/g) ?? []).length, 6, '六段缺各显示一次未采集说明');
 });
 
-test('审查视图：readFailed=true 时显示读取降级提示，不伪装成「没有记录」（VER-02）', async () => {
+test('审查视图：readFailed=true 时显示读取降级提示，不伪装成「没有记录」（design §8.3）', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
@@ -1787,7 +1787,7 @@ test('审查视图：详情匹配 PTC 子调用行；truncated 标注已截断�
   assert.match(text2, /未匹配到工具/);
 });
 
-test('设置表单恒渲染：无折叠头、无分区标题，字段与唯一保存首屏在场（R27＋R29）', async () => {
+test('设置表单恒渲染：无折叠头、无分区标题，字段与唯一保存首屏在场', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
@@ -1811,7 +1811,7 @@ test('设置表单恒渲染：无折叠头、无分区标题，字段与唯一�
   // 折叠头已移除（下拉基元自带 aria-expanded，不在此断言）。
   assert.equal(flat.includes('dsafm_head'), false, '折叠头已移除，不应再有 dsafm_head');
   assert.equal(flat.includes('dsafm_card'), false, '折叠外壳已移除，不应再有 dsafm_card');
-  // R29：分区标题退役；唯一保存按钮首屏在场且初始置灰；全局重置不再渲染。
+  // 分区标题退役；唯一保存按钮首屏在场且初始置灰；全局重置不再渲染。
   assert.equal(flat.includes('card.section.'), false, '分区标题已退役');
   assert.notEqual(flat.indexOf('card.save'), -1, '保存控件应首屏在场');
   assert.equal(flat.includes('card.resetAll'), false, '重置控件已删除');
@@ -1824,7 +1824,7 @@ test('设置表单恒渲染：无折叠头、无分区标题，字段与唯一�
   assert.notEqual(flatSummary.indexOf('card.save'), -1, 'view:summary 同样渲完整表单');
 });
 
-test('写入被宿主拒绝（mutate 解析 false）时显示失败、保留暂存，不报已保存（R29）', async () => {
+test('写入被宿主拒绝（mutate 解析 false）时显示失败、保留暂存，不报已保存', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({ mutateRejects: true });
@@ -1850,13 +1850,13 @@ test('写入被宿主拒绝（mutate 解析 false）时显示失败、保留暂�
   assert.match(after, /card\.failed/, '应显示失败文案');
   assert.equal(after.includes('card.saved'), false, '不应显示已保存');
   assert.equal(env.writes.length, 0, '快照不应被假写入');
-  // R29：失败保留暂存——控件仍显示暂存值，保存仍视为有改动。
+  // 失败保留暂存——控件仍显示暂存值，保存仍视为有改动。
   assert.equal(findAllByClass(afterTree, 'dsafm_input').find((node) => node.props.id === 'approve-for-me-ctl-mode').props.value, 'rules', '失败后暂存值应保留');
   assert.equal(findByClass(afterTree, 'dsafm_save').props.disabled, false, '失败后保存仍可重试');
   assert.match(String(findByClass(afterTree, 'dsafm_failed').props.children), /card\.failed/, '失败文案用现行错误别名容器');
 });
 
-test('恢复默认：只暂存回退值、保存才落 unset（R29 判据②）', async () => {
+test('恢复默认：只暂存回退值、保存才落 unset', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
@@ -1902,7 +1902,7 @@ test('恢复默认：只暂存回退值、保存才落 unset（R29 判据②）'
   const stagedSelect = findAllByClass(stagedField, 'dsafm_input').find((node) => node.type === 'select');
   assert.equal(stagedSelect.props.value, 'reject', '恢复默认后控件应立即显示组合层默认值');
   assert.equal(JSON.stringify(stagedField).includes('card.override'), false, '暂存 clear 后不再显示已覆盖');
-  assert.equal(env.writes.length, 0, '恢复默认不应写库（R29 判据②核心）');
+  assert.equal(env.writes.length, 0, '恢复默认不应写库（保存才落 unset）');
 
   // 保存：写入 unset（用户层键消失才是真回退）。
   const save = findByClass(staged, 'dsafm_save');
@@ -1913,7 +1913,7 @@ test('恢复默认：只暂存回退值、保存才落 unset（R29 判据②）'
   assert.equal(unsets.length, 1, '保存应落 unset');
 });
 
-test('保存门控：数字字段暂存非法文本阻止保存、改回合法即恢复（R29 判据③·非法值因子）', async () => {
+test('保存按钮启用条件：数字字段暂存非法文本阻止保存、改回合法即恢复（requirements §6.1）', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx();
@@ -1935,7 +1935,7 @@ test('保存门控：数字字段暂存非法文本阻止保存、改回合法�
   assert.equal(invalidMarker.props.invalid, true, '非法暂存应标记 invalid');
   assert.equal(invalidMarker.props.invalidLabel, 'card.invalidNumber', '非法文案走字典键');
   assert.equal(invalidMarker.props.text, 'abc', '暂存文本保留在控件里');
-  assert.equal(findByClass(invalidTree, 'dsafm_save').props.disabled, true, '有非法值时保存必须置灰（requirements R29 保存三态）');
+  assert.equal(findByClass(invalidTree, 'dsafm_save').props.disabled, true, '有非法值时保存必须置灰（requirements §6.1 保存三态）');
   assert.equal(env.writes.length, 0, '非法态不得触发任何写入');
   // 改回合法数字：invalid 消除、保存恢复可点，写入的是合法值。
   invalidMarker.props.onEdit('96000');
@@ -1981,7 +1981,7 @@ test('恢复默认的无操作路径：无用户层键时 clear 不产生写入�
   assert.equal(noopSelect.props.value, '', '显示回到组合层默认（未设置）');
 });
 
-test('毫秒字段秒数读数：生效值常驻、草稿随输入实时换算（R30 判据①②③⑥）', async () => {
+test('毫秒字段秒数读数：生效值常驻、草稿随输入实时换算', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
@@ -2004,11 +2004,11 @@ test('毫秒字段秒数读数：生效值常驻、草稿随输入实时换算�
     return line === undefined ? undefined : findAllByClass(line, cls)[0];
   };
   const tree = await expandCard(card.component, zhProps);
-  // 判据①：两个 ms 字段的生效值读数与快照生效值一致，且初始草稿＝生效值文本（无暂存）。
+  // 两个 ms 字段的生效值读数与快照生效值一致，且初始草稿＝生效值文本（无暂存）。
   assert.equal(secSpan(tree, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_resolved').props.children, '生效：300 秒', '审查超时生效值读数 300 秒');
   assert.equal(secSpan(tree, 'approve-for-me-sec-human-timeoutMs', 'dsafm_sec_resolved').props.children, '生效：600 秒', '人工超时生效值读数 600 秒');
   assert.equal(secSpan(tree, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_draft').props.children, '草稿：300 秒', '初始草稿读数＝生效值');
-  // 判据②：键入未保存，同一次输入后的渲染即出现新草稿读数，生效值读数不变（不是保存后才更新）。
+  // 键入未保存，同一次输入后的渲染即出现新草稿读数，生效值读数不变（不是保存后才更新）。
   const marker = findAllNodes(tree, (node) => node.type === primitivesStub.SettingsValueField)
     .find((node) => node.props.id === 'approve-for-me-ctl-reviewer-timeoutMs');
   const afterEdit = async (text) => {
@@ -2020,9 +2020,9 @@ test('毫秒字段秒数读数：生效值常驻、草稿随输入实时换算�
   const typed = await afterEdit('120000');
   assert.equal(secSpan(typed, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_draft').props.children, '草稿：120 秒', '键入 120000 未保存即出现 120 秒');
   assert.equal(secSpan(typed, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_resolved').props.children, '生效：300 秒', '生效值读数不随草稿变化');
-  // GAP-06：草稿与生效值都非 0 时，无上限风险提醒不在场。
+  // 草稿与生效值都非 0 时，无上限风险提醒不在场。
   assert.equal(secSpan(typed, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_warn'), undefined, '非零时限不显示提醒');
-  // 判据③＋格式边界：整数不带小数点；非整数一位小数（1501 四舍五入到 1.5；999 到 1.0）；0 按字面显示。
+  // 格式边界：整数不带小数点；非整数一位小数（1501 四舍五入到 1.5；999 到 1.0）；0 按字面显示。
   const oneFive = await afterEdit('1500');
   assert.equal(secSpan(oneFive, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_draft').props.children, '草稿：1.5 秒', '1500 → 1.5 秒');
   const odd = await afterEdit('1501');
@@ -2031,24 +2031,24 @@ test('毫秒字段秒数读数：生效值常驻、草稿随输入实时换算�
   assert.equal(secSpan(sub, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_draft').props.children, '草稿：1.0 秒', '999 → 1.0 秒（非整数秒一位小数）');
   const zero = await afterEdit('0');
   assert.equal(secSpan(zero, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_draft').props.children, '草稿：0 秒', '0 按字面显示 0 秒');
-  // GAP-06（设计 §7.2）：草稿为 0 → 无上限风险提醒固定渲染在审查时限字段的秒数读数行内，
+  // 草稿为 0 → 无上限风险提醒固定渲染在审查时限字段的秒数读数行内（design §7.2），
   // 可见性不依赖帮助区；只描述风险不改写输入（0 仍可保存）。人工时限字段的 0 是「立即拒绝」，不显示。
   const warnZero = secSpan(zero, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_warn');
   assert.ok(warnZero, '草稿为 0 时无上限提醒必须在场');
   assert.match(String(warnZero.props.children), /无限停/u);
   assert.equal(secSpan(zero, 'approve-for-me-sec-human-timeoutMs', 'dsafm_sec_warn'), undefined, '人工时限的 0 不显示该提醒');
-  // 判据⑥：en 档单位 s（同一暂存文本，读数跟随语言）。
+  // en 档单位 s（同一暂存文本，读数跟随语言）。
   const enProps = { t: (key) => dicts.en[key] ?? key, scope: env.scope, ...card.options.inject() };
   hookIndex = 0;
   const enTree = render(card.component, enProps);
   assert.equal(secSpan(enTree, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_resolved').props.children, 'Effective: 300 s', 'en 档生效值读数单位 s');
   assert.equal(secSpan(enTree, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_draft').props.children, 'Draft: 0 s', 'en 档草稿读数单位 s');
-  // GAP-06 中英成对：en 档提醒文本同样在场。
+  // 中英成对：en 档提醒文本同样在场。
   const warnEn = secSpan(enTree, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_warn');
   assert.ok(warnEn && /forever/u.test(String(warnEn.props.children)), 'en 档无上限提醒在场');
 });
 
-test('GAP-06：生效值为 0 即显示无上限提醒（保存读回语义）；草稿改回非零不撤销提醒', async () => {
+test('生效值为 0 即显示无上限提醒（保存读回语义）；草稿改回非零不撤销提醒', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
@@ -2085,7 +2085,7 @@ test('GAP-06：生效值为 0 即显示无上限提醒（保存读回语义）�
   assert.ok(findAllByClass(typedLine, 'dsafm_sec_warn')[0], '生效值为 0 时草稿非零不撤销提醒');
 });
 
-test('秒数读数占位：清空与非数字走占位、生效值读数仍在场（R30 判据④⑦）', async () => {
+test('秒数读数占位：清空与非数字走占位、生效值读数仍在场', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
@@ -2115,12 +2115,12 @@ test('秒数读数占位：清空与非数字走占位、生效值读数仍在�
     hookIndex = 0;
     return render(card.component, props);
   };
-  // 判据④：清空 → 草稿读数占位、不变色（空不是非法）、生效值读数不变。
+  // 清空 → 草稿读数占位、不变色（空不是非法）、生效值读数不变。
   const cleared = await afterEdit('');
   assert.equal(secSpan(cleared, 'dsafm_sec_draft').props.children, '草稿：—', '清空后草稿读数为占位');
   assert.equal(String(secSpan(cleared, 'dsafm_sec_draft').props.className).includes('dsafm_sec_invalid'), false, '空串占位不转错误色');
   assert.equal(secSpan(cleared, 'dsafm_sec_resolved').props.children, '生效：300 秒', '清空后生效值读数不变');
-  // 判据⑦：非数字（12x）→ 草稿占位且转错误色，生效值读数仍在场（读数自绘在官方组件之外，不随 hint 被顶掉）。
+  // 非数字（12x）→ 草稿占位且转错误色，生效值读数仍在场（读数自绘在官方组件之外，不随 hint 被顶掉）。
   const bad = await afterEdit('12x');
   assert.equal(secSpan(bad, 'dsafm_sec_draft').props.children, '草稿：—', '非数字草稿读数为占位');
   assert.equal(String(secSpan(bad, 'dsafm_sec_draft').props.className).includes('dsafm_sec_invalid'), true, '非数字草稿 span 转错误色');
@@ -2132,7 +2132,7 @@ test('秒数读数占位：清空与非数字走占位、生效值读数仍在�
   assert.equal(secSpan(fraction, 'dsafm_sec_draft').props.children, '草稿：—', '1.5 非法（非整数）→占位');
 });
 
-test('秒数读数与「恢复默认」／保存：clear 后按默认值换算、保存写毫秒（R30 判据⑤）', async () => {
+test('秒数读数与「恢复默认」／保存：clear 后按默认值换算、保存写毫秒', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
@@ -2183,7 +2183,7 @@ test('秒数读数与「恢复默认」／保存：clear 后按默认值换算�
   assert.equal(secSpan(saved, 'dsafm_sec_draft').props.children, '草稿：120 秒', '保存成功后草稿读数回落到新生效值文本');
 });
 
-test('秒数读数只属毫秒字段：恰好两行，字节／令牌字段无读数（R30 适用范围）', async () => {
+test('秒数读数只属毫秒字段：恰好两行，字节／令牌字段无读数', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx();
@@ -2204,7 +2204,7 @@ test('秒数读数只属毫秒字段：恰好两行，字节／令牌字段无�
   for (const span of resolvedSpans) assert.equal(span.props.children, '生效：—', '快照缺值时生效值读数为占位');
 });
 
-test('中英字典整表键集奇偶：zh 与 en 键集排序后相等（R28 升格；R30 秒数键入册）', async () => {
+test('中英字典整表键集奇偶：zh 与 en 键集排序后相等（requirements §5.4，秒数键入册）', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx();
@@ -2220,7 +2220,7 @@ test('中英字典整表键集奇偶：zh 与 en 键集排序后相等（R28 升
   }
 });
 
-test('离开页面丢弃暂存：重挂载后读快照旧值、保存回到置灰（R29 官方语义）', async () => {
+test('离开页面丢弃暂存：重挂载后读快照旧值、保存回到置灰', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx();
@@ -2240,7 +2240,7 @@ test('离开页面丢弃暂存：重挂载后读快照旧值、保存回到置�
   assert.equal(findByClass(reopened, 'dsafm_save').props.disabled, true, '重开后保存应回到置灰');
 });
 
-test('静态扫描：退役文案与失效令牌零命中、外壳类退役（R29 判据①④⑥）', async () => {
+test('静态扫描：退役文案与失效令牌零命中、外壳类退役', async () => {
   const client = loadClient();
   assert.ok(client, '模块应可加载');
   // 源码零命中：全局重置、当前生效值行、问号图标（变异验证：加回任一即红）。
@@ -2252,13 +2252,13 @@ test('静态扫描：退役文案与失效令牌零命中、外壳类退役（R2
   assert.equal(SOURCE.includes('dsafm_section'), false, '分区标题类应退役');
   assert.equal(SOURCE.includes('dsafm_divider'), false, '分区线类应退役');
   assert.equal(SOURCE.includes('dsafm_actions'), false, '旧操作区类应退役');
-  // 判据⑥：交付 CSS 串对 0.1.7 令牌表不存在的别名零命中（含官方笔误 bg-layer-4）。
+  // 交付 CSS 串对 0.1.7 令牌表不存在的别名零命中（含官方笔误 bg-layer-4）。
   for (const token of ['--dsw-alias-state-warning-primary', '--dsw-alias-label-error', '--dsw-alias-bg-layer-4']) {
     assert.equal(SOURCE.includes(token), false, `失效令牌零命中：${token}`);
   }
   // 笔误修正：警示色用现行别名 state-warn-primary。
   assert.ok(SOURCE.includes('--dsw-alias-state-warn-primary'), '警示色应使用现行别名');
-  // 卡片外壳退役（判据④源码侧）：.dsafm_form 不再声明 border/radius/底色。
+  // 卡片外壳退役（源码侧）：.dsafm_form 不再声明 border/radius/底色。
   const formRule = /\.dsafm_form\{[^}]*\}/u.exec(SOURCE)?.[0] ?? '';
   assert.ok(formRule.length > 0, '应有 .dsafm_form 规则');
   assert.equal(/border(?!-top)/u.test(formRule), false, '.dsafm_form 不应再带边框');

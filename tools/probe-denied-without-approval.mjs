@@ -57,7 +57,7 @@ for (const ws of readdirSync(root)) {
       const callId = String(content?.toolCallId ?? data?.callId ?? '');
       const out = (content?.content ?? []).map((block) => block.text ?? '').join(' ');
       // 只在**这一次调用被判为错误**时才认裸文本：否则会把文件内容、grep 命中、
-      // 测试输出里出现的 "denied" 全部误判成拒绝（实测 166 条命中里绝大多数是这个来源）。
+      // 测试输出里出现的 "denied" 全部误判成拒绝（实测：绝大多数命中来自这个来源）。
       const failed = content?.isError === true;
       const marker = MARKER.test(out);
       const raw = failed && RAW.test(out);

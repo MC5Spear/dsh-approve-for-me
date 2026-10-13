@@ -248,7 +248,7 @@ test('自定义 NTFS 流名不能绕过拒止', async () => {
   assert.equal(grepped.denied, true);
 });
 
-test('setLang 两档驱动结果模板语言（R32-4：工具失败回喂整句随语言切换）', async () => {
+test('setLang 两档驱动结果模板语言（design §3.4：工具失败回喂整句随语言切换）', async () => {
   const root = await fixture();
   const tools = createReadonlyTools({ rootDir: root });
   // 用文件路径列目录 → readdir 抛 ENOTDIR → run 的 catch 回喂 tool.failed（唯一产生该模板的路径）。
@@ -266,13 +266,13 @@ test('setLang 两档驱动结果模板语言（R32-4：工具失败回喂整句�
   assert.equal(en.text.slice(enHead.length), zh.text.slice(zhHead.length));
   assert.ok(!en.text.includes('工具'), 'en 档不得残留 zh 模板');
   assert.ok(!zh.text.includes('Tool list_dir failed'), 'zh 档不得残留 en 模板');
-  // 变红判据：结果模板退回硬编码 zh（r32 登记的缺口形态）→ enHead 断言红；硬编码 en → zhHead 红；
+  // 变红判据：结果模板退回硬编码 zh → enHead 断言红；硬编码 en → zhHead 红；
   // setLang 失效（两档同文）→ 两条首部断言之一必红（同一文本不可能同时以两种模板开头）。
 });
 
-// ── R32：grep 模式静态预检与资源上界 ──────────────────────────────────────
+// ── grep 模式静态预检与资源上界（design §3.4） ──────────────────────────────
 
-test('R32④ assertSafePattern：普通形态放行、病态形态给出拒止理由', () => {
+test('assertSafePattern：普通形态放行、病态形态给出拒止理由', () => {
   // 放行：无「量词作用于复杂组」、无反向引用、不超长。
   for (const source of ['[a-z]+\\d+', '(foo)+', 'foo|bar', 'a+?', '(?:ab)+', 'a{2,4}', '^\\d+$', String.raw`\bmkfs\b`]) {
     assert.equal(assertSafePattern(source), undefined, `应放行：${source}`);
@@ -283,7 +283,7 @@ test('R32④ assertSafePattern：普通形态放行、病态形态给出拒止�
   }
 });
 
-test('R32③ 病态 pattern 在编译前被静态拒止：同步返回、不触超时、审计照写', async () => {
+test('病态 pattern 在编译前被静态拒止：同步返回、不触超时、审计照写', async () => {
   const root = await fixture();
   const { audits, audit } = spy();
   const tools = createReadonlyTools({ rootDir: root, timeoutMs: 5000, audit });
@@ -295,7 +295,7 @@ test('R32③ 病态 pattern 在编译前被静态拒止：同步返回、不触�
   assert.equal(audits[0].phase, 'tool');
 });
 
-test('R32① 超过 1 MiB 的文件跳过并说明；同目录小文件仍命中', async () => {
+test('超过 1 MiB 的文件跳过并说明；同目录小文件仍命中', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dsafm-big-'));
   // ≈1.15 MiB 且末尾带 needle：若不做大小跳过，big.log 会是命中项。
   await writeFile(join(root, 'big.log'), `${'x'.repeat(96)}\n`.repeat(12000) + 'needle\n');
@@ -307,7 +307,7 @@ test('R32① 超过 1 MiB 的文件跳过并说明；同目录小文件仍命中
   assert.match(result.text, /跳过 1 个超过 1 MiB 的文件/);
 });
 
-test('R32② 候选文件数截断：超过 200 个候选时说明截断为前 200', async () => {
+test('候选文件数截断：超过 200 个候选时说明截断为前 200', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dsafm-many-'));
   for (let index = 0; index < 250; index += 1) {
     await writeFile(join(root, `f${String(index).padStart(3, '0')}.txt`), 'needle\n');
@@ -320,9 +320,9 @@ test('R32② 候选文件数截断：超过 200 个候选时说明截断为前 2
   assert.doesNotMatch(result.text, /f2\d\d\.txt/);
 });
 
-// ── R33：DSH 数据根围栏 ──────────────────────────────────────────────────
+// ── DSH 数据根围栏（design §3.4／§8.3） ────────────────────────────────────
 
-test('R33①② sessions/reviews/current-url.txt 全部拒止，拒止类别随行写出', async () => {
+test('sessions/reviews/current-url.txt 全部拒止，拒止类别随行写出', async () => {
   const root = await fixture();
   const home = await mkdtemp(join(tmpdir(), 'dsafm-home-'));
   await mkdir(join(home, 'sessions'), { recursive: true });
@@ -343,7 +343,7 @@ test('R33①② sessions/reviews/current-url.txt 全部拒止，拒止类别随�
   assert.equal(globbed.denied, true, 'glob 基点在围栏内应拒止');
 });
 
-test('R33③④ 对照：注入根独立生效、工作区同名目录不误伤', async () => {
+test('对照：注入根独立生效、工作区同名目录不误伤', async () => {
   const root = await fixture();
   await mkdir(join(root, 'sessions'), { recursive: true });
   await writeFile(join(root, 'sessions', 'note.txt'), 'workspace-session\n');
@@ -358,9 +358,9 @@ test('R33③④ 对照：注入根独立生效、工作区同名目录不误伤'
   assert.equal(inEnv.denied, true);
 });
 
-// ── R36/R43：热改接线与真实超时 ──────────────────────────────────────────
+// ── 热改接线与真实超时（requirements §5.3／design §3.4） ────────────────────
 
-test('R36①③ setter 现读生效、非法值不改变现值', async () => {
+test('setter 现读生效、非法值不改变现值', async () => {
   const seen = [];
   let delayMs = 0;
   const tools = createReadonlyTools({
@@ -396,7 +396,7 @@ test('R36①③ setter 现读生效、非法值不改变现值', async () => {
   assert.equal(still.isError, true, '非法超时不得改写现值：仍按 15ms 生效');
 });
 
-test('R43① 超时真实触发：慢任务＋小超时 → 超时形态且结算落在超时值邻域', async () => {
+test('超时真实触发：慢任务＋小超时 → 超时形态且结算落在超时值邻域', async () => {
   const tools = createReadonlyTools({
     rootDir: '.',
     timeoutMs: 15,
@@ -413,7 +413,7 @@ test('R43① 超时真实触发：慢任务＋小超时 → 超时形态且结�
   assert.ok(elapsed < 140, `必须在超时值附近结算而不是等满任务：${elapsed}ms`);
 });
 
-test('R43② junction 真建：遍历不进入符号链接目录（建链失败显式红）', async () => {
+test('junction 真建：遍历不进入符号链接目录（建链失败显式红）', async () => {
   const root = await fixture();
   await mkdir(join(root, 'real'), { recursive: true });
   await writeFile(join(root, 'real', 'inside.txt'), 'junction-target\n');
@@ -431,7 +431,7 @@ test('R43② junction 真建：遍历不进入符号链接目录（建链失败�
   assert.doesNotMatch(listed.text, /linkdir.*inside\.txt/, 'glob 不得进入链接目录');
   assert.match(listed.text, /real.*inside\.txt/, '对照：真实目录内容在列');
   const grepped = await tools.run('grep', { pattern: 'junction-target', path: root });
-  // 内容经真实路径本来就可搜到；R43 的判据是「命中路径不得经链接」。
+  // 内容经真实路径本来就可搜到；判据是「命中路径不得经链接」。
   assert.match(grepped.text, /real.*inside\.txt/u, '对照：真实路径可搜到内容');
   assert.doesNotMatch(grepped.text, /linkdir/u, 'grep 命中不得以链接目录为路径');
   // 对照：真实目录内的文件照常可查。

@@ -1,7 +1,7 @@
 /**
- * R28 字典守护：lib/agent-texts.js 的结构与语义断言。
- * 设计 §7.5：键集相等（可变红——给单侧加键必红）、冻结、未知 lang 抛错、缺键抛错、
- * 不变块两语言逐字节一致、en 拒绝末句＝codex 原文、超时文案不含末句（R10）。
+ * 文本字典守护（requirements §5.4）：lib/agent-texts.js 的结构与语义断言。
+ * design §7.5：键集相等（可变红——给单侧加键必红）、冻结、未知 lang 抛错、缺键抛错、
+ * 不变块两语言逐字节一致、en 拒绝末句＝codex 原文、超时文案不含末句（requirements §4.3）。
  */
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
@@ -95,7 +95,7 @@ test('拒绝文本：en 末句＝codex REJECTION_INSTRUCTIONS 原文；zh 末句
   assert.match(zhReject, /不要用等价手段绕过该拒绝/u);
 });
 
-test('超时文案（两语言）都不含「绕过拒绝」末句（R10）', () => {
+test('超时文案（两语言）都不含「绕过拒绝」末句（requirements §4.3）', () => {
   for (const lang of ['zh', 'en']) {
     const body = agentT(lang, 'gate.timeout.body');
     assert.ok(!body.includes(REJECTION_INSTRUCTIONS_EN), `${lang} 超时文案不得含 en 拒绝末句`);
@@ -104,7 +104,7 @@ test('超时文案（两语言）都不含「绕过拒绝」末句（R10）', ()
   }
 });
 
-test('R46⑤ 通道故障模板：两语言结构一致、含防风暴指引、不含拒绝末句；errorText 渲染 {reason}', () => {
+test('通道故障模板：两语言结构一致、含防风暴指引、不含拒绝末句；errorText 渲染 {reason}', () => {
   const zh = agentT('zh', 'gate.error.body');
   const en = agentT('en', 'gate.error.body');
   // 结构与超时模板平行：首行前缀＋原因行＋说明行＋末行处置指引（四行）。
@@ -119,7 +119,7 @@ test('R46⑤ 通道故障模板：两语言结构一致、含防风暴指引、�
   const placeholders = (text) => [...text.matchAll(/\{(\w+)\}/gu)].map((m) => m[1]).sort().join(',');
   assert.equal(placeholders(zh), placeholders(en), 'gate.error.body 占位集两语言必须一致');
   assert.equal(placeholders(zh), 'reason');
-  // 防风暴指引（R46 不可裁剪项）：末行不得写成无限重试许可。
+  // 防风暴指引（不可裁剪项）：末行不得写成无限重试许可。
   assert.match(zh, /不要连续反复重试.*把故障报告用户/u);
   assert.match(en, /do not keep retrying in a row; report the failure to the user/u);
   // errorText 渲染：reason 原文进 {reason} 位，缺省落 gate.noReason，两语言各自成句。
@@ -168,7 +168,7 @@ test('工具结果模板：两语言占位集一致（换参名会在对侧丢�
   }
 });
 
-test('buildUserTexts：动作段衔接行按 lang 切换，两档首行不同（G3/N3 两语言行为差异）', () => {
+test('buildUserTexts：动作段衔接行按 lang 切换，两档首行不同（两语言行为差异）', () => {
   const input = { evidence: 'EVIDENCE', action: { toolName: 'pwsh', command: 'npm i', cwd: 'C:/work', mode: 'danger-full-access', justification: 'test' } };
   const zh = buildUserTexts(input, 'zh');
   const en = buildUserTexts(input, 'en');
@@ -181,17 +181,17 @@ test('buildUserTexts：动作段衔接行按 lang 切换，两档首行不同（
   const body = (value) => value.split('\n').slice(1).join('\n');
   assert.equal(body(zh.actionText), body(en.actionText));
   assert.equal(zh.evidenceText, en.evidenceText);
-  // 变红判据：若 buildUserTexts 退回硬编码 en 衔接行（N3 修正前形态），zh 首行等值断言红；
+  // 变红判据：若 buildUserTexts 退回硬编码 en 衔接行，zh 首行等值断言红；
   // 若 lang 参数断裂（两档同文），notEqual 与两条互不残留断言红。
 });
 
-test('字典外无残留硬编码送模文本（G3 静态扫描：锚短语只许住在 agent-texts.js）', async () => {
+test('字典外无残留硬编码送模文本（静态扫描：锚短语只许住在 agent-texts.js）', async () => {
   const { readFileSync, readdirSync } = await import('node:fs');
   const { join, dirname } = await import('node:path');
   const { fileURLToPath } = await import('node:url');
   const libDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'lib');
   // 锚短语取送模文本的特征句（拒绝/放行/超时注入正文、轮次用尽指令、动作段衔接行、
-  // 回喂模板）；审计 reason 的合法中文（R28 排除项，如 index.js 的「应答者逃逸异常：」）
+  // 回喂模板）；审计 reason 的合法中文（字典排除项，如 index.js 的「应答者逃逸异常：」）
   // 不在锚集里，不会误伤。
   const anchors = [
     '本次升权请求被拒绝',
@@ -202,7 +202,7 @@ test('字典外无残留硬编码送模文本（G3 静态扫描：锚短语只�
     'Planned action JSON:',
     '工具轮次已用完',
     'The tool round budget is exhausted',
-    // 工具失败模板（R32-4）：模板句身的两种源码形态各作锚——占位符写法 {name} 与模板字面量写法 ${name}，
+    // 工具失败模板：模板句身的两种源码形态各作锚——占位符写法 {name} 与模板字面量写法 ${name}，
     // 消费方无论用哪种形式硬编码回喂句，都会离开字典出现在消费文件里被扫出。
     '工具 {name} 失败',
     'Tool {name} failed',
@@ -220,7 +220,7 @@ test('字典外无残留硬编码送模文本（G3 静态扫描：锚短语只�
     const hits = scan(readFileSync(join(libDir, file), 'utf8'));
     if (hits.length > 0) offenders.push(`${file}: ${hits.join(', ')}`);
   }
-  assert.deepEqual(offenders, [], `送模文本句身必须只住在字典（设计 §7.5）：\n${offenders.join('\n')}`);
+  assert.deepEqual(offenders, [], `送模文本句身必须只住在字典（design §7.5）：\n${offenders.join('\n')}`);
   // 变红判据：把任一消费方（index/reviewer/prompt/gate）改回内联硬编码句——即「故意留一处」——
-  // 对应锚短语离开字典出现在消费文件，本扫描必红；这正是 N1–N3 漏出去的那类缺口。
+  // 对应锚短语离开字典出现在消费文件，本扫描必红；这正是字典化要堵住的那类缺口。
 });

@@ -4,8 +4,8 @@
  * 存在的理由：0.1.7 把图标由 `IconXxxOutline14` 改成尺寸变体命名
  * （`IconXxxOutline` + `Regular`/`Medium`/`Artwork`），旧名在宿主里不存在；
  * `jsx(undefined)` 触发 React #130「Element type is invalid」，
- * 槽条目**整条崩溃且页面静默空白**——2026-09-24 在真实实例上实测到
- * `slot entry crashed in 'plugins.row.config'`，挂点 1 因此完全不渲染。
+ * 槽条目**整条崩溃且页面静默空白**（实测：`slot entry crashed in 'plugins.row.config'`），
+ * 挂点 1 因此完全不渲染。
  *
  * 本测试把「我们引用的每个 primitives 名字都必须真的存在于宿主制品里」变成一条
  * **能失败**的断言：解析 `primitives.<Name>` → 在宿主包的实现与类型声明里逐个查名。
@@ -85,7 +85,7 @@ test('client.js 引用的每个 primitives 名字都存在于宿主制品里', (
 test('核验器本身能失败：0.1.5 时代的图标名在 0.1.7 宿主里确实不存在', (t) => {
   const artifact = hostArtifactOrSkip(t);
   if (artifact === undefined) return;
-  // 反面对照：这两个名字正是 2026-09-24 崩溃的元凶，必须查不到——
+  // 反面对照：这两个旧名正是崩溃元凶，必须查不到——
   // 若某天它们又出现了，说明断言对象变了，本用例会先红，提醒重估。
   assert.equal(/\bIconChevronDownOutline14\b/u.test(artifact), false);
   assert.equal(/\bIconQuestionOutline14\b/u.test(artifact), false);
@@ -95,10 +95,10 @@ test('核验器本身能失败：0.1.5 时代的图标名在 0.1.7 宿主里确�
   }
 });
 
-test('client.js 图标引用收敛：设置界面帮助图标走宿主基元，其余内联（R29）', () => {
+test('client.js 图标引用收敛：设置界面帮助图标走宿主基元，其余内联', () => {
   const source = stripComments(readFileSync(CLIENT, 'utf8'));
-  // R29：字段帮助按钮统一用官方 IconInfoOutlineRegular（12px），不再自造问号图标；
-  // 多选触发器的下箭头仍内联 SVG（宿主无 ChevronDownOutline14，旧名是 2026-09-24 崩溃元凶）。
+  // 字段帮助按钮统一用官方 IconInfoOutlineRegular（12px），不自造问号图标；
+  // 多选触发器的下箭头仍内联 SVG（宿主无 ChevronDownOutline14 旧名）。
   const iconRefs = [...source.matchAll(/primitives\.(Icon\w*)/gu)].map((match) => match[1]);
   assert.deepEqual(iconRefs, ['IconInfoOutlineRegular'], `图标引用应只有 IconInfoOutlineRegular，实际：${iconRefs.join(', ')}`);
   assert.equal(/const ChevronDownIcon = /u.test(source), true, '内联下箭头组件缺失');

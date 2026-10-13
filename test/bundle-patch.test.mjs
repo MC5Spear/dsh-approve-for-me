@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * R57（设计 §9.1）：bundle patch 形状守护＋发布范围守护。
+ * bundle patch 形状守护＋发布范围守护（design §9.1）。
  *
  * 预设注入主路径＝本包 cordis.patch.yml 的 permission 行四档重述（随包装卸）；
  * 生命周期脚本是被实测否决的路径（pnpm 不执行依赖卸载脚本），禁止回潮。
@@ -18,7 +18,7 @@ const patchText = readFileSync(join(root, 'cordis.patch.yml'), 'utf8');
 const patchLines = patchText.split('\n');
 
 /**
- * npm 生命周期脚本禁令的**规则**（R57 禁令；盲审修订：人工名单会漏键，改为按规则判全）。
+ * npm 生命周期脚本禁令的**规则**——按规则判全，不靠人工名单（名单会漏键）。
  *
  * npm 会在生命周期事件前后执行同名前后缀脚本，且 `npm run <script>` 也会执行 `pre<script>` /
  * `post<script>` 影子钩子（pretest 会在 npm test 时跑）。因此规则不靠枚举：
@@ -116,7 +116,7 @@ test('bundle patch：三标准档取值与 dsh-base 逐字一致', () => {
   assert.equal(scalarOf(tierIndex(block, 'read-only'), block, 'sandbox'), 'read-only');
   assert.equal(scalarOf(tierIndex(block, 'read-only'), block, 'approval'), 'ask');
   // workspace-write 自身的取值必须钉住：它是会话回落目标＋auto-approve 的等同基准，
-  // 相等性断言（下一用例）对「两档一起改错」不设防（实现审查 R57 发现 1）。
+  // 相等性断言（下一用例）对「两档一起改错」不设防。
   assert.equal(scalarOf(tierIndex(block, 'workspace-write'), block, 'sandbox'), 'workspace-write');
   assert.equal(scalarOf(tierIndex(block, 'workspace-write'), block, 'approval'), 'ask');
   assert.equal(scalarOf(tierIndex(block, 'danger-full-access'), block, 'sandbox'), 'danger-full-access');
@@ -127,21 +127,21 @@ test('bundle patch：auto-approve knobs 与 workspace-write 逐字段等同＋�
   const block = rowBlock('permission');
   const workspaceWrite = tierIndex(block, 'workspace-write');
   const autoApprove = tierIndex(block, 'auto-approve');
-  // knobs 等同是宿主 derive() 会话回落的前提（设计 §9.1）：unset 或改值都会让旧会话悬空。
+  // knobs 等同是宿主 derive() 会话回落的前提（design §9.1）：unset 或改值都会让旧会话悬空。
   assert.equal(scalarOf(autoApprove, block, 'sandbox'), scalarOf(workspaceWrite, block, 'sandbox'), 'auto-approve.sandbox 必须与 workspace-write 相同');
   assert.equal(scalarOf(autoApprove, block, 'approval'), scalarOf(workspaceWrite, block, 'approval'), 'auto-approve.approval 必须与 workspace-write 相同');
   assert.match(patchLines[autoApprove + 3] ?? '', /name: 自动审批/u, 'auto-approve 需带展示名');
   assert.match(block.map((index) => patchLines[index]).join('\n'), /自动判定/u, 'auto-approve 需带说明文案');
 });
 
-test('bundle patch：重述不写 defaultPreset（R26 禁令）', () => {
+test('bundle patch：重述不写 defaultPreset（design §9.1 禁令）', () => {
   const block = rowBlock('permission');
   for (const index of block) {
     assert.doesNotMatch(patchLines[index], /defaultPreset/u, `行 ${index + 1} 出现 defaultPreset——插件档不得作默认`);
   }
 });
 
-test('发布范围守护：package.json 禁止生命周期脚本（R57 禁令，防钩子通道回潮）', () => {
+test('发布范围守护：package.json 禁止生命周期脚本（design §9.1，防钩子通道回潮）', () => {
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
   const scripts = Object.keys(pkg.scripts ?? {});
   const lifecycle = scripts.filter(isBannedScriptKey);
@@ -149,7 +149,7 @@ test('发布范围守护：package.json 禁止生命周期脚本（R57 禁令，
 });
 
 test('发布范围守护：生命周期禁令按规则判全——npm 全集键与影子钩子逐一命中，自有脚本名不误伤', () => {
-  // 盲审反例：旧十键名单漏 prepublish/preprepare/postprepare，注入后 7/7 假绿。
+  // 反例对照：十键人工名单漏 prepublish/preprepare/postprepare，注入后 7/7 假绿。
   // 规则化后任何 pre*/post* 与裸事件键都必须被拦下——新增任何生命周期键无需改本名单即红。
   for (const key of LIFECYCLE_MUTANTS) {
     assert.equal(isBannedScriptKey(key), true, `规则必须拦截生命周期键：${key}`);
@@ -166,7 +166,7 @@ test('发布范围守护：files 白名单与 hooks 缺席', () => {
   for (const entry of ['cordis.patch.yml', 'lib']) {
     assert.ok(files.includes(entry), `files 白名单缺少 ${entry}`);
   }
-  // GAP-02：配置清理工具随手术机制整体退役，发布产物不再携带。
+  // 配置清理工具随手术机制整体退役，发布产物不携带。
   assert.ok(!files.includes('tools/permission-preset.mjs'), 'files 白名单不得再含配置清理工具');
   assert.equal(existsSync(join(root, 'tools', 'permission-preset.mjs')), false, '配置清理工具脚本必须删除');
   assert.ok(!files.includes('hooks'), 'files 白名单不得再含 hooks');

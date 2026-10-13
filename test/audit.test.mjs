@@ -8,7 +8,7 @@ function collector() {
   return { lines, write: (line) => lines.push(line) };
 }
 
-test('formatAuditLine 字段顺序固定且必含 R5 要求的字段', () => {
+test('formatAuditLine 字段顺序固定且必含 requirements §7.1／design §8.1 要求的字段', () => {
   const { line } = formatAuditLine(
     {
       id: 'req-1',
@@ -83,7 +83,7 @@ test('formatAuditLine 缺省值填 - 且 inject 默认 no', () => {
   assert.match(line, /ms=-/);
 });
 
-test('formatAuditLine 渲染 finish 与 reasoningTokens（设计「单行格式」）', () => {
+test('formatAuditLine 渲染 finish 与 reasoningTokens（design §8.1）', () => {
   const { line } = formatAuditLine(
     { id: 'r', phase: 'review', finish: 'max-tokens', reasoningTokens: 1347, fieldsDefaulted: true, degraded: 'output-truncated' },
     { now: 0 },
@@ -159,9 +159,9 @@ test('createAudit 在写入抛错时不影响调用方', () => {
   assert.doesNotThrow(() => audit({ id: 'r', phase: 'decide', decision: 'rejected' }));
 });
 
-// ── R34：审计 reason 的先遮后截 ──────────────────────────────────────────
+// ── 审计 reason 的先遮后截（requirements §5.2／design §8.1） ────────────────
 
-test('R34① 审计 reason 落笔前过 redactPatterns', () => {
+test('审计 reason 落笔前过 redactPatterns', () => {
   const { lines, write } = collector();
   const audit = createAudit(() => ({ enabled: true, redactPatterns: ['sk-[A-Za-z0-9]+'] }), { write, now: () => 0 });
   audit({ id: 'r1', phase: 'screen', action: 'deny', reason: 'found token sk-abc12345 in command' });
@@ -169,7 +169,7 @@ test('R34① 审计 reason 落笔前过 redactPatterns', () => {
   assert.doesNotMatch(lines[0], /sk-abc12345/);
 });
 
-test('R34② 先遮后截次序：跨界秘密整段先遮、再进长度截断', () => {
+test('先遮后截次序：跨界秘密整段先遮、再进长度截断', () => {
   // 判据形态：截断点落在秘密中间——先截后遮时残留前半段（password=s3…），先遮后截时整段被替换。
   const { lines, write } = collector();
   const audit = createAudit(() => ({ enabled: true, redactPatterns: ['password=s3cretpw'] }), { write, now: () => 0 });
@@ -179,7 +179,7 @@ test('R34② 先遮后截次序：跨界秘密整段先遮、再进长度截断'
   assert.match(lines[0], /truncated=true/);
 });
 
-test('R34③ 超行上限的压缩路径同样不漏秘密', () => {
+test('超行上限的压缩路径同样不漏秘密', () => {
   const { lines, write } = collector();
   const audit = createAudit(() => ({ enabled: true, maxLineBytes: 120, redactPatterns: ['s3cretpw'] }), { write, now: () => 0 });
   audit({ id: 'r3', phase: 'screen', action: 'deny', reason: `password=s3cretpw ${'x'.repeat(400)}` });
@@ -187,9 +187,9 @@ test('R34③ 超行上限的压缩路径同样不漏秘密', () => {
   assert.doesNotMatch(lines[0], /s3cretpw/);
 });
 
-// ── R41：startedAt 的登记口径与容量 ──────────────────────────────────────
+// ── startedAt 的登记口径与容量（design §8.3） ───────────────────────────────
 
-test('R41 startedAt 只登记接管型 screen 行：skip 行不登记', () => {
+test('startedAt 只登记接管型 screen 行：skip 行不登记', () => {
   const skipped = collector();
   let clock = 0;
   const skipAudit = createAudit(() => ({ enabled: true }), { write: skipped.write, now: () => clock });
@@ -208,7 +208,7 @@ test('R41 startedAt 只登记接管型 screen 行：skip 行不登记', () => {
   assert.match(tracked.lines[1], /ms=120/);
 });
 
-test('R41 startedAt 容量淘汰：超过 2000 个在途 id 后最旧起点被回收', () => {
+test('startedAt 容量淘汰：超过 2000 个在途 id 后最旧起点被回收', () => {
   const { lines, write } = collector();
   let clock = 0;
   const audit = createAudit(() => ({ enabled: true }), { write, now: () => clock });

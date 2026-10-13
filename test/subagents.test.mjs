@@ -84,7 +84,7 @@ test('isDelegated：header.parentSession 存在即真', () => {
   assert.equal(isDelegated(undefined), false);
 });
 
-test('R41 subagents written 容量：超 1000 会话后最旧淘汰（skip 行）', () => {
+test('subagents written 容量：超 1000 会话后最旧淘汰（skip 行，design §8.3）', () => {
   const { coverage, audits } = harness({ list: [] });
   // 1001 个互不相干的委派子会话：根不可达 → 各写一行 skip（键 sub|id|-）。
   for (let index = 0; index < 1001; index += 1) {

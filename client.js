@@ -4,7 +4,7 @@
  * 加载器只提供 `react` / `react/jsx-runtime` 等模块表里的包名，相对路径 `require` 会抛错，
  * 因此三个挂点（composer 的审查模型下拉、设置页卡片、审批卡片 body 的自动审批状态条）都在同一个 factory 闭包内实现。
  * 卡片外壳（「等待审批」条与两个按钮）仍由宿主渲染；插件只接管 body 里的 `conversation.approval.detail`，
- * 并自己渲染关联命令以保证非接管预设下的观感不变（设计「审批卡片：外壳原生，插件只接管 body 里的 detail seat」）。
+ * 并自己渲染关联命令以保证非接管预设下的观感不变（design §7.1）。
  */
 window.__ModuleLoader__.load({
 	id: "dsh-approve-for-me",
@@ -22,8 +22,8 @@ window.__ModuleLoader__.load({
 		 * 为什么不用 `primitives.IconChevronDownOutline14`：0.1.7 把图标改成尺寸变体命名
 		 * （`IconChevronDownOutline` + `Regular`/`Medium`/`Artwork` 后缀），旧名在宿主里**不存在**，
 		 * `jsx(undefined)` 直接触发 React #130「Element type is invalid」，
-		 * 结果是槽条目整条崩溃、页面静默空白（2026-09-24 实测：`slot entry crashed in 'plugins.row.config'`）。
-		 * 图标名跨版本不稳定，自带两个内联 SVG 更可靠（设计「客户端半边只依赖槽位与控制器契约」）。
+		 * 结果是槽条目整条崩溃、页面静默空白（实测：`slot entry crashed in 'plugins.row.config'`）。
+		 * 图标名跨版本不稳定，自带两个内联 SVG 更可靠（design §7.1）。
 		 * @param {object} props - `className`。
 		 * @returns {object} SVG 元素。
 		 */
@@ -48,7 +48,7 @@ window.__ModuleLoader__.load({
 		const NS = "approve-for-me";
 		/** 包名；Plugins 页 keyed 槽的键是 `<包名>#<行id>`）。 */
 		const PACKAGE_NAME = "dsh-approve-for-me";
-		/** RPC 端点前缀；三个端点共用同一份 TYPERT 清单（设计「接口」）。 */
+		/** RPC 端点前缀；三个端点共用同一份 TYPERT 清单（design §7.1）。 */
 		const RPC_CHANNEL = "/api";
 
 		const zh = {
@@ -85,7 +85,7 @@ window.__ModuleLoader__.load({
 			"help.reviewer.model": "全局级·默认审查模型与档位：模型形如 provider/model；档位留空表示跟随模型默认。未配置时跟随会话当前模型（见下方「跟随主模型」）。",
 			"help.reviewer.followParent": "上面两级都没有可用值时，是否直接用主模型自己来审查。关掉则模型解析失败时直接拒绝。",
 			"help.reviewer.timeoutMs": "单次审查的时限（毫秒）。超时按审查失败处理（默认直接拒绝）。0 表示不限时。",
-			"help.reviewer.maxTokens": "审查请求的输出上限（token）。0 或留空 = 本插件不设上限，由模型自己的默认值决定（与 codex 一致，推荐）。思考型模型会先吃掉这份预算：实测上限 512 时正文必为空（本次审查直接判失败），2048 在最高档位下余量也很小。",
+			"help.reviewer.maxTokens": "审查请求的输出上限（token）。0 或留空 = 本插件不设上限，由模型自己的默认值决定（与 codex 一致，推荐）。思考型模型会先吃掉这份预算：小上限会让正文为空（本次审查直接判失败），2048 一档在最高档位下余量也很小。",
 			"help.human.timeoutMs": "仅在「审查未放行处置 = 交人工」时生效：人工卡片等待多久后自动拒绝（毫秒）。0 表示立即拒绝。",
 			"help.human.timeoutFrom": "人工计时的起点：request＝从审批请求进来开始算；handoff＝从交给人工那一刻开始算。",
 			"help.mode": "总开关：rules＝规则强制检查 + LLM 审查；off＝完全不管审批（等同于未安装）。",
@@ -290,7 +290,7 @@ window.__ModuleLoader__.load({
 			"help.reviewer.model": "Global default reviewer model and effort: the model reads provider/model, and an empty effort follows the model default. When empty, the session model follows the main model (see Follow the main model).",
 			"help.reviewer.followParent": "When neither layer is usable, review with the main model itself. Turn it off to reject instead.",
 			"help.reviewer.timeoutMs": "Deadline for one review (ms). A timeout counts as review failure (rejected by default). 0 disables the deadline.",
-			"help.reviewer.maxTokens": "Output cap for one review request (tokens). 0 or empty means this plugin sets none, so the model default applies (same as codex, recommended). Thinking models spend this budget on reasoning first: measured, a cap of 512 always leaves an empty reply (the review then fails), and 2048 leaves little room at the highest effort.",
+			"help.reviewer.maxTokens": "Output cap for one review request (tokens). 0 or empty means this plugin sets none, so the model default applies (same as codex, recommended). Thinking models spend this budget on reasoning first: a small cap can leave the reply empty (the review then fails), and 2048 leaves little room at the highest effort.",
 			"help.human.timeoutMs": "Only used when Fallback is Ask: how long the native card waits before auto-rejecting (ms). 0 rejects immediately.",
 			"help.human.timeoutFrom": "When the human deadline starts: request counts from the approval request, handoff from the moment the card is handed to the user.",
 			"help.mode": "Master switch: rules runs the mandatory rule check plus the LLM review; off leaves approvals untouched.",
@@ -462,13 +462,12 @@ window.__ModuleLoader__.load({
 			"hint.denyPatterns": "Mandatory-deny patterns, one regex per line; empty = rule check disabled (factory reference list in README).",
 		};
 
-		/** 卡片分区（自上而下）：触发、审查模型（专用控件）、高级（设计「分区」）。 */
-		/** 字段分区沿用 FIELDS 的 section 标记（trigger/advanced）；审查模型三行单独渲染（R29 无分区标题）。 */
+		/** 字段按 FIELDS 的 section 标记（trigger/advanced）分组排序；审查模型三行与「接管预设」由专用控件渲染；不渲染分区标题（requirements §6.1）。 */
 
 		/**
-		 * 普通字段行；审查模型分区的三行与触发区的「接管预设」由专用控件渲染（设计「设置页 GUI（替换 JSON 文本域）」「接管预设：多选下拉」），不在本表内。
-		 * path 指向命名空间分节内的路径；标签与校验文案走字典（键 `field.<path.join('.')>`，R28），helpKey 由 path 推导；
-		 * `optionLabels` 走字典，键为 `option.<path.join('.')>.<值>`（设计「设置项文案」）。
+		 * 普通字段行；审查模型分区的三行与触发区的「接管预设」由专用控件渲染（design §7.2；「接管预设」是多选下拉，requirements §6.1），不在本表内。
+		 * path 指向命名空间分节内的路径；标签与校验文案走字典（键 `field.<path.join('.')>`），helpKey 由 path 推导；
+		 * `optionLabels` 走字典，键为 `option.<path.join('.')>.<值>`（design §7.2）。
 		 */
 		const FIELDS = [
 			{ section: "trigger", path: ["trigger", "unknown"], labelKey: "field.trigger.unknown", kind: "select", options: ["skip", "review"] },
@@ -492,8 +491,8 @@ window.__ModuleLoader__.load({
 
 		/** 注入样式；同一 tagId 只插入一次，避免重复挂载时样式叠加。 */
 		const CSS = [
-			// R29：设置界面照官方设置表单重绘（规格来源见 docs/design.md；0.1.7 令牌表不存在的别名零命中，判据⑥）。
-			// 外壳：无卡片边框/圆角/底色，只做纵向布局（判据④按计算样式核）。
+			// 设置界面照官方设置表单重绘（规格来源见 docs/design.md；0.1.7 令牌表不存在的别名零命中）。
+			// 外壳：无卡片边框/圆角/底色，只做纵向布局（按计算样式核）。
 			".dsafm_form{display:flex;flex-direction:column;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary)}",
 			".dsafm_readonly{margin:0 0 12px;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary)}",
 			// 字段：竖排，标签行 → 控件 → 常驻说明；相邻字段 0.5px 分隔线（见官方 fields.module.css）。
@@ -503,7 +502,7 @@ window.__ModuleLoader__.load({
 			".dsafm_labelgroup{display:flex;align-items:center;gap:4px;flex:1;min-width:0}",
 			".dsafm_f_label{font-size:13px;font-weight:500;line-height:1.5;color:var(--dsw-alias-label-primary)}",
 			// 帮助按钮：24×24 命中区、点击展开；hover 只把图标从三级色转二级色（官方 .helpButton:hover
-			// 引用的底色别名在 0.1.7 令牌表不存在，不得照抄——判据⑥第三名，见 design §13.5）。
+			// 引用的底色别名在 0.1.7 令牌表不存在，不得照抄）。
 			".dsafm_helpbtn{display:inline-flex;align-items:center;justify-content:center;flex:none;width:24px;height:24px;padding:0;border:0;border-radius:6px;background:none;color:var(--dsw-alias-label-tertiary);cursor:pointer}",
 			".dsafm_helpbtn:hover,.dsafm_helpbtn[aria-expanded='true']{color:var(--dsw-alias-label-secondary)}",
 			".dsafm_helpbtn:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}",
@@ -516,7 +515,7 @@ window.__ModuleLoader__.load({
 			".dsafm_reset:hover:not(:disabled){color:var(--dsw-alias-label-primary)}",
 			".dsafm_reset:disabled{cursor:default}",
 			".dsafm_f_hint{margin:0;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary);overflow-wrap:anywhere}",
-			// R30：毫秒字段的秒数读数行——自绘在官方组件之外（官方 hint 在字段非法时被非法文案顶掉）。
+			// 毫秒字段的秒数读数行——自绘在官方组件之外（官方 hint 在字段非法时被非法文案顶掉）。
 			// 负 margin 把它拉进官方字段自己的 12px 底部内边距区，与官方字段内 6px 间隙对齐（视觉归属该字段）；
 			// 平铺会插进官方相邻字段选择器之间，第二条恢复后继官方字段的 0.5px 分隔线（自绘字段后本就无分隔线）。
 			".dsafm_f_sec{margin:-12px 0 12px;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary);overflow-wrap:anywhere}",
@@ -634,7 +633,7 @@ window.__ModuleLoader__.load({
 		 * 把编辑框文本解析成写入值。
 		 * @param {string} text - 编辑框内容。
 		 * @param {object} field - 字段定义。
-		 * @param {(key: string) => string} [translate] - 取词函数（R28：校验文案走字典）；缺省时退回字段键名。
+		 * @param {(key: string) => string} [translate] - 取词函数（校验文案走字典）；缺省时退回字段键名。
 		 * @returns {{ok: true, value: unknown} | {ok: false, error: string}} 解析结果。
 		 */
 		function fromDraft(text, field, translate) {
@@ -667,7 +666,7 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 把模型选择归一化为 `{ model, effort }`；旧字符串写法读成 effort 空串（设计「模型选择对象化（档位与模型绑定）」）。
+		 * 把模型选择归一化为 `{ model, effort }`；旧字符串写法读成 effort 空串（requirements §5.1）。
 		 * @param {unknown} value - 配置值。
 		 * @returns {{model: string, effort: string}} 归一化结果。
 		 */
@@ -683,7 +682,7 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 读 `reviewer.byParentModel`，得到行表；键兼容纯模型 id 与全引用（设计「设置页 GUI（替换 JSON 文本域）」）。
+		 * 读 `reviewer.byParentModel`，得到行表；键兼容纯模型 id 与全引用（design §7.2）。
 		 * @param {unknown} value - 映射对象。
 		 * @returns {{parent: string, model: string, effort: string}[]} 行表。
 		 */
@@ -708,7 +707,7 @@ window.__ModuleLoader__.load({
 
 		/**
 		 * 映射键：`provider/model` 取**最后一个** `/` 之后的模型 id，与宿主 `lookupByParentModel`
-		 * 的取法（`lastIndexOf('/')`，设计「映射键的客户端归一化」）一致；输入 `a/b/c` 得 `c`，不再得 `b/c`。
+		 * 的取法（`lastIndexOf('/')`，design §6.2）一致；输入 `a/b/c` 得 `c`，不再得 `b/c`。
 		 * @param {string} text - 用户输入或目录引用。
 		 * @returns {string} 键；空输入返回空串。
 		 */
@@ -734,7 +733,7 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 展示用的主模型引用：键已是全引用时原样返回，否则用目录拼上 provider（设计「设置页 GUI（替换 JSON 文本域）」）。
+		 * 展示用的主模型引用：键已是全引用时原样返回，否则用目录拼上 provider（design §7.2）。
 		 * @param {string} key - 映射键。
 		 * @param {object | null} catalog - 模型目录。
 		 * @returns {string} 展示引用。
@@ -748,7 +747,7 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 档位下拉的选项：首项固定为空串（跟随模型默认）；当前档位不被模型支持时保留该项并置灰（设计「设置页 GUI（替换 JSON 文本域）」）。
+		 * 档位下拉的选项：首项固定为空串（跟随模型默认）；当前档位不被模型支持时保留该项并置灰（design §7.2）。
 		 * 模型未选定或未取到档位时只剩首项且不可写。
 		 * @param {{efforts: {id: string}[]} | undefined} entry - 该模型的档位表。
 		 * @param {string} current - 当前档位。
@@ -767,7 +766,7 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 读某模型的档位表；`modelEfforts` 失败时按空表处理（设计「接口增量（TYPERT）」）。
+		 * 读某模型的档位表；`modelEfforts` 失败时按空表处理（design §7.1）。
 		 * @param {((endpoint: string, args: object) => Promise<object | undefined>) | null} rpcCall - RPC 调用。
 		 * @param {string} ref - 模型引用。
 		 * @returns {Promise<{efforts: {id: string}[]}>} 档位表。
@@ -797,9 +796,9 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * R30：把毫秒换算成秒数读数的数字部分——整数秒不带小数点，非整数秒四舍五入到一位小数
+		 * 把毫秒换算成秒数读数的数字部分——整数秒不带小数点，非整数秒四舍五入到一位小数
 		 * （`1500`→`1.5`、`1501`→`1.5`、`999`→`1.0`、`0`→`0`）。与 formatMillis 的「≥1000 ms 一位
-		 * 小数」口径不同，不得混用（设计 §13.5b）。入参须与数字字段草稿同一口径：有限、≥0、整数。
+		 * 小数」口径不同，不得混用（requirements §6.1）。入参须与数字字段草稿同一口径：有限、≥0、整数。
 		 * @param {unknown} ms - 毫秒数。
 		 * @returns {string | null} 秒数文本；入参不是合法毫秒整数时 null（占位由调用方出）。
 		 */
@@ -822,7 +821,7 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 分段耗时的展示文本：缺失段显示 `—`，不按 0 计（设计 §8.5；缺失不是测量值 0）。
+		 * 分段耗时的展示文本：缺失段显示 `—`，不按 0 计（design §8.5；缺失不是测量值 0）。
 		 * @param {unknown} ms - 分段毫秒数。
 		 * @returns {string} 文本。
 		 */
@@ -831,7 +830,7 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 审批耗时 Z ＝ 在场分段之和（设计 §8.5：只累加在场的分段，缺失段不按 0 计）。
+		 * 审批耗时 Z ＝ 在场分段之和（design §8.5：只累加在场的分段，缺失段不按 0 计）。
 		 * @param {object | null | undefined} record - 记录（摘要或合并详情）。
 		 * @returns {number} 毫秒。
 		 */
@@ -844,7 +843,7 @@ window.__ModuleLoader__.load({
 
 		/**
 		 * 判定文案的字典键：兼容 verdict 词汇（allow/deny/error，现行 host 落盘值）与
-		 * 结局词汇（allowed-once/rejected/timed-out，设计 §8.2 的字段口径）；其余原样返回 null。
+		 * 结局词汇（allowed-once/rejected/timed-out，design §8.2 的字段口径）；其余原样返回 null。
 		 * @param {unknown} decision - 判定值。
 		 * @returns {string | null} 字典键。
 		 */
@@ -859,7 +858,7 @@ window.__ModuleLoader__.load({
 		 *
 		 * 口径复刻宿主 `dsh-client-ui-trajectory` 的 `durationSeconds(node.time, node.callTime)`：
 		 * 结算行 = `time − callTime`、下限 0；`callTime` 缺失（窗口截断）或调用在飞时**没有总时长**，
-		 * 返回 `null`（绝不猜 X，设计 §8.5）。根调用（`kind: 'tool-result'` 节点）与 PTC 子调用
+		 * 返回 `null`（绝不猜 X，design §8.5）。根调用（`kind: 'tool-result'` 节点）与 PTC 子调用
 		 * （`subCalls` 里的结算行，审批的 `callId` 多为 `…:ptc:N` 子调用）都在扫描范围。
 		 * @param {object | null | undefined} snapshot - `useTrajectory` 选择器返回的记录表快照。
 		 * @param {string | null | undefined} callId - 审批请求的 `callId`。
@@ -897,15 +896,15 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * composer 的审查模型下拉：模型段 + 档位段的两段式菜单（设计「会话级下拉（模型 + 档位两段式）」）。
+		 * composer 的审查模型下拉：模型段 + 档位段的两段式菜单（design §7.3）。
 		 *
 		 * 状态来自 RPC `approveForMe/getState`；选择写入 `approveForMe/setSessionModel`，
-		 * 成功后重新拉取状态，不依赖会话投影（设计「会话级下拉（composer）」）。取不到会话 id 时不渲染。
+		 * 成功后重新拉取状态，不依赖会话投影（design §7.3）。取不到会话 id 时不渲染。
 		 * @param {object} props - 注入的 `rpcCall`、`sessionIdOf`、`subscribeSessions` 与 `t`。
 		 * @returns {object | null} React 元素。
 		 */
 		function ComposerModelSelect(props) {
-			// R28：槽位注入的 useNsT 优先（强制语言档）；旧宿主/直调测试没传时退回宿主 t（auto 行为）。
+			// 槽位注入的 useNsT 优先（强制语言档）；旧宿主/直调测试没传时退回宿主 t（auto 行为）。
 			const { t: hostT, useNsT, sessionIdOf, subscribeSessions } = props;
 			const t =
 				typeof useNsT === "function"
@@ -922,7 +921,7 @@ window.__ModuleLoader__.load({
 			const [error, setError] = react.useState("");
 
 			// 会话 id 来自 sessions 服务：`sessionId` 标准 prop 在本构建里可能是空值，
-			// 而 slot 的 kit 钩子在插件侧不可用（调用会抛错），所以只读 store 快照（设计「会话级下拉（composer）」）。
+			// 而 slot 的 kit 钩子在插件侧不可用（调用会抛错），所以只读 store 快照（design §7.3）。
 			react.useEffect(() => {
 				const update = () => setSessionId(sessionIdOf?.(props.sessionId) ?? "");
 				update();
@@ -944,7 +943,7 @@ window.__ModuleLoader__.load({
 			const lastSignatureRef = react.useRef(null);
 			const aliveRef = react.useRef(true);
 			/**
-			 * 拉一次状态；`active` 决定控件显隐，所以预设被切换后必须重新拉（设计「会话级下拉（composer）」）。
+			 * 拉一次状态；`active` 决定控件显隐，所以预设被切换后必须重新拉（design §7.3）。
 			 * @returns {void}
 			 */
 			const refreshState = () => {
@@ -981,8 +980,8 @@ window.__ModuleLoader__.load({
 				};
 			}, [sessionId]);
 
-			// 权限预设变化即刷新（R21）：宿主已把权限状态发布成 `permissions` 投影（`dsh-permission-presets`，
-			// 值为 `{options, currentValue}`），客户端只把它当"该刷新了"的闹钟——**接管判定仍在宿主侧**（设计 §8.1 / §7.1）。
+			// 权限预设变化即刷新：宿主已把权限状态发布成 `permissions` 投影（`dsh-permission-presets`，
+			// 值为 `{options, currentValue}`），客户端只把它当"该刷新了"的闹钟——**接管判定仍在宿主侧**（design §2.1／§7.3）。
 			// 钩子可能不存在（旧宿主）：用恒定空实现占位，保证 hooks 顺序稳定。
 			const projectionHook = typeof props.useProjection === "function" ? props.useProjection : () => undefined;
 			const permissionsValue = (() => {
@@ -999,7 +998,7 @@ window.__ModuleLoader__.load({
 				return undefined;
 			}, [presetKey, sessionId]);
 
-			// 档位段的数据源：对当前生效模型调一次 `modelEfforts`；失败时该段只留「跟随模型默认」（设计「会话级下拉（模型 + 档位两段式）」）。
+			// 档位段的数据源：对当前生效模型调一次 `modelEfforts`；失败时该段只留「跟随模型默认」（design §7.3）。
 			react.useEffect(() => {
 				const ref = typeof state?.effective === "string" ? state.effective : "";
 				if (ref.length === 0) return undefined;
@@ -1015,8 +1014,7 @@ window.__ModuleLoader__.load({
 			/**
 			 * 把 composer 挂点的三次早退判定写进诊断对象（`window.__dsafmProbe.composer`）。
 			 *
-			 * 存在的理由：控件不可见时，页面既不报错也不留痕（2026-09-24 实测：修正会话 id 取值后仍无座位，
-			 * 而三种早退都合法）。这条诊断让「没渲染」能自证是哪一个条件不满足——排查用，不影响渲染分支。
+			 * 存在的理由：控件不可见时，页面既不报错也不留痕（三种早退都合法）。这条诊断让「没渲染」能自证是哪一个条件不满足——排查用，不影响渲染分支。
 			 * @param {object} snapshot - 判定当时的 `sessionId`/`state`/`props.sessionId`。
 			 * @returns {void}
 			 */
@@ -1038,7 +1036,7 @@ window.__ModuleLoader__.load({
 				noteComposerGate({ gate: "state-null", sessionId });
 				return null;
 			}
-			// 显隐只看宿主的接管结论（设计「会话级下拉（composer）」）：非接管预设下不占位。
+			// 显隐只看宿主的接管结论（design §7.3）：非接管预设下不占位。
 			// 旧宿主（部署里 client 比 host 新）没有 `active` 字段：此时按「照常显示」处理，宁可多显示也不要让控件消失。
 			if (state.active !== undefined && state.active !== true) {
 				noteComposerGate({ gate: "not-active", sessionId, active: state.active, preset: state.preset ?? null, layer: state.layer ?? null });
@@ -1046,7 +1044,7 @@ window.__ModuleLoader__.load({
 			}
 
 			// `found=false` 只是「宿主里没有这个活会话」，不再是禁用理由：写入按会话 id 落文件载体，
-			// 会话开始后生效（设计「会话开始前可写」）。
+			// 会话开始后生效（requirements §6.2）。
 			const pendingSession = state.found === false;
 			const model = typeof state.effective === "string" ? state.effective : "";
 			const currentEffort = state.sessionModel !== null && state.sessionModel !== undefined ? state.sessionEffort : state.effectiveEffort;
@@ -1169,11 +1167,11 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 「接管预设」多选控件（设计「接管预设：多选下拉」）。
+		 * 「接管预设」多选控件（requirements §6.1）。
 		 *
 		 * 触发器是一个按钮，点开是复选框面板：选项来自宿主预设目录 `approveForMe/presetCatalog`，
 		 * 展示名优先用宿主给的 `label`（部署可能已给中文名），并标出默认预设。
-		 * R29：勾选只暂存（`onChange` 上抛新数组），由设置界面的「保存」一次写入，不走选中即写。
+		 * 勾选只暂存（`onChange` 上抛新数组），由设置界面的「保存」一次写入，不走选中即写。
 		 * @param {object} props - `selected`（暂存显示数组）、`onChange`、`writable`、`rpcCall` 与 `t`。
 		 * @returns {object} React 元素。
 		 */
@@ -1197,7 +1195,7 @@ window.__ModuleLoader__.load({
 			}, []);
 
 			/**
-			 * 勾选/取消一个预设：只上抛新数组（暂存），不写库（R29「只有保存才写」）。
+			 * 勾选/取消一个预设：只上抛新数组（暂存），不写库（只有保存才写）。
 			 * @param {string} id - 预设 id。
 			 * @returns {void}
 			 */
@@ -1283,14 +1281,14 @@ window.__ModuleLoader__.load({
 					missing.length === 0
 						? null
 						: jsxRuntime.jsx("div", { className: "dsafm_hint", children: `${t("card.presets.missing")}${missing.join("、")}` }),
-					// R57：缺失态附补救指引（设计 §9.1）——指引服务于缺失态，不是常驻文案。
+					// 缺失态附补救指引（requirements §6.1／design §9.2）——指引服务于缺失态，不是常驻文案。
 					missing.length === 0 ? null : jsxRuntime.jsx("div", { className: "dsafm_hint", children: t("card.presets.missing.remedy") }),
 				],
 			});
 		}
 
 		/**
-		 * 审批卡片 body 里的自动审批状态条（设计「审批卡片内的自动审批状态条与倒计时」）。
+		 * 审批卡片 body 里的自动审批状态条（design §7.4）。
 		 *
 		 * 与 `dsh-client-ui-chat` 的 `ApprovalCommand` 同源：先用 `useChat` 找到关联命令并原样渲染，
 		 * 再在其上方叠加状态行与倒计时。该 seat 是 `single`，本组件接管后必须自己渲染命令，
@@ -1300,7 +1298,7 @@ window.__ModuleLoader__.load({
 		 */
 		function ApprovalDetail(props) {
 			const { callId, t } = props;
-			// 会话 id 与 composer 下拉同一条通道；宿主也传标准 `sessionId` prop，作为备用（设计「审批卡片：外壳原生，插件只接管 body 里的 detail seat」）。
+			// 会话 id 与 composer 下拉同一条通道；宿主也传标准 `sessionId` prop，作为备用（design §7.1）。
 			const sessionId = react.useMemo(() => {
 				const fromSessions = typeof props.sessionIdOf === "function" ? props.sessionIdOf(props.sessionId) : "";
 				if (typeof fromSessions === "string" && fromSessions.length > 0) return fromSessions;
@@ -1363,8 +1361,8 @@ window.__ModuleLoader__.load({
 						? (entry.reason === "" ? t("cardstate.denied.noreason") : t("cardstate.denied").replace("{reason}", entry.reason))
 						: t("cardstate.reviewing");
 			const remaining = entry.deadlineAt === null ? null : Math.max(0, Math.ceil((entry.deadlineAt - now) / 1000));
-			// 倒计时文案（设计 §7.4）：只在审查状态且截止为 null 时显示「审查不限时」；非审查状态的
-			// null 截止不渲染任何无时限等待文案，只显示状态与原因（VER-01：零时限立即结算，无瞬态倒计时）。
+			// 倒计时文案（design §7.4）：只在审查状态且截止为 null 时显示「审查不限时」；非审查状态的
+			// null 截止不渲染任何无时限等待文案，只显示状态与原因（零时限立即结算，无瞬态倒计时）。
 			const countdown =
 				remaining === null
 					? entry.state === "reviewing"
@@ -1398,7 +1396,7 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 会话视图「审查记录」（设计 §8.5 呈现层第一落点）：本会话全部自动审批记录 + 单次详情 + 每轮耗时对照。
+		 * 会话视图「审查记录」（design §8.5 呈现层第一落点）：本会话全部自动审批记录 + 单次详情 + 每轮耗时对照。
 		 *
 		 * 列表走 `approveForMe/traceRecords`（只回摘要字段），点开一条再按需拉 `approveForMe/traceRecord` 全文；
 		 * X（工具调用在记录表里的总时长）从标准 prop `useTrajectory` 取、按 `callId` 匹配工具行
@@ -1409,7 +1407,7 @@ window.__ModuleLoader__.load({
 		 * @returns {object} React 元素。
 		 */
 		function ReviewView(props) {
-			// R28：槽位注入的 useNsT 优先（强制语言档）；旧宿主/直调测试没传时退回宿主 t（auto 行为）。
+			// 槽位注入的 useNsT 优先（强制语言档）；旧宿主/直调测试没传时退回宿主 t（auto 行为）。
 			const { t: hostT, useNsT, sessionIdOf, subscribeSessions } = props;
 			const t =
 				typeof useNsT === "function"
@@ -1420,7 +1418,7 @@ window.__ModuleLoader__.load({
 			const [sessionId, setSessionId] = react.useState(() => sessionIdOf?.(props.sessionId) ?? "");
 			const [records, setRecords] = react.useState(null);
 			const [error, setError] = react.useState("");
-			// VER-02：该会话记录读取是否降级（读失败或末行撕裂）——列表可能不完整，必须可见、不伪装成「没有记录」
+			// 该会话记录读取是否降级（读失败或末行撕裂）——列表可能不完整，必须可见、不伪装成「没有记录」
 			const [readFailed, setReadFailed] = react.useState(false);
 			const [openId, setOpenId] = react.useState("");
 			const [detail, setDetail] = react.useState(null);
@@ -1543,7 +1541,7 @@ window.__ModuleLoader__.load({
 						children: records === null ? t("view.loading") : t("view.count").replace("{n}", String(records.length)),
 					}),
 					error === "" ? null : jsxRuntime.jsx("span", { className: "dsafm_hint dsafm_warn", children: error }),
-					// VER-02：读取降级必须可见——「列表可能不完整」不是错误（数据仍在），用警示色而非错误文案。
+					// 读取降级必须可见——「列表可能不完整」不是错误（数据仍在），用警示色而非错误文案。
 					readFailed ? jsxRuntime.jsx("span", { className: "dsafm_review_degraded", children: t("view.readFailed") }) : null,
 					jsxRuntime.jsx("button", { type: "button", className: "dsafm_button", onClick: refresh, children: t("view.refresh") }),
 				],
@@ -1557,7 +1555,7 @@ window.__ModuleLoader__.load({
 			}
 
 			/**
-			 * 展开行的耗时等式（R19）：`工具总计 X = 执行 Y + 审批 Z`；匹配不上或任何异常只显示 Z。
+			 * 展开行的耗时等式（requirements §7.3）：`工具总计 X = 执行 Y + 审批 Z`；匹配不上或任何异常只显示 Z。
 			 * @param {object} source - 详情记录（含 `humanWaitMs`，Z 才完整）。
 			 * @returns {object} 等式元素。
 			 */
@@ -1610,7 +1608,7 @@ window.__ModuleLoader__.load({
 			// 旧在后 → 新在前展示。
 			const rows = [...records].reverse().map((record) => {
 				const open = record.approvalId === openId;
-				// 主判定＝最终结算 outcome（§8.5）；旧格式行没有 outcome，回落 decision；两者都缺原样展示。
+				// 主判定＝最终结算 outcome（design §8.5）；旧格式行没有 outcome，回落 decision；两者都缺原样展示。
 				const primary = typeof record.outcome === "string" && record.outcome.length > 0 ? record.outcome : record.decision;
 				const primaryKey = decisionKeyOf(primary);
 				const decisionClass =
@@ -1633,7 +1631,7 @@ window.__ModuleLoader__.load({
 					const text = t(key);
 					return text === key ? value : text;
 				};
-				// 详情元信息段：只列在场字段（§8.4「取不到明确缺失」——缺失段不显示假占位）。
+				// 详情元信息段：只列在场字段（design §8.4「取不到明确缺失」——缺失段不显示假占位）。
 				const metaParts = [];
 				const metaOf = (titleKey, value, formatter) => {
 					if (value === undefined || value === null || value === "") return;
@@ -1678,7 +1676,7 @@ window.__ModuleLoader__.load({
 										className: decisionClass,
 										children: primaryKey === null ? String(primary ?? "-") : t(primaryKey),
 									}),
-									// 审查判定与最终结算并存且不同（人工推翻、超时、取消）：次级徽标并排可分辨（§8.5）。
+									// 审查判定与最终结算并存且不同（人工推翻、超时、取消）：次级徽标并排可分辨（design §8.5）。
 									decisionKey !== null && record.decision !== record.outcome
 										? jsxRuntime.jsx("span", { className: "dsafm_review_decision_sub", children: t(decisionKey) })
 										: null,
@@ -1699,7 +1697,7 @@ window.__ModuleLoader__.load({
 													jsxRuntime.jsx("div", {
 														className: "dsafm_review_equation",
 														children: [
-															// 缺失段显示 —，不按 0 计（§8.5：缺失不是测量值）。
+															// 缺失段显示 —，不按 0 计（design §8.5：缺失不是测量值）。
 															t("time.queue").replace("{n}", segmentText(detail.queueMs)),
 															` · ${t("time.review").replace("{n}", segmentText(detail.reviewMs))}`,
 															` · ${t("time.human").replace("{n}", segmentText(detail.humanWaitMs))}`,
@@ -1731,10 +1729,10 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 记录表近似行的会话定义（设计 §8.5 第二落点，默认关）。
+		 * 记录表近似行的会话定义（design §8.5 第二落点，默认关）。
 		 *
 		 * `approval/asked` 开一个上下文、`approval/decided` 收尾（同一 `id` 配对），收尾后产出一行
-		 * `kind: 'context'` 节点，文案含工具名、判定与耗时（两条审计事件的时间戳差，实测正确）。
+		 * `kind: 'context'` 节点，文案含工具名、判定与耗时（两条审计事件的时间戳差）。
 		 * 位置与时长条由内置视图决定（落在工具行之下、无时长条），本定义控制不了。
 		 * @param {(key: string) => string} translate - 绑定到本命名空间的翻译函数。
 		 * @returns {object} `ConversationNodeDefinition`。
@@ -1884,18 +1882,18 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 插件设置卡（R27 起挂 Plugins 页本包详情 `plugins.bundle.config`）：读 `configForms` 控制器快照（与旧 scope 同形）。
+		 * 插件设置卡（挂 Plugins 页本包详情 `plugins.bundle.config`）：读 `configForms` 控制器快照（与旧 scope 同形）。
 		 *
-		 * R29：外观照官方设置表单重绘（规格与自绘落点见 docs/design.md）——无卡片外壳与分区标题、字段竖排、
+		 * 外观照官方设置表单重绘（规格与自绘落点见 docs/design.md）——无卡片外壳与分区标题、字段竖排、
 		 * 覆盖＝胶囊「已覆盖」＋「恢复默认」、说明常驻＋帮助点击展开、底部唯一「保存」且无改动/非法/保存中置灰；
-		 * 一切编辑（含接管预设、模型/档位、映射表、跟随主模型）先暂存，只有「保存」写库，离开页面丢弃（设计 §13.5）。
+		 * 一切编辑（含接管预设、模型/档位、映射表、跟随主模型）先暂存，只有「保存」写库，离开页面丢弃（requirements §6.1）。
 		 * 嵌套路径沿用 `mutate` 的路径操作；数字字段直接用官方 `SettingsValueField`，其余控件按官方输入规格自绘。
 		 * 写通道注意：控制器的 `mutate` 对「宿主拒绝」解析 `false` 而不抛错，保存后按返回值定相位并依赖订阅回读快照。
 		 * @param {object} props - 注入的 `scope`（configForms 控制器）、`rpcCall`、`t` 与页面主的 `view`。
 		 * @returns {object} React 元素。
 		 */
 		function SettingsCard(props) {
-			// R28：槽位注入的 useNsT 优先（强制语言档）；旧宿主/直调测试没传时退回宿主 t（auto 行为）。
+			// 槽位注入的 useNsT 优先（强制语言档）；旧宿主/直调测试没传时退回宿主 t（auto 行为）。
 			const { t: hostT, useNsT, scope } = props;
 			const t =
 				typeof useNsT === "function"
@@ -1905,7 +1903,7 @@ window.__ModuleLoader__.load({
 						: (key) => key;
 			const rpcCall = typeof props.rpcCall === "function" ? props.rpcCall : null;
 			const [snapshot, setSnapshot] = react.useState(() => scope.getSnapshot());
-			// R29 暂存（设计 §13.5「只有保存才写」）：键＝字段路径（"." 连接），
+			// 暂存（requirements §6.1「只有保存才写」）：键＝字段路径（"." 连接），
 			// 值＝{text}（FIELDS 文本）| {value}（结构化：presets/model/行表/布尔）| {clear}（恢复默认）。
 			// 控件显示值＝暂存值 ?? 快照种子；暂存是组件本地 state，卸载即弃（离开页面丢弃，官方语义）。
 			const [staged, setStaged] = react.useState({});
@@ -1931,7 +1929,7 @@ window.__ModuleLoader__.load({
 			}, []);
 
 			/**
-			 * 按需读档位表并写进缓存；同一引用只请求一次，失败时记空表（设计「设置页 GUI（替换 JSON 文本域）」）。
+			 * 按需读档位表并写进缓存；同一引用只请求一次，失败时记空表（design §7.2）。
 			 * @param {string} ref - 模型引用。
 			 * @returns {void}
 			 */
@@ -1961,7 +1959,7 @@ window.__ModuleLoader__.load({
 			 */
 			const stageText = (field, text) => stageEntry(field.path.join("."), { text });
 			/**
-			 * 暂存「恢复默认」（clear）：控件立即显示组合层默认值，保存时才落 unset（R29 判据②）。
+			 * 暂存「恢复默认」（clear）：控件立即显示组合层默认值，保存时才落 unset。
 			 * @param {readonly string[]} path - 字段路径。
 			 * @returns {void}
 			 */
@@ -2001,7 +1999,7 @@ window.__ModuleLoader__.load({
 			};
 
 			/**
-			 * 覆盖标记（R29 判据②）：暂存 clear → 无；暂存写 → 有（保存将留下覆盖，与基线同值也算）；
+			 * 覆盖标记：暂存 clear → 无；暂存写 → 有（保存将留下覆盖，与基线同值也算）；
 			 * 无暂存 → 用户层有该键（键在场，不是值比较）。
 			 * @param {readonly string[]} path - 字段路径。
 			 * @returns {boolean} 是否显示「已覆盖」。
@@ -2027,7 +2025,7 @@ window.__ModuleLoader__.load({
 				};
 			};
 
-			/** 行表 → 映射对象：键取纯模型 id，空键行丢弃（设计「设置页 GUI（替换 JSON 文本域）」）。 */
+			/** 行表 → 映射对象：键取纯模型 id，空键行丢弃（design §7.2）。 */
 			const rowsToMap = (rows) => {
 				const map = {};
 				for (const row of rows) {
@@ -2037,7 +2035,7 @@ window.__ModuleLoader__.load({
 				return map;
 			};
 
-			/** 四个结构化字段的保存规格（R29：与 FIELDS 同一条暂存 → 保存路径）。 */
+			/** 四个结构化字段的保存规格（与 FIELDS 同一条暂存 → 保存路径）。 */
 			const SPECIAL_PLAN = [
 				{ path: ["reviewer", "model"], toValue: (val) => val },
 				{ path: ["reviewer", "byParentModel"], toValue: rowsToMap },
@@ -2115,8 +2113,8 @@ window.__ModuleLoader__.load({
 			};
 
 			/**
-			 * 字段外壳（R29，设计 §13.5）：标签行（label ＋帮助按钮 ＋覆盖组）→ 控件 → 常驻说明 →（展开的）帮助区。
-			 * 帮助按钮 24×24、`IconInfoOutlineRegular`（12px）、`aria-expanded`/`aria-controls` 成对、键盘可达（判据⑤）；
+			 * 字段外壳（design §7.2）：标签行（label ＋帮助按钮 ＋覆盖组）→ 控件 → 常驻说明 →（展开的）帮助区。
+			 * 帮助按钮 24×24、`IconInfoOutlineRegular`（12px）、`aria-expanded`/`aria-controls` 成对、键盘可达；
 			 * 覆盖组＝`Tag`「已覆盖」＋文本按钮「恢复默认」（只暂存 `{clear}`，不写库）。
 			 * @param {object} options - `label`/`path`/`hint`/`helpText`/`onReset` 与 `control(controlId, describedby)`。
 			 * @returns {object} 元素。
@@ -2188,7 +2186,7 @@ window.__ModuleLoader__.load({
 
 			/**
 			 * 纯数字字段直接用官方 `SettingsValueField`（自带标签行/帮助/覆盖组/非法文案全套，其 CSS 无失效令牌）。
-			 * 毫秒字段（`unit:"ms"`）在其后平铺一行秒数读数（R30，设计 §13.5b）：Fragment 不引入包装 DOM，
+			 * 毫秒字段（`unit:"ms"`）在其后平铺一行秒数读数（requirements §6.1）：Fragment 不引入包装 DOM，
 			 * 读数自绘在官方组件之外——官方 hint 在字段非法时被非法文案整段顶掉，拼进去会让生效值读数消失。
 			 * @param {object} field - 字段定义。
 			 * @returns {object} 元素。
@@ -2218,7 +2216,7 @@ window.__ModuleLoader__.load({
 			};
 
 			/**
-			 * 毫秒字段的秒数读数行（R30 判据①–⑦）：生效值读数＝快照生效值（常驻，不随草稿变化）；
+			 * 毫秒字段的秒数读数行（requirements §6.1）：生效值读数＝快照生效值（常驻，不随草稿变化）；
 			 * 草稿读数＝暂存显示文本（渲染期现算，每次输入后的重渲染即更新——不防抖、不等失焦、不等保存）。
 			 * 占位口径与数字字段草稿同一口径（有限、≥0、整数）；草稿非法时占位并转错误色，空串占位不变色（空不是非法）。
 			 * @param {object} field - 字段定义（`unit:"ms"`）。
@@ -2231,7 +2229,7 @@ window.__ModuleLoader__.load({
 				const draftNumber = draftRaw.length === 0 ? null : secondsNumberText(Number(draftRaw));
 				const fill = (number) => (number === null ? "—" : `${number} ${unit}`);
 				const draftInvalid = draftRaw.length > 0 && draftNumber === null;
-				// GAP-06：无上限风险提醒固定渲染在审查时限字段的秒数读数行内（设计 §7.2），可见性不依赖
+				// 无上限风险提醒固定渲染在审查时限字段的秒数读数行内（design §7.2），可见性不依赖
 				// 帮助区展开；草稿为 0 或生效值为 0 时显示。只描述风险，不改写输入：草稿为 0 仍可保存。
 				// 人工时限字段的 0 是「立即拒绝」，不显示该提醒。
 				const noLimitWarn =
@@ -2281,7 +2279,7 @@ window.__ModuleLoader__.load({
 				});
 
 			/**
-			 * 档位下拉：首项固定「跟随模型默认」；模型未选定或未取到档位时置灰不可写（设计「设置页 GUI（替换 JSON 文本域）」）。
+			 * 档位下拉：首项固定「跟随模型默认」；模型未选定或未取到档位时置灰不可写（design §7.2）。
 			 * @param {string} ref - 所属模型引用。
 			 * @param {string} current - 当前档位。
 			 * @param {(effort: string) => void} onChange - 选择回调。
@@ -2311,7 +2309,7 @@ window.__ModuleLoader__.load({
 			};
 
 			/**
-			 * 换模型后保留哪个档位：新模型支持就保留，否则清空（设计「会话级下拉（模型 + 档位两段式）」 的同一规则）。
+			 * 换模型后保留哪个档位：新模型支持就保留，否则清空（design §7.3 的同一规则）。
 			 * @param {string} ref - 新模型引用。
 			 * @param {string} current - 当前档位。
 			 * @returns {Promise<string>} 档位。
@@ -2326,7 +2324,7 @@ window.__ModuleLoader__.load({
 				});
 			};
 
-			// 结构化字段的显示值（R29 暂存优先；种子与组合层默认值经归一化后取用）。
+			// 结构化字段的显示值（暂存优先；种子与组合层默认值经归一化后取用）。
 			const displayChoice = specialOf(["reviewer", "model"], choiceOf).display;
 			const displayRows = specialOf(["reviewer", "byParentModel"], rowsOf).display;
 			const displayFollow = specialOf(["reviewer", "followParent"], (raw) => raw !== false).display;
@@ -2349,7 +2347,7 @@ window.__ModuleLoader__.load({
 			};
 
 			/**
-			 * 暂存行表（R29：不再即时写库）；键归一化挪到保存计划（rowsToMap）。
+			 * 暂存行表（不再即时写库）；键归一化挪到保存计划（rowsToMap）。
 			 * @param {object[]} next - 新行表。
 			 * @returns {void}
 			 */
@@ -2371,7 +2369,7 @@ window.__ModuleLoader__.load({
 				if (field.kind === "number") return numberField(field);
 				const key = field.path.join(".");
 				/**
-				 * 选项的中文文案：`option.<字段路径>.<值>`；字典缺该键时退回原值（外部来源的值保持原样，设计「设置项文案」）。
+				 * 选项的中文文案：`option.<字段路径>.<值>`；字典缺该键时退回原值（外部来源的值保持原样，design §7.2）。
 				 * @param {string} option - 原值。
 				 * @returns {string} 展示文案。
 				 */
@@ -2433,7 +2431,7 @@ window.__ModuleLoader__.load({
 			/**
 			 * 映射行：主模型（下拉，列【模型】里注册的全部模型；另留「自定义…」兼顾手输）→
 			 * 审查模型 → 档位 → 删除。四列布局由 `.dsafm_map_row` 的 grid 定义，整表占满卡片宽度；
-			 * 每个下拉的 `title` 取当前完整值，长引用可悬停看全。键仍取纯模型 id，与解析侧一致（设计「设置页 GUI（替换 JSON 文本域）」）。
+			 * 每个下拉的 `title` 取当前完整值，长引用可悬停看全。键仍取纯模型 id，与解析侧一致（design §7.2）。
 			 */
 			const parentRefs = modelRefsOf(catalog, "");
 			const mapRows = displayRows.map((row, index) =>
@@ -2489,7 +2487,7 @@ window.__ModuleLoader__.load({
 				),
 			);
 
-			/** 默认审查模型行（字段外壳＋模型/档位两个下拉，选择即暂存，R29）。 */
+			/** 默认审查模型行（字段外壳＋模型/档位两个下拉，选择即暂存）。 */
 			const modelRow = () =>
 				fieldShell({
 					label: t("card.field.defaultModel"),
@@ -2507,7 +2505,7 @@ window.__ModuleLoader__.load({
 						}),
 				});
 
-			/** 按主模型映射行（字段外壳＋全宽四列表，增删改只暂存，R29）。 */
+			/** 按主模型映射行（字段外壳＋全宽四列表，增删改只暂存）。 */
 			const mapRow = () =>
 				fieldShell({
 					label: t("card.field.byParentModel"),
@@ -2542,7 +2540,7 @@ window.__ModuleLoader__.load({
 						}),
 				});
 
-			/** 跟随主模型行（字段外壳＋复选框，勾选只暂存，R29；勾进标签行右端——用户报告勾位误置，requirements §4「本轮三件额外修复」）。 */
+			/** 跟随主模型行（字段外壳＋复选框，勾选只暂存；复选框置于标签行右端）。 */
 			const followParentRow = () =>
 				fieldShell({
 					label: t("card.field.followParent"),
@@ -2563,7 +2561,7 @@ window.__ModuleLoader__.load({
 						}),
 				});
 
-			/** 接管预设行（字段外壳＋多选 picker；勾选只暂存，R29）。 */
+			/** 接管预设行（字段外壳＋多选 picker；勾选只暂存）。 */
 			const presetsRow = () =>
 				fieldShell({
 					label: t("card.presets.label"),
@@ -2583,7 +2581,7 @@ window.__ModuleLoader__.load({
 						}),
 				});
 
-			// R27「打开即见」＋R29 字段顺序（设计 §13.9，无分区标题）：
+			// 打开即见＋字段顺序（design §7.2「21 字段」清单，无分区标题）：
 			// 接管预设 → 触发两行 → 默认审查模型 → 映射 → 跟随主模型 → 高级其余行；插件标题/描述由宿主页面自己画。
 			return jsxRuntime.jsxs("div", {
 				className: "dsafm_form",
@@ -2605,7 +2603,7 @@ window.__ModuleLoader__.load({
 										children: error === "" ? t("card.failed") : `${t("card.failed")}：${error}`,
 									})
 								: null,
-							// 唯一「保存」：无改动/有非法值/保存中置灰（R29 判据③；官方 blocked 门控同款）。
+							// 唯一「保存」：无改动/有非法值/保存中置灰（requirements §6.1；置灰条件与官方 blocked 字段同款）。
 							jsxRuntime.jsx("button", {
 								type: "button",
 								className: "dsafm_save",
@@ -2634,7 +2632,7 @@ window.__ModuleLoader__.load({
 			const translate =
 				typeof ctx.locale?.bind === "function" ? ctx.locale.bind(NS) : (key) => key;
 
-			// R28 用户文案语言档（设计 §7.5）：`auto`＝宿主界面语言（沿用 `translate`，现状行为）；
+			// 用户文案语言档（design §7.5）：`auto`＝宿主界面语言（沿用 `translate`，现状行为）；
 			// `zh`/`en`＝强制直查本命名空间字典——不经宿主 setLocale（那会写全局语言）。缺键抛错，不静默回退。
 			/** @type {(lang: string, key: string) => string} */
 			const localT = (lang, key) => {
@@ -2668,7 +2666,7 @@ window.__ModuleLoader__.load({
 				}
 			};
 			/**
-			 * 组件取词 hook（R28）：订阅控制器快照，切换语言档即重画；auto 用宿主绑定，强制档直查字典。
+			 * 组件取词 hook：订阅控制器快照，切换语言档即重画；auto 用宿主绑定，强制档直查字典。
 			 * 宿主 react 缺 `useSyncExternalStore`（旧版/测试替身）时退化为渲染期现取，行为仍正确、只少一次主动重画。
 			 * @param {(key: string) => string} [hostT] - 槽位标准 prop 传入的宿主绑定。
 			 * @returns {(key: string) => string} 取词函数。
@@ -2697,11 +2695,9 @@ window.__ModuleLoader__.load({
 			/**
 			 * 读当前会话 id。
 			 *
-			 * **0.1.7 起以 slot 的标准 prop `sessionId` 为准**（`dsh-client-ui-slots` 的标准 props，
-			 * 原生组件一律这么取，如 `client-ui-cordis:741` 的会话面板）——本文件此前只从
-			 * `sessions` 服务的 `list.getSnapshot().current` 取，那是 0.1.5 的形状；0.1.7 的
-			 * `sessions` 服务只提供 `retain/using/retainInfo`（`dsh-api-session-controller/lib/client.js:3194-3234`），
-			 * 于是取到空串、composer 控件与审批卡片状态条**静默不渲染**（2026-09-24 实测）。
+			 * 以 slot 的标准 prop `sessionId` 为准（`dsh-client-ui-slots` 标准 props，如 `client-ui-cordis:741` 的会话面板）。
+			 * `sessions` 服务在 0.1.7 只提供 `retain/using/retainInfo`（`dsh-api-session-controller/lib/client.js:3194-3234`），
+			 * `list.getSnapshot().current` 取不到当前会话——取到空串时 composer 控件与审批卡片状态条静默不渲染。
 			 * @param {unknown} [explicit] - 组件拿到的标准 prop `sessionId`。
 			 * @returns {string} 会话 id；读不到时返回空串，组件因此不渲染。
 			 */
@@ -2730,10 +2726,10 @@ window.__ModuleLoader__.load({
 				}
 			};
 
-			// 设置表单（0.1.7 双语轮，R27）：本包详情页 `plugins.bundle.config`（keyed，键＝包名），`whileServed` 门控——
+			// 设置表单（requirements §6.1／design §7.2）：本包详情页 `plugins.bundle.config`（keyed，键＝包名），生命周期由 `whileServed` 管理——
 			// 宿主没服务本命名空间（或行被停用）时不挂表单，避免读不到控制器的空卡；宿主恢复服务时自动重挂。
 			// 数据源是 `configForms.get(行id)` 控制器（getSnapshot/subscribe/mutate 与 0.1.5 旧 scope 控制器同形）；组件自取控制器，
-			// bundle 级槽的 owner props 只有 `view:'page'`（不注入 form），不注册 `plugins.row.config`（R27「落点唯一」）。
+			// bundle 级槽的 owner props 只有 `view:'page'`（不注入 form），不注册 `plugins.row.config`（落点唯一）。
 			ctx.effect(
 				() =>
 					ctx.configForms.whileServed([NS], () =>
@@ -2756,7 +2752,7 @@ window.__ModuleLoader__.load({
 				"approve-for-me: settings form",
 			);
 
-			// composer 的审查模型下拉；非接管预设、拿不到会话 id 或 RPC 不可用时组件自己不渲染（设计「会话级下拉（composer）」）。
+			// composer 的审查模型下拉；非接管预设、拿不到会话 id 或 RPC 不可用时组件自己不渲染（design §7.3）。
 			ctx.slots.inject("conversation.input.left", () =>
 				ctx.slots.register(
 					{
@@ -2769,7 +2765,7 @@ window.__ModuleLoader__.load({
 				),
 			);
 
-			// 审批卡片 body 的自动审批状态条与倒计时（设计「审批卡片内的自动审批状态条与倒计时」）。
+			// 审批卡片 body 的自动审批状态条与倒计时（design §7.4）。
 			// 该 seat 是 `single`：`ApprovalCommand` 未写 priority（即 0），这里必须给负数才能成为 `entriesOfSlot[0]`；
 			// 组件自己渲染关联命令，因此非接管请求的观感与原生一致。
 			ctx.slots.inject("conversation.approval.detail", () =>
@@ -2784,7 +2780,7 @@ window.__ModuleLoader__.load({
 				),
 			);
 
-			// 会话视图「审查记录」（设计 §8.5 呈现层第一落点）：与「对话」（order 0）、「轨迹」（order 10）并列的
+			// 会话视图「审查记录」（design §8.5 呈现层第一落点）：与「对话」（order 0）、「轨迹」（order 10）并列的
 			// 第三个页签，`list` 座位按 `priority` 再 `order` 升序排，20 恰好排在其后。
 			// owner props 是 `{ viewRequest, openView, completeViewRequest }`；`useTrajectory` 等 hook 走标准 props。
 			ctx.slots.inject("conversation.view", () =>
@@ -2801,7 +2797,7 @@ window.__ModuleLoader__.load({
 				),
 			);
 
-			// 记录表近似行（可选，默认关；设计 §8.5）：内部自回退，任何失败只写 window.__dsafmProbe，不影响上面四个挂点。
+			// 记录表近似行（可选，默认关；design §8.5）：内部自回退，任何失败只写 window.__dsafmProbe，不影响上面四个挂点。
 			registerLegacyRow(ctx, call, sessionIdOf, (key) => {
 				// 近似行按当前语言档现取；结局闭集探测未命中时回退原值（auto 档键名回显的同一语义）。
 				try {

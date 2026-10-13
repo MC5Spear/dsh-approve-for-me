@@ -1,6 +1,6 @@
 /**
- * R28 ② 取证：解码指定会话日志，抽出 approve-for-me 注入消息，打印首行与字节长。
- * 判据（requirements §4 :295 ②）：agent=zh 档下注入文本首行应为中文 `[approve-for-me] …`。
+ * 取证：解码指定会话日志，抽出 approve-for-me 注入消息，打印首行与字节长。
+ * 判据（requirements §5.4）：agent=zh 档下注入文本首行应为中文 `[approve-for-me] …`。
  * 兼容两种会话文件命名：session.jsonl.zstd 与 session.v*.jsonl.zstd。
  * 用法：node tools/probe-r28-zh-inject.mjs <sessionsRoot> <sessionId>
  * @module tools/probe-r28-zh-inject

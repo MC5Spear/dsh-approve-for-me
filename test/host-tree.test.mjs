@@ -4,8 +4,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 /**
- * R49 判据⑤的锚点守卫（r53 审查 D4）：「host hooks 解析到 0.2.0 树」此前无守卫——
- * 把 `tools/_host-resolve.mjs` 的锚点改回 0.1.7 树，全套仍然全绿（审查者实测）。
+ * 宿主解析树的锚点守卫：把 `tools/_host-resolve.mjs` 的锚点改回 0.1.7 树时，
+ * 套件此前仍全绿——这正是要钉住的变红缺口。
  * 本用例断言：宿主解析钩子生效时（npm test 带 `--import ./tools/_host-hooks.mjs`），
  * `@deepseek-ai/dsh-llm` 解析出的实体版本必须与本包 `package.json` 的锁定版本一致——
  * 锚点退回 0.1.7 树（解析出 0.1.7-rc.1）即红；离线跑（无钩子）时解析到仓库自带
@@ -23,14 +23,14 @@ function resolvedPackageVersion(specifier) {
   };
 }
 
-test('R49⑤ 守卫：dsh-llm 宿主解析版本的与 package.json 锁定版本一致（锚点退回 0.1.7 树即红）', () => {
+test('守卫：dsh-llm 宿主解析版本的与 package.json 锁定版本一致（锚点退回 0.1.7 树即红）', () => {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   const pinned = pkg.dependencies['@deepseek-ai/dsh-llm'];
   const { resolved, version } = resolvedPackageVersion('@deepseek-ai/dsh-llm');
   assert.equal(version, pinned, `锚点树或本地 node_modules 的 dsh-llm=${version}，与本包锁定版本 ${pinned} 不一致（解析自 ${resolved}）`);
 });
 
-test('R49⑤ 守卫：dsh-typert-protocol 同口径（与 dsh-llm 同树同版系）', () => {
+test('守卫：dsh-typert-protocol 同口径（与 dsh-llm 同树同版系）', () => {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   const pinned = pkg.dependencies['@deepseek-ai/dsh-typert-protocol'];
   const resolved = import.meta.resolve('@deepseek-ai/dsh-typert-protocol');
