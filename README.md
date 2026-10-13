@@ -70,7 +70,7 @@ dsh plugin --profile web add <克隆目录的绝对路径>
 | `trigger.auditEverySkip` | 开启后逐次记录跳过，不降噪 |
 | `tools`、`allowEscalationTo` | 收窄工具和升权范围；空工具名单覆盖全部升权工具 |
 | `denyPatterns`、`unknownSubject`、`fallback` | 拒绝规则、缺操作证据和人工备用处置；规则空清单不作文本拦截 |
-| `reviewer.model`、`reviewer.byParentModel`、`reviewer.followParent` | 选择审查模型与档位，按模型选择规则回退 |
+| `reviewer.model`、`reviewer.byParentModel`、`reviewer.followParent` | 选择审查模型与推理强度，按模型选择规则回退 |
 | `reviewer.timeoutMs`、`human.timeoutMs`、`human.timeoutFrom` | 控制审查及人工等待；审查零取消时限，人工零立即拒绝，两者不同 |
 | `reviewer.maxTokens`、`reviewer.temperature`、`reviewer.maxToolSteps`、`reviewer.toolTimeoutMs` | 控制模型响应和取证；工具轮次用尽要求直接回答；输出预算零不传上限，单工具零不设时限 |
 | `context.*` | 控制上下文取样和脱敏；条数零不取上下文，本次真实参数仍独立送审；清单空表关闭遮蔽 |
@@ -83,7 +83,7 @@ dsh plugin --profile web add <克隆目录的绝对路径>
 
 ### 模型选择与配置更新
 
-会话选择 → 父模型映射 → 全局默认 → 跟随父模型。不可用候选逐层降级并记录实际使用层；全部不可用按故障拒绝。模型引用为 `provider/model`，档位与模型绑定，未指定时支持low则用low，否则使用模型默认。
+会话选择 → 执行助手模型映射 → 全局默认 → 跟随执行助手模型。不可用候选逐层降级并记录实际使用层；全部不可用按故障拒绝。模型引用为 `provider/model`，推理强度与模型绑定，未指定时支持 low 则用 low，否则自动选择。
 
 会话控件只在接管会话显示，权限变化后及时更新，不要求刷新。取得会话id后，在发第一条消息之前也能设置；切换失败显示可见错误并保留原值。
 

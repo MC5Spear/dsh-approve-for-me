@@ -108,7 +108,9 @@ class Session {
         if (message.method === 'Runtime.consoleAPICalled') {
           const text = (message.params?.args ?? [])
             .map((arg) => arg.value ?? arg.description ?? arg.unserializableValue ?? '')
-            .join(' ');
+            .join(' ')
+            // 插件聚合 URL（/plugins/??a,b,c…）动辄上千字符，会把后面的调用栈帧挤出版面——折叠成标记。
+            .replace(/https?:\/\/[^)\s]+\/plugins\/\?\?[^)\s]+/gu, '<plugins-bundle>');
           this.logs.push({ kind: message.params?.type ?? 'log', text: String(text) });
         } else if (message.method === 'Runtime.exceptionThrown') {
           const details = message.params?.exceptionDetails;
