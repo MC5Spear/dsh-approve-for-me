@@ -620,7 +620,7 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
 | `list.outcome` | 最终审批：{v} | Final approval: {v} |
 | `list.decision` | 模型结论：{v} | Model conclusion: {v} |
 | `view.noOutcome` | 未记录最终审批结果 | No final outcome recorded |
-| `view.retention` | 记录跟随产生它的会话；每会话回读最近一个窗口（默认 200 条，随 `ui.trace.maxRecords` 可配置），磁盘最多保留 50 个会话文件（固定上限），超限删除最旧；减少采集不删除已有记录。 | Records follow the session that produced them. Each session reads back the most recent window (200 entries by default, configurable via `ui.trace.maxRecords`); at most 50 session files are kept on disk (a fixed cap), the oldest deleted first. Reducing capture never deletes existing records. |
+| `view.retention` | 记录跟随产生它的会话；每会话回读最近一个窗口（默认 200 条，随 ui.trace.maxRecords 可配置），磁盘最多保留 50 个会话文件（固定上限），超限删除最旧；减少采集不删除已有记录。 | Records follow the session that produced them. Each session reads back the most recent window (200 entries by default, configurable via ui.trace.maxRecords); at most 50 session files are kept on disk (a fixed cap), the oldest deleted first. Reducing capture never deletes existing records. |
 
 详情缺段说明（`sectionOf` 的缺省分支按优先级链分派；无法确认时用统一文案）：
 
