@@ -191,6 +191,33 @@ test('会话选择不可用：记录原因后直退全局默认（degraded 带�
   assert.ok(audits.some((entry) => entry.degraded === 'session:unknown provider ghost'), '审计行必须留逐层原因');
 });
 
+test('会话选择不可用：跳过映射层直取全局默认（映射规则命中且可用也不参与）', async () => {
+  const { resolver, calls, audits } = harness({
+    snapshot: {
+      revision: 4,
+      value: {
+        reviewer: {
+          parentModelRules: [{ parent: { provider: null, model: 'chat' }, choice: { model: 'zai/glm-5.3', effort: '' } }],
+          model: 'deepseek-official/deepseek-v4-pro',
+        },
+      },
+      base: {},
+      user: {},
+    },
+  });
+  const cfg = await resolver.configFor({
+    agent: { session: session({ parent: { provider: 'zai', model: 'chat' }, sessionModel: 'ghost/nope' }) },
+  });
+  // 会话层失败后不落入映射层：直退全局默认（requirements §5.1／design §6.2 任一层不可用不逐层回退）。
+  assert.equal(cfg.resolution.layer, 'global');
+  assert.equal(cfg.resolution.model, 'deepseek-v4-pro');
+  assert.equal(cfg.resolution.degraded, 'session:unknown provider ghost');
+  // 映射目标可用也不被校验：映射层未参与本轮解析。
+  assert.equal(calls.includes('zai/glm-5.3'), false);
+  assert.ok(audits.some((entry) => entry.degraded === 'session:unknown provider ghost'), 'degraded 保留会话层原因');
+  assert.equal(audits.some((entry) => entry.layer === 'parent-map'), false, '映射层不应留任何审计行');
+});
+
 // ── 父模型映射规则矩阵（design §6.2／§10.2「模型选择与映射」） ────────────────
 
 test('斜杠 id：parent.model 含斜杠不切分，通用规则按完整纯模型 id 命中', async () => {
@@ -293,7 +320,7 @@ test('普通 id：不含斜杠的规则条件按字面命中', async () => {
   assert.equal(cfg.resolution.effort, 'low');
 });
 
-test('旧全引用键：读作去掉首个斜杠后的完整纯模型 id（不再取末段）', async () => {
+test('旧全引用键：读作去掉首个斜杠后的完整纯模型 id', async () => {
   const { resolver } = harness({
     snapshot: {
       revision: 16,
@@ -309,7 +336,7 @@ test('旧全引用键：读作去掉首个斜杠后的完整纯模型 id（不�
 });
 
 test('旧全引用键归一冲突：值一致时可用且与枚举顺序无关', async () => {
-  // 两个全引用键去首斜杠后归一到同一通用条件 `claude-3`（面值都不等于它，只能走归一路径）。
+  // 两个全引用键去首斜杠后归一到同一通用条件 `claude-3`（按字面都不等于它，只能走归一路径）。
   const orderA = harness({
     snapshot: {
       revision: 17,
@@ -362,7 +389,7 @@ test('坏末段键不猜测恢复：被截断的旧键不当作完整 id 的别�
       user: {},
     },
   });
-  // 父模型 id 是 `anthropic/claude-3`；末段键 `claude-3` 与它面值不等（也不含斜杠、无归一读法），
+  // 父模型 id 是 `anthropic/claude-3`；末段键 `claude-3` 与它按字面不等（也不含斜杠、无归一读法），
   // 不猜测把 `claude-3` 恢复成 `anthropic/claude-3`——按未命中继续三层序。
   const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'anthropic', model: 'anthropic/claude-3' } }) } });
   assert.equal(cfg.resolution.layer, 'global');
@@ -757,4 +784,28 @@ test('空全局默认不发 session 作用域条目：会话已选择时宿主�
   assert.equal(issues.length, 1);
   assert.equal(issues[0].scope, 'global');
   assert.equal(issues[0].configured, '');
+});
+
+test('空目标规则行发 rule 条目：reason 与不可解析目标同族，空值旧键不发', async () => {
+  // 空目标（choice.model 空串）命中时选择层按候选不可用直退全局默认（design §6.2）；
+  // 诊断推演同口径（design §7.2.0 未明文跳过空目标行）；空目标不判非法草稿，保存不受阻。
+  const issues = await collectModelIssues({
+    llm: issuesLlm(),
+    reviewer: {
+      model: 'zai/glm-5.3',
+      parentModelRules: [{ parent: { provider: null, model: 'chat' }, choice: { model: '', effort: '' } }],
+      byParentModel: { 'inert-legacy': '' },
+    },
+    sessionChoice: undefined,
+    parent: { provider: 'zai', model: 'glm-5.3' },
+  });
+  const rule = issues.find((issue) => issue.scope === 'rule');
+  assert.ok(rule !== undefined, '空目标规则行应发 rule 条目');
+  assert.equal(rule.ruleProvider, null);
+  assert.equal(rule.ruleModel, 'chat');
+  assert.equal(rule.configured, '', 'configured 保留空目标原文');
+  assert.equal(rule.reason, 'unparsable model reference', 'reason 与不可解析目标同一文案');
+  assert.equal(rule.effectiveLayer, 'global');
+  assert.equal(rule.effectiveModel, 'zai/glm-5.3');
+  assert.equal(issues.some((issue) => issue.scope === 'rule' && issue.ruleModel === 'inert-legacy'), false, '空值旧键不被任何路径选中，不发条目');
 });

@@ -1,6 +1,6 @@
 # 设置表单 DOM 夹具（结构判据 + 毫秒字段秒数读数；离线回归用）
 
-- 采集：本插件设置详情页（loopback 实例）的页面 DOM 与计算样式导出；采集工具链随仓发布（`tools/browser-shot.mjs` 驱动取证、`tools/build-dom-dump.mjs` 汇编成档），本轮的步骤场景脚本属开发期工件、不随仓发布。CSS 收窄扫描（scoped 段，只读本包注入的 `style[data-plugin-css="dsh-approve-for-me"]`）并入同一脚本。本轮（结构化规则表＋分置提示定稿，20 字段）经真实页面复核抽查对齐：§1/§2/§3/§4/§6/§7/§8/§10 全量比对、mode 说明开合、两字段「恢复默认→保存」往返（覆盖组回 3、非表单键 `ui.trace` 保留）；证据见 `开发期图证记录表（不随仓发布）`；§5 的 zh→auto 重开往返沿用上一真实采集轮语义，本轮同型往返再证。
+- 采集：本插件设置详情页（loopback 实例）的页面 DOM 与计算样式导出；采集工具链随仓发布（`tools/browser-shot.mjs` 驱动取证、`tools/build-dom-dump.mjs` 汇编成档），本轮的步骤场景脚本属开发期工件、不随仓发布。CSS 收窄扫描（scoped 段，只读本包注入的 `style[data-plugin-css="dsh-approve-for-me"]`）并入同一脚本。本轮（结构化规则表＋分置提示定稿，20 字段）经真实页面复核抽查对齐：§1/§2/§3/§4/§6/§7/§8/§10 全量比对、mode 说明开合、两字段「恢复默认→保存」往返（覆盖组回 3、非表单键 `ui.trace` 保留）；证据见 `开发期图证记录表（不随仓发布）`；§5 的 zh→auto 往返按同型语义执行。
 - 入口路径：侧栏「插件」→ `dsh-approve-for-me` → 本包详情页；页面身份 `[data-plugin-detail="dsh-approve-for-me"]`。
 - 常驻断言：`test/settings-dom-dump.test.mjs` 读本文件逐项核对（变异验证：篡改本文件对应断言变红）。
 
@@ -199,7 +199,7 @@ approve-for-me
 ## 3. 覆盖组与字段结构
 
 自绘覆盖组（`.dsafm_badges`＝Tag「已单独设置」＋文本按钮「恢复默认」）恰好 3 组：已单独设置 恢复默认｜已单独设置 恢复默认｜已单独设置 恢复默认（默认审查模型、插件界面语言、发送给模型的文本语言——与 profile patch 用户层键一一对应；数字字段「已单独设置/恢复默认」在官方 SettingsValueField 内部，见 §1 文本）。
-字段壳 `dsafm_field`＝16（自绘），数字字段 4 个走官方组件标记，合计 20 字段（followParent 字段随 B1 退役，design §7.2）。
+字段壳 `dsafm_field`＝16（自绘），数字字段 4 个走官方组件标记，合计 20 字段（followParent 字段不在 20 字段清单，design §7.2）。
 
 ## 4. 说明入口点击展开（aria 成对；design §7.2.1）
 
@@ -244,7 +244,7 @@ approve-for-me
 | 17 | textarea | textarea | approve-for-me-ctl-tools | （空） |
 | 18 | textarea | textarea | approve-for-me-ctl-denyPatterns | （空） |
 
-接管预设为多选 picker（button + aria-expanded），不计入本表；followParent 复选框随字段退役（B1），结构化规则表在空表时只有表头与「添加一行」按钮，无行控件。
+接管预设为多选 picker（button + aria-expanded），不计入本表；followParent 复选框不再出现，结构化规则表在空表时只有表头与「添加一行」按钮，无行控件。
 
 ## 8. dsafm 类清单（容器内去重；退役类零残留）
 

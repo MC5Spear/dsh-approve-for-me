@@ -325,7 +325,7 @@ window.__ModuleLoader__.load({
 			"warn.modelIssue.session": "This session's reviewer model is unavailable: {reason}. Currently using: {effective}.",
 			"warn.modelIssue.globalUnset": "The default reviewer model is not set: reviews follow the agent's current model as an independent call — the same model, never the agent approving itself. Currently using: {effective}.",
 			"warn.modelIssue.followParent": "This session has no reviewer of its own and the global default is unset, so reviews follow the agent's current model as an independent call — the same model, never the agent approving itself. Currently using: {effective}.",
-			"warn.modelIssue.layer": "Currently on: {layer}.",
+			"warn.modelIssue.layer": "Currently effective: {layer}.",
 			"card.field.defaultModel": "Default reviewer model",
 			"card.field.parentModelRules": "Reviewer model by the agent's model",
 			"card.effort.unsupported": " (unsupported by this model)",
@@ -784,15 +784,18 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 规则条件的比较键：provider 归一空值为 null 后与 model 逐字比较，键化为 `[provider, model]` 对。
-		 * 与宿主侧 `lib/config.js` 的 `parentModelRuleKey` 同一口径；重复条件防线在两侧按同一比较对齐（design §6.2/§7.2）。
+		 * 规则条件的比较键：provider 归一空值为 null 后与 model 比较，键化为 `[provider, model]` 对。
+		 * 键化前 trim provider 与 model，与 `persistableOf` 入库前的裁剪同口径——「chat」与「 chat」
+		 * 两行在行级即判重复，不会入库成重复规则后被宿主读取防线拒绝（design §6.2/§7.2）。
 		 * @param {string | null} provider - 条件 provider（空值归一为 null）。
 		 * @param {string} model - 条件完整纯模型 id。
 		 * @returns {string} 条件键。
 		 */
 		function conditionKeyOf(provider, model) {
-			const normalized = typeof provider === "string" && provider.trim().length > 0 ? provider : null;
-			return JSON.stringify([normalized, model]);
+			const trimmedProvider = typeof provider === "string" ? provider.trim() : "";
+			const normalized = trimmedProvider.length > 0 ? trimmedProvider : null;
+			const trimmedModel = typeof model === "string" ? model.trim() : model;
+			return JSON.stringify([normalized, trimmedModel]);
 		}
 
 		/**

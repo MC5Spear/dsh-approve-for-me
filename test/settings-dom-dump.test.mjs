@@ -75,7 +75,7 @@ test('退役件零命中——重置全部覆盖、当前生效值、分区标�
   }
 });
 
-test('逐项等价：表单字段集与 config schema 的 UI 面一致（20 字段，竖排无分区）', () => {
+test('逐项等价：表单字段集与 config schema 的 UI 字段集一致（20 字段，竖排无分区）', () => {
   const fields = [
     '启用自动审批的权限预设',
     '无法识别权限预设时',
@@ -99,7 +99,7 @@ test('逐项等价：表单字段集与 config schema 的 UI 面一致（20 字�
     '文本拒绝规则（每行一条正则表达式）',
   ];
   const missing = fields.filter((f) => !hasLine(f));
-  assert.deepEqual(missing, [], '设置表单丢字段（对照 lib/config.js 的 UI 面）');
+  assert.deepEqual(missing, [], '设置表单丢字段（对照 lib/config.js 的 UI 字段集）');
   assert.ok(hasLine('保存'), '唯一保存按钮缺失');
   // followParent 已从 config schema 退役：页面文本零命中是字段面一致的一部分。
   assert.equal(pageText.includes('无可用审查模型时使用执行助手的模型'), false, 'followParent 字段标签应零命中（design §7.2 20 字段）');

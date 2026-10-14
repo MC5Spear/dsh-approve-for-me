@@ -1696,6 +1696,58 @@ test('映射行重复条件：行级错误并阻止保存，含旧字典行同�
   assert.equal(findAllByClass(current, 'dsafm_map_dup').length, 2, '换条件后新行不再重复（旧表自带的重复仍在）');
 });
 
+test('映射行重复条件同口径 trim：空白前后缀条件判重复并禁存（不待入库后被宿主防线拒绝）', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    snapshot: {
+      status: 'ready',
+      value: {
+        reviewer: {
+          parentModelRules: [{ parent: { provider: null, model: 'deepseek-chat' }, choice: { model: 'zai/glm-5.3', effort: '' } }],
+        },
+      },
+      base: {},
+      user: {},
+      revision: 1,
+      writable: true,
+    },
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'deepseek', models: [{ id: 'deepseek-chat' }] }, { id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      if (endpoint === 'approveForMe/modelEfforts') return { ok: true, value: { efforts: [{ id: 'low' }], defaultEffort: 'low' } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
+  const props = { t: (key) => key, scope: env.scope, rpcCall: env.rpcCall };
+  const tree = await expandCard(card.component, props);
+  assert.equal(findAllByClass(tree, 'dsafm_map_dup').length, 0, '单行条件不报重复');
+
+  // 新行手输带空白前后缀的同 id：比较键与持久化同口径（键化前 trim），行级即判重复。
+  hookIndex = 0;
+  let current = render(card.component, props);
+  findByClass(current, 'dsafm_map_add').props.onClick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  let newRow = findAllByClass(current, 'dsafm_map_row')[1];
+  findByClass(newRow, 'dsafm_map_parent').props.onChange({ target: { value: '__custom__' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  newRow = findAllByClass(current, 'dsafm_map_row')[1];
+  const customInput = findAllByClass(newRow, 'dsafm_input').find((node) => node.type === 'input');
+  customInput.props.onChange({ target: { value: ' deepseek-chat ' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  assert.equal(findAllByClass(current, 'dsafm_map_dup').length, 2, '「chat」与「 chat」两行都应报行级重复错误');
+  assert.equal(findByClass(current, 'dsafm_save').props.disabled, true, '重复条件应阻止保存');
+  assert.equal(env.writes.length, 0, '禁存：不写库（避免入库成重复规则后 normalizeConfig 读取抛错）');
+});
+
 test('待确认含斜杠旧键：确认「指定 provider」转为命名规则，旧键从字典移除（design §7.2）', async () => {
   resetHooks();
   const client = loadClient();
@@ -2976,7 +3028,7 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['warn.modelIssue.session', '本会话选择的审查模型不可用：{reason}。实际使用：{effective}。', "This session's reviewer model is unavailable: {reason}. Currently using: {effective}."],
     ['warn.modelIssue.globalUnset', '默认审查模型未设置：审查跟随执行助手的当前模型，独立发起审查调用——是「使用相同模型」，不是由执行助手自己审批。实际使用：{effective}。', "The default reviewer model is not set: reviews follow the agent's current model as an independent call — the same model, never the agent approving itself. Currently using: {effective}."],
     ['warn.modelIssue.followParent', '本会话未单独选择审查模型，按未设置的全局默认跟随执行助手的当前模型：独立发起审查调用——是「使用相同模型」，不是由执行助手自己审批。实际使用：{effective}。', "This session has no reviewer of its own and the global default is unset, so reviews follow the agent's current model as an independent call — the same model, never the agent approving itself. Currently using: {effective}."],
-    ['warn.modelIssue.layer', '当前生效：{layer}。', "Currently on: {layer}."],
+    ['warn.modelIssue.layer', '当前生效：{layer}。', "Currently effective: {layer}."],
     ['field.language.ui', '插件界面语言', "Plugin UI language"],
     ['field.language.agent', '发送给模型的文本语言', "Language of model-facing texts"],
     ['field.reviewer.timeoutMs', '自动审查等待上限（毫秒）', "Auto-review wait limit (ms)"],
@@ -3020,6 +3072,7 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['hint.ui.injectMaxBytes', '单条通知的字节上限；0 不裁剪。', "Byte cap per notice; 0 does not trim."],
     ['hint.tools', '纳入自动审批的工具，每行一个；空清单覆盖全部工具。', "Tools under auto-approval, one per line; empty covers all."],
     ['hint.denyPatterns', '每行一条正则表达式；命中即直接拒绝，模型与人工都不能推翻。', "One regex per line; a hit rejects outright, beyond model or human."],
+    ['warn.noLimit', '风险：审查模型挂起、工具或其他异常可能使请求无限停在自动审批；插件不会自动恢复时限，取消与其他人工路径按各自条件生效。', "Risk: a hung review model, a tool failure or another error can leave the request stuck in auto-approval forever; the plugin does not restore the limit automatically — cancel and other human paths still apply per their conditions."],
     // —— §7.2.2 展开说明表 ——
     ['help.trigger.presets', '会话使用清单内权限预设时，插件按接管规则处理升权审批；其他预设保持宿主原审批流程。清单为空时，任何已知预设都不接管；无法识别的预设按「无法识别权限预设时」的设置处置。选择接管范围不等于授予任意权限。', 'Sessions on a listed preset hand escalation approvals to this plugin; other presets keep the host flow. An empty list takes over no known preset; unidentifiable presets follow "When the preset cannot be identified". Choosing the take-over range grants no extra permissions.'],
     ['help.trigger.unknown', '读不到会话权限预设时的处置。保持宿主原审批流程＝不接管；继续自动审查＝视为命中接管范围。可能原因包括服务缺失、读取失败或没有可用预设信息。', 'What to do when the session preset cannot be read: keep the host flow means no take-over; continue means treat it as covered. Causes include a missing service, a read failure, or no preset information.'],

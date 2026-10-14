@@ -347,7 +347,7 @@ test('逃逸通知走通道故障模板并按 language.agent 切换：zh 中文�
   // 若逃逸通知退回专用拒绝正文（缺通道故障要素），两首行断言双红。
 });
 
-test('退役静态扫描：源码零补丁档位/旧宿主侧残留（设计 §10.2 判据）', async () => {
+test('退役静态扫描：源码零补丁框架/旧档位键/旧宿主 API 残留（设计 §10.2 判据）', async () => {
   const { readFileSync, readdirSync } = await import('node:fs');
   const { join, dirname } = await import('node:path');
   const { fileURLToPath } = await import('node:url');

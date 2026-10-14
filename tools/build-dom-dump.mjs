@@ -62,7 +62,7 @@ lines.push('', '接管预设为多选 picker（button + aria-expanded），不�
 lines.push('## 8. dsafm 类清单（容器内去重；退役类零残留）', '', dsafmClasses.join(' / '), '');
 lines.push('退役类零残留：无 dsafm_row、dsafm_label、dsafm_section、dsafm_divider、dsafm_actions、dsafm_help、dsafm_map_block。`dsafm_chevron` 在场属下拉 picker 箭头；`dsafm_helpbtn_text` 为说明按钮的可见文字 span；`dsafm_f_help` 为官方数字字段后的平铺说明行（design §7.2.1）。', '');
 lines.push('## 9. 失败登录计数', '');
-lines.push(`- 采集前 \`BadPasswordAttempts=${arg('--f51-before', '?')}\`，采集后 \`=${arg('--f51-after', '?')}\`（本轮无头浏览器启动次数以当次运行记录表为准；窗口阈值 10/10min，纪律 ≤5 次/10min）。`, '');
+lines.push(`- 采集前 \`BadPasswordAttempts=${arg('--f51-before', '?')}\`，采集后 \`=${arg('--f51-after', '?')}\`（本次采集无头浏览器启动次数以当次运行记录表为准；窗口阈值 10/10min，纪律 ≤5 次/10min）。`, '');
 lines.push('## 10. 毫秒字段换算读数（.dsafm_f_sec，干净页＝无暂存）', '');
 if (!Array.isArray(seconds) || seconds.length === 0) {
 	lines.push('（采集失败：seconds 段缺失——DUMP-A 未捕获换算读数行）', '');
