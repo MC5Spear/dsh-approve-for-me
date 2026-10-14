@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createResolver, normalizeModelChoice, parentModelOf, parseModelRef, pickEffort } from '../lib/model-resolver.js';
+import { collectModelIssues, createResolver, normalizeModelChoice, parentModelOf, parseModelRef, pickEffort } from '../lib/model-resolver.js';
 import { SESSION_MODEL_EVENT, sessionModelOf } from '../lib/session-model.js';
 
 /**
@@ -624,4 +624,137 @@ test('层级 2 命中映射后不再看全局默认', async () => {
   });
   const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } }) } });
   assert.equal(cfg.resolution.layer, 'parent-map');
+});
+
+// ── 空全局默认提示条目（design §7.2.0／requirements §5.1、§6.1） ────────────────
+
+/**
+ * 构造 collectModelIssues 直调的 llm 替身（与 harness 同目录口径）。
+ * @param {object} [options] - 选项。
+ * @returns {object} llm 替身。
+ */
+function issuesLlm(options = {}) {
+  const known = options.known ?? ['zai/glm-5.3', 'deepseek-official/deepseek-v4-pro'];
+  return {
+    listProviders: () => (options.providers ?? [{ id: 'zai' }, { id: 'deepseek-official' }]),
+    resolveModelInfo: async (provider, model) => {
+      if (!known.includes(`${provider}/${model}`)) throw new Error('unknown model');
+      return { reasoning: { efforts: [{ id: 'low' }, { id: 'high' }] } };
+    },
+  };
+}
+
+test('空全局默认条目字段逐项：scope=global、follow-parent 层、reason 定稿、有父模型填引用', async () => {
+  const issues = await collectModelIssues({
+    llm: issuesLlm(),
+    reviewer: {},
+    sessionChoice: undefined,
+    parent: { provider: 'zai', model: 'glm-5.3' },
+  });
+  assert.equal(issues.length, 1, '空全局默认只产生一条 global 条目');
+  assert.deepEqual(
+    issues[0],
+    {
+      scope: 'global',
+      ruleProvider: null,
+      ruleModel: '',
+      configured: '',
+      reason: '全局默认审查模型未设置',
+      effectiveLayer: 'follow-parent',
+      effectiveModel: 'zai/glm-5.3',
+    },
+    '空默认条目七字段逐项（reason 为 design §7.2.0 定稿文案）',
+  );
+});
+
+test('空全局默认条目两态 effectiveModel：无会话父模型时取空串、以层含义呈现', async () => {
+  const issues = await collectModelIssues({
+    llm: issuesLlm(),
+    reviewer: {},
+    sessionChoice: undefined,
+    parent: undefined,
+  });
+  assert.equal(issues.length, 1);
+  assert.equal(issues[0].effectiveLayer, 'follow-parent');
+  assert.equal(issues[0].effectiveModel, '', '无会话求值无值可填，取空串');
+});
+
+test('空全局默认条目不校验父模型可用性：父模型不在目录仍填引用并记 follow-parent', async () => {
+  // 状态提示而非故障（design §7.2.0）：父模型已知即填全引用；父模型不可用的故障由解析侧
+  // layer='unavailable' 承载，空默认条目不改写层含义（design §10.2 判据锚）。
+  const issues = await collectModelIssues({
+    llm: issuesLlm(),
+    reviewer: {},
+    sessionChoice: undefined,
+    parent: { provider: 'ghost', model: 'nope' },
+  });
+  assert.equal(issues.length, 1);
+  assert.equal(issues[0].configured, '');
+  assert.equal(issues[0].effectiveLayer, 'follow-parent');
+  assert.equal(issues[0].effectiveModel, 'ghost/nope', '父模型已知即填引用，不因不在目录改判 unavailable');
+});
+
+test('空全局默认与「已设置但不可用」global 条目互斥（reviewer.model 空与非空二态）', async () => {
+  const unset = await collectModelIssues({
+    llm: issuesLlm(),
+    reviewer: {},
+    sessionChoice: undefined,
+    parent: { provider: 'zai', model: 'glm-5.3' },
+  });
+  assert.equal(unset.length, 1);
+  assert.equal(unset[0].configured, '', '空态发空默认条目');
+
+  const broken = await collectModelIssues({
+    llm: issuesLlm(),
+    reviewer: { model: 'ghost/nope' },
+    sessionChoice: undefined,
+    parent: { provider: 'zai', model: 'glm-5.3' },
+  });
+  assert.equal(broken.length, 1, '非空态只发不可用条目，不另发空默认条目');
+  assert.equal(broken[0].configured, 'ghost/nope');
+  assert.equal(broken[0].effectiveLayer, 'unavailable');
+});
+
+test('空全局默认级联并存：映射规则不可用退到空默认时，行条目与顶部空默认条目同屏保留', async () => {
+  const issues = await collectModelIssues({
+    llm: issuesLlm(),
+    reviewer: {
+      parentModelRules: [{ parent: { provider: null, model: 'chat' }, choice: { model: 'ghost/nope', effort: '' } }],
+    },
+    sessionChoice: undefined,
+    parent: { provider: 'zai', model: 'glm-5.3' },
+  });
+  const empty = issues.find((issue) => issue.scope === 'global' && issue.configured === '');
+  const rule = issues.find((issue) => issue.scope === 'rule');
+  assert.ok(empty !== undefined, '空默认条目在场');
+  assert.equal(empty.reason, '全局默认审查模型未设置');
+  assert.ok(rule !== undefined, '规则行条目在场');
+  assert.equal(rule.configured, 'ghost/nope');
+  // 级联的直退终点推演不受空默认条目影响：父模型可用 → follow-parent＋引用。
+  assert.equal(rule.effectiveLayer, 'follow-parent');
+  assert.equal(rule.effectiveModel, 'zai/glm-5.3');
+});
+
+test('空全局默认非空不产生：已设置且可用的全局默认不产生任何 global 条目', async () => {
+  const issues = await collectModelIssues({
+    llm: issuesLlm(),
+    reviewer: { model: 'zai/glm-5.3' },
+    sessionChoice: undefined,
+    parent: { provider: 'zai', model: 'glm-5.3' },
+  });
+  assert.deepEqual(issues, [], '可用全局默认不产生条目');
+});
+
+test('空全局默认不发 session 作用域条目：会话已选择时宿主仍只发这一类', async () => {
+  // 会话控件附近的渲染条件（全局默认为空且会话未单独选择）由客户端匹配；
+  // 会话已单独选择且可用时，宿主只发空默认 global 条目，不重复发 session 条目。
+  const issues = await collectModelIssues({
+    llm: issuesLlm(),
+    reviewer: {},
+    sessionChoice: { kind: 'set', model: 'zai/glm-5.3', effort: '' },
+    parent: { provider: 'zai', model: 'glm-5.3' },
+  });
+  assert.equal(issues.length, 1);
+  assert.equal(issues[0].scope, 'global');
+  assert.equal(issues[0].configured, '');
 });

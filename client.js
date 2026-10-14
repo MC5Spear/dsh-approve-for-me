@@ -74,6 +74,9 @@ window.__ModuleLoader__.load({
 			"warn.modelIssue.global": "默认审查模型不可用：{reason}。实际使用：{effective}。",
 			"warn.modelIssue.rule": "此规则选择的审查模型不可用：{reason}。实际使用：{effective}。",
 			"warn.modelIssue.session": "本会话选择的审查模型不可用：{reason}。实际使用：{effective}。",
+			"warn.modelIssue.globalUnset": "默认审查模型未设置：审查跟随执行助手的当前模型，独立发起审查调用——是「使用相同模型」，不是由执行助手自己审批。实际使用：{effective}。",
+			"warn.modelIssue.followParent": "本会话未单独选择审查模型，按未设置的全局默认跟随执行助手的当前模型：独立发起审查调用——是「使用相同模型」，不是由执行助手自己审批。实际使用：{effective}。",
+			"warn.modelIssue.layer": "当前生效：{layer}。",
 			"card.field.defaultModel": "默认审查模型",
 			"card.field.parentModelRules": "按执行助手的模型选择审查模型",
 			"card.effort.unsupported": "（模型不支持）",
@@ -320,6 +323,9 @@ window.__ModuleLoader__.load({
 			"warn.modelIssue.global": "The default reviewer model is unavailable: {reason}. Currently using: {effective}.",
 			"warn.modelIssue.rule": "The reviewer model picked by this rule is unavailable: {reason}. Currently using: {effective}.",
 			"warn.modelIssue.session": "This session's reviewer model is unavailable: {reason}. Currently using: {effective}.",
+			"warn.modelIssue.globalUnset": "The default reviewer model is not set: reviews follow the agent's current model as an independent call — the same model, never the agent approving itself. Currently using: {effective}.",
+			"warn.modelIssue.followParent": "This session has no reviewer of its own and the global default is unset, so reviews follow the agent's current model as an independent call — the same model, never the agent approving itself. Currently using: {effective}.",
+			"warn.modelIssue.layer": "Currently on: {layer}.",
 			"card.field.defaultModel": "Default reviewer model",
 			"card.field.parentModelRules": "Reviewer model by the agent's model",
 			"card.effort.unsupported": " (unsupported by this model)",
@@ -960,10 +966,15 @@ window.__ModuleLoader__.load({
 				.catch(() => ({ efforts: [] }));
 		}
 
+		/** 空串省略后需以层含义句承接回退结果的不可用键（design §7.2.0）。 */
+		const WARN_LAYER_SENTENCE_KEYS = new Set(["warn.modelIssue.global", "warn.modelIssue.rule", "warn.modelIssue.session"]);
+
 		/**
-		 * 审查模型不可用的分置醒目提示行（design §7.2.0）：警告图标＋不可用原因＋实际回退结果。
-		 * 实际结果按 §8.5.1 的层枚举文案呈现：模型引用非空＝「层含义：引用」；空串＝仅层含义
-		 * （无会话求值时无生效引用可填，以层含义承接）。取词只呈现可见性，不改变解析行为。
+		 * 审查模型分置醒目提示行（design §7.2.0）：警告图标＋原因＋实际回退结果。
+		 * `effectiveModel` 有值时按「实际使用：层含义：引用」呈现（层文案取 §8.5.1 枚举词）；
+		 * 为空串时省略「实际使用」句，三类不可用键其后以 `warn.modelIssue.layer` 层含义独立
+		 * 成句承接（不丢实际生效层），空全局默认两键不补层句——首句已承载层含义。
+		 * 取词只呈现可见性，不改变解析行为。
 		 * @param {(key: string) => string} t - 取词函数。
 		 * @param {string} key - 提示键（`warn.modelIssue.*`）。
 		 * @param {object} issue - `modelIssues` 条目。
@@ -974,14 +985,17 @@ window.__ModuleLoader__.load({
 			const rawLayer = t(layerKey);
 			const layerText = rawLayer === layerKey ? t("enum.unknown").replace("{v}", String(issue?.effectiveLayer)) : rawLayer;
 			const model = typeof issue?.effectiveModel === "string" ? issue.effectiveModel : "";
-			const effective = model.length === 0 ? layerText : `${layerText}${/[\u3400-\u9fff]/u.test(layerText) ? "：" : ": "}${model}`;
+			const template = t(key).replace("{reason}", String(issue?.reason ?? ""));
+			const stripped = template.replace(/\s*(?:实际使用：|Currently using:)\s*\{effective\}[。.]\s*$/u, "");
+			const text =
+				model.length > 0
+					? template.replace("{effective}", `${layerText}${/[\u3400-\u9fff]/u.test(layerText) ? "：" : ": "}${model}`)
+					: `${stripped}${WARN_LAYER_SENTENCE_KEYS.has(key) ? t("warn.modelIssue.layer").replace("{layer}", layerText) : ""}`;
 			return jsxRuntime.jsxs("div", {
 				className: "dsafm_warnline",
 				children: [
 					jsxRuntime.jsx(primitives.IconWarningOutlineRegular, { size: 12 }),
-					jsxRuntime.jsx("span", {
-						children: t(key).replace("{reason}", String(issue?.reason ?? "")).replace("{effective}", effective),
-					}),
+					jsxRuntime.jsx("span", { children: text }),
 				],
 			});
 		}
@@ -995,6 +1009,16 @@ window.__ModuleLoader__.load({
 		function issuesOf(issues, scope) {
 			if (!Array.isArray(issues)) return [];
 			return issues.filter((issue) => issue !== null && typeof issue === "object" && issue.scope === scope);
+		}
+
+		/**
+		 * 条目是否为空全局默认条目（design §7.2.0/§10.2 判据）：`configured` 为空串
+		 * （区别于不可用条目的非空配置目标）。宿主按 `reviewer.model` 为空追加，中英与位置无关。
+		 * @param {object} issue - `modelIssues` 条目。
+		 * @returns {boolean} 是否空全局默认条目。
+		 */
+		function isGlobalUnsetIssue(issue) {
+			return typeof issue?.configured === "string" && issue.configured === "";
 		}
 
 		/**
@@ -1373,11 +1397,21 @@ window.__ModuleLoader__.load({
 				],
 			});
 
-			// 会话作用域的分置醒目提示（design §7.2.0/§7.3.1）：渲染在选择控件附近；
-			// 求值失败或旧宿主无 modelIssues 字段时不产生条目。
-			const sessionWarns = issuesOf(state?.modelIssues, "session").map((issue, index) =>
-				modelIssueLine(t, "warn.modelIssue.session", issue),
-			);
+			// 会话作用域的分置醒目提示（design §7.2.0/§7.3.1）：渲染在选择控件附近。
+			// 空全局默认条目在「全局默认为空且会话未单独选择审查模型」时用 followParent 键渲染
+			// （effectiveModel 有值即会话执行助手模型，随「实际使用」句展示）；它与 session 不可用
+			// 条目条件互斥（选择空 vs 已选择且不可用），控件附近至多一条——已选择且不可用时跟随
+			// 状态由该不可用条目的回退结果承载，不另渲染空默认行。求值失败或旧宿主无
+			// modelIssues 字段时不产生条目。
+			const sessionModelRef = typeof state?.sessionModel === "string" ? state.sessionModel : "";
+			const sessionIssues = issuesOf(state?.modelIssues, "session");
+			const unsetIssue = issuesOf(state?.modelIssues, "global").find(isGlobalUnsetIssue) ?? null;
+			const followParentIssue =
+				sessionModelRef.length === 0 && sessionIssues.length === 0 && unsetIssue !== null ? unsetIssue : null;
+			const sessionWarns = [
+				...(followParentIssue !== null ? [modelIssueLine(t, "warn.modelIssue.followParent", followParentIssue)] : []),
+				...sessionIssues.map((issue, index) => modelIssueLine(t, "warn.modelIssue.session", issue)),
+			];
 
 			const menu = jsxRuntime.jsx(primitives.Menu, {
 				open,
@@ -3230,8 +3264,11 @@ window.__ModuleLoader__.load({
 
 			// 打开即见＋字段顺序（design §7.2「20 字段」清单，无分区标题）：
 			// 接管预设 → 触发两行 → 默认审查模型 → 映射 → 高级其余行；插件标题/描述由宿主页面自己画。
-			// global 作用域的醒目提示渲染在表单顶部、第一个字段之前（design §7.2.0）。
-			const globalWarns = issuesOf(issues, "global").map((issue, index) => modelIssueLine(t, "warn.modelIssue.global", issue));
+			// global 作用域的醒目提示渲染在表单顶部、第一个字段之前（design §7.2.0）；
+			// 空全局默认条目（configured 空串）用 globalUnset 键，与不可用条目互斥、至多一条。
+			const globalWarns = issuesOf(issues, "global").map((issue, index) =>
+				modelIssueLine(t, isGlobalUnsetIssue(issue) ? "warn.modelIssue.globalUnset" : "warn.modelIssue.global", issue),
+			);
 			return jsxRuntime.jsxs("div", {
 				className: "dsafm_form",
 				children: [

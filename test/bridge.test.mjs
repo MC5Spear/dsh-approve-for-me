@@ -415,7 +415,7 @@ testHost('modelIssues：session 作用域仅会话场景产生；无会话不产
   assert.deepEqual(empty.modelIssues, []);
 });
 
-testHost('modelIssues：无会话求值且全局默认为空时，rule 直退层按零值语义记 follow-parent、生效引用为空串', async () => {
+testHost('modelIssues：无会话求值且全局默认为空时，rule 条目与空默认条目同屏，生效引用均为空串', async () => {
   const instance = service({
     session: undefined,
     config: {
@@ -424,11 +424,48 @@ testHost('modelIssues：无会话求值且全局默认为空时，rule 直退层
     },
   });
   const state = await instance.getState('s1');
-  assert.equal(state.modelIssues.length, 1);
-  const issue = state.modelIssues[0];
-  assert.equal(issue.scope, 'rule');
-  assert.equal(issue.effectiveLayer, 'follow-parent');
-  assert.equal(issue.effectiveModel, '', '无会话值可填时取空串，以层含义呈现');
+  // 空全局默认（零值语义生效）与规则行不可用级联：两条并存（design §7.2.0）。
+  assert.equal(state.modelIssues.length, 2);
+  const rule = state.modelIssues.find((issue) => issue.scope === 'rule');
+  assert.equal(rule.effectiveLayer, 'follow-parent');
+  assert.equal(rule.effectiveModel, '', '无会话值可填时取空串，以层含义呈现');
+  const empty = state.modelIssues.find((issue) => issue.scope === 'global');
+  assert.equal(empty.configured, '');
+  assert.equal(empty.reason, '全局默认审查模型未设置');
+  assert.equal(empty.effectiveLayer, 'follow-parent');
+  assert.equal(empty.effectiveModel, '', '无会话求值时空默认条目同样取空串');
+});
+
+testHost('getState 透传空全局默认条目：真会话填父模型引用，空会话为空串', async () => {
+  const live = service({
+    session: { id: 's1', snapshotEvents: () => [{ type: 'model/selection', data: { provider: 'zai', model: 'glm-5.3' } }] },
+    config: { reviewer: {}, trigger: { presets: ['auto-approve'], unknown: 'skip' } },
+  });
+  const liveState = await live.getState('s1');
+  assert.equal(liveState.layer, 'follow-parent');
+  assert.deepEqual(
+    liveState.modelIssues,
+    [
+      {
+        scope: 'global',
+        ruleProvider: null,
+        ruleModel: '',
+        configured: '',
+        reason: '全局默认审查模型未设置',
+        effectiveLayer: 'follow-parent',
+        effectiveModel: 'zai/glm-5.3',
+      },
+    ],
+    'composer 真会话求值：空默认条目带父模型引用（客户端按 configured 空串匹配渲染控件附近提示）',
+  );
+
+  const bare = service({
+    session: undefined,
+    config: { reviewer: {}, trigger: { presets: ['auto-approve'], unknown: 'skip' } },
+  });
+  const bareState = await bare.getState('s1');
+  assert.equal(bareState.modelIssues.length, 1);
+  assert.equal(bareState.modelIssues[0].effectiveModel, '', '设置页空会话调用：无父模型可填');
 });
 
 testHost('modelIssues：级联——规则行不可用且全局默认也不可用时，行条目与顶部条目同时在场', async () => {

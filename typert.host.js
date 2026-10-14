@@ -308,9 +308,9 @@ export const TYPERT = {
             kind: 'method',
             name: 'getState',
             signature: '@Remote("getState") getState(args: { sessionId: string }): Promise<GetStateResult>',
-            summary: 'Read the effective reviewer model, its layer and unavailability diagnostics for one session.',
+            summary: 'Read the effective reviewer model, its layer and model diagnostics for one session.',
             jsDoc:
-              '/**\n * Read one session reviewer model state.\n * @param args - session id.\n * @returns session value, global default, the effective layer, and modelIssues rows (scope/ruleProvider/ruleModel/configured/reason/effectiveLayer/effectiveModel) flagging configured models that are unavailable.\n */',
+              '/**\n * Read one session reviewer model state.\n * @param args - session id.\n * @returns session value, global default, the effective layer, and modelIssues rows (scope/ruleProvider/ruleModel/configured/reason/effectiveLayer/effectiveModel) flagging configured models that are unavailable and the unset global default (follow-parent status).\n */',
           },
           {
             kind: 'method',

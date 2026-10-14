@@ -513,8 +513,9 @@ test('设置页分置提示（§7.2.0）：global 渲染在表单顶部，rule �
   const globalText = JSON.stringify(topLevel[0]);
   assert.match(globalText, /默认审查模型不可用/, 'global 提示用 warn.modelIssue.global 文案');
   assert.match(globalText, /模型不在目录/, '提示正文包含不可用原因');
-  assert.match(globalText, /无可用审查模型（unavailable）/, 'effectiveModel 为空串时仅层含义（§8.5.1 layer.unavailable）');
-  assert.doesNotMatch(globalText, /无可用审查模型（unavailable）：/, '空串生效引用不得拼出「层含义：」悬空冒号');
+  assert.match(globalText, /当前生效：无可用审查模型（unavailable）。/, '不可用键空串时以 warn.modelIssue.layer 层含义独立成句承接（§7.2.0/§8.5.1）');
+  assert.doesNotMatch(globalText, /（unavailable）：/, '层含义句后不得拼「层含义：」悬空冒号');
+  assert.doesNotMatch(globalText, /实际使用/, 'effectiveModel 为空串时省略「实际使用」句（design §7.2.0）');
   assert.equal(topLevel[1].props.className, 'dsafm_field', '提示之后的顶层节点应是字段（接管预设）');
   // 提示行视觉：官方 IconWarningOutlineRegular（12px）＋warn-label 文字（design §7.2.0，背景色由样式令牌承担）。
   const warnIcons = findAllNodes(topLevel[0], (node) => node.type === primitivesStub.IconWarningOutlineRegular);
@@ -528,6 +529,95 @@ test('设置页分置提示（§7.2.0）：global 渲染在表单顶部，rule �
   const ruleText = JSON.stringify(ruleWarns[0]);
   assert.match(ruleText, /provider 不存在/, 'rule 提示包含原因');
   assert.match(ruleText, /全局默认（global）：zai\/gone-1/, '有生效引用时按「层含义：引用」呈现');
+});
+
+test('设置页空全局默认提示（§7.2.0）：globalUnset 键渲染在表单顶部，空串省略「实际使用」句', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    snapshot: {
+      status: 'ready',
+      value: { reviewer: { parentModelRules: [] } },
+      base: {},
+      user: {},
+      revision: 1,
+      writable: true,
+    },
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/modelCatalog') return { ok: true, value: { providers: [{ id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      if (endpoint === 'approveForMe/modelEfforts') return { ok: true, value: { efforts: [], defaultEffort: '' } };
+      if (endpoint === 'approveForMe/getState') {
+        // reviewer.model 为空（零值语义生效）：宿主追加空全局默认条目；设置页无会话求值，effectiveModel 空串。
+        return {
+          ok: true,
+          value: {
+            found: false,
+            sessionModel: null,
+            sessionEffort: '',
+            globalDefault: '',
+            globalEffort: '',
+            modelIssues: [
+              { scope: 'global', ruleProvider: null, ruleModel: '', configured: '', reason: '全局默认审查模型未设置', effectiveLayer: 'follow-parent', effectiveModel: '' },
+            ],
+            effective: '',
+            effectiveEffort: '',
+            layer: 'follow-parent',
+            preset: 'auto-approve',
+            active: true,
+            trace: {},
+          },
+        };
+      }
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const dicts = env.dictionaries[0].dicts;
+  const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
+  const props = { t: (key) => dicts.zh[key] ?? key, scope: env.scope, rpcCall: env.rpcCall };
+  const tree = await expandCard(card.component, props);
+  const warns = findAllByClass(tree, 'dsafm_warnline');
+  assert.equal(warns.length, 1, '空全局默认条目应渲染一条顶部提示');
+  const form = findByClass(tree, 'dsafm_form');
+  const topLevel = form.props.children.filter(Boolean);
+  assert.equal(topLevel[0].props.className, 'dsafm_warnline', '空默认提示与不可用提示同位：表单顶部、第一个字段之前');
+  const text = JSON.stringify(topLevel[0]);
+  assert.match(text, /默认审查模型未设置/, '用 warn.modelIssue.globalUnset 文案（按 configured 空串选键）');
+  assert.match(text, /独立发起审查调用/, '文案说明独立发起审查调用');
+  assert.match(text, /「使用相同模型」，不是由执行助手自己审批/, '文案区分「使用相同模型」与自审');
+  assert.doesNotMatch(text, /不可用|故障/, '状态语义：空默认提示不含「不可用」「故障」措辞（design §7.2.0）');
+  assert.doesNotMatch(text, /实际使用/, 'effectiveModel 为空串时省略「实际使用」句');
+  assert.doesNotMatch(text, /全局默认未设置，使用执行助手当前模型（follow-parent）/u, '空默认键不补层含义句——首句已承载层含义（design §7.2.0）');
+  assert.equal(findAllNodes(topLevel[0], (node) => node.type === primitivesStub.IconWarningOutlineRegular).length, 1, '沿用同款警告图标');
+});
+
+test('设置页空全局默认提示（§7.2.0）：旧宿主无 modelIssues 字段时不渲染提示', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    snapshot: {
+      status: 'ready',
+      value: { reviewer: {} },
+      base: {},
+      user: {},
+      revision: 1,
+      writable: true,
+    },
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/modelCatalog') return { ok: true, value: { providers: [] } };
+      if (endpoint === 'approveForMe/getState') {
+        // 旧宿主：状态里没有 modelIssues 字段——不渲染任何提示，不影响表单本身。
+        return { ok: true, value: { found: false, sessionModel: null, globalDefault: '', effective: '', layer: 'follow-parent' } };
+      }
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
+  const props = { t: (key) => key, scope: env.scope, rpcCall: env.rpcCall };
+  const tree = await expandCard(card.component, props);
+  assert.equal(findAllByClass(tree, 'dsafm_warnline').length, 0, '旧宿主无字段时不应渲染提示行');
+  assert.equal(findAllByClass(tree, 'dsafm_field').length, 16, '表单本体不受影响（20 字段）');
 });
 
 test('说明入口（§10.2）：20 个字段全覆盖，图标＋可见文字，aria 成对，键盘 Enter/Space 可达', async () => {
@@ -1182,7 +1272,7 @@ test('composer 下拉：写入失败时触发器出现 dsafm_badge 错误徽标�
   assert.match(JSON.stringify(seat.props.children), /composer\.failed/, '徽标文案用 composer.failed');
 });
 
-test('composer 分置提示（§7.2.0）：session 条目渲染在选择控件附近，空串生效引用只显层含义', async () => {
+test('composer 分置提示（§7.2.0）：session 条目渲染在选择控件附近，空串省略「实际使用」句', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
@@ -1233,8 +1323,9 @@ test('composer 分置提示（§7.2.0）：session 条目渲染在选择控件�
   const text = JSON.stringify(warns[0]);
   assert.match(text, /本会话选择的审查模型不可用/, '用 warn.modelIssue.session 文案');
   assert.match(text, /provider 不存在/, '正文包含原因');
-  assert.match(text, /全局默认未设置，使用执行助手当前模型（follow-parent）/, '空串生效引用只显层含义（§8.5.1）');
-  assert.doesNotMatch(text, /（follow-parent）：/, '空串生效引用不得拼出「层含义：」悬空冒号');
+  assert.match(text, /当前生效：全局默认未设置，使用执行助手当前模型（follow-parent）。/, '不可用键空串时以 warn.modelIssue.layer 层含义独立成句承接（§7.2.0/§8.5.1）');
+  assert.doesNotMatch(text, /（follow-parent）：/, '层含义句后不得拼「层含义：」悬空冒号');
+  assert.doesNotMatch(text, /实际使用/, 'effectiveModel 为空串时省略「实际使用」句（design §7.2.0）');
   assert.equal(findAllNodes(wrap, (node) => node.type === primitivesStub.IconWarningOutlineRegular).length, 1, '提示行带警告图标');
 });
 
@@ -1279,6 +1370,167 @@ test('composer 分置提示（§7.2.0）：无 modelIssues 字段（旧宿主）
   const tree = render(dropdown.component, props);
   assert.equal(findByClass(tree, 'dsafm_seatwrap'), undefined, '旧宿主无字段时不渲染包裹层');
   assert.equal(findAllByClass(tree, 'dsafm_warnline').length, 0, '不应渲染任何提示行');
+});
+
+test('composer 空全局默认提示（§7.2.0）：会话未选择且全局默认为空，effectiveModel 有值时展示', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/getState') {
+        // 会话未单独选择审查模型（sessionModel 空）＋全局默认为空：空默认条目的
+        // effectiveModel 填会话执行助手当前模型（design §7.2.0），随「实际使用」句展示。
+        return {
+          ok: true,
+          value: {
+            found: true,
+            active: true,
+            preset: 'auto-approve',
+            sessionModel: null,
+            sessionEffort: '',
+            globalDefault: '',
+            globalEffort: '',
+            modelIssues: [
+              { scope: 'global', ruleProvider: null, ruleModel: '', configured: '', reason: '全局默认审查模型未设置', effectiveLayer: 'follow-parent', effectiveModel: 'zai/glm-5.3' },
+            ],
+            effective: 'zai/glm-5.3',
+            effectiveEffort: '',
+            layer: 'follow-parent',
+          },
+        };
+      }
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      return { ok: true, value: { efforts: [{ id: 'low' }] } };
+    },
+  });
+  client.apply(env.ctx);
+  const dicts = env.dictionaries[0].dicts;
+  const dropdown = env.registrations.find((entry) => entry.options.name === 'conversation.input.left');
+  const props = { t: (key) => dicts.zh[key] ?? key, ...dropdown.options.inject() };
+  render(dropdown.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const tree = render(dropdown.component, props);
+  const wrap = findByClass(tree, 'dsafm_seatwrap');
+  assert.ok(wrap, '空默认条目也应渲染座位包裹层');
+  assert.ok(findNode(wrap, primitivesStub.Menu), '包裹层内应仍有 Menu');
+  const warns = findAllByClass(wrap, 'dsafm_warnline');
+  assert.equal(warns.length, 1, '控件附近至多一条（design §7.2.0）');
+  const text = JSON.stringify(warns[0]);
+  assert.match(text, /本会话未单独选择审查模型/, '用 warn.modelIssue.followParent 文案');
+  assert.match(text, /按未设置的全局默认跟随执行助手的当前模型/, '文案说明跟随语义');
+  assert.match(text, /「使用相同模型」，不是由执行助手自己审批/, '文案区分「使用相同模型」与自审');
+  assert.match(text, /实际使用：全局默认未设置，使用执行助手当前模型（follow-parent）：zai\/glm-5\.3/, '有生效引用时按「实际使用：层含义：引用」呈现');
+  assert.doesNotMatch(text, /不可用|故障/, '状态语义：不含「不可用」「故障」措辞');
+});
+
+test('composer 空全局默认提示（§7.2.0）：effectiveModel 空串时省略「实际使用」句', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/getState') {
+        return {
+          ok: true,
+          value: {
+            found: true,
+            active: true,
+            preset: 'auto-approve',
+            sessionModel: null,
+            sessionEffort: '',
+            globalDefault: '',
+            globalEffort: '',
+            modelIssues: [
+              { scope: 'global', ruleProvider: null, ruleModel: '', configured: '', reason: '全局默认审查模型未设置', effectiveLayer: 'follow-parent', effectiveModel: '' },
+            ],
+            effective: '',
+            effectiveEffort: '',
+            layer: 'follow-parent',
+          },
+        };
+      }
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      return { ok: true, value: { efforts: [{ id: 'low' }] } };
+    },
+  });
+  client.apply(env.ctx);
+  const dicts = env.dictionaries[0].dicts;
+  const dropdown = env.registrations.find((entry) => entry.options.name === 'conversation.input.left');
+  const props = { t: (key) => dicts.zh[key] ?? key, ...dropdown.options.inject() };
+  render(dropdown.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const tree = render(dropdown.component, props);
+  const wrap = findByClass(tree, 'dsafm_seatwrap');
+  assert.ok(wrap, '空默认条目应渲染座位包裹层');
+  const warns = findAllByClass(wrap, 'dsafm_warnline');
+  assert.equal(warns.length, 1, '控件附近至多一条');
+  const text = JSON.stringify(warns[0]);
+  assert.match(text, /本会话未单独选择审查模型/, '用 warn.modelIssue.followParent 文案');
+  assert.doesNotMatch(text, /实际使用/, 'effectiveModel 为空串时省略「实际使用」句');
+  assert.doesNotMatch(text, /全局默认未设置，使用执行助手当前模型（follow-parent）/u, '空默认键不补层含义句——首句已承载层含义（design §7.2.0）');
+});
+
+test('composer 提示互斥（§7.2.0）：会话已选择且不可用时只渲染 session 条目，不另渲染空默认行', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/getState') {
+        // 两条同时在数据通道里（宿主按 reviewer.model 为空照发 global 空默认条目）：
+        // 会话已单独选择且不可用 → 控件附近只渲染 session 条目，跟随状态由其回退结果承载。
+        return {
+          ok: true,
+          value: {
+            found: true,
+            active: true,
+            preset: 'auto-approve',
+            sessionModel: 'zai/gone-9',
+            sessionEffort: '',
+            globalDefault: '',
+            globalEffort: '',
+            modelIssues: [
+              { scope: 'global', ruleProvider: null, ruleModel: '', configured: '', reason: '全局默认审查模型未设置', effectiveLayer: 'follow-parent', effectiveModel: 'zai/glm-5.3' },
+              { scope: 'session', ruleProvider: null, ruleModel: '', configured: 'zai/gone-9', reason: 'provider 不存在', effectiveLayer: 'follow-parent', effectiveModel: 'zai/glm-5.3' },
+            ],
+            effective: 'zai/glm-5.3',
+            effectiveEffort: '',
+            layer: 'follow-parent',
+          },
+        };
+      }
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      return { ok: true, value: { efforts: [{ id: 'low' }] } };
+    },
+  });
+  client.apply(env.ctx);
+  const dicts = env.dictionaries[0].dicts;
+  const dropdown = env.registrations.find((entry) => entry.options.name === 'conversation.input.left');
+  const props = { t: (key) => dicts.zh[key] ?? key, ...dropdown.options.inject() };
+  render(dropdown.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const tree = render(dropdown.component, props);
+  const wrap = findByClass(tree, 'dsafm_seatwrap');
+  assert.ok(wrap, '有提示时应渲染座位包裹层');
+  const warns = findAllByClass(wrap, 'dsafm_warnline');
+  assert.equal(warns.length, 1, '互斥：控件附近至多一条（design §7.2.0）');
+  const text = JSON.stringify(warns[0]);
+  assert.match(text, /本会话选择的审查模型不可用/, '渲染的是 session 不可用条目');
+  assert.match(text, /实际使用：全局默认未设置，使用执行助手当前模型（follow-parent）：zai\/glm-5\.3/, '跟随状态由该条目的回退结果承载');
+  assert.doesNotMatch(text, /本会话未单独选择审查模型/, '不得另渲染空全局默认行（warn.modelIssue.followParent）');
 });
 
 test('结构化规则行：目录选择全 id 往返不变形，两种作用范围回显口径不同（design §6.2/§7.2）', async () => {
@@ -2722,6 +2974,9 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['warn.modelIssue.global', '默认审查模型不可用：{reason}。实际使用：{effective}。', "The default reviewer model is unavailable: {reason}. Currently using: {effective}."],
     ['warn.modelIssue.rule', '此规则选择的审查模型不可用：{reason}。实际使用：{effective}。', "The reviewer model picked by this rule is unavailable: {reason}. Currently using: {effective}."],
     ['warn.modelIssue.session', '本会话选择的审查模型不可用：{reason}。实际使用：{effective}。', "This session's reviewer model is unavailable: {reason}. Currently using: {effective}."],
+    ['warn.modelIssue.globalUnset', '默认审查模型未设置：审查跟随执行助手的当前模型，独立发起审查调用——是「使用相同模型」，不是由执行助手自己审批。实际使用：{effective}。', "The default reviewer model is not set: reviews follow the agent's current model as an independent call — the same model, never the agent approving itself. Currently using: {effective}."],
+    ['warn.modelIssue.followParent', '本会话未单独选择审查模型，按未设置的全局默认跟随执行助手的当前模型：独立发起审查调用——是「使用相同模型」，不是由执行助手自己审批。实际使用：{effective}。', "This session has no reviewer of its own and the global default is unset, so reviews follow the agent's current model as an independent call — the same model, never the agent approving itself. Currently using: {effective}."],
+    ['warn.modelIssue.layer', '当前生效：{layer}。', "Currently on: {layer}."],
     ['field.language.ui', '插件界面语言', "Plugin UI language"],
     ['field.language.agent', '发送给模型的文本语言', "Language of model-facing texts"],
     ['field.reviewer.timeoutMs', '自动审查等待上限（毫秒）', "Auto-review wait limit (ms)"],
