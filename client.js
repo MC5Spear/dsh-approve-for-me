@@ -626,10 +626,15 @@ window.__ModuleLoader__.load({
 			".dsafm_save:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}",
 			".dsafm_chevron{flex:0 0 auto;color:var(--dsw-alias-label-tertiary)}",
 			".dsafm_ctl{display:flex;gap:6px;min-width:0}",
-			// 分置醒目提示行（design §7.2.0）：警告图标＋文字取 warn-label，行背景取 warn-tertiary
-			// （宿主连接指示器同款配对令牌）；圆角与内边距沿用字段说明区的规格。
-			".dsafm_warnline{display:flex;align-items:flex-start;gap:6px;padding:6px 10px;border-radius:8px;background:var(--dsw-alias-state-warn-tertiary);color:var(--dsw-alias-state-warn-label);font-size:12px;line-height:1.5;overflow-wrap:anywhere}",
-			".dsafm_warnline svg{flex:none;color:var(--dsw-alias-state-warn-label)}",
+			// 分置醒目提示行（design §7.2.0）：行背景取 warn-tertiary（宿主连接指示器同款），圆角与内边距沿用字段说明区规格。
+			// 文字与图标分主题取色（design §7.2.0 分主题定稿）：requirements §6.5 的两主题 ≥4.5:1 优先于
+			// 宿主别名令牌取值——浅色下 warn-label 解析为 amber-600 #dd8629，对 warn-tertiary 浅色值 #fef5e7
+			// 仅 2.585:1，改取插件内声明的深琥珀 #92400e（约 6.6:1；宿主静态令牌族无 amber-800，amber 序列为
+			// 100/400/500/600/900）；深色按宿主主题机制（body[data-ds-dark-theme] 属性选择器）回到 warn-label
+			// （约 5.5:1）。背景两主题均维持 warn-tertiary 不动。
+			".dsafm_warnline{display:flex;align-items:flex-start;gap:6px;padding:6px 10px;border-radius:8px;background:var(--dsw-alias-state-warn-tertiary);color:#92400e;font-size:12px;line-height:1.5;overflow-wrap:anywhere}",
+			".dsafm_warnline svg{flex:none;color:#92400e}",
+			"body[data-ds-dark-theme] .dsafm_warnline,body[data-ds-dark-theme] .dsafm_warnline svg{color:var(--dsw-alias-state-warn-label)}",
 			// 结构化规则表（design §7.2）：作用范围／执行助手模型／审查模型／推理强度／操作五列。
 			".dsafm_map{display:flex;flex-direction:column;gap:6px}",
 			".dsafm_map_head,.dsafm_map_row{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1.5fr) minmax(0,1.5fr) minmax(96px,.8fr) auto;gap:8px;align-items:center;min-width:0}",

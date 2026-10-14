@@ -517,7 +517,7 @@ test('设置页分置提示（§7.2.0）：global 渲染在表单顶部，rule �
   assert.doesNotMatch(globalText, /（unavailable）：/, '层含义句后不得拼「层含义：」悬空冒号');
   assert.doesNotMatch(globalText, /实际使用/, 'effectiveModel 为空串时省略「实际使用」句（design §7.2.0）');
   assert.equal(topLevel[1].props.className, 'dsafm_field', '提示之后的顶层节点应是字段（接管预设）');
-  // 提示行视觉：官方 IconWarningOutlineRegular（12px）＋warn-label 文字（design §7.2.0，背景色由样式令牌承担）。
+  // 提示行视觉：官方 IconWarningOutlineRegular（12px）；文字/图标分主题取色（浅色深琥珀、深色 warn-label，design §7.2.0；背景由样式令牌承担）。
   const warnIcons = findAllNodes(topLevel[0], (node) => node.type === primitivesStub.IconWarningOutlineRegular);
   assert.equal(warnIcons.length, 1, '提示行应带一个警告图标');
   assert.equal(warnIcons[0].props.size, 12, '警告图标规格 size=12');
@@ -529,6 +529,25 @@ test('设置页分置提示（§7.2.0）：global 渲染在表单顶部，rule �
   const ruleText = JSON.stringify(ruleWarns[0]);
   assert.match(ruleText, /provider 不存在/, 'rule 提示包含原因');
   assert.match(ruleText, /全局默认（global）：zai\/gone-1/, '有生效引用时按「层含义：引用」呈现');
+  // 有值路径拼接回归锚点：层文案与全角冒号直接相接，整句无空白（窄容器断行不改变文本内容）。
+  assert.match(ruleText, /实际使用：全局默认（global）：zai\/gone-1。/, '「实际使用：层含义：引用」整句直连，无空格');
+  assert.doesNotMatch(ruleText, /（global）\s+：/, '层文案与全角冒号之间不得夹空白');
+  // en 档同型拼接：半角冒号＋后随空格（空格只在冒号后），冒号前无空白。
+  const enProps = { t: (key) => dicts.en[key] ?? key, scope: env.scope, ...card.options.inject() };
+  render(card.component, enProps);
+  await tick();
+  hookIndex = 0;
+  render(card.component, enProps);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const enTree = render(card.component, enProps);
+  const enMapField = findAllByClass(enTree, 'dsafm_field').find((field) => JSON.stringify(field).includes(dicts.en['card.field.parentModelRules']));
+  const enRuleWarn = enMapField === undefined ? undefined : findAllByClass(enMapField, 'dsafm_warnline')[0];
+  assert.ok(enRuleWarn, 'en 档 rule 提示在场');
+  const enRuleText = JSON.stringify(enRuleWarn);
+  assert.match(enRuleText, /Currently using: Global default \(global\): zai\/gone-1\./, 'en 档「Currently using: 层含义: 引用」空格只在冒号后');
+  assert.doesNotMatch(enRuleText, /\(global\)\s+:/, 'en 档层文案与冒号之间不得夹空白');
 });
 
 test('设置页空全局默认提示（§7.2.0）：globalUnset 键渲染在表单顶部，空串省略「实际使用」句', async () => {
@@ -2757,6 +2776,46 @@ test('审查视图 §10.2：degraded 含 transcript 反证「未取上下文」�
   assert.match(text, /缺失或异常情况: 会话目录缺失（cwd）、上下文读取失败或截断（transcript）/, '读取失败原因由 degraded 段承载');
 });
 
+test('审查视图 §10.2：output 缺失且 decision=error 归「模型未提供」，无 transcript 反证时不误报（design §8.5.1）', async () => {
+  resetHooks();
+  const client = loadClient();
+  // 全文档记录：prompt 在场证实全文采集（二级分派前提）；decision=error、output 缺失（结算为故障类，
+  // 正文未产生）、reasoning 在场——「模型未提供」只可能出自 output 分支（absentKeyOf 二级分派），
+  // 不落入统一缺省；degraded 无 transcript（无反证）、tools 无（计数缺失，无从反证）。
+  const rows = [{ ...TRACE_ROWS[0], approvalId: 'apO', callId: 'call_O', decision: 'error', outcome: 'rejected', source: 'llm' }];
+  const detail = { ...rows[0], humanWaitMs: 0, prompt: 'PROMPT-O', reasoning: 'REASON-O', evidence: 'EV-O', probes: 'PROB-O' };
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint, args) => {
+      if (endpoint === 'approveForMe/traceRecords') return { ok: true, value: { records: rows, readFailed: false } };
+      if (endpoint === 'approveForMe/traceRecord') return { ok: true, value: { record: args?.approvalId === 'apO' ? detail : null } };
+      if (endpoint === 'approveForMe/getState') return { ok: true, value: { trace: { capture: 'full', ownView: true, turnSummary: true } } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const view = env.registrations.find((entry) => entry.options.name === 'conversation.view');
+  const props = { t: reviewT, ...view.options.inject() };
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  findAllByClass(render(view.component, props), 'dsafm_review_head')[0].props.onClick();
+  hookIndex = 0;
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const text = JSON.stringify(render(view.component, props));
+  assert.match(text, /PROMPT-O/, '全文段在场（全文采集证实）');
+  assert.match(text, /REASON-O/, 'reasoning 在场，排除 reasoning 分支出文案');
+  assert.match(text, /模型结论: 失败（error）/, 'decision=error 的模型结论照常渲染');
+  // reasoning 在场时唯一一次「模型未提供」只能来自 output 缺失＋decision=error 分支（design §8.5.1）。
+  assert.equal((text.match(/模型未提供/g) ?? []).length, 1, 'output 缺失且 decision=error → 模型未提供（§8.5.1 二级分派）');
+  assert.equal((text.match(/本次未记录此项/g) ?? []).length, 1, 'input 缺失（全文采集下无反证）→ 本次未记录此项');
+  assert.ok(!text.includes('未开启全文采集'), '全文采集证实时 output 缺失不得归「未开启全文采集」');
+});
+
 test('审查视图：旧格式行（无 outcome）主位＝模型结论并附「未记录最终审批结果」，详情同样说明缺失（design §8.5）', async () => {
   resetHooks();
   const client = loadClient();
@@ -3720,6 +3779,18 @@ test('静态扫描：退役文案与失效令牌零命中、外壳类退役', as
     '说明行作为锚恢复后继字段的分隔线',
   );
   assert.ok(SOURCE.includes('.dsafm_f_help{margin:-12px 0 12px}'), '平铺说明行与秒数行同一负边距');
+  // 醒目提示行分主题取色（design §7.2.0）：浅色取插件内深琥珀 #92400e——requirements §6.5 的 ≥4.5:1 优先于
+  // 宿主 warn-label 令牌取值（浅色 amber-600 #dd8629 对 warn-tertiary #fef5e7 仅 2.585:1；宿主静态令牌族
+  // 无 amber-800）；深色按宿主 body[data-ds-dark-theme] 机制回 warn-label；背景两主题不动。
+  const warnlineRule = /\.dsafm_warnline\{[^}]*\}/u.exec(SOURCE)?.[0] ?? '';
+  assert.ok(warnlineRule.length > 0, '应有 .dsafm_warnline 规则');
+  assert.equal(warnlineRule.includes('background:var(--dsw-alias-state-warn-tertiary)'), true, '行背景两主题均取 warn-tertiary');
+  assert.equal(warnlineRule.includes('color:#92400e'), true, '浅色文字取深琥珀 #92400e（对 #fef5e7 约 6.6:1，requirements §6.5）');
+  assert.ok(SOURCE.includes('.dsafm_warnline svg{flex:none;color:#92400e}'), '浅色图标与文字同取深琥珀');
+  assert.ok(
+    SOURCE.includes('body[data-ds-dark-theme] .dsafm_warnline,body[data-ds-dark-theme] .dsafm_warnline svg{color:var(--dsw-alias-state-warn-label)}'),
+    '深色按宿主 data-ds-dark-theme 机制回 warn-label（design §7.2.0 分主题定稿）',
+  );
   // 退役文案防回潮（§10.2 退役键零命中判据）：旧键与旧话术在源码零命中。
   for (const word of ['cardstate.timeout', 'cardstate.denied', 'detail.notCaptured', 'detail.absent', '跟随模型默认', '上面两级']) {
     assert.equal(SOURCE.includes(word), false, `退役字样零命中：${word}`);
