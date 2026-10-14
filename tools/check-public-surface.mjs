@@ -32,7 +32,7 @@ export const ROOT = fileURLToPath(new URL('..', import.meta.url));
  * 本机指纹。命中即违规——这些串只会出现在本机环境，公开范围出现必是漏网。
  *
  * 各类变体都要覆盖：反斜杠原形、转义形态（`D:\\P`）、正斜杠形态（`D:/P`）。
- * 典型假阴性教训：只写 `D:\P` 会漏掉 `D:/P` 与 `D:\\P`。
+ * 漏一种变体即假阴性：只写 `D:\P` 会漏掉 `D:/P` 与 `D:\\P`。
  */
 export const FINGERPRINTS = [
   { id: 'dev-root', label: '本机开发根', re: /D:[\\/]{1,4}P(?![A-Za-z0-9])/gu },

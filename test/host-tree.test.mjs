@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 /**
  * 宿主解析树的锚点守卫：把 `tools/_host-resolve.mjs` 的锚点改回 0.1.7 树时，
- * 套件此前仍全绿——这正是要钉住的变红缺口。
+ * 套件其余用例不会变红——本守卫钉住的就是这个缺口。
  * 本用例断言：宿主解析钩子生效时（npm test 带 `--import ./tools/_host-hooks.mjs`），
  * `@deepseek-ai/dsh-llm` 解析出的实体版本必须与本包 `package.json` 的锁定版本一致——
  * 锚点退回 0.1.7 树（解析出 0.1.7-rc.1）即红；离线跑（无钩子）时解析到仓库自带

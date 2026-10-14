@@ -41,7 +41,7 @@ test('dump 留档存在且含页面身份与采集元数据', () => {
   assert.match(dump, /CSS 收窄扫描（scoped 段，只读本包注入的 `style\[data-plugin-css="dsh-approve-for-me"\]`）并入同一脚本/u, 'CSS 收窄扫描并入主取证脚本（scoped 段）');
   assert.match(dump, /style\[data-plugin-css="dsh-approve-for-me"\]/u, '扫描口径应收窄到本包注入样式');
   // 来源可追性：夹具必须交代自己是怎么来的。采集工具链随仓发布（tools/browser-shot.mjs 驱动、
-  // tools/build-dom-dump.mjs 汇编），档里点名；本轮的步骤场景脚本属开发期工件、不随仓发布。
+  // tools/build-dom-dump.mjs 汇编），档里点名；步骤场景脚本属开发期工件、不随仓发布。
   assert.match(dump, /采集工具链随仓发布（`tools\/browser-shot\.mjs` 驱动取证、`tools\/build-dom-dump\.mjs` 汇编成档）/u, '夹具须声明采集来源口径');
 });
 
@@ -58,7 +58,7 @@ test('退役件零命中——重置全部覆盖、当前生效值、分区标�
   assert.ok(pageText.includes('启用自动审批的权限预设') && pageText.includes('保存'), '§1 逐字文本块缺失或为空（围栏解析失败会让零命中断言恒真）');
   assert.equal(pageText.includes('重置全部覆盖'), false, '「重置全部覆盖」应零命中');
   assert.equal(pageText.includes('当前生效值'), false, '「当前生效值」灰字行应零命中');
-  // §11 迁移：退役话术在页面文本零命中。
+  // 退役话术防回潮：页面文本零命中。
   assert.equal(pageText.includes('跟随模型默认'), false, '「跟随模型默认」应零命中（effort.default＝自动选择）');
   assert.equal(pageText.includes('已覆盖'), false, '「已覆盖」应零命中（card.override＝已单独设置）');
   assert.equal(pageText.includes('主模型'), false, '「主模型」用户可见字样应零命中（执行助手模型）');
@@ -101,7 +101,7 @@ test('逐项等价：表单字段集与 config schema 的 UI 面一致（20 字�
   const missing = fields.filter((f) => !hasLine(f));
   assert.deepEqual(missing, [], '设置表单丢字段（对照 lib/config.js 的 UI 面）');
   assert.ok(hasLine('保存'), '唯一保存按钮缺失');
-  // followParent 已从 config schema 退役（B1）：页面文本零命中是字段面一致的一部分。
+  // followParent 已从 config schema 退役：页面文本零命中是字段面一致的一部分。
   assert.equal(pageText.includes('无可用审查模型时使用执行助手的模型'), false, 'followParent 字段标签应零命中（design §7.2 20 字段）');
   assert.equal(hasLine('作用范围'), true, '映射表头应含作用范围列（五列结构化规则表）');
   assert.match(dump, /字段壳 `dsafm_field`＝16/u, '自绘字段壳应 16 个');
@@ -154,7 +154,7 @@ test('说明入口（§7.2.1）：20 个按钮带可见文字，aria 成对，�
 
 test('交付 CSS 串失效令牌零命中（收窄到本包 style 元素）；长度与规则数对账实算', () => {
   assert.match(dump, /`--dsw-alias-state-warning-primary`×0、`--dsw-alias-label-error`×0、`--dsw-alias-bg-layer-4`×0/u, '三个失效令牌应零命中');
-  // 数字不自证（盲审 I-1）：fixture 声称的字符数与规则数必须与 client.js CSS 块实算一致——
+  // 数字不自证：fixture 声称的字符数与规则数必须与 client.js CSS 块实算一致——
   // 同一口径＝取 `const CSS = [...]` 数组、`join("")` 后的注入串长度与数组元素数（含 @media 整条计 1）。
   const clientSource = readFileSync(join(import.meta.dirname, '..', 'client.js'), 'utf8');
   const cssAt = clientSource.indexOf('const CSS = [');
@@ -190,7 +190,7 @@ test('控件清单：生效值就在控件里，id 挂在控件上', () => {
     assert.ok(dump.includes(row), `控件表缺行：${row}`);
   }
   assert.match(dump, /接管预设为多选 picker（button \+ aria-expanded），不计入本表/u, 'picker 不应计入 input 清单');
-  assert.equal(dump.includes('reviewer-followParent'), false, 'followParent 控件行应随字段退役（B1）');
+  assert.equal(dump.includes('reviewer-followParent'), false, 'followParent 控件行应随字段退役');
 });
 
 // ── 取值逐项等于生效值（结构断言抓不到整片为空） ─────────────────────────────
@@ -201,7 +201,7 @@ const REAL_PROFILE = {
   ui: { trace: { capture: 'full' } },
   language: { ui: 'zh', agent: 'en' },
 };
-/** 控件 id 尾段 → 生效值路径（与 client.js 的 ctl id 命名一一对应；followParent 随 B1 退役）。 */
+/** 控件 id 尾段 → 生效值路径（与 client.js 的 ctl id 命名一一对应；followParent 已退役）。 */
 const CTL_PATHS = {
   'trigger-unknown': 'trigger.unknown',
   'trigger-auditEverySkip': 'trigger.auditEverySkip',

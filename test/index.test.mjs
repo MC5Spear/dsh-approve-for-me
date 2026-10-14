@@ -347,7 +347,7 @@ test('逃逸通知走通道故障模板并按 language.agent 切换：zh 中文�
   // 若逃逸通知退回专用拒绝正文（缺通道故障要素），两首行断言双红。
 });
 
-test('退役静态扫描：源码零补丁档位/旧宿主侧残留（设计 §8.5 判据）', async () => {
+test('退役静态扫描：源码零补丁档位/旧宿主侧残留（设计 §10.2 判据）', async () => {
   const { readFileSync, readdirSync } = await import('node:fs');
   const { join, dirname } = await import('node:path');
   const { fileURLToPath } = await import('node:url');
@@ -382,7 +382,7 @@ test('退役静态扫描：源码零补丁档位/旧宿主侧残留（设计 §8
     const hits = bannedIn(readFileSync(file, 'utf8'));
     if (hits.length > 0) offenders.push(`${file}: ${hits.join(', ')}`);
   }
-  assert.deepEqual(offenders, [], `退役残留必须为零（设计 §8.5）：\n${offenders.join('\n')}`);
+  assert.deepEqual(offenders, [], `退役残留必须为零（设计 §10.2）：\n${offenders.join('\n')}`);
 });
 
 // ── 装配层接线：逃逸出口脱敏＋热改现设（requirements §5.2／design §8.1）──────

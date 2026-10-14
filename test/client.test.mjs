@@ -2693,7 +2693,7 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
   assert.equal(zh['detail.tokens'], '推理 token 用量');
   assert.ok(zh['view.retention'].length > 0, '保留范围文案应在场');
 
-  // 全表逐键断言（盲审 I-2）：期望值逐键转抄自设计定稿表——§7.2.2（字段名称与选项文案／常驻短句／
+  // 全表逐键断言：期望值逐键转抄自设计定稿表——§7.2.2（字段名称与选项文案／常驻短句／
   // 展开说明／预设多选提示）、§7.3.1（会话控件）、§7.4（状态行）、§8.5.1（详情字段名／列表双标注／
   // 缺段说明／枚举文案）。中英两列都是权威：字典与设计表任何一侧漂移，这里变红。
   const DESIGN_FINAL = [
@@ -3412,7 +3412,7 @@ test('静态扫描：退役文案与失效令牌零命中、外壳类退役', as
     '说明行作为锚恢复后继字段的分隔线',
   );
   assert.ok(SOURCE.includes('.dsafm_f_help{margin:-12px 0 12px}'), '平铺说明行与秒数行同一负边距');
-  // 退役文案（§11 迁移清单）：旧键与旧话术在源码零命中。
+  // 退役文案防回潮（§10.2 退役键零命中判据）：旧键与旧话术在源码零命中。
   for (const word of ['cardstate.timeout', 'cardstate.denied', 'detail.notCaptured', 'detail.absent', '跟随模型默认', '上面两级']) {
     assert.equal(SOURCE.includes(word), false, `退役字样零命中：${word}`);
   }
