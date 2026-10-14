@@ -10,14 +10,34 @@ import { z } from 'zod';
 
 /** `getState` 参数：会话 id。 */
 export const getStateArgsSchema = z.object({ sessionId: z.string() });
-/** `getState` 结果：会话级当前值（含档位）、全局级两项、最终生效层级与接管判定。 */
+
+/** `getState` 结果的审查模型不可用诊断条目（design §7.2.0）：按 `scope` 分置提示位置与回退结果。 */
+export const modelIssueSchema = z.object({
+  /** `global` 全局默认／`rule` 映射行／`session` 会话选择。 */
+  scope: z.string(),
+  /** 仅 `rule`：该行条件的 provider（null = 任意 provider）；其余作用域为 null。 */
+  ruleProvider: z.string().nullable(),
+  /** 仅 `rule`：条件的完整纯模型 id；其余作用域为空串。 */
+  ruleModel: z.string(),
+  /** 配置的目标模型引用原文。 */
+  configured: z.string(),
+  /** 可核实的不可用原因。 */
+  reason: z.string(),
+  /** 实际生效层（直退语义下只会是 `global`／`follow-parent`／`unavailable`）。 */
+  effectiveLayer: z.string(),
+  /** 该生效层对应的模型引用；无生效或无会话值可填时为空串。 */
+  effectiveModel: z.string(),
+});
+
+/** `getState` 结果：会话级当前值（含档位）、全局默认、生效层级、不可用诊断与接管判定。 */
 export const getStateResultSchema = z.object({
   found: z.boolean(),
   sessionModel: z.string().nullable(),
   sessionEffort: z.string(),
   globalDefault: z.string(),
   globalEffort: z.string(),
-  byParentModel: z.record(z.string(), z.unknown()),
+  /** 审查模型不可用诊断（design §7.2.0）：配置目标不可用即出现，与实际是否已回退无关。 */
+  modelIssues: z.array(modelIssueSchema),
   effective: z.string(),
   effectiveEffort: z.string(),
   layer: z.string(),
@@ -287,10 +307,10 @@ export const TYPERT = {
           {
             kind: 'method',
             name: 'getState',
-            signature: '@Remote("getState") getState(args: { sessionId: string }): GetStateResult',
-            summary: 'Read the effective reviewer model and its layer for one session.',
+            signature: '@Remote("getState") getState(args: { sessionId: string }): Promise<GetStateResult>',
+            summary: 'Read the effective reviewer model, its layer and unavailability diagnostics for one session.',
             jsDoc:
-              '/**\n * Read one session reviewer model state.\n * @param args - session id.\n * @returns session value, global layers and the effective layer.\n */',
+              '/**\n * Read one session reviewer model state.\n * @param args - session id.\n * @returns session value, global default, the effective layer, and modelIssues rows (scope/ruleProvider/ruleModel/configured/reason/effectiveLayer/effectiveModel) flagging configured models that are unavailable.\n */',
           },
           {
             kind: 'method',
@@ -353,7 +373,12 @@ export const TYPERT = {
           {
             name: 'GetStateResult',
             declaration:
-              'export interface GetStateResult { found: boolean; sessionModel: string | null; sessionEffort: string; globalDefault: string; globalEffort: string; byParentModel: Record<string, unknown>; effective: string; effectiveEffort: string; layer: string; preset: string | null; active: boolean; trace: { capture: string; ownView: boolean; turnSummary: boolean; legacyRow: boolean }; }',
+              'export interface GetStateResult { found: boolean; sessionModel: string | null; sessionEffort: string; globalDefault: string; globalEffort: string; modelIssues: { scope: string; ruleProvider: string | null; ruleModel: string; configured: string; reason: string; effectiveLayer: string; effectiveModel: string }[]; effective: string; effectiveEffort: string; layer: string; preset: string | null; active: boolean; trace: { capture: string; ownView: boolean; turnSummary: boolean; legacyRow: boolean }; }',
+          },
+          {
+            name: 'ModelIssue',
+            declaration:
+              'export interface ModelIssue { scope: string; ruleProvider: string | null; ruleModel: string; configured: string; reason: string; effectiveLayer: string; effectiveModel: string; }',
           },
           {
             name: 'ModelEfforts',

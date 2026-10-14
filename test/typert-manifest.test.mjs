@@ -49,3 +49,71 @@ test('TYPERT 清单：checkCodec 本身能失败（对照，防恒真）', () =>
     assert.deepEqual(checkCodec(item.result), [], `${item.id} result 应合规`);
   }
 });
+
+// ── getState 结果扩展（design §7.1 三处同步／§7.2.0 modelIssues） ─────────────
+
+/** 从清单取 getState 的 invocation。 */
+function getStateInvocation() {
+  return TYPERT.invocations.find((item) => item.method === 'getState');
+}
+
+/** 从服务模型取 getState 的成员声明与 GetStateResult 类型声明。 */
+function getStateDeclarations() {
+  const serviceModel = TYPERT.model.services.find((entry) => entry.key === 'approveForMe');
+  const member = serviceModel.members.find((entry) => entry.name === 'getState');
+  const type = serviceModel.types.find((entry) => entry.name === 'GetStateResult');
+  const issue = serviceModel.types.find((entry) => entry.name === 'ModelIssue');
+  return { member, type, issue };
+}
+
+test('getState 结果 schema：modelIssues 七字段不被校验或投影丢失，byParentModel 字段已退役', () => {
+  const invocation = getStateInvocation();
+  const schema = invocation.result.create();
+  const sample = {
+    found: true,
+    sessionModel: 'zai/glm-5.3',
+    sessionEffort: 'low',
+    globalDefault: 'zai/glm-5.3',
+    globalEffort: '',
+    modelIssues: [
+      {
+        scope: 'rule',
+        ruleProvider: null,
+        ruleModel: 'anthropic/claude-3',
+        configured: 'ghost/nope',
+        reason: 'unknown provider ghost',
+        effectiveLayer: 'follow-parent',
+        effectiveModel: '',
+      },
+      { scope: 'global', ruleProvider: null, ruleModel: '', configured: 'ghost/x', reason: 'unknown provider ghost', effectiveLayer: 'unavailable', effectiveModel: '' },
+    ],
+    effective: 'zai/glm-5.3',
+    effectiveEffort: 'low',
+    layer: 'global',
+    preset: null,
+    active: true,
+    trace: { capture: 'summary', ownView: true, turnSummary: true, legacyRow: false },
+  };
+  const parsed = schema.parse(sample);
+  // 七字段逐个在场：缺任何一处声明都会在校验或投影环节丢失（design §7.1）。
+  for (const field of ['scope', 'ruleProvider', 'ruleModel', 'configured', 'reason', 'effectiveLayer', 'effectiveModel']) {
+    assert.equal(field in parsed.modelIssues[0], true, `modelIssues.${field} 必须保留`);
+  }
+  assert.equal(parsed.modelIssues.length, 2);
+  // 旧结构字段已从结果 schema 退役。
+  assert.equal('byParentModel' in parsed, false);
+  assert.equal(JSON.stringify(schema).includes('byParentModel'), false);
+  // 缺 modelIssues 的载荷必须被校验拒绝（必填，不是可选扩展）。
+  assert.throws(() => schema.parse({ ...sample, modelIssues: undefined }));
+});
+
+test('getState 三处同步：类型声明与成员描述都含 modelIssues，不含退役字段', () => {
+  const { member, type, issue } = getStateDeclarations();
+  assert.match(type.declaration, /modelIssues: \{ scope: string; ruleProvider: string \| null; ruleModel: string; configured: string; reason: string; effectiveLayer: string; effectiveModel: string \}\[\]/u);
+  assert.doesNotMatch(type.declaration, /byParentModel/u, 'GetStateResult 类型不得再含退役字段');
+  assert.match(issue.declaration, /scope: string; ruleProvider: string \| null; ruleModel: string; configured: string; reason: string; effectiveLayer: string; effectiveModel: string/u);
+  // 成员描述：签名改为 Promise（getState 现为异步选择），jsDoc 提及 modelIssues。
+  assert.match(member.signature, /Promise<GetStateResult>/u);
+  assert.match(member.jsDoc, /modelIssues/u);
+  assert.match(member.summary, /diagnostics/u);
+});

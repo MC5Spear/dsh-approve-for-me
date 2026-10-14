@@ -54,6 +54,18 @@ test('文件不存在时按空表处理，首次写入懒创建（含父目录�
   assert.equal(typeof disk.entries.a.updatedAt, 'number');
 });
 
+test('含多斜杠的目标引用原样往返：模型 id 内的斜杠不被切分（design §6.3 格式不变）', (t) => {
+  const dir = makeDir(t);
+  const file = join(dir, 'session-models.json');
+  const store = createSessionStore({ file });
+  // 目标引用按首斜杠解析 provider（openrouter），模型 id `anthropic/claude-3` 内的斜杠保留。
+  const reference = 'openrouter/anthropic/claude-3';
+  assert.equal(store.write('session-multi', reference, 'low'), true);
+  assert.deepEqual(store.read('session-multi'), { model: reference, effort: 'low' });
+  const disk = JSON.parse(readFileSync(file, 'utf8'));
+  assert.equal(disk.entries.multi.model, reference);
+});
+
 test('带与不带 session- 前缀的 id 指向同一条目', (t) => {
   const dir = makeDir(t);
   const file = join(dir, 'session-models.json');

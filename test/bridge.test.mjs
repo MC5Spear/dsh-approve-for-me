@@ -24,6 +24,8 @@ async function loadBridge() {
 }
 
 const bridge = await loadBridge();
+// model-resolver 被 bridge.js 静态依赖：bridge 可加载 ⇒ 它必然可加载；bridge 缺失时本文件已整体跳过。
+const resolverModule = bridge === undefined ? undefined : await import('../lib/model-resolver.js');
 /** 离线（宿主包不可解析）时本文件不注册任何用例，避免把「跳过」当成「通过」。 */
 const testHost = bridge === undefined ? test.skip : test;
 
@@ -31,14 +33,26 @@ const testHost = bridge === undefined ? test.skip : test;
  * 组装一个不经 Cordis 容器的服务实例：只借用原型方法，注入最小依赖。
  * 这样单测覆盖的是端点逻辑本身（`getState` / `setSessionModel` / `pendingState` / `presetCatalog`），
  * 不依赖宿主的 Service 基类与网关。
+ * `getState` 与审批共用模型选择（design §6.2）：替身注入同一份 llm 目录；`options.resolver`
+ * 传入真实 `createResolver` 产物以验证缓存复用，缺省时走无缓存的直接选择。
  * @param {object} [options] - 选项。
  * @returns {object} 服务实例替身。
  */
 function service(options = {}) {
   const proto = bridge.ApproveForMeService.prototype;
-  const snapshot = { value: options.config ?? { reviewer: { model: 'zai/glm-5.3', effort: 'low' }, trigger: { presets: ['auto-approve'], unknown: 'skip' } } };
+  const snapshot = { revision: options.revision ?? 1, value: options.config ?? { reviewer: { model: 'zai/glm-5.3', effort: 'low' }, trigger: { presets: ['auto-approve'], unknown: 'skip' } } };
   const writes = [];
   const audits = [];
+  const known = options.known ?? ['zai/glm-5.3', 'zai/glm-5.3-flash', 'deepseek-official/deepseek-v4-pro', 'deepseek-official/deepseek-v4-flash'];
+  const llm =
+    options.llm ??
+    {
+      listProviders: () => (options.providers ?? [{ id: 'zai' }, { id: 'deepseek-official' }, { id: 'openrouter' }]),
+      resolveModelInfo: async (provider, model) => {
+        if (!known.includes(`${provider}/${model}`)) throw new Error('unknown model');
+        return { reasoning: { efforts: options.efforts ?? [{ id: 'low' }, { id: 'high' }] } };
+      },
+    };
   // 文件载体替身：`read(id)` 回放已写条目，`write(id, model, effort)` 记录并返回是否成功。
   const rows = new Map(Object.entries(options.stored ?? {}));
   const store = options.store ?? {
@@ -50,9 +64,12 @@ function service(options = {}) {
       return true;
     },
   };
+  const resolver =
+    options.resolver ??
+    resolverModule.createResolver({ llm, settingsSnapshot: () => snapshot, sessionModelOf: bridge.createSessionChoiceReader(store), audit: () => {} });
   return {
-    ctx: { get: (name) => (name === 'permissionPresets' ? options.service : undefined) },
-    deps: { settingsSnapshot: () => snapshot, sessionStore: store, pending: options.pending, audit: (fields) => audits.push(fields), traceStore: options.traceStore },
+    ctx: { get: (name) => (name === 'permissionPresets' ? options.service : undefined), llm },
+    deps: { settingsSnapshot: () => snapshot, sessionStore: store, pending: options.pending, audit: (fields) => audits.push(fields), traceStore: options.traceStore, llm, resolver },
     writes,
     audits,
     choiceOf: bridge.createSessionChoiceReader(store),
@@ -68,51 +85,51 @@ function service(options = {}) {
   };
 }
 
-testHost('getState：活会话命中接管名单时 active=true 且带 preset', () => {
+testHost('getState：活会话命中接管名单时 active=true 且带 preset', async () => {
   const instance = service({
     session: { id: 's1' },
     service: { current: () => 'auto-approve', defaultPreset: 'workspace-write' },
   });
-  const state = instance.getState('s1');
+  const state = await instance.getState('s1');
   assert.equal(state.found, true);
   assert.equal(state.preset, 'auto-approve');
   assert.equal(state.active, true);
 });
 
-testHost('getState：非接管预设下 active=false', () => {
+testHost('getState：非接管预设下 active=false', async () => {
   const instance = service({
     session: { id: 's1' },
     service: { current: () => 'workspace-write', defaultPreset: 'workspace-write' },
   });
-  assert.equal(instance.getState('s1').active, false);
-  assert.equal(instance.getState('s1').preset, 'workspace-write');
+  assert.equal((await instance.getState('s1')).active, false);
+  assert.equal((await instance.getState('s1')).preset, 'workspace-write');
 });
 
-testHost('getState：非活会话用 defaultPreset 判定，控件在会话开始前也能显隐（design §7.3）', () => {
+testHost('getState：非活会话用 defaultPreset 判定，控件在会话开始前也能显隐（design §7.3）', async () => {
   const instance = service({
     session: undefined,
     service: { current: () => 'auto-approve', defaultPreset: 'auto-approve' },
   });
-  const state = instance.getState('s1');
+  const state = await instance.getState('s1');
   assert.equal(state.found, false);
   assert.equal(state.preset, 'auto-approve');
   assert.equal(state.active, true);
 });
 
-testHost('getState：服务缺失时按 trigger.unknown 折算（skip → 不接管）', () => {
+testHost('getState：服务缺失时按 trigger.unknown 折算（skip → 不接管）', async () => {
   const instance = service({ session: { id: 's1' }, service: undefined });
-  const state = instance.getState('s1');
+  const state = await instance.getState('s1');
   assert.equal(state.preset, null);
   assert.equal(state.active, false);
 });
 
-testHost('getState：trigger.unknown=review 且服务缺失时视为接管', () => {
+testHost('getState：trigger.unknown=review 且服务缺失时视为接管', async () => {
   const instance = service({
     session: { id: 's1' },
     service: undefined,
     config: { reviewer: {}, trigger: { presets: ['auto-approve'], unknown: 'review' } },
   });
-  assert.equal(instance.getState('s1').active, true);
+  assert.equal((await instance.getState('s1')).active, true);
 });
 
 testHost('pendingState：无登记表或会话无条目时返回空数组，不抛', () => {
@@ -213,13 +230,13 @@ testHost('setSessionModel：落盘失败时不报成功，并记一行降级审�
   assert.equal(audit.action, 'skip');
 });
 
-testHost('getState：非活会话也读得到已落盘的选择，层级为 session', () => {
+testHost('getState：非活会话也读得到已落盘的选择，层级为 session', async () => {
   const instance = service({
     session: undefined,
     stored: { s1: { model: 'zai/glm-5.3', effort: 'max' } },
     service: { current: () => 'auto-approve', defaultPreset: 'auto-approve' },
   });
-  const state = instance.getState('s1');
+  const state = await instance.getState('s1');
   assert.equal(state.found, false);
   assert.equal(state.sessionModel, 'zai/glm-5.3');
   assert.equal(state.sessionEffort, 'max');
@@ -227,16 +244,243 @@ testHost('getState：非活会话也读得到已落盘的选择，层级为 sess
   assert.equal(state.layer, 'session');
 });
 
-testHost('getState：清除条目后回落全局层，而不是仍报 session', () => {
+testHost('getState：清除条目后回落全局层，而不是仍报 session', async () => {
   const instance = service({
     session: undefined,
     stored: { s1: { model: null, effort: '' } },
     service: { current: () => 'auto-approve', defaultPreset: 'auto-approve' },
   });
-  const state = instance.getState('s1');
+  const state = await instance.getState('s1');
   assert.equal(state.sessionModel, null);
   assert.equal(state.layer, 'global');
   assert.equal(state.effective, 'zai/glm-5.3');
+});
+
+// ── 模型选择共享（design §6.2：状态与审批同一逻辑）与 modelIssues（design §7.2.0） ──
+
+testHost('getState 与审批同一选择：映射层精确规则优先于通用规则', async () => {
+  const instance = service({
+    session: { id: 's1', snapshotEvents: () => [{ type: 'model/selection', data: { provider: 'openrouter', model: 'claude-3' } }] },
+    config: {
+      reviewer: {
+        parentModelRules: [
+          { parent: { provider: 'openrouter', model: 'claude-3' }, choice: { model: 'deepseek-official/deepseek-v4-pro', effort: '' } },
+          { parent: { provider: null, model: 'claude-3' }, choice: { model: 'zai/glm-5.3', effort: '' } },
+        ],
+      },
+      trigger: { presets: ['auto-approve'], unknown: 'skip' },
+    },
+  });
+  const state = await instance.getState('s1');
+  assert.equal(state.layer, 'parent-map');
+  assert.equal(state.effective, 'deepseek-official/deepseek-v4-pro');
+  // 状态结果不再携带映射字典：映射表经设置页 configForms 读取（design §7.1）。
+  assert.equal('byParentModel' in state, false);
+});
+
+testHost('getState 通用规则承接：provider 不匹配精确规则时命中通用行', async () => {
+  const instance = service({
+    session: { id: 's1', snapshotEvents: () => [{ type: 'model/selection', data: { provider: 'zai', model: 'claude-3' } }] },
+    config: {
+      reviewer: {
+        parentModelRules: [
+          { parent: { provider: 'openrouter', model: 'claude-3' }, choice: { model: 'deepseek-official/deepseek-v4-pro', effort: '' } },
+          { parent: { provider: null, model: 'claude-3' }, choice: { model: 'zai/glm-5.3', effort: '' } },
+        ],
+      },
+      trigger: { presets: ['auto-approve'], unknown: 'skip' },
+    },
+  });
+  const state = await instance.getState('s1');
+  assert.equal(state.layer, 'parent-map');
+  assert.equal(state.effective, 'zai/glm-5.3');
+});
+
+testHost('getState 斜杠 id：父模型 id 含斜杠不切分，按完整纯 id 匹配', async () => {
+  const instance = service({
+    session: { id: 's1', snapshotEvents: () => [{ type: 'model/selection', data: { provider: 'openrouter', model: 'anthropic/claude-3' } }] },
+    config: {
+      reviewer: { parentModelRules: [{ parent: { provider: null, model: 'anthropic/claude-3' }, choice: { model: 'zai/glm-5.3', effort: '' } }] },
+      trigger: { presets: ['auto-approve'], unknown: 'skip' },
+    },
+  });
+  const state = await instance.getState('s1');
+  assert.equal(state.layer, 'parent-map');
+  assert.equal(state.effective, 'zai/glm-5.3');
+});
+
+testHost('getState 旧配置行为：byParentModel 纯 id 键与全引用键按兼容链读取', async () => {
+  const legacy = service({
+    session: { id: 's1', snapshotEvents: () => [{ type: 'model/selection', data: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } }] },
+    config: {
+      reviewer: { byParentModel: { 'deepseek-v4-flash': 'zai/glm-5.3' } },
+      trigger: { presets: ['auto-approve'], unknown: 'skip' },
+    },
+  });
+  const pure = await legacy.getState('s1');
+  assert.equal(pure.layer, 'parent-map');
+  assert.equal(pure.effective, 'zai/glm-5.3');
+
+  const refKey = service({
+    session: { id: 's1', snapshotEvents: () => [{ type: 'model/selection', data: { provider: 'deepseek-official', model: 'deepseek-v4-pro' } }] },
+    config: {
+      reviewer: { byParentModel: { 'deepseek-official/deepseek-v4-pro': 'zai/glm-5.3' } },
+      trigger: { presets: ['auto-approve'], unknown: 'skip' },
+    },
+  });
+  const aliased = await refKey.getState('s1');
+  assert.equal(aliased.layer, 'parent-map');
+  assert.equal(aliased.effective, 'zai/glm-5.3');
+});
+
+testHost('getState 全局默认未设置时按零值语义跟随父模型（layer=follow-parent）', async () => {
+  const instance = service({
+    session: { id: 's1', snapshotEvents: () => [{ type: 'model/selection', data: { provider: 'zai', model: 'glm-5.3' } }] },
+    config: { reviewer: {}, trigger: { presets: ['auto-approve'], unknown: 'skip' } },
+  });
+  const state = await instance.getState('s1');
+  assert.equal(state.layer, 'follow-parent');
+  assert.equal(state.effective, 'zai/glm-5.3');
+});
+
+testHost('modelIssues：global 作用域——全局默认不可用给出条目，回退为 unavailable', async () => {
+  const instance = service({
+    session: undefined,
+    config: { reviewer: { model: 'ghost/nope' }, trigger: { presets: ['auto-approve'], unknown: 'skip' } },
+  });
+  const state = await instance.getState('s1');
+  assert.equal(state.layer, 'unavailable');
+  assert.equal(state.effective, '');
+  assert.equal(state.modelIssues.length, 1);
+  const issue = state.modelIssues[0];
+  assert.equal(issue.scope, 'global');
+  assert.equal(issue.ruleProvider, null);
+  assert.equal(issue.ruleModel, '');
+  assert.equal(issue.configured, 'ghost/nope');
+  assert.match(issue.reason, /unknown provider ghost/u);
+  assert.equal(issue.effectiveLayer, 'unavailable');
+  assert.equal(issue.effectiveModel, '');
+});
+
+testHost('modelIssues：rule 作用域——结构化行与旧字典呈现行按当前生效条件与目标计算', async () => {
+  const instance = service({
+    session: undefined,
+    config: {
+      reviewer: {
+        model: 'zai/glm-5.3',
+        parentModelRules: [
+          { parent: { provider: 'openrouter', model: 'claude-3' }, choice: { model: 'ghost/nope', effort: '' } },
+          { parent: { provider: null, model: 'chat' }, choice: { model: 'zai/glm-5.3', effort: '' } },
+        ],
+        byParentModel: { 'anthropic/claude-3': 'ghost/legacy' },
+      },
+      trigger: { presets: ['auto-approve'], unknown: 'skip' },
+    },
+  });
+  const state = await instance.getState('s1');
+  const rows = state.modelIssues.filter((issue) => issue.scope === 'rule');
+  assert.equal(rows.length, 2, '结构化坏行与旧字典坏行各一条');
+  const structured = rows.find((issue) => issue.ruleProvider === 'openrouter');
+  assert.equal(structured.ruleModel, 'claude-3');
+  assert.equal(structured.configured, 'ghost/nope');
+  assert.match(structured.reason, /unknown provider ghost/u);
+  assert.equal(structured.effectiveLayer, 'global', '直退终点是可用的全局默认');
+  assert.equal(structured.effectiveModel, 'zai/glm-5.3');
+  // 旧字典呈现行按兼容读取条件（任意 provider＋去首斜杠后的完整 id）。
+  const legacy = rows.find((issue) => issue.ruleProvider === null && issue.ruleModel === 'claude-3');
+  assert.equal(legacy.configured, 'ghost/legacy');
+  assert.equal(legacy.effectiveLayer, 'global');
+  // 目标可用的行不产生条目。
+  assert.equal(rows.some((issue) => issue.configured === 'zai/glm-5.3'), false);
+});
+
+testHost('modelIssues：session 作用域仅会话场景产生；无会话不产生', async () => {
+  const withChoice = service({
+    session: undefined,
+    stored: { s1: { model: 'ghost/nope', effort: '' } },
+    config: { reviewer: { model: 'zai/glm-5.3' }, trigger: { presets: ['auto-approve'], unknown: 'skip' } },
+  });
+  const state = await withChoice.getState('s1');
+  const rows = state.modelIssues.filter((issue) => issue.scope === 'session');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].configured, 'ghost/nope');
+  assert.equal(rows[0].effectiveLayer, 'global');
+  assert.equal(rows[0].effectiveModel, 'zai/glm-5.3');
+
+  const noChoice = service({
+    session: undefined,
+    config: { reviewer: { model: 'zai/glm-5.3' }, trigger: { presets: ['auto-approve'], unknown: 'skip' } },
+  });
+  const empty = await noChoice.getState('s1');
+  assert.deepEqual(empty.modelIssues, []);
+});
+
+testHost('modelIssues：无会话求值且全局默认为空时，rule 直退层按零值语义记 follow-parent、生效引用为空串', async () => {
+  const instance = service({
+    session: undefined,
+    config: {
+      reviewer: { parentModelRules: [{ parent: { provider: null, model: 'chat' }, choice: { model: 'ghost/nope', effort: '' } }] },
+      trigger: { presets: ['auto-approve'], unknown: 'skip' },
+    },
+  });
+  const state = await instance.getState('s1');
+  assert.equal(state.modelIssues.length, 1);
+  const issue = state.modelIssues[0];
+  assert.equal(issue.scope, 'rule');
+  assert.equal(issue.effectiveLayer, 'follow-parent');
+  assert.equal(issue.effectiveModel, '', '无会话值可填时取空串，以层含义呈现');
+});
+
+testHost('modelIssues：级联——规则行不可用且全局默认也不可用时，行条目与顶部条目同时在场', async () => {
+  const instance = service({
+    session: undefined,
+    config: {
+      reviewer: {
+        model: 'ghost/global',
+        parentModelRules: [{ parent: { provider: null, model: 'chat' }, choice: { model: 'ghost/rule', effort: '' } }],
+      },
+      trigger: { presets: ['auto-approve'], unknown: 'skip' },
+    },
+  });
+  const state = await instance.getState('s1');
+  const global = state.modelIssues.find((issue) => issue.scope === 'global');
+  const rule = state.modelIssues.find((issue) => issue.scope === 'rule');
+  assert.equal(global.configured, 'ghost/global');
+  assert.equal(rule.configured, 'ghost/rule');
+  assert.equal(rule.effectiveLayer, 'unavailable');
+  assert.equal(rule.effectiveModel, '');
+});
+
+testHost('getState 经 resolver.selectFor 共享缓存：与审批同一选择逻辑', async () => {
+  const shared = service({
+    session: { id: 's1', snapshotEvents: () => [{ type: 'model/selection', data: { provider: 'zai', model: 'glm-5.3' } }] },
+    config: { reviewer: {}, trigger: { presets: ['auto-approve'], unknown: 'skip' } },
+  });
+  const state = await shared.getState('s1');
+  assert.equal(state.layer, 'follow-parent');
+  // 同键第二次查询命中缓存（selectFor 与 configFor 的同一查找表）。
+  assert.equal(shared.deps.resolver.cacheSize(), 1);
+  const again = await shared.getState('s1');
+  assert.equal(again.layer, 'follow-parent');
+  assert.equal(shared.deps.resolver.cacheSize(), 1);
+});
+
+testHost('getState 遇可见配置错误不抛错：按 unavailable 呈现（审批路径仍按异常结算）', async () => {
+  const instance = service({
+    session: { id: 's1', snapshotEvents: () => [{ type: 'model/selection', data: { provider: 'zai', model: 'chat' } }] },
+    config: {
+      reviewer: {
+        parentModelRules: [
+          { parent: { provider: null, model: 'chat' }, choice: { model: 'zai/glm-5.3', effort: '' } },
+          { parent: { provider: '', model: 'chat' }, choice: { model: 'zai/glm-5.3', effort: '' } },
+        ],
+      },
+      trigger: { presets: ['auto-approve'], unknown: 'skip' },
+    },
+  });
+  const state = await instance.getState('s1');
+  assert.equal(state.layer, 'unavailable');
+  assert.equal(state.effective, '');
 });
 
 // ── §8.2/§8.5：traceRecords 合并行与 traceRecord 合并详情 ────────────────────

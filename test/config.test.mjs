@@ -3,7 +3,7 @@ import test from 'node:test';
 import { isVolatile } from '@deepseek-ai/cosmokit';
 import { readFileSync } from 'node:fs';
 import z from '@deepseek-ai/schemastery';
-import { Config, normalizeConfig } from '../lib/config.js';
+import { Config, normalizeConfig, normalizeRuleProvider, parentModelRuleKey } from '../lib/config.js';
 
 // ── 数值边界（requirements §4.2／§5.2：毫秒上界与 temperature 有限性） ──────
 
@@ -134,4 +134,131 @@ test('decode 往返：含空分节的真实 describe 取值在一跳/两跳重�
       assert.doesNotThrow(() => schema(value), `${hop} × ${label} 必须校验通过`);
     }
   }
+});
+
+// ── 父模型映射规则（design §6.2：新结构、兼容输入、重复条件拒绝、残留键） ────────
+
+/** 一条合法的结构化规则（条件与选择都齐全）。 */
+const sampleRule = {
+  parent: { provider: 'openrouter', model: 'anthropic/claude-3' },
+  choice: { model: 'zai/glm-5.3', effort: 'low' },
+};
+
+test('parentModelRules：新结构与旧字典并存装载，默认值为 [] 与 {}（requirements §5.3）', () => {
+  const merged = normalizeConfig(
+    Config({
+      reviewer: {
+        parentModelRules: [sampleRule, { parent: { provider: null, model: 'chat' }, choice: { model: 'zai/glm-5.3', effort: '' } }],
+        byParentModel: { 'deepseek-v4-flash': 'zai/glm-5.3' },
+      },
+    }),
+  );
+  assert.deepEqual(merged.reviewer.parentModelRules[0], sampleRule);
+  assert.deepEqual(merged.reviewer.parentModelRules[1], { parent: { provider: null, model: 'chat' }, choice: { model: 'zai/glm-5.3', effort: '' } });
+  assert.deepEqual(merged.reviewer.byParentModel, { 'deepseek-v4-flash': 'zai/glm-5.3' });
+  const empty = normalizeConfig({});
+  assert.deepEqual(empty.reviewer.parentModelRules, []);
+  assert.deepEqual(empty.reviewer.byParentModel, {});
+  // 规则清单是可热更新字段：volatile 元数据保留。
+  const raw = Config({});
+  assert.equal(isVolatile(raw.reviewer.parentModelRules), true, '规则清单应是 volatile 引用');
+});
+
+test('非法条件：provider 非字符串非 null 在 schema 调用即拒（错误可见，不静默改默认）', () => {
+  for (const bad of [3, true, {}, []]) {
+    assert.throws(
+      () => Config({ reviewer: { parentModelRules: [{ parent: { provider: bad, model: 'chat' }, choice: { model: 'zai/glm-5.3' } }] } }),
+      /parent\.provider|expected/u,
+      `provider=${JSON.stringify(bad)} 必须被 schema 拒绝`,
+    );
+  }
+});
+
+test('非法条件：parent.model 空串由装载阶段显式校验拒绝（design §6.2）', () => {
+  for (const bad of ['', '   ']) {
+    assert.throws(
+      () => normalizeConfig({ reviewer: { parentModelRules: [{ parent: { provider: null, model: bad }, choice: {} }] } }),
+      /parent\.model 必须是非空字符串/u,
+      `model=${JSON.stringify(bad)} 必须被装载校验拒绝`,
+    );
+  }
+});
+
+test('重复条件：装载路径拒绝、错误信息可见（不按清单顺序选赢家）', () => {
+  const duplicated = {
+    reviewer: {
+      parentModelRules: [
+        { parent: { provider: null, model: 'chat' }, choice: { model: 'zai/glm-5.3' } },
+        { parent: { provider: null, model: 'chat' }, choice: { model: 'deepseek-official/deepseek-v4-pro' } },
+      ],
+    },
+  };
+  // 直传装载：同一比较抛错。
+  assert.throws(() => normalizeConfig(duplicated), /重复匹配条件/u);
+  // Config 调用产物再装载：同一比较抛错（装载失败、错误可见）。
+  assert.throws(() => normalizeConfig(Config(duplicated)), /重复匹配条件/u);
+  // 归一口径：空串 provider 与 null 是同一条件（任意 provider）。
+  assert.throws(
+    () =>
+      normalizeConfig({
+        reviewer: {
+          parentModelRules: [
+            { parent: { provider: null, model: 'chat' }, choice: {} },
+            { parent: { provider: '', model: 'chat' }, choice: {} },
+          ],
+        },
+      }),
+    /重复匹配条件/u,
+  );
+});
+
+test('重复条件：volatile 写路径由读取路径按同一比较拒绝（design §6.2 拒绝落点）', () => {
+  // 模拟宿主对 volatile 字段的原地更新：装载成功的配置对象被替换规则清单后，
+  // 读取（normalizeConfig）是程序化写入的最后一层防线。
+  const base = normalizeConfig(Config({}));
+  const poisoned = { ...base, reviewer: { ...base.reviewer, parentModelRules: [
+    { parent: { provider: 'zai', model: 'chat' }, choice: { model: 'zai/glm-5.3' } },
+    { parent: { provider: 'zai', model: 'chat' }, choice: { model: 'zai/glm-5.3', effort: 'high' } },
+  ] } };
+  assert.throws(() => normalizeConfig(poisoned), /重复匹配条件/u, '读取路径必须拒绝重复条件');
+});
+
+test('规则 schema 随一跳/两跳序列化往返保留：合法规则通过、非法 provider 仍拒', () => {
+  const s1 = new z(JSON.parse(JSON.stringify(Config.toJSON())));
+  const s2 = new z(JSON.parse(JSON.stringify(s1.toJSON())));
+  for (const [hop, schema] of [['one-hop', s1], ['two-hop', s2]]) {
+    assert.doesNotThrow(
+      () => schema({ reviewer: { parentModelRules: [sampleRule, { parent: { model: 'chat' }, choice: { model: 'zai/glm-5.3' } }] } }),
+      `${hop}：往返后合法规则必须通过`,
+    );
+    assert.throws(
+      () => schema({ reviewer: { parentModelRules: [{ parent: { provider: 3, model: 'chat' }, choice: {} }] } }),
+      `${hop}：往返后非法 provider 必须仍拒`,
+    );
+  }
+});
+
+test('followParent 残留键：装载按未声明键处理——不读取、不迁移、不报错', () => {
+  // 未声明键经 schema 解析原样保留、校验不报错；行为等同未提供（零值语义由解析层承载）。
+  const merged = normalizeConfig(Config({ reviewer: { followParent: false, model: 'zai/glm-5.3' } }));
+  assert.equal(merged.reviewer.followParent, false, '残留键原样保留（不迁移）');
+  assert.equal(merged.reviewer.model, 'zai/glm-5.3');
+  assert.doesNotThrow(() => normalizeConfig({ reviewer: { followParent: true } }), '残留键不触发装载错误');
+  const source = readFileSync(new URL('../lib/config.js', import.meta.url), 'utf8');
+  assert.match(source, /followParent/u, 'schema 注释应写明残留键的处理口径');
+  assert.doesNotThrow(() => Config({}), 'schema 声明不含 followParent，默认装载不受影响');
+});
+
+test('normalizeRuleProvider 与 parentModelRuleKey：归一空值与逐字比较的单一实现', () => {
+  assert.equal(normalizeRuleProvider(null), null);
+  assert.equal(normalizeRuleProvider(undefined), null);
+  assert.equal(normalizeRuleProvider(''), null);
+  assert.equal(normalizeRuleProvider('  '), null);
+  assert.equal(normalizeRuleProvider('openrouter'), 'openrouter');
+  assert.equal(normalizeRuleProvider(3), undefined, '非字符串非空值返回 undefined 标记非法');
+  // 空值归一后同键；model 逐字比较（不 trim、不切斜杠）。
+  assert.equal(parentModelRuleKey(null, 'chat'), parentModelRuleKey('', 'chat'));
+  assert.notEqual(parentModelRuleKey(null, 'chat'), parentModelRuleKey('zai', 'chat'));
+  assert.notEqual(parentModelRuleKey(null, 'claude-3'), parentModelRuleKey(null, 'anthropic/claude-3'));
+  assert.notEqual(parentModelRuleKey('a', 'b/c'), parentModelRuleKey('a/b', 'c'), '条件键不得被斜杠拼接歧义碰撞');
 });

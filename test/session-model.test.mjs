@@ -33,6 +33,11 @@ test('foldSessionModel：档位随模型一起记录', () => {
   assert.deepEqual(foldSessionModel(events), { kind: 'set', model: 'zai/glm-5.3', effort: 'high' });
 });
 
+test('foldSessionModel：含多斜杠的目标引用原样折叠，不切分模型 id（design §6.3 格式不变）', () => {
+  const events = [{ type: SESSION_MODEL_EVENT, data: { model: 'openrouter/anthropic/claude-3', effort: 'low' } }];
+  assert.deepEqual(foldSessionModel(events), { kind: 'set', model: 'openrouter/anthropic/claude-3', effort: 'low' });
+});
+
 test('foldSessionModel：无相关事件或输入非法时返回 undefined', () => {
   assert.equal(foldSessionModel([]), undefined);
   assert.equal(foldSessionModel([{ type: 'permission/preset', data: { preset: 'auto-approve' } }]), undefined);

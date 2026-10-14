@@ -27,7 +27,7 @@ function harness(options = {}) {
   const audits = [];
   const known = options.known ?? ['deepseek-official/deepseek-v4-flash', 'deepseek-official/deepseek-v4-pro', 'zai/glm-5.3'];
   const llm = {
-    listProviders: () => (options.providers ?? [{ id: 'deepseek-official' }, { id: 'zai' }]),
+    listProviders: () => (options.providers ?? [{ id: 'deepseek-official' }, { id: 'zai' }, { id: 'openrouter' }, { id: 'anthropic' }]),
     resolveModelInfo: async (provider, model) => {
       calls.push(`${provider}/${model}`);
       if (!known.includes(`${provider}/${model}`)) throw new Error('unknown model');
@@ -43,8 +43,9 @@ function harness(options = {}) {
   return { resolver, calls, audits };
 }
 
-test('parseModelRef 解析 provider/model，无斜杠时用回退 provider', () => {
+test('parseModelRef 按首斜杠解析 provider，模型 id 内斜杠保留；无斜杠时用回退 provider', () => {
   assert.deepEqual(parseModelRef('zai/glm-5.3', undefined), { provider: 'zai', model: 'glm-5.3' });
+  assert.deepEqual(parseModelRef('openrouter/anthropic/claude-3', undefined), { provider: 'openrouter', model: 'anthropic/claude-3' });
   assert.deepEqual(parseModelRef('glm-5.3', 'zai'), { provider: 'zai', model: 'glm-5.3' });
   assert.equal(parseModelRef('glm-5.3', undefined), undefined);
   assert.equal(parseModelRef('  ', 'zai'), undefined);
@@ -70,11 +71,16 @@ test('sessionModelOf 折叠会话级选择与清除语义', () => {
   assert.equal(sessionModelOf(undefined), undefined);
 });
 
-test('层级 1：会话级选择优先于全局级各项', async () => {
+test('层级 1：会话级选择优先于映射与全局默认', async () => {
   const { resolver } = harness({
     snapshot: {
       revision: 1,
-      value: { reviewer: { byParentModel: { 'deepseek-v4-flash': 'zai/glm-5.3' }, model: 'deepseek-official/deepseek-v4-pro', followParent: true } },
+      value: {
+        reviewer: {
+          byParentModel: { 'deepseek-v4-flash': 'zai/glm-5.3' },
+          model: 'deepseek-official/deepseek-v4-pro',
+        },
+      },
       base: {},
       user: {},
     },
@@ -99,7 +105,7 @@ test('层级 1 清除：写 {model:null} 后回落到全局级', async () => {
   assert.equal(cfg.resolution.model, 'glm-5.3');
 });
 
-test('层级 2：按主模型映射命中', async () => {
+test('层级 2：旧字典纯 id 键按通用匹配命中', async () => {
   const { resolver } = harness({
     snapshot: { revision: 1, value: { reviewer: { byParentModel: { 'deepseek-v4-flash': 'zai/glm-5.3' } } }, base: {}, user: {} },
   });
@@ -108,61 +114,396 @@ test('层级 2：按主模型映射命中', async () => {
   assert.equal(cfg.resolution.provider, 'zai');
 });
 
-test('层级 3：全局默认先于跟随父模型', async () => {
+test('层级 3：全局默认先于零值语义（follow-parent）', async () => {
   const { resolver } = harness({
-    snapshot: { revision: 1, value: { reviewer: { model: 'deepseek-official/deepseek-v4-pro', followParent: true } }, base: {}, user: {} },
+    snapshot: { revision: 1, value: { reviewer: { model: 'deepseek-official/deepseek-v4-pro' } }, base: {}, user: {} },
   });
   const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } }) } });
   assert.equal(cfg.resolution.layer, 'global');
   assert.equal(cfg.resolution.model, 'deepseek-v4-pro');
 });
 
-test('层级 4：前三层都未配置时跟随父模型', async () => {
+test('全局默认未设置的零值语义：使用执行助手当前模型（layer=follow-parent）', async () => {
   const { resolver } = harness({
-    snapshot: { revision: 1, value: { reviewer: { followParent: true } }, base: {}, user: {} },
+    snapshot: { revision: 1, value: { reviewer: {} }, base: {}, user: {} },
+  });
+  const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } }) } });
+  assert.equal(cfg.resolution.layer, 'follow-parent');
+  assert.equal(cfg.resolution.provider, 'deepseek-official');
+  assert.equal(cfg.resolution.model, 'deepseek-v4-flash');
+});
+
+test('followParent 残留键不参与解析：未声明键不读取，零值语义照常生效', async () => {
+  const { resolver } = harness({
+    // 残留键以原值出现在快照里（存量配置未迁移的形态）；解析不读取它。
+    snapshot: { revision: 1, value: { reviewer: { followParent: false } }, base: {}, user: {} },
   });
   const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } }) } });
   assert.equal(cfg.resolution.layer, 'follow-parent');
   assert.equal(cfg.resolution.model, 'deepseek-v4-flash');
 });
 
-test('followParent=false 且前三层都未配置 → unavailable', async () => {
+test('零值语义下父模型不可得 → unavailable', async () => {
   const { resolver, audits } = harness({
-    snapshot: { revision: 1, value: { reviewer: { followParent: false } }, base: {}, user: {} },
-  });
-  const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } }) } });
-  assert.equal(cfg.resolution.layer, 'unavailable');
-  assert.equal(audits[audits.length - 1].degraded, 'all');
-});
-
-test('非法值逐层降级并留审计，最终命中可用层', async () => {
-  const { resolver, calls, audits } = harness({
-    snapshot: { revision: 2, value: { reviewer: { model: 'ghost/nope' } }, base: {}, user: {} },
+    snapshot: { revision: 1, value: { reviewer: {} }, base: {}, user: {} },
   });
   const cfg = await resolver.configFor({ agent: { session: session() } });
   assert.equal(cfg.resolution.layer, 'unavailable');
-  assert.deepEqual(calls, []);
+  assert.equal(cfg.resolution.degraded, 'all');
+  const last = audits[audits.length - 1];
+  assert.equal(last.layer, 'unavailable');
+  assert.match(String(last.reason), /follow-parent:parent model unavailable/u);
+});
+
+test('零值语义下父模型不可用 → unavailable（不静默选别的模型）', async () => {
+  const { resolver } = harness({
+    snapshot: { revision: 1, value: { reviewer: {} }, base: {}, user: {} },
+  });
+  const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'ghost', model: 'nope' } }) } });
+  assert.equal(cfg.resolution.layer, 'unavailable');
+});
+
+test('已设置全局默认不可用 → unavailable（故障，不退执行助手当前模型）', async () => {
+  const { resolver, audits } = harness({
+    snapshot: { revision: 2, value: { reviewer: { model: 'ghost/nope' } }, base: {}, user: {} },
+  });
+  const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } }) } });
+  assert.equal(cfg.resolution.layer, 'unavailable');
+  assert.equal(cfg.resolution.effort, 'none');
   // 审计的 degraded 与返回值同源，必须带层名前缀（design §6.2 逐层校验留原因／§8.2 词汇表）。
   const degrade = audits.find((entry) => entry.degraded === 'global:unknown provider ghost');
   assert.equal(degrade.layer, 'global');
-  // 所有层都失败时，返回值的标记是聚合值 `all`；逐层原因在审计行里（每层一行）。
+  // 直退语义：reason 文案不再出现「降级到下一层」式表述。
+  assert.match(String(degrade.reason), /直接使用全局默认/u);
   assert.equal(cfg.resolution.degraded, 'all');
   assert.match(String(audits[audits.length - 1].reason), /global:unknown provider ghost/u);
 });
 
-test('全部层失败：layer=unavailable 且审计 degraded=all', async () => {
+test('会话选择不可用：记录原因后直退全局默认（degraded 带层名前缀）', async () => {
   const { resolver, audits } = harness({
-    snapshot: { revision: 3, value: { reviewer: { model: 'ghost/nope2' } }, base: {}, user: {} },
+    snapshot: { revision: 3, value: { reviewer: { model: 'zai/glm-5.3' } }, base: {}, user: {} },
   });
-  const cfg = await resolver.configFor({ agent: { session: session() } });
-  assert.equal(cfg.resolution.layer, 'unavailable');
-  assert.equal(cfg.resolution.effort, 'none');
-  const last = audits[audits.length - 1];
-  assert.equal(last.layer, 'unavailable');
-  assert.equal(last.degraded, 'all');
+  const events = [{ type: SESSION_MODEL_EVENT, data: { model: 'ghost/nope', effort: '' } }];
+  const cfg = await resolver.configFor({ agent: { session: { snapshotEvents: () => events } } });
+  assert.equal(cfg.resolution.layer, 'global');
+  assert.equal(cfg.resolution.model, 'glm-5.3');
+  assert.equal(cfg.resolution.degraded, 'session:unknown provider ghost');
+  assert.ok(audits.some((entry) => entry.degraded === 'session:unknown provider ghost'), '审计行必须留逐层原因');
 });
 
-test('模型不支持 low 档时降级为不传并记 effort=none', async () => {
+// ── 父模型映射规则矩阵（design §6.2／§10.2「模型选择与映射」） ────────────────
+
+test('斜杠 id：parent.model 含斜杠不切分，通用规则按完整纯模型 id 命中', async () => {
+  const { resolver } = harness({
+    snapshot: {
+      revision: 11,
+      value: {
+        reviewer: {
+          parentModelRules: [{ parent: { provider: null, model: 'anthropic/claude-3' }, choice: { model: 'zai/glm-5.3', effort: '' } }],
+        },
+      },
+      base: {},
+      user: {},
+    },
+  });
+  const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'openrouter', model: 'anthropic/claude-3' } }) } });
+  assert.equal(cfg.resolution.layer, 'parent-map');
+  assert.equal(cfg.resolution.provider, 'zai');
+  assert.equal(cfg.resolution.model, 'glm-5.3');
+});
+
+test('精确规则先于通用规则（同 model 双规则，provider 决定赢家）', async () => {
+  const { resolver } = harness({
+    snapshot: {
+      revision: 12,
+      value: {
+        reviewer: {
+          parentModelRules: [
+            { parent: { provider: 'openrouter', model: 'anthropic/claude-3' }, choice: { model: 'zai/glm-5.3', effort: 'high' } },
+            { parent: { provider: null, model: 'anthropic/claude-3' }, choice: { model: 'deepseek-official/deepseek-v4-pro', effort: '' } },
+          ],
+        },
+      },
+      base: {},
+      user: {},
+    },
+  });
+  const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'openrouter', model: 'anthropic/claude-3' } }) } });
+  assert.equal(cfg.resolution.layer, 'parent-map');
+  assert.equal(cfg.resolution.model, 'glm-5.3');
+  assert.equal(cfg.resolution.effort, 'high');
+});
+
+test('通用规则在 provider 不匹配任何精确规则时命中', async () => {
+  const { resolver } = harness({
+    snapshot: {
+      revision: 13,
+      value: {
+        reviewer: {
+          parentModelRules: [
+            { parent: { provider: 'anthropic', model: 'claude-3' }, choice: { model: 'zai/glm-5.3', effort: '' } },
+            { parent: { provider: null, model: 'claude-3' }, choice: { model: 'deepseek-official/deepseek-v4-pro', effort: '' } },
+          ],
+        },
+      },
+      base: {},
+      user: {},
+    },
+  });
+  const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'openrouter', model: 'claude-3' } }) } });
+  assert.equal(cfg.resolution.layer, 'parent-map');
+  assert.equal(cfg.resolution.model, 'deepseek-v4-pro');
+});
+
+test('双 provider 同 id：两条精确规则各自命中各自的 provider', async () => {
+  const { resolver } = harness({
+    snapshot: {
+      revision: 14,
+      value: {
+        reviewer: {
+          parentModelRules: [
+            { parent: { provider: 'deepseek-official', model: 'chat' }, choice: { model: 'zai/glm-5.3', effort: '' } },
+            { parent: { provider: 'zai', model: 'chat' }, choice: { model: 'deepseek-official/deepseek-v4-pro', effort: '' } },
+          ],
+        },
+      },
+      base: {},
+      user: {},
+    },
+  });
+  const first = await resolver.configFor({ agent: { session: session({ parent: { provider: 'deepseek-official', model: 'chat' } }) } });
+  assert.equal(first.resolution.model, 'glm-5.3');
+  const second = await resolver.configFor({ agent: { session: session({ parent: { provider: 'zai', model: 'chat' } }) } });
+  assert.equal(second.resolution.model, 'deepseek-v4-pro');
+});
+
+test('普通 id：不含斜杠的规则条件按字面命中', async () => {
+  const { resolver } = harness({
+    snapshot: {
+      revision: 15,
+      value: {
+        reviewer: { parentModelRules: [{ parent: { provider: 'deepseek-official', model: 'deepseek-chat' }, choice: { model: 'zai/glm-5.3', effort: 'low' } }] },
+      },
+      base: {},
+      user: {},
+    },
+  });
+  const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'deepseek-official', model: 'deepseek-chat' } }) } });
+  assert.equal(cfg.resolution.layer, 'parent-map');
+  assert.equal(cfg.resolution.effort, 'low');
+});
+
+test('旧全引用键：读作去掉首个斜杠后的完整纯模型 id（不再取末段）', async () => {
+  const { resolver } = harness({
+    snapshot: {
+      revision: 16,
+      value: { reviewer: { byParentModel: { 'openrouter/anthropic/claude-3': 'zai/glm-5.3' } } },
+      base: {},
+      user: {},
+    },
+  });
+  // 父模型 id 为 `anthropic/claude-3`（模型 id 本身含斜杠）：去首斜杠归一后命中。
+  const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'openrouter', model: 'anthropic/claude-3' } }) } });
+  assert.equal(cfg.resolution.layer, 'parent-map');
+  assert.equal(cfg.resolution.model, 'glm-5.3');
+});
+
+test('旧全引用键归一冲突：值一致时可用且与枚举顺序无关', async () => {
+  // 两个全引用键去首斜杠后归一到同一通用条件 `claude-3`（面值都不等于它，只能走归一路径）。
+  const orderA = harness({
+    snapshot: {
+      revision: 17,
+      value: { reviewer: { byParentModel: { 'anthropic/claude-3': 'zai/glm-5.3', 'openrouter/claude-3': 'zai/glm-5.3' } } },
+      base: {},
+      user: {},
+    },
+  });
+  const cfgA = await orderA.resolver.configFor({ agent: { session: session({ parent: { provider: 'openrouter', model: 'claude-3' } }) } });
+  const orderB = harness({
+    snapshot: {
+      revision: 17,
+      value: { reviewer: { byParentModel: { 'openrouter/claude-3': 'zai/glm-5.3', 'anthropic/claude-3': 'zai/glm-5.3' } } },
+      base: {},
+      user: {},
+    },
+  });
+  const cfgB = await orderB.resolver.configFor({ agent: { session: session({ parent: { provider: 'openrouter', model: 'claude-3' } }) } });
+  assert.equal(cfgA.resolution.layer, 'parent-map');
+  assert.deepEqual([cfgA.resolution.provider, cfgA.resolution.model], [cfgB.resolution.provider, cfgB.resolution.model]);
+});
+
+test('旧全引用键归一冲突：值不一致时不用冲突别名，审计留痕并直退全局默认', async () => {
+  const { resolver, audits } = harness({
+    snapshot: {
+      revision: 18,
+      value: {
+        reviewer: {
+          byParentModel: { 'anthropic/claude-3': 'zai/glm-5.3', 'openrouter/claude-3': 'deepseek-official/deepseek-v4-pro' },
+          model: 'deepseek-official/deepseek-v4-flash',
+        },
+      },
+      base: {},
+      user: {},
+    },
+  });
+  const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'openrouter', model: 'claude-3' } }) } });
+  // 映射层按未命中处理：三层序继续全局默认，不选枚举顺序里的任一别名。
+  assert.equal(cfg.resolution.layer, 'global');
+  assert.equal(cfg.resolution.model, 'deepseek-v4-flash');
+  assert.ok(audits.some((entry) => entry.degraded === 'parent-map:legacy-alias-conflict'), '冲突必须在审计留痕');
+});
+
+test('坏末段键不猜测恢复：被截断的旧键不当作完整 id 的别名', async () => {
+  const { resolver } = harness({
+    snapshot: {
+      revision: 19,
+      value: { reviewer: { byParentModel: { 'claude-3': 'zai/glm-5.3' }, model: 'deepseek-official/deepseek-v4-pro' } },
+      base: {},
+      user: {},
+    },
+  });
+  // 父模型 id 是 `anthropic/claude-3`；末段键 `claude-3` 与它面值不等（也不含斜杠、无归一读法），
+  // 不猜测把 `claude-3` 恢复成 `anthropic/claude-3`——按未命中继续三层序。
+  const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'anthropic', model: 'anthropic/claude-3' } }) } });
+  assert.equal(cfg.resolution.layer, 'global');
+  assert.equal(cfg.resolution.model, 'deepseek-v4-pro');
+});
+
+test('精确目标不可用：直退全局默认，不改试通用规则', async () => {
+  const { resolver, calls, audits } = harness({
+    snapshot: {
+      revision: 20,
+      value: {
+        reviewer: {
+          parentModelRules: [
+            { parent: { provider: 'openrouter', model: 'anthropic/claude-3' }, choice: { model: 'ghost/nope', effort: '' } },
+            { parent: { provider: null, model: 'anthropic/claude-3' }, choice: { model: 'zai/glm-5.3', effort: '' } },
+          ],
+          model: 'deepseek-official/deepseek-v4-pro',
+        },
+      },
+      base: {},
+      user: {},
+    },
+  });
+  const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'openrouter', model: 'anthropic/claude-3' } }) } });
+  assert.equal(cfg.resolution.layer, 'global');
+  assert.equal(cfg.resolution.model, 'deepseek-v4-pro');
+  assert.equal(cfg.resolution.degraded, 'parent-map:unknown provider ghost');
+  // 通用规则的目标（zai/glm-5.3）没有被尝试：层内不改试其他规则。
+  assert.equal(calls.includes('zai/glm-5.3'), false);
+  assert.ok(audits.some((entry) => entry.layer === 'parent-map'));
+});
+
+test('映射层选中后不再看零值语义；规则目标为空串按不可用直退', async () => {
+  const { resolver, audits } = harness({
+    snapshot: {
+      revision: 21,
+      value: {
+        reviewer: {
+          parentModelRules: [{ parent: { provider: null, model: 'chat' }, choice: { model: '', effort: '' } }],
+          model: 'zai/glm-5.3',
+        },
+      },
+      base: {},
+      user: {},
+    },
+  });
+  const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'zai', model: 'chat' } }) } });
+  // 规则已被选中但目标未设置：按候选不可用记录原因并直退全局默认，不试零值语义。
+  assert.equal(cfg.resolution.layer, 'global');
+  assert.equal(cfg.resolution.model, 'glm-5.3');
+  assert.match(String(cfg.resolution.degraded), /parent-map:unparsable model reference/u);
+  assert.ok(audits.some((entry) => entry.degraded === 'parent-map:unparsable model reference'));
+});
+
+test('同 id 切换 provider 后缓存不串：缓存键含父 provider', async () => {
+  const { resolver, calls } = harness({
+    snapshot: {
+      revision: 22,
+      value: {
+        reviewer: {
+          parentModelRules: [
+            { parent: { provider: 'deepseek-official', model: 'chat' }, choice: { model: 'zai/glm-5.3', effort: '' } },
+            { parent: { provider: 'zai', model: 'chat' }, choice: { model: 'deepseek-official/deepseek-v4-pro', effort: '' } },
+          ],
+        },
+      },
+      base: {},
+      user: {},
+    },
+  });
+  const viaDeepseek = await resolver.configFor({ agent: { session: session({ parent: { provider: 'deepseek-official', model: 'chat' } }) } });
+  assert.equal(viaDeepseek.resolution.model, 'glm-5.3');
+  const viaZai = await resolver.configFor({ agent: { session: session({ parent: { provider: 'zai', model: 'chat' } }) } });
+  assert.equal(viaZai.resolution.model, 'deepseek-v4-pro');
+  // 回到第一个 provider 仍命中第一条（未被第二条的缓存覆盖）。
+  const again = await resolver.configFor({ agent: { session: session({ parent: { provider: 'deepseek-official', model: 'chat' } }) } });
+  assert.equal(again.resolution.model, 'glm-5.3');
+  assert.equal(calls.filter((entry) => entry === 'zai/glm-5.3').length, 1, '同一候选只校验一次（缓存命中）');
+});
+
+test('运行时重复条件：按可见配置错误抛出，不按清单顺序选赢家', async () => {
+  const { resolver } = harness({
+    snapshot: {
+      revision: 23,
+      value: {
+        reviewer: {
+          parentModelRules: [
+            { parent: { provider: null, model: 'chat' }, choice: { model: 'zai/glm-5.3', effort: '' } },
+            { parent: { provider: null, model: 'chat' }, choice: { model: 'deepseek-official/deepseek-v4-pro', effort: '' } },
+          ],
+        },
+      },
+      base: {},
+      user: {},
+    },
+  });
+  await assert.rejects(
+    () => resolver.configFor({ agent: { session: session({ parent: { provider: 'zai', model: 'chat' } }) } }),
+    /重复匹配条件/u,
+    '重复条件必须按可见配置错误拒绝结算',
+  );
+});
+
+test('新结构规则带档位：choice.effort 随映射生效', async () => {
+  const { resolver } = harness({
+    snapshot: {
+      revision: 24,
+      value: {
+        reviewer: { parentModelRules: [{ parent: { provider: null, model: 'deepseek-v4-flash' }, choice: { model: 'zai/glm-5.3', effort: 'high' } }] },
+      },
+      base: {},
+      user: {},
+    },
+  });
+  const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } }) } });
+  assert.equal(cfg.resolution.layer, 'parent-map');
+  assert.equal(cfg.resolution.effort, 'high');
+});
+
+test('新结构在前、旧字典承接：同条件命中按兼容链次序确定性取值', async () => {
+  const { resolver } = harness({
+    snapshot: {
+      revision: 25,
+      value: {
+        reviewer: {
+          parentModelRules: [{ parent: { provider: null, model: 'deepseek-v4-flash' }, choice: { model: 'zai/glm-5.3', effort: '' } }],
+          byParentModel: { 'deepseek-v4-flash': 'deepseek-official/deepseek-v4-pro' },
+        },
+      },
+      base: {},
+      user: {},
+    },
+  });
+  const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } }) } });
+  assert.equal(cfg.resolution.layer, 'parent-map');
+  assert.equal(cfg.resolution.model, 'glm-5.3');
+});
+
+// ── 档位与归一（requirements §5.1） ──────────────────────────────────────────
+
+test('模型不支持 low 档时不传档位并记 effort=none', async () => {
   const { resolver } = harness({
     snapshot: { revision: 4, value: { reviewer: { model: 'zai/glm-5.3' } }, base: {}, user: {} },
     efforts: [{ id: 'high' }],
@@ -194,7 +535,7 @@ test('显式档位不被支持时不传并记 degraded（带层名前缀，desig
   });
   const cfg = await resolver.configFor({ agent: { session: session() } });
   assert.equal(cfg.resolution.effort, 'none');
-  assert.match(String(cfg.resolution.degraded), /^global:effort=low unsupported$/u);
+  assert.match(String(cfg.resolution.degraded), /(^|,)global:effort=low unsupported(,|$)/u);
   assert.ok(
     audits.some((entry) => entry.degraded === 'global:effort=low unsupported'),
     '审计行的 degraded 必须带层名前缀',
@@ -225,20 +566,6 @@ test('pickEffort：显式支持用显式、显式不支持记降级、缺省按 
   assert.deepEqual(pickEffort(undefined, 'low'), { effort: 'none', degraded: true });
 });
 
-test('按主模型映射支持对象写法（带档位）', async () => {
-  const { resolver } = harness({
-    snapshot: {
-      revision: 9,
-      value: { reviewer: { byParentModel: { 'deepseek-v4-flash': { model: 'zai/glm-5.3', effort: 'high' } } } },
-      base: {},
-      user: {},
-    },
-  });
-  const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } }) } });
-  assert.equal(cfg.resolution.layer, 'parent-map');
-  assert.equal(cfg.resolution.effort, 'high');
-});
-
 test('会话级档位随会话级选择优先', async () => {
   const { resolver } = harness({
     snapshot: { revision: 10, value: { reviewer: { model: { model: 'zai/glm-5.3', effort: 'low' } } }, base: {}, user: {} },
@@ -248,6 +575,8 @@ test('会话级档位随会话级选择优先', async () => {
   assert.equal(cfg.resolution.layer, 'session');
   assert.equal(cfg.resolution.effort, 'high');
 });
+
+// ── 缓存（design §6.2 有界查找表） ──────────────────────────────────────────
 
 test('缓存命中、会话级值参与 key、失效后重算', async () => {
   const { resolver, calls } = harness({
@@ -271,6 +600,19 @@ test('缓存命中、会话级值参与 key、失效后重算', async () => {
   assert.equal(calls.length, 3);
 });
 
+test('unavailable 结果不进缓存：故障恢复后下一次解析即重新校验', async () => {
+  const { resolver, calls } = harness({
+    snapshot: { revision: 26, value: { reviewer: { model: 'ghost/nope' } }, base: {}, user: {} },
+  });
+  const request = { agent: { session: session() } };
+  const first = await resolver.configFor(request);
+  assert.equal(first.resolution.layer, 'unavailable');
+  assert.equal(resolver.cacheSize(), 0, '故障结果不驻留缓存');
+  const second = await resolver.configFor(request);
+  assert.equal(second.resolution.layer, 'unavailable');
+  assert.equal(calls.length, 0, 'unknown provider 在 provider 表就被拒，未到 resolveModelInfo');
+});
+
 test('层级 2 命中映射后不再看全局默认', async () => {
   const { resolver } = harness({
     snapshot: {
@@ -283,6 +625,3 @@ test('层级 2 命中映射后不再看全局默认', async () => {
   const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } }) } });
   assert.equal(cfg.resolution.layer, 'parent-map');
 });
-
-
-
