@@ -269,7 +269,7 @@ DSH 敏感范围按实际 home 根判断，环境变量优先、缺省 `~/.dsh`�
 
 匹配条件不依赖字符串形态或目录猜测。设置页映射行的行状态保存四个独立字段：作用范围 provider（空值或指定 id）、完整纯模型 id、目标模型引用、推理强度。执行助手模型下拉选中一项只把该项的完整模型 id 写入 `parent.model`；选择、暂存、保存各环节都不对模型 id 做斜杠切分或前缀剥离，保存函数无需识别输入是否已经是纯 id。回显由作用范围字段决定：任意 provider 显示纯模型 id；指定 provider 显示 provider 与 id 的拼接。不按有无斜杠推断作用范围，不按目录首命中为通用规则补 provider。
 
-解析信息可使用有界查找表；键包含设置快照修订号（承载 `parentModelRules` 规则清单与兼容字典的一切变化）、会话选择引用和档位、父 provider/model。父模型、适配器目录、volatile 更新或会话写入使旧解析失效。这里保存的是模型路由信息，不是审批结论。使用执行 Agent 当前模型作为审查模型时仍独立发起审查调用（需求 5.1）；设置页与会话控件的说明文案按 7.2.2、7.3.1 定稿区分「使用相同模型」与「由执行 Agent 自己审批」。
+解析信息可使用有界查找表；键包含设置快照修订号（承载 `parentModelRules` 规则清单与兼容字典的一切变化）、会话选择引用和档位、父 provider/model。父模型、适配器目录、volatile 更新或会话写入使旧解析失效。这里保存的是模型路由信息，不是审批结论。使用执行助手当前模型作为审查模型时仍独立发起审查调用（需求 5.1）；设置页与会话控件的说明文案按 7.2.2、7.3.1 定稿区分「使用相同模型」与「由执行助手自己审批」。
 
 ### 6.3 会话级选择的文件载体
 
@@ -420,7 +420,7 @@ aria 语义：`aria-expanded` 表开合；`aria-controls` 关联展开区域 `he
 | `warn.modelIssue.session` | 本会话选择的审查模型不可用：{reason}。实际使用：{effective}。 | This session's reviewer model is unavailable: {reason}. Currently using: {effective}. |
 | `warn.modelIssue.globalUnset` | 默认审查模型未设置：审查跟随执行助手的当前模型，独立发起审查调用——是「使用相同模型」，不是由执行助手自己审批。实际使用：{effective}。 | The default reviewer model is not set: reviews follow the agent's current model as an independent call — the same model, never the agent approving itself. Currently using: {effective}. |
 | `warn.modelIssue.followParent` | 本会话未单独选择审查模型，按未设置的全局默认跟随执行助手的当前模型：独立发起审查调用——是「使用相同模型」，不是由执行助手自己审批。实际使用：{effective}。 | This session has no reviewer of its own and the global default is unset, so reviews follow the agent's current model as an independent call — the same model, never the agent approving itself. Currently using: {effective}. |
-| `warn.modelIssue.layer` | 当前生效：{layer}。 | Currently on: {layer}. |
+| `warn.modelIssue.layer` | 当前生效：{layer}。 | Currently effective: {layer}. |
 | `card.map.col.reviewer` | 审查模型 | Reviewer model |
 | `card.map.col.effort` | 推理强度 | Effort |
 | `card.map.placeholder.parent` | 执行助手模型 id | Agent model id |
@@ -506,7 +506,7 @@ aria 语义：`aria-expanded` 表开合；`aria-controls` 关联展开区域 `he
 | `card.presets.missing.remedy` | 该预设不在宿主当前预设表中。可依次检查：插件是否已停用、宿主版本是否兼容、预设是否为自定义。重新启用插件或重启宿主可能恢复，不保证一定恢复；插件已卸载且配置仍选择该预设时，可改选标准权限档。插件不解析、不改写用户 YAML，不建议手工清理。 | The preset is absent from the host's current table. Check in turn: a disabled plugin, an incompatible host version, or a custom preset. Re-enabling or restarting may restore it, with no guarantee; if the plugin is uninstalled while the config still selects it, pick a standard tier. The plugin never parses or rewrites user YAML, and manual cleanup is not recommended. |
 | `card.presets.unavailable` | 读不到预设目录。可能原因：服务缺失、读取失败或没有可用预设信息；可确认权限预设服务可用后重试。 | The preset catalog is unavailable. Possible causes: a missing service, a read failure, or no preset information; check the permission preset service and retry. |
 
-依据：字段名与选项名取自 requirements §6.4 名称表各行；覆盖胶囊的名称与预设缺失指引按 requirements §6.1；空清单语义按 requirements §2.1；`denyPatterns` 说明与 requirements §3.4 及 `lib/policy.js` 现行编译口径一致（普通源串默认加 `i`；`/source/flags` 按所填标志，未填标志同普通源串回退 `i`，`lib/policy.js:105`）；`parentModelRules` 与默认模型的空值说明按 requirements §6.4 名称表及 §5.1 的三层序与零值语义，区分「使用相同模型」与「由执行 Agent 自己审批」；时限零值按 requirements §4.2；通知范围与记录的区分按 requirements §6.4 `ui.inject` 行。`help.reviewer.maxTokens` 不含具体测量数字，只作定性表述。机制叙述中的「执行 Agent」与「父模型」即界面文案的「执行助手」与「执行助手模型」，机制叙述中的「档位」（模型的 `effort` 取值）即界面的「推理强度」（requirements §6.4 定名，未指定显示「自动选择」），同一概念，用户可见名称以本表为准。
+依据：字段名与选项名取自 requirements §6.4 名称表各行；覆盖胶囊的名称与预设缺失指引按 requirements §6.1；空清单语义按 requirements §2.1；`denyPatterns` 说明与 requirements §3.4 及 `lib/policy.js` 现行编译口径一致（普通源串默认加 `i`；`/source/flags` 按所填标志，未填标志同普通源串回退 `i`，`lib/policy.js:105`）；`parentModelRules` 与默认模型的空值说明按 requirements §6.4 名称表及 §5.1 的三层序与零值语义，区分「使用相同模型」与「由执行助手自己审批」；时限零值按 requirements §4.2；通知范围与记录的区分按 requirements §6.4 `ui.inject` 行。`help.reviewer.maxTokens` 不含具体测量数字，只作定性表述。机制叙述中的「执行 Agent」与「父模型」即界面文案的「执行助手」与「执行助手模型」，机制叙述中的「档位」（模型的 `effort` 取值）即界面的「推理强度」（requirements §6.4 定名，未指定显示「自动选择」），同一概念，用户可见名称以本表为准。
 
 ### 7.3 会话级下拉与更新
 
@@ -798,13 +798,6 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
 
 本章是当前实施与验证差距的唯一工作清单。完成后删除对应项，不保存修正历史。仍待办理：
 
-- 结构化父模型映射与三层序（6.2）：`reviewer.parentModelRules` schema 与重复条件校验、解析器三层顺序与兼容链（含旧全引用键归一冲突口径）、直退全局默认与零值语义、缓存键更新、状态服务与审批同一选择逻辑、`typert.host.js` 结果结构与 `modelIssues` 诊断三处同步。
-- 设置页结构化规则表与分置提示（7.2）：字段数收敛到 20、作用范围控件、重复行禁止保存、含斜杠旧键迁移确认、三类醒目提示及全部新增字典键的中英实现。
-- 空全局默认醒目提示（7.2.0）：modelIssues 空默认条目（scope=global、effectiveLayer=follow-parent、reason「全局默认审查模型未设置」、configured 空串、不校验父模型可用性）、设置页顶部与 composer 两处渲染、`warn.modelIssue.globalUnset` 与 `warn.modelIssue.followParent` 字典键实现；空串成句规则实现——三类不可用键的渲染按「省略『实际使用』句＋`warn.modelIssue.layer` 层含义独立成句」执行，空默认键不补层句。
-- README.md 更新：说明两种作用范围（任意 provider／指定 provider）及配置方式；默认值继续指向需求文档，不另维护副本。
-- 记录视图缺段分派（8.5.1）：反证规则（`tools` 计数、`degraded=transcript`）、层级归位与审查未执行边界、详情 `tools` 计数行的实现；钉三级行为的测试样本改用 `capture=summary` 且已执行审查的记录，未执行审查样本改断统一缺省。
-- 文案修订实施（7.2.2、8.5.1）：maxTokens 零值句（含 `lib/config.js` 中 maxTokens 注释零值句的同口径修订）、fallback 通知条件句、token 释义、规则字段 hint/help 及新增键；8.5.1 枚举值 `layer.follow-parent`、`layer.unavailable`、`degraded=all` 三条的中英字典值。
-- §10.2 新增「模型选择与映射」验证行与「说明入口与名称」20 字段判据的执行；§10.3 分置提示巡检。
 - 真实宿主核验余量（10.3 清单，宿主环境阻塞）：allow 后实际工具执行、卡片状态与同帧截图等待真机审批流——服务实例（session 0，沙箱后端不可用：`CreateRestrictedToken prerequisite failed: no logon SID`）升权在到达审批通道前失败，待交互式会话宿主环境后补验；反向双标注与旧格式行的真页面样本未取得，由单元测试与真页面机制验证覆盖。
 - 发布链核验未执行（9.3）：发布产物读取的完整版本、完整 Git 标签隔离安装、宿主管理界面展示、Release 标题。标签与 Release 在发布流程执行时创建，不移动已有发布标签。
 
