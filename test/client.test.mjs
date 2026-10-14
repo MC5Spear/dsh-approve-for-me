@@ -1609,6 +1609,7 @@ const REVIEW_TEXT = {
   'detail.auth': '授权',
   'detail.fieldsDefaulted': '自动补全的字段',
   'detail.degraded': '缺失或异常情况',
+  'detail.tools': '取证工具调用',
   'detail.configTag': '配置标识',
   'detail.policyTag': '策略标识',
   'detail.evidence': '上下文证据',
@@ -1669,9 +1670,9 @@ const TRACE_ROWS = [
   { approvalId: 'apB', callId: 'call_B', toolName: 'edit', origin: 'main', escalation: null, startedAt: 1_700_000_010_000, endedAt: 1_700_000_010_500, queueMs: 0, reviewMs: 500, humanWaitMs: null, decision: 'deny', outcome: 'rejected', source: 'llm', model: 'zai/glm-5.3', effort: 'low', risk: 'high', auth: 'low', reason: '改动敏感文件', subject: 'edit x.ts', truncated: false },
   { approvalId: 'apC', callId: 'call_C', toolName: 'pwsh', origin: 'subagent', escalation: null, startedAt: 1_700_000_020_000, endedAt: 1_700_000_020_010, queueMs: null, reviewMs: null, humanWaitMs: null, decision: null, outcome: 'rejected', source: 'llm', model: null, effort: null, risk: null, auth: null, reason: '审查未执行：queue-overflow', subject: 'npm run build', truncated: false },
 ];
-/** 详情：A 有 humanWaitMs 与两段全文（input/reasoning 缺）；B 只有 humanWaitMs；C 全段缺失且 stage=queue。 */
+/** 详情：A 有 humanWaitMs 与两段全文（input/reasoning 缺，tools=0 证实未调用取证工具）；B 摘要档且审查已执行（全文段均缺）；C 全段缺失且 stage=queue（审查未执行）。 */
 const TRACE_DETAILS = {
-  apA: { ...TRACE_ROWS[0], humanWaitMs: 400, prompt: 'PROMPT-A', output: 'OUTPUT-A', layer: 'session', attempts: 1, tokens: 32, preset: 'auto-approve', configTag: 'a1b2c3d4e5f6', policyTag: 'zh:missing' },
+  apA: { ...TRACE_ROWS[0], humanWaitMs: 400, prompt: 'PROMPT-A', output: 'OUTPUT-A', layer: 'session', attempts: 1, tokens: 32, tools: 0, preset: 'auto-approve', configTag: 'a1b2c3d4e5f6', policyTag: 'zh:missing' },
   apB: { ...TRACE_ROWS[1], humanWaitMs: 0, layer: 'session', attempts: 1 },
   apC: { ...TRACE_ROWS[2], stage: 'queue', degraded: 'queue-overflow' },
 };
@@ -1765,10 +1766,11 @@ test('审查视图：合并行主判定为 outcome、判定与结算并存可分
   const allowText = JSON.stringify(render(view.component, props));
   assert.match(allowText, /工具总计 5\.0 s = 执行 2\.5 s \+ 审批 2\.5 s/);
   assert.ok(!allowText.includes('未匹配到工具行'), '匹配上时不应再显示未标注');
-  // A：全文段在场（prompt/output 有值）证实全文采集，四段缺按 §8.5.1 分派链各归其类：
-  // evidence→未取上下文、probes→未调用取证工具、reasoning→模型未提供、input→本次未记录此项。
+  // A：全文段在场（prompt/output 有值）证实全文采集，反证不成立（degraded 无 transcript、tools 在场为 0），
+  // 四段缺按 §8.5.1 分派链各归其类：evidence→未取上下文、probes→未调用取证工具、
+  // reasoning→模型未提供、input→本次未记录此项。
   assert.equal((allowText.match(/未取上下文/g) ?? []).length, 1, 'evidence 缺失 → 未取上下文');
-  assert.equal((allowText.match(/未调用取证工具/g) ?? []).length, 1, 'probes 缺失 → 未调用取证工具');
+  assert.equal((allowText.match(/未调用取证工具/g) ?? []).length, 1, 'probes 缺失且 tools 在场为 0 → 未调用取证工具');
   assert.equal((allowText.match(/模型未提供/g) ?? []).length, 1, 'reasoning 缺失（全文采集下）→ 模型未提供');
   assert.equal((allowText.match(/本次未记录此项/g) ?? []).length, 1, 'input 缺失（全文采集下）→ 本次未记录此项');
   assert.ok(!allowText.includes('未开启全文采集'), '全文段在场时不得误报未开启全文采集');
@@ -1780,13 +1782,33 @@ test('审查视图：合并行主判定为 outcome、判定与结算并存可分
   assert.match(allowText, /决定方式: 人工（human）/);
   assert.match(allowText, /模型选择来源: 会话选择（session）/);
   assert.match(allowText, /尝试次数: 1/);
+  assert.match(allowText, /取证工具调用: 0/, '详情 tools 计数行在场（design §8.5.1），0 正常显示');
   assert.match(allowText, /接管预设: auto-approve/);
   assert.match(allowText, /配置标识: a1b2c3d4e5f6/);
   assert.match(allowText, /策略标识: zh:missing/);
   assert.match(allowText, /归属: 主会话（main）/);
   assert.match(allowText, /升权目标: danger-full-access/);
 
-  // 收起 A、点开 C（只有结算）：全部分段缺失显示 —，不按 0 计（design §8.5）。
+  // 收起 A、点开 B（摘要档且审查已执行：全文段均不在场、decision 在场）：第三级判「未开启全文采集」。
+  const headsB = findAllByClass(render(view.component, props), 'dsafm_review_head');
+  const headB = headsB.find((entry) => JSON.stringify(entry).includes('edit x.ts'));
+  headB.props.onClick();
+  hookIndex = 0;
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const bText = JSON.stringify(render(view.component, props));
+  // B 六段缺（capture=summary 且审查已执行 → 证实未开启全文采集，design §8.5.1 分派链第三级）：
+  // prompt/input/reasoning/output 四段 → 未开启全文采集；该级两条可确认说明不生效，
+  // evidence/probes → 本次未记录此项（层级归位）。
+  assert.equal((bText.match(/未开启全文采集/g) ?? []).length, 4, '摘要档已审查记录的四个全文段缺失各显示一次未开启全文采集');
+  assert.equal((bText.match(/本次未记录此项/g) ?? []).length, 2, '全文段均不在场时 evidence/probes 归统一缺省，不误报可确认文案');
+  assert.ok(!bText.includes('未取上下文'), '全文未采集时 evidence 缺失不得归「未取上下文」');
+  assert.ok(!bText.includes('未调用取证工具'), '全文未采集时 probes 缺失不得归「未调用取证工具」');
+  assert.ok(!bText.includes('模型未提供'), '全文未采集时 reasoning 缺失不得归为模型未提供');
+
+  // 收起 B、点开 C（只有结算、审查未执行：decision 缺失）：全部分段缺失显示 —，不按 0 计（design §8.5）。
   const headsC = findAllByClass(render(view.component, props), 'dsafm_review_head');
   const headC = headsC.find((entry) => JSON.stringify(entry).includes('npm run build'));
   headC.props.onClick();
@@ -1803,17 +1825,18 @@ test('审查视图：合并行主判定为 outcome、判定与结算并存可分
   assert.ok(!cText.includes('工具总计'), '匹配不上时不得显示等式');
   assert.match(cText, /未匹配到工具行/, '匹配不上时必须标注，不猜 X');
   assert.match(cText, /审批 0 ms/, '无在场分段时 Z=0（求和口径）');
-  // C 六段缺（全文段均不在场 → 证实未开启全文采集，design §8.5.1 分派链第三级）：
-  // evidence/probes 仍归第一级专键；prompt/input/reasoning/output 四段 → 未开启全文采集。
-  assert.equal((cText.match(/未开启全文采集/g) ?? []).length, 4, '四个全文段缺失各显示一次未开启全文采集');
-  assert.ok(!cText.includes('模型未提供'), '全文未采集时 reasoning 缺失不得归为模型未提供');
+  // C（queue-overflow 结算、decision 缺失＝审查未执行）：全文段缺失不构成「未开启」的证据，
+  // 六个缺段全部归统一缺省（design §8.5.1 第三级以 decision 在场为前提）。
+  assert.equal((cText.match(/本次未记录此项/g) ?? []).length, 6, '审查未执行记录的全部缺段归「本次未记录此项」');
+  assert.ok(!cText.includes('未开启全文采集'), '审查未执行的记录不得归因未开启全文采集');
+  assert.ok(!cText.includes('未取上下文'), '审查未执行的记录不得归因未取上下文');
   assert.ok(!cText.includes('最终审批结果: null'), 'C 行 decision 缺失时模型结论段不渲染');
 });
 
 test('审查视图：readFailed=true 时显示读取降级提示，详情缺段一律按一级缺省归「本次未记录此项」（design §8.3/§8.5.1）', async () => {
   resetHooks();
   const client = loadClient();
-  // A 详情：全文段在场（prompt/output 有值），若走常规分派链，evidence/probes 应归一级专键；
+  // A 详情：全文段在场（prompt/output 有值）且无反证，若走常规分派链，evidence/probes 应归可确认专键；
   // 读取降级在场时按 §8.5.1 一级规则统一缺省，不冒充可确认原因。
   const rows = [TRACE_ROWS[0]];
   const detail = { ...TRACE_DETAILS.apA };
@@ -1849,6 +1872,76 @@ test('审查视图：readFailed=true 时显示读取降级提示，详情缺段�
   assert.ok(!detailText.includes('未取上下文'), '读取降级时 evidence 缺失不得归「未取上下文」');
   assert.ok(!detailText.includes('未调用取证工具'), '读取降级时 probes 缺失不得归「未调用取证工具」');
   assert.ok(!detailText.includes('模型未提供'), '读取降级时 reasoning 缺失不得归「模型未提供」');
+});
+
+test('审查视图 §10.2：tools 大于 0 反证「未调用取证工具」，probes 缺失归统一缺省', async () => {
+  resetHooks();
+  const client = loadClient();
+  // 全文采集证实（prompt/output 在场）、evidence 在场、probes 缺失且 tools=2：已记录计数证伪「未调用」。
+  const rows = [{ ...TRACE_ROWS[0], approvalId: 'apT', callId: 'call_T', decision: 'deny', outcome: 'rejected', source: 'llm' }];
+  const detail = { ...rows[0], humanWaitMs: 0, prompt: 'PROMPT-T', output: 'OUTPUT-T', evidence: 'EV-T', tools: 2 };
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint, args) => {
+      if (endpoint === 'approveForMe/traceRecords') return { ok: true, value: { records: rows, readFailed: false } };
+      if (endpoint === 'approveForMe/traceRecord') return { ok: true, value: { record: args?.approvalId === 'apT' ? detail : null } };
+      if (endpoint === 'approveForMe/getState') return { ok: true, value: { trace: { capture: 'full', ownView: true, turnSummary: true } } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const view = env.registrations.find((entry) => entry.options.name === 'conversation.view');
+  const props = { t: reviewT, ...view.options.inject() };
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  findAllByClass(render(view.component, props), 'dsafm_review_head')[0].props.onClick();
+  hookIndex = 0;
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const text = JSON.stringify(render(view.component, props));
+  // probes 缺失但计数为 2：不得声称「未调用取证工具」；缺段与 input 同归统一缺省（design §8.5.1 反证）。
+  assert.ok(!text.includes('未调用取证工具'), 'tools=2 证伪「未调用」，probes 缺失不得归「未调用取证工具」');
+  assert.equal((text.match(/本次未记录此项/g) ?? []).length, 2, 'probes 与 input 两段缺失归统一缺省');
+  assert.match(text, /取证工具调用: 2/, '详情 tools 计数行在场，矛盾对用户可见');
+});
+
+test('审查视图 §10.2：degraded 含 transcript 反证「未取上下文」，evidence 缺失归统一缺省', async () => {
+  resetHooks();
+  const client = loadClient();
+  // 全文采集证实（prompt/output 在场）、probes 在场、evidence 缺失且 degraded 多值含 transcript：
+  // 采集环节读取失败由 degraded 段承载，不显示「未取上下文」（design §8.5.1 反证）。
+  const rows = [{ ...TRACE_ROWS[0], approvalId: 'apE', callId: 'call_E', decision: 'deny', outcome: 'rejected', source: 'llm' }];
+  const detail = { ...rows[0], humanWaitMs: 0, prompt: 'PROMPT-E', output: 'OUTPUT-E', probes: 'grep: ok', degraded: 'cwd,transcript' };
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint, args) => {
+      if (endpoint === 'approveForMe/traceRecords') return { ok: true, value: { records: rows, readFailed: false } };
+      if (endpoint === 'approveForMe/traceRecord') return { ok: true, value: { record: args?.approvalId === 'apE' ? detail : null } };
+      if (endpoint === 'approveForMe/getState') return { ok: true, value: { trace: { capture: 'full', ownView: true, turnSummary: true } } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const view = env.registrations.find((entry) => entry.options.name === 'conversation.view');
+  const props = { t: reviewT, ...view.options.inject() };
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  findAllByClass(render(view.component, props), 'dsafm_review_head')[0].props.onClick();
+  hookIndex = 0;
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const text = JSON.stringify(render(view.component, props));
+  assert.ok(!text.includes('未取上下文'), 'degraded 含 transcript 时 evidence 缺失不得归「未取上下文」');
+  assert.equal((text.match(/本次未记录此项/g) ?? []).length, 2, 'evidence 与 input 两段缺失归统一缺省');
+  assert.match(text, /缺失或异常情况: 会话目录缺失（cwd）、上下文读取失败或截断（transcript）/, '读取失败原因由 degraded 段承载');
 });
 
 test('审查视图：旧格式行（无 outcome）主位＝模型结论并附「未记录最终审批结果」，详情同样说明缺失（design §8.5）', async () => {
@@ -2198,6 +2291,7 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['detail.layer', '模型选择来源', "Model selection source"],
     ['detail.fieldsDefaulted', '自动补全的字段', "Auto-filled fields"],
     ['detail.degraded', '缺失或异常情况', "Missing or degraded conditions"],
+    ['detail.tools', '取证工具调用', "Evidence-tool calls"],
     ['detail.tokens', '推理 token 用量', "Reasoning tokens"],
     ['detail.reasoning', '模型返回的推理文本', "Model-returned reasoning"],
     // —— §8.5.1 列表双标注与旧记录表 ——

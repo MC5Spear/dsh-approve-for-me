@@ -183,6 +183,7 @@ window.__ModuleLoader__.load({
 			"detail.auth": "授权",
 			"detail.fieldsDefaulted": "自动补全的字段",
 			"detail.degraded": "缺失或异常情况",
+			"detail.tools": "取证工具调用",
 			"detail.preset": "接管预设",
 			"detail.origin": "归属",
 			"detail.escalation": "升权目标",
@@ -419,6 +420,7 @@ window.__ModuleLoader__.load({
 			"detail.auth": "Authorization",
 			"detail.fieldsDefaulted": "Auto-filled fields",
 			"detail.degraded": "Missing or degraded conditions",
+			"detail.tools": "Evidence-tool calls",
 			"detail.preset": "Take-over preset",
 			"detail.origin": "Origin",
 			"detail.escalation": "Escalation target",
@@ -1732,25 +1734,36 @@ window.__ModuleLoader__.load({
 				// 全文段任一在场即证实 capture=full（design §8.5.1 分派链第二级的依据）。
 				const fullTextPresent =
 					typeof detail?.prompt === "string" || typeof detail?.input === "string" || typeof detail?.output === "string";
+				// 第二级反证依据（design §8.5.1）：degraded 多值拆分与 multiEnumText 同口径（逗号与 +
+				// 分隔），token 精确等于 transcript 即证实采集环节读取失败；tools 缺失时无法反证「未调用」。
+				const degradedHasTranscript =
+					typeof detail?.degraded === "string" && detail.degraded.split(/[,+]/u).some((token) => token === "transcript");
+				const toolsCount = typeof detail?.tools === "number" ? detail.tools : undefined;
 				/**
 				 * 缺段说明的三级分派（design §8.5.1）：①读取失败在场 → 一律「本次未记录此项」；
-				 * ②全文采集证实（任一全文段在场）：evidence→未取上下文、probes→未调用取证工具、
-				 * reasoning→模型未提供、output 缺且结算为故障类（decision=error）→模型未提供；
-				 * ③全文段均不在场：全文段（prompt/input/output）与 reasoning 显示「未开启全文采集」；
-				 * 其余缺段（reason；全文采集下的 input）→「本次未记录此项」。
+				 * ②全文采集证实（任一全文段在场）先查反证——evidence 缺且 degraded 含 transcript（读取
+				 * 失败，具体原因由 degraded 段承载）、probes 缺且 tools 大于 0 或缺失（计数证伪「未调用」）
+				 * 时走「本次未记录此项」；无反证时 evidence→未取上下文、probes 缺且 tools 在场为 0→未调用
+				 * 取证工具、reasoning→模型未提供、output 缺且结算为故障类（decision=error）→模型未提供、
+				 * 其余→「本次未记录此项」；
+				 * ③全文段均不在场：仅审查已执行（decision 在场）时 prompt/input/output/reasoning 显示
+				 * 「未开启全文采集」；审查未执行（decision 缺失）的记录本就不产生全文段，不构成「未开启」
+				 * 的证据——该级 evidence/probes/reason 与审查未执行的全部缺段均走「本次未记录此项」。
 				 * @param {string} segment - 段名（reason/evidence/probes/prompt/input/reasoning/output）。
 				 * @returns {string} absent 字典键。
 				 */
 				const absentKeyOf = (segment) => {
 					if (readFailed) return "absent.unknown";
-					if (segment === "evidence") return "absent.noContext";
-					if (segment === "probes") return "absent.noProbes";
 					if (fullTextPresent) {
+						if (segment === "evidence") return degradedHasTranscript ? "absent.unknown" : "absent.noContext";
+						if (segment === "probes") return toolsCount === 0 ? "absent.noProbes" : "absent.unknown";
 						if (segment === "reasoning") return "absent.modelNotProvided";
 						if (segment === "output" && record.decision === "error") return "absent.modelNotProvided";
 						return "absent.unknown";
 					}
-					if (segment === "prompt" || segment === "input" || segment === "output" || segment === "reasoning") return "absent.notFullCapture";
+					if ((segment === "prompt" || segment === "input" || segment === "output" || segment === "reasoning") && hasDecision) {
+						return "absent.notFullCapture";
+					}
 					return "absent.unknown";
 				};
 				/**
@@ -1817,6 +1830,9 @@ window.__ModuleLoader__.load({
 				metaOf("detail.effort", record.effort);
 				metaOf("detail.layer", detail?.layer, (value) => enumText("layer", value));
 				metaOf("detail.attempts", detail?.attempts);
+				// 取证工具调用计数行（design §8.5.1）：0 正常显示；作为 probes 摘要缺失时的反证依据，
+				// 计数与摘要的矛盾对用户可见。
+				metaOf("detail.tools", detail?.tools);
 				metaOf("detail.tokens", detail?.tokens);
 				metaOf("detail.risk", record.risk);
 				metaOf("detail.auth", record.auth);
