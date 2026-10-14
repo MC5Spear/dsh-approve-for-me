@@ -332,7 +332,7 @@ RPC 共八项，其中 `presetCatalog` 提供宿主预设目录；统一在 `typ
 
 视觉定稿：提示为一段带图标的文字行，图标 `IconWarningOutlineRegular`（12px），文字与图标取 `var(--dsw-alias-state-warn-label)`，行背景取 `var(--dsw-alias-state-warn-tertiary)`（宿主连接指示器同款配对，浅深主题各随令牌取值），圆角与内边距沿用字段说明区样式；文字对比度按需求 6.5 的 ≥4.5:1 口径在两主题下核验。空全局默认提示沿用同一呈现规格（需求 6.1「同一呈现规格」），语义为状态而非故障：文案不含「不可用」「故障」措辞。
 
-宿主侧数据通道：`getState` 结果扩展 `modelIssues` 诊断数组，按 7.1 三处同步（结果 schema、类型声明、成员描述）。条目形状：`scope`（`global`／`rule`／`session`，决定呈现位置）、`ruleProvider`（仅 `rule`：该规则条件的 provider，空值＝任意）、`ruleModel`（仅 `rule`：条件完整纯模型 id；其余为空串）、`configured`（配置的目标模型引用原文）、`reason`（可核实原因）、`effectiveLayer`（实际生效层，取值复用 6.2 的审计层值；因任一层不可用直退全局默认，实际只会是 `global`、`follow-parent` 或 `unavailable`）与 `effectiveModel`（该生效层对应的模型引用，无生效为空串）。`rule` 与 `session` 作用域的回退按「该配置目标被选中且不可用」推演：直退全局默认——未设置按零值语义使用执行助手当前模型（`follow-parent`），已设置且不可用为 `unavailable`。global 与 rule 作用域诊断不依赖会话：设置页以无会话状态求值即可取得这两类条目；session 作用域条目仅在会话控件使用时产生。无会话求值时 `effectiveModel` 无会话值可填，取空串——该口径同时覆盖规则不可用回退与空全局默认两类条目。`effectiveModel` 为空串时提示省略「实际使用」句：三类不可用键（`warn.modelIssue.global`／`rule`／`session`）其后以层含义独立成句（`warn.modelIssue.layer`，`{layer}` 填与 8.5.1 枚举一致的层含义词面）承接回退结果，不丢实际生效层；空全局默认两键（`warn.modelIssue.globalUnset`／`followParent`）不补层含义句，首句已承载层含义。rule 条目按映射行当前生效条件与目标计算，含旧字典呈现行的兼容读取条件。诊断按当前配置与目录惰性求值，复用 6.2 的校验路径与有界查找表，不改变解析结果本身；诊断计算失败时不产生条目并在 stderr 留痕，不伪造原因。
+宿主侧数据通道：`getState` 结果扩展 `modelIssues` 诊断数组，按 7.1 三处同步（结果 schema、类型声明、成员描述）。条目形状：`scope`（`global`／`rule`／`session`，决定呈现位置）、`ruleProvider`（仅 `rule`：该规则条件的 provider，空值＝任意）、`ruleModel`（仅 `rule`：条件完整纯模型 id；其余为空串）、`configured`（配置的目标模型引用原文）、`reason`（可核实原因）、`effectiveLayer`（实际生效层，取值复用 6.2 的审计层值；因任一层不可用直退全局默认，实际只会是 `global`、`follow-parent` 或 `unavailable`）与 `effectiveModel`（该生效层对应的模型引用，无生效为空串）。`rule` 与 `session` 作用域的回退按「该配置目标被选中且不可用」推演：直退全局默认——未设置按零值语义使用执行助手当前模型（`follow-parent`），已设置且不可用为 `unavailable`。global 与 rule 作用域诊断不依赖会话：设置页以无会话状态求值即可取得这两类条目；session 作用域条目仅在会话控件使用时产生。无会话求值时 `effectiveModel` 无会话值可填，取空串——该口径同时覆盖规则不可用回退与空全局默认两类条目。`effectiveModel` 为空串时提示省略「实际使用」句：三类不可用键（`warn.modelIssue.global`／`rule`／`session`）其后以层含义独立成句（`warn.modelIssue.layer`，`{layer}` 填与 8.5.1 枚举一致的层含义词面）承接回退结果，不丢实际生效层；空全局默认两键（`warn.modelIssue.globalUnset`／`followParent`）不补层含义句，首句已承载层含义。rule 条目按映射行当前生效条件与目标计算，含旧字典呈现行的兼容读取条件。规则行目标为空串时不判非法、保存不受阻（选择层按不可用直退，见 6.2），诊断按不可解析目标同族 `reason` 发 `rule` 条目；旧字典值为空串的行不被任何匹配路径选中，不发条目。诊断按当前配置与目录惰性求值，复用 6.2 的校验路径与有界查找表，不改变解析结果本身；诊断计算失败时不产生条目并在 stderr 留痕，不伪造原因。
 
 #### 7.2.1 常驻文字说明入口（requirements §6.5）
 
@@ -799,6 +799,7 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
 本章是当前实施与验证差距的唯一工作清单。完成后删除对应项，不保存修正历史。仍待办理：
 
 - 真实宿主核验余量（10.3 清单，宿主环境阻塞）：allow 后实际工具执行、卡片状态与同帧截图等待真机审批流——服务实例（session 0，沙箱后端不可用：`CreateRestrictedToken prerequisite failed: no logon SID`）升权在到达审批通道前失败，待交互式会话宿主环境后补验；反向双标注与旧格式行的真页面样本未取得，由单元测试与真页面机制验证覆盖。
+- 分置提示与空全局默认提示的真实页面行为巡检（10.3）：构造含不可用目标的配置核对提示出现、级联保留与恢复后消失，空全局默认两处提示与互斥，warn 视觉规格——可在测试实例真实页面执行，不依赖真机审批流。
 - 发布链核验未执行（9.3）：发布产物读取的完整版本、完整 Git 标签隔离安装、宿主管理界面展示、Release 标题。标签与 Release 在发布流程执行时创建，不移动已有发布标签。
 
 ## 12. 增补设计

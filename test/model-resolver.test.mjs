@@ -788,7 +788,7 @@ test('空全局默认不发 session 作用域条目：会话已选择时宿主�
 
 test('空目标规则行发 rule 条目：reason 与不可解析目标同族，空值旧键不发', async () => {
   // 空目标（choice.model 空串）命中时选择层按候选不可用直退全局默认（design §6.2）；
-  // 诊断推演同口径（design §7.2.0 未明文跳过空目标行）；空目标不判非法草稿，保存不受阻。
+  // 诊断推演同口径（design §7.2.0：空目标规则行按不可解析目标同族发 rule 条目）；空目标不判非法草稿，保存不受阻。
   const issues = await collectModelIssues({
     llm: issuesLlm(),
     reviewer: {

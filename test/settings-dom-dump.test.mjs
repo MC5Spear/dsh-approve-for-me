@@ -101,7 +101,7 @@ test('逐项等价：表单字段集与 config schema 的 UI 字段集一致（2
   const missing = fields.filter((f) => !hasLine(f));
   assert.deepEqual(missing, [], '设置表单丢字段（对照 lib/config.js 的 UI 字段集）');
   assert.ok(hasLine('保存'), '唯一保存按钮缺失');
-  // followParent 已从 config schema 退役：页面文本零命中是字段面一致的一部分。
+  // followParent 字段不出现在页面文本：零命中是字段集一致的一部分。
   assert.equal(pageText.includes('无可用审查模型时使用执行助手的模型'), false, 'followParent 字段标签应零命中（design §7.2 20 字段）');
   assert.equal(hasLine('作用范围'), true, '映射表头应含作用范围列（五列结构化规则表）');
   assert.match(dump, /字段壳 `dsafm_field`＝16/u, '自绘字段壳应 16 个');
