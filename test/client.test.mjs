@@ -99,6 +99,10 @@ const primitivesStub = {
   IconInfoOutlineRegular: function IconInfoOutlineRegular(props) {
     return { type: 'IconInfoOutlineRegular', props };
   },
+  // 分置醒目提示行的警告图标（design §7.2.0；size=12 与说明按钮同规格）。
+  IconWarningOutlineRegular: function IconWarningOutlineRegular(props) {
+    return { type: 'IconWarningOutlineRegular', props };
+  },
 };
 
 /**
@@ -351,8 +355,8 @@ test('中英字典齐备：每个字段都有 help 与 hint 键，覆盖组文�
     assert.equal(typeof dicts.en[key], 'string', `英文缺 ${key}`);
     assert.ok(dicts.en[key].length > 0, `英文 ${key} 为空`);
   }
-  // 21 个字段（FIELDS 17 行 + 预设/模型/映射/跟随 4 个结构化字段）都必须有常驻说明 `hint.<path>` 与展开帮助 `help.<path>`。
-  for (const path of ['trigger.presets', 'trigger.unknown', 'trigger.auditEverySkip', 'reviewer.model', 'reviewer.byParentModel', 'reviewer.followParent', 'language.ui', 'language.agent', 'reviewer.timeoutMs', 'reviewer.maxTokens', 'ui.humanCardDuringReview', 'human.timeoutMs', 'human.timeoutFrom', 'mode', 'allowEscalationTo', 'unknownSubject', 'fallback', 'ui.inject', 'ui.injectMaxBytes', 'tools', 'denyPatterns']) {
+  // 20 个字段（FIELDS 17 行 + 预设/模型/映射 3 个结构化字段）都必须有常驻说明 `hint.<path>` 与展开帮助 `help.<path>`。
+  for (const path of ['trigger.presets', 'trigger.unknown', 'trigger.auditEverySkip', 'reviewer.model', 'reviewer.parentModelRules', 'language.ui', 'language.agent', 'reviewer.timeoutMs', 'reviewer.maxTokens', 'ui.humanCardDuringReview', 'human.timeoutMs', 'human.timeoutFrom', 'mode', 'allowEscalationTo', 'unknownSubject', 'fallback', 'ui.inject', 'ui.injectMaxBytes', 'tools', 'denyPatterns']) {
     assert.ok(dicts.zh[`help.${path}`], `缺中文 help 键 help.${path}`);
     assert.ok(dicts.en[`help.${path}`], `缺英文 help 键 help.${path}`);
     assert.ok(dicts.zh[`hint.${path}`], `缺中文 hint 键 hint.${path}`);
@@ -424,13 +428,13 @@ test('设置表单首屏：字段竖排、覆盖组在场、保存置灰、无�
   assert.equal(serialized.includes('card.resetAll'), false, '不应再有「重置全部覆盖」');
   assert.equal(serialized.includes('card.section.'), false, '不应再有分区标题');
   assert.equal(serialized.includes('card.resolved'), false, '不应再有「当前生效值」灰字行');
-  // 字段竖排：自绘字段一个 dsafm_field 壳（17＝21 字段－4 个官方数字字段），数字字段走官方组件标记；
+  // 字段竖排：自绘字段一个 dsafm_field 壳（16＝20 字段－4 个官方数字字段），数字字段走官方组件标记；
   // 覆盖字段有「已覆盖」＋「恢复默认」。
   const fields = findAllByClass(form, 'dsafm_field');
-  assert.equal(fields.length, 17, `自绘字段壳数量应＝17，实际 ${fields.length}`);
+  assert.equal(fields.length, 16, `自绘字段壳数量应＝16，实际 ${fields.length}`);
   const markers = findAllNodes(form, (node) => node.type === primitivesStub.SettingsValueField);
   assert.equal(markers.length, 4, '数字字段应走官方 SettingsValueField（timeoutMs/maxTokens/human.timeoutMs/injectMaxBytes）');
-  assert.equal(fields.length + markers.length, 21, '字段总数应＝21');
+  assert.equal(fields.length + markers.length, 20, '字段总数应＝20（design §7.2）');
   const overridden = fields.filter((field) => JSON.stringify(field).includes('card.override'));
   assert.equal(overridden.length, 1, '只有 user 层带键的 fallback 字段显示覆盖组');
   const fallbackField = overridden[0];
@@ -446,40 +450,87 @@ test('设置表单首屏：字段竖排、覆盖组在场、保存置灰、无�
   assert.doesNotMatch(serialized, /card\.readonly/);
 });
 
-test('跟随执行助手模型复选框行内落在标签行右端，不单独占一行', () => {
+test('设置页分置提示（§7.2.0）：global 渲染在表单顶部，rule 挂对应映射行附近', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
     snapshot: {
       status: 'ready',
-      value: { reviewer: { followParent: true } },
+      value: {
+        reviewer: {
+          model: 'zai/gone-1',
+          parentModelRules: [{ parent: { provider: null, model: 'glm-5.3' }, choice: { model: 'zai/gone-2', effort: '' } }],
+        },
+      },
       base: {},
       user: {},
       revision: 1,
       writable: true,
     },
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      if (endpoint === 'approveForMe/modelEfforts') return { ok: true, value: { efforts: [], defaultEffort: '' } };
+      if (endpoint === 'approveForMe/getState') {
+        // 空会话求值：global 与 rule 条目不依赖会话（design §7.2.0）；session 条目不应在设置页渲染。
+        return {
+          ok: true,
+          value: {
+            found: false,
+            sessionModel: null,
+            sessionEffort: '',
+            globalDefault: 'zai/gone-1',
+            globalEffort: '',
+            modelIssues: [
+              { scope: 'global', ruleProvider: null, ruleModel: '', configured: 'zai/gone-1', reason: '模型不在目录', effectiveLayer: 'unavailable', effectiveModel: '' },
+              { scope: 'rule', ruleProvider: null, ruleModel: 'glm-5.3', configured: 'zai/gone-2', reason: 'provider 不存在', effectiveLayer: 'global', effectiveModel: 'zai/gone-1' },
+              { scope: 'session', ruleProvider: null, ruleModel: '', configured: 'zai/x', reason: 'r', effectiveLayer: 'follow-parent', effectiveModel: '' },
+            ],
+            effective: 'zai/gone-1',
+            effectiveEffort: '',
+            layer: 'global',
+            preset: 'auto-approve',
+            active: true,
+            trace: {},
+          },
+        };
+      }
+      return { ok: true, value: {} };
+    },
   });
   client.apply(env.ctx);
+  const dicts = env.dictionaries[0].dicts;
   const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
-  const form = render(card.component, { t: (key) => key, scope: env.scope });
-  const fields = findAllByClass(form, 'dsafm_field');
-  const field = fields.find((node) => JSON.stringify(node).includes('card.field.followParent'));
-  assert.ok(field, '跟随执行助手模型字段应在场');
-  // 勾在标签行（.dsafm_f_head → .dsafm_inlinecheck）内，且全字段唯一一个复选框——不孤悬在标签下方。
-  const head = findAllByClass(field, 'dsafm_f_head')[0];
-  assert.ok(head, '字段应有标签行');
-  const inline = findAllByClass(field, 'dsafm_inlinecheck');
-  assert.equal(inline.length, 1, '行内控件槽应恰好一个');
-  const checkbox = findAllNodes(field, (node) => node.type === 'input' && node.props?.type === 'checkbox');
-  assert.equal(checkbox.length, 1, '字段内只应有一个复选框');
-  assert.equal(checkbox[0].props.id, 'approve-for-me-ctl-reviewer-followParent');
-  assert.ok(JSON.stringify(head).includes('approve-for-me-ctl-reviewer-followParent'), '复选框必须在标签行内');
-  assert.equal(checkbox[0].props.checked, true, '勾选态就是生效值');
-  assert.equal(typeof checkbox[0].props.onChange, 'function', '勾选仍走暂存通道');
-  // 勾选只暂存：onChange 后保存按钮才解除置灰（启用条件同上，不因行内化回退成选中即写）。
+  const props = { t: (key) => dicts.zh[key] ?? key, scope: env.scope, rpcCall: env.rpcCall };
+  const tree = await expandCard(card.component, props);
+  const warns = findAllByClass(tree, 'dsafm_warnline');
+  assert.equal(warns.length, 2, '设置页只消费 global 与 rule 两类条目（session 不在此渲染）');
+  // global 在表单顶部：位于第一个字段（接管预设）之前（design §7.2.0 位置表）。
+  const form = findByClass(tree, 'dsafm_form');
+  const topLevel = form.props.children.filter(Boolean);
+  assert.equal(topLevel[0].props.className, 'dsafm_warnline', '表单顶层第一个节点应是 global 提示');
+  const globalText = JSON.stringify(topLevel[0]);
+  assert.match(globalText, /默认审查模型不可用/, 'global 提示用 warn.modelIssue.global 文案');
+  assert.match(globalText, /模型不在目录/, '提示正文包含不可用原因');
+  assert.match(globalText, /无可用审查模型（unavailable）/, 'effectiveModel 为空串时仅层含义（§8.5.1 layer.unavailable）');
+  assert.doesNotMatch(globalText, /无可用审查模型（unavailable）：/, '空串生效引用不得拼出「层含义：」悬空冒号');
+  assert.equal(topLevel[1].props.className, 'dsafm_field', '提示之后的顶层节点应是字段（接管预设）');
+  // 提示行视觉：官方 IconWarningOutlineRegular（12px）＋warn-label 文字（design §7.2.0，背景色由样式令牌承担）。
+  const warnIcons = findAllNodes(topLevel[0], (node) => node.type === primitivesStub.IconWarningOutlineRegular);
+  assert.equal(warnIcons.length, 1, '提示行应带一个警告图标');
+  assert.equal(warnIcons[0].props.size, 12, '警告图标规格 size=12');
+  // rule 提示挂对应映射行附近（按 ruleProvider/ruleModel 配对），生效结果＝「层含义：引用」。
+  const mapField = findAllByClass(tree, 'dsafm_field').find((field) => JSON.stringify(field).includes('按执行助手的模型选择审查模型'));
+  assert.ok(mapField, '映射字段应在场');
+  const ruleWarns = findAllByClass(mapField, 'dsafm_warnline');
+  assert.equal(ruleWarns.length, 1, 'rule 提示应恰好一条并挂在映射字段内');
+  const ruleText = JSON.stringify(ruleWarns[0]);
+  assert.match(ruleText, /provider 不存在/, 'rule 提示包含原因');
+  assert.match(ruleText, /全局默认（global）：zai\/gone-1/, '有生效引用时按「层含义：引用」呈现');
 });
 
-test('说明入口（§10.2）：21 个字段全覆盖，图标＋可见文字，aria 成对，键盘 Enter/Space 可达', async () => {
+test('说明入口（§10.2）：20 个字段全覆盖，图标＋可见文字，aria 成对，键盘 Enter/Space 可达', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx();
@@ -487,11 +538,11 @@ test('说明入口（§10.2）：21 个字段全覆盖，图标＋可见文字�
   const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
   const props = { t: (key) => key, scope: env.scope };
   const first = render(card.component, props);
-  // 21 字段全覆盖：17 个自绘壳 ＋ 4 个官方数字字段的平铺说明行（design §7.2.1）。
+  // 20 字段全覆盖：16 个自绘壳 ＋ 4 个官方数字字段的平铺说明行（design §7.2.1）。
   const buttons = findAllByClass(first, 'dsafm_helpbtn');
-  assert.equal(buttons.length, 21, `说明按钮应 21 个（17 自绘＋4 平铺），实际 ${buttons.length}`);
+  assert.equal(buttons.length, 20, `说明按钮应 20 个（16 自绘＋4 平铺），实际 ${buttons.length}`);
   const iconNodes = findAllNodes(first, (node) => node.type === primitivesStub.IconInfoOutlineRegular);
-  assert.equal(iconNodes.length, 21, '说明按钮图标统一用官方 IconInfoOutlineRegular（size=12）');
+  assert.equal(iconNodes.length, 20, '说明按钮图标统一用官方 IconInfoOutlineRegular（size=12）');
   assert.equal(JSON.stringify(first).includes('Tooltip'), false, '设置界面不应再用 Tooltip');
   for (const button of buttons) {
     assert.equal(button.props['aria-expanded'], false, '初始未展开');
@@ -739,7 +790,7 @@ test('默认审查模型行：模型与推理强度两个下拉，换模型只�
   assert.deepEqual(written[written.length - 1], { model: 'zai/glm-4.6', effort: '' }, '保存应一次写入模型选择');
 });
 
-test('按执行助手模型映射：键为纯 id 时展示全引用，增删行只暂存、保存写入键仍是纯 id', async () => {
+test('映射表（design §7.2）：旧字典纯 id 键呈现为「任意 provider」行，回显纯 id；增删行只暂存', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
@@ -764,24 +815,31 @@ test('按执行助手模型映射：键为纯 id 时展示全引用，增删行�
   const props = { t: (key) => key, scope: env.scope, rpcCall: env.rpcCall };
   const tree = await expandCard(card.component, props);
   assert.equal(findAllByClass(tree, 'dsafm_map_row').length, 1, '应当渲染一行映射');
-  assert.equal(findByClass(tree, 'dsafm_map_parent').props.value, 'deepseek/deepseek-chat', '纯 id 键应当拼上 provider 展示');
 
   // 字段壳：标签行（labelgroup）＋全宽表（map 容器即控件本体，id 挂在容器上）。
   assert.ok(findByClass(tree, 'dsafm_map'), '映射表缺自己的容器');
-  assert.equal(findByClass(tree, 'dsafm_map').props.id, 'approve-for-me-ctl-reviewer-byParentModel', '控件 id 应挂在表容器上');
-  assert.ok(findAllByClass(tree, 'dsafm_f_label').some((node) => node.props.children === 'card.field.byParentModel'), '字段应有标签行');
+  assert.equal(findByClass(tree, 'dsafm_map').props.id, 'approve-for-me-ctl-reviewer-parentModelRules', '控件 id 应挂在表容器上');
+  assert.ok(findAllByClass(tree, 'dsafm_f_label').some((node) => node.props.children === 'card.field.parentModelRules'), '字段应有标签行');
   const head = findByClass(tree, 'dsafm_map_head');
   assert.ok(head, '缺表头行');
   assert.deepEqual(
     head.props.children.map((cell) => cell.props.children),
-    ['card.map.col.parent', 'card.map.col.reviewer', 'card.map.col.effort', 'card.map.col.action'],
+    ['card.map.col.scope', 'card.map.col.parent', 'card.map.col.reviewer', 'card.map.col.effort', 'card.map.col.action'],
+    '五列表头（design §7.2）',
   );
   const mapRow = findAllByClass(tree, 'dsafm_map_row')[0];
-  assert.equal(findByClass(mapRow, 'dsafm_map_parent').props.title, 'deepseek/deepseek-chat', '执行助手模型下拉的 title 应当是完整引用');
+  // 旧字典纯 id 键＝「任意 provider＋该 id」的规则行：作用范围回显纯 id，不猜目录首 provider（design §10.2）。
+  const scopeSelect = findByClass(mapRow, 'dsafm_map_scope_mode');
+  assert.equal(scopeSelect.props.value, 'any', '纯 id 旧键的作用范围应是任意 provider');
+  assert.equal(findByClass(mapRow, 'dsafm_map_parent').props.value, 'deepseek-chat', '任意 provider 行的回显应是纯模型 id');
+  assert.equal(findByClass(mapRow, 'dsafm_map_parent').props.title, 'deepseek-chat', '执行助手模型下拉的 title 应当是纯 id');
   assert.equal(findByClass(mapRow, 'dsafm_model').props.title, 'zai/glm-5.3', '审查模型下拉的 title 应当是当前值');
   assert.equal(findByClass(mapRow, 'dsafm_effort').props.title, 'low', '档位下拉的 title 应当是当前档位');
   assert.match(String(findByClass(mapRow, 'dsafm_map_del').props.className), /dsafm_button/, '删除按钮沿用 dsafm_button');
   assert.match(String(findByClass(tree, 'dsafm_map_add').props.className), /dsafm_button/, '添加一行沿用 dsafm_button');
+  // 任意 provider 列的选项按纯 id 去重并附 provider 信息（design §7.2）。
+  const optionTexts = findByClass(mapRow, 'dsafm_map_parent').props.children.filter(Boolean).map((option) => option.props.children);
+  assert.ok(optionTexts.some((text) => String(text).startsWith('deepseek-chat (deepseek)')), `选项应附 provider 信息，实际 ${JSON.stringify(optionTexts)}`);
 
   // 增删行都只是暂存：操作后行数变化、写计数不变。
   findByClass(tree, 'dsafm_map_add').props.onClick();
@@ -798,7 +856,7 @@ test('按执行助手模型映射：键为纯 id 时展示全引用，增删行�
   // 添加又删除＝回到与快照同值：保存计划应跳过同值条目，保存仍置灰。
   assert.equal(findByClass(removed, 'dsafm_save').props.disabled, true, '回到原值后应视为无改动');
 
-  // 删掉现存行再保存：写入只剩空映射是「有改动」，键归一化发生在保存计划。
+  // 删掉现存行再保存：旧字典只减不增（design §7.2）——写入空字典；规则清单与种子同值不写该路径。
   findAllByClass(removed, 'dsafm_map_del')[0].props.onClick();
   hookIndex = 0;
   const emptied = render(card.component, props);
@@ -807,8 +865,9 @@ test('按执行助手模型映射：键为纯 id 时展示全引用，增删行�
   save.props.onClick();
   await tick();
   const mapped = env.writes.filter((op) => op.path.join('.') === 'reviewer.byParentModel');
-  assert.ok(mapped.length >= 1, '未写入映射表');
-  assert.deepEqual(mapped[mapped.length - 1].value, {}, '删除全部行应写入空映射');
+  assert.ok(mapped.length >= 1, '未写入旧字典路径');
+  assert.deepEqual(mapped[mapped.length - 1].value, {}, '删除全部行应写入空字典');
+  assert.equal(env.writes.some((op) => op.path.join('.') === 'reviewer.parentModelRules'), false, '规则清单与种子同值（[]）不应写入');
 });
 
 test('接管工具名单：label 走字典键 field.tools，help.tools 中英同步（requirements §5.4）', async () => {
@@ -1123,13 +1182,112 @@ test('composer 下拉：写入失败时触发器出现 dsafm_badge 错误徽标�
   assert.match(JSON.stringify(seat.props.children), /composer\.failed/, '徽标文案用 composer.failed');
 });
 
-test('按执行助手模型映射：多斜杠输入取末段为键，暂存后由保存写入（design §6.2）', async () => {
+test('composer 分置提示（§7.2.0）：session 条目渲染在选择控件附近，空串生效引用只显层含义', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/getState') {
+        return {
+          ok: true,
+          value: {
+            found: true,
+            active: true,
+            preset: 'auto-approve',
+            sessionModel: 'zai/gone-9',
+            sessionEffort: '',
+            globalDefault: '',
+            globalEffort: '',
+            modelIssues: [
+              { scope: 'session', ruleProvider: null, ruleModel: '', configured: 'zai/gone-9', reason: 'provider 不存在', effectiveLayer: 'follow-parent', effectiveModel: '' },
+            ],
+            effective: '',
+            effectiveEffort: '',
+            layer: 'follow-parent',
+          },
+        };
+      }
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      return { ok: true, value: { efforts: [{ id: 'low' }] } };
+    },
+  });
+  client.apply(env.ctx);
+  const dicts = env.dictionaries[0].dicts;
+  const dropdown = env.registrations.find((entry) => entry.options.name === 'conversation.input.left');
+  const props = { t: (key) => dicts.zh[key] ?? key, ...dropdown.options.inject() };
+  render(dropdown.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const tree = render(dropdown.component, props);
+  // 会话提示挂在选择控件附近：座位包裹层内＝Menu＋提示行（design §7.2.0/§7.3.1）。
+  const wrap = findByClass(tree, 'dsafm_seatwrap');
+  assert.ok(wrap, '有 session 条目时应有座位包裹层');
+  const menu = findNode(wrap, primitivesStub.Menu);
+  assert.ok(menu, '包裹层内应仍有 Menu');
+  const warns = findAllByClass(wrap, 'dsafm_warnline');
+  assert.equal(warns.length, 1, '应渲染一条 session 提示');
+  const text = JSON.stringify(warns[0]);
+  assert.match(text, /本会话选择的审查模型不可用/, '用 warn.modelIssue.session 文案');
+  assert.match(text, /provider 不存在/, '正文包含原因');
+  assert.match(text, /全局默认未设置，使用执行助手当前模型（follow-parent）/, '空串生效引用只显层含义（§8.5.1）');
+  assert.doesNotMatch(text, /（follow-parent）：/, '空串生效引用不得拼出「层含义：」悬空冒号');
+  assert.equal(findAllNodes(wrap, (node) => node.type === primitivesStub.IconWarningOutlineRegular).length, 1, '提示行带警告图标');
+});
+
+test('composer 分置提示（§7.2.0）：无 modelIssues 字段（旧宿主）或求值失败时不渲染', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/getState') {
+        // 旧宿主：状态里没有 modelIssues 字段。
+        return {
+          ok: true,
+          value: {
+            found: true,
+            active: true,
+            preset: 'auto-approve',
+            sessionModel: null,
+            sessionEffort: '',
+            globalDefault: 'zai/glm-5.3',
+            globalEffort: 'low',
+            byParentModel: {},
+            effective: 'zai/glm-5.3',
+            effectiveEffort: 'low',
+            layer: 'global',
+          },
+        };
+      }
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      return { ok: true, value: { efforts: [{ id: 'low' }] } };
+    },
+  });
+  client.apply(env.ctx);
+  const dropdown = env.registrations.find((entry) => entry.options.name === 'conversation.input.left');
+  const props = { t: (key) => key, ...dropdown.options.inject() };
+  render(dropdown.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const tree = render(dropdown.component, props);
+  assert.equal(findByClass(tree, 'dsafm_seatwrap'), undefined, '旧宿主无字段时不渲染包裹层');
+  assert.equal(findAllByClass(tree, 'dsafm_warnline').length, 0, '不应渲染任何提示行');
+});
+
+test('结构化规则行：目录选择全 id 往返不变形，两种作用范围回显口径不同（design §6.2/§7.2）', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
     snapshot: {
       status: 'ready',
-      value: { reviewer: { byParentModel: {} } },
+      value: { reviewer: {} },
       base: {},
       user: {},
       revision: 1,
@@ -1137,7 +1295,7 @@ test('按执行助手模型映射：多斜杠输入取末段为键，暂存后�
     },
     call: async (endpoint) => {
       if (endpoint === 'approveForMe/modelCatalog') {
-        return { ok: true, value: { providers: [{ id: 'deepseek', models: [{ id: 'deepseek-chat' }] }] } };
+        return { ok: true, value: { providers: [{ id: 'deepseek', models: [{ id: 'deepseek-chat' }] }, { id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
       }
       if (endpoint === 'approveForMe/modelEfforts') return { ok: true, value: { efforts: [{ id: 'low' }], defaultEffort: 'low' } };
       return { ok: true, value: {} };
@@ -1149,20 +1307,371 @@ test('按执行助手模型映射：多斜杠输入取末段为键，暂存后�
   const tree = await expandCard(card.component, props);
   findByClass(tree, 'dsafm_map_add').props.onClick();
   hookIndex = 0;
-  const added = render(card.component, props);
-  const parentSelect = findAllByClass(added, 'dsafm_map_parent')[0];
-  parentSelect.props.onChange({ target: { value: 'a/b/c' } });
+  let current = render(card.component, props);
+  let row = findAllByClass(current, 'dsafm_map_row')[0];
+  assert.equal(findByClass(row, 'dsafm_map_scope_mode').props.value, 'any', '新行默认任意 provider');
+
+  // 切到「指定 provider」：行内出现 provider 选择，默认取目录首个 provider。
+  findByClass(row, 'dsafm_map_scope_mode').props.onChange({ target: { value: 'named' } });
   await tick();
-  assert.equal(env.writes.length, 0, '输入只暂存，不应写库');
   hookIndex = 0;
-  const staged = render(card.component, props);
-  const save = findByClass(staged, 'dsafm_save');
+  current = render(card.component, props);
+  row = findAllByClass(current, 'dsafm_map_row')[0];
+  const providerSelect = findByClass(row, 'dsafm_map_provider');
+  assert.ok(providerSelect, '指定 provider 时应有 provider 选择');
+  assert.equal(providerSelect.props.value, 'deepseek', 'provider 默认取目录首个');
+  assert.deepEqual(providerSelect.props.children.filter(Boolean).map((option) => option.props.children), ['card.map.placeholder.provider', 'deepseek', 'zai', 'card.map.custom']);
+
+  // 执行助手模型下拉只列该 provider 的模型；选项值＝provider 与 id 的拼接，选择查回纯 id，不切斜杠。
+  const agentSelect = findByClass(row, 'dsafm_map_parent');
+  assert.deepEqual(agentSelect.props.children.filter(Boolean).map((option) => option.props.value), ['', 'deepseek/deepseek-chat', '__custom__']);
+  agentSelect.props.onChange({ target: { value: 'deepseek/deepseek-chat' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  row = findAllByClass(current, 'dsafm_map_row')[0];
+  assert.equal(findByClass(row, 'dsafm_map_parent').props.value, 'deepseek/deepseek-chat', '指定 provider 的回显是拼接值（design §6.2）');
+
+  // 审查模型与档位。
+  findByClass(row, 'dsafm_model').props.onChange({ target: { value: 'zai/glm-5.3' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  row = findAllByClass(current, 'dsafm_map_row')[0];
+  assert.equal(env.writes.length, 0, '编辑只暂存，不应写库');
+  let save = findByClass(current, 'dsafm_save');
   assert.equal(save.props.disabled, false, '有改动后保存应可点');
   save.props.onClick();
   await tick();
-  const mapped = env.writes.filter((op) => op.path.join('.') === 'reviewer.byParentModel');
-  assert.ok(mapped.length >= 1, '未写入映射表');
-  assert.deepEqual(Object.keys(mapped[mapped.length - 1].value), ['c'], '多斜杠输入应当只取末段作键');
+  let rulesOps = env.writes.filter((op) => op.path.join('.') === 'reviewer.parentModelRules');
+  assert.equal(env.writes.some((op) => op.path.join('.') === 'reviewer.byParentModel'), false, '旧字典无内容不应写旧字典路径');
+  assert.deepEqual(
+    rulesOps[rulesOps.length - 1].value,
+    [{ parent: { provider: 'deepseek', model: 'deepseek-chat' }, choice: { model: 'zai/glm-5.3', effort: '' } }],
+    '保存写入结构化规则，id 全程不变形（不切斜杠、不剥前缀；档位原为空则保持空）',
+  );
+
+  // 作用范围切回任意：回显变纯 id，保存写 provider=null 的规则。
+  findByClass(row, 'dsafm_map_scope_mode').props.onChange({ target: { value: 'any' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  row = findAllByClass(current, 'dsafm_map_row')[0];
+  assert.equal(findByClass(row, 'dsafm_map_provider'), undefined, '任意 provider 时不应有 provider 选择');
+  assert.equal(findByClass(row, 'dsafm_map_parent').props.value, 'deepseek-chat', '任意 provider 的回显是纯 id（design §6.2）');
+  save = findByClass(current, 'dsafm_save');
+  save.props.onClick();
+  await tick();
+  rulesOps = env.writes.filter((op) => op.path.join('.') === 'reviewer.parentModelRules');
+  assert.deepEqual(
+    rulesOps[rulesOps.length - 1].value,
+    [{ parent: { provider: null, model: 'deepseek-chat' }, choice: { model: 'zai/glm-5.3', effort: '' } }],
+    '切回任意 provider 保存应写 provider:null',
+  );
+});
+
+test('映射行重复条件：行级错误并阻止保存，含旧字典行同条件（design §7.2）', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    snapshot: {
+      status: 'ready',
+      value: {
+        fallback: 'ask',
+        reviewer: {
+          byParentModel: {
+            'deepseek-chat': { model: 'zai/glm-5.3', effort: 'low' },
+            'deepseek/deepseek-chat': { model: 'zai/glm-5.3', effort: '' },
+          },
+        },
+      },
+      base: {},
+      user: { fallback: 'ask' },
+      revision: 1,
+      writable: true,
+    },
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'deepseek', models: [{ id: 'deepseek-chat' }] }, { id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      if (endpoint === 'approveForMe/modelEfforts') return { ok: true, value: { efforts: [{ id: 'low' }], defaultEffort: 'low' } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
+  const props = { t: (key) => key, scope: env.scope, rpcCall: env.rpcCall };
+  const tree = await expandCard(card.component, props);
+  // 纯 id 旧键行与待确认含斜杠旧键行按兼容读取条件同条件（任意＋去首斜杠 id）→ 两行都报重复。
+  const wraps = findAllByClass(tree, 'dsafm_map_rowwrap');
+  assert.equal(wraps.length, 2, '两行（legacy＋pending）');
+  assert.equal(findAllByClass(tree, 'dsafm_map_dup').length, 2, '两行都应有行级重复错误');
+  // 快照自带重复：即便只改其他字段，保存也应被阻止（错误在场却可保存会自相矛盾）。
+  const fallbackSelect = findAllByClass(tree, 'dsafm_input').find((node) => node.type === 'select' && node.props.value === 'ask');
+  fallbackSelect.props.onChange({ target: { value: 'reject' } });
+  await tick();
+  hookIndex = 0;
+  let current = render(card.component, props);
+  assert.equal(findByClass(current, 'dsafm_save').props.disabled, true, '重复条件在场时保存应禁用');
+  assert.equal(env.writes.length, 0, '不应写库');
+
+  // 手输同一纯 id 到新行也构成重复；换条件后错误消失、恢复可保存。
+  hookIndex = 0;
+  current = render(card.component, props);
+  const add = findByClass(current, 'dsafm_map_add');
+  add.props.onClick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  let newRow = findAllByClass(current, 'dsafm_map_row')[2];
+  findByClass(newRow, 'dsafm_map_parent').props.onChange({ target: { value: '__custom__' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  newRow = findAllByClass(current, 'dsafm_map_row')[2];
+  const customInput = findAllByClass(newRow, 'dsafm_input').find((node) => node.type === 'input');
+  customInput.props.onChange({ target: { value: 'deepseek-chat' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  assert.equal(findAllByClass(current, 'dsafm_map_dup').length, 3, '手输同 id 的行与两行旧键都报重复');
+  assert.equal(findByClass(current, 'dsafm_save').props.disabled, true, '重复条件应阻止保存');
+  const rows3 = findAllByClass(current, 'dsafm_map_row');
+  const typed = findAllByClass(rows3[2], 'dsafm_input').find((node) => node.type === 'input');
+  typed.props.onChange({ target: { value: 'glm-5.3' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  assert.equal(findAllByClass(current, 'dsafm_map_dup').length, 2, '换条件后新行不再重复（旧表自带的重复仍在）');
+});
+
+test('待确认含斜杠旧键：确认「指定 provider」转为命名规则，旧键从字典移除（design §7.2）', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    snapshot: {
+      status: 'ready',
+      value: { reviewer: { byParentModel: { 'deepseek/deepseek-chat': { model: 'zai/glm-5.3', effort: 'low' } } } },
+      base: {},
+      user: {},
+      revision: 1,
+      writable: true,
+    },
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'deepseek', models: [{ id: 'deepseek-chat' }] }, { id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      if (endpoint === 'approveForMe/modelEfforts') return { ok: true, value: { efforts: [{ id: 'low' }], defaultEffort: 'low' } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const dicts = env.dictionaries[0].dicts;
+  const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
+  const props = { t: (key) => dicts.zh[key] ?? key, scope: env.scope, rpcCall: env.rpcCall };
+  const tree = await expandCard(card.component, props);
+  const row = findAllByClass(tree, 'dsafm_map_row')[0];
+  // 待确认行的形态：确认下拉＋只读的键回显＋不可编辑的审查模型与档位＋保留说明。
+  const confirm = findByClass(row, 'dsafm_map_confirm');
+  assert.ok(confirm, '待确认行应有确认下拉');
+  assert.deepEqual(
+    confirm.props.children.map((option) => option.props.value),
+    ['', 'any', 'named'],
+  );
+  assert.match(String(confirm.props.children[1].props.children), /任意 provider，模型 id 为 deepseek\/deepseek-chat/, '「任意」选项应展示整键为 id');
+  assert.match(String(confirm.props.children[2].props.children), /指定 provider deepseek，模型 id 为 deepseek-chat/, '「指定」选项应展示 provider 与 id');
+  const keyEcho = findAllByClass(row, 'dsafm_input').find((node) => node.type === 'input');
+  assert.equal(keyEcho.props.value, 'deepseek/deepseek-chat', '确认前原值保留展示');
+  assert.equal(keyEcho.props.disabled, true, '确认前键不可编辑');
+  assert.equal(findByClass(row, 'dsafm_model').props.disabled, true, '确认前审查模型不可编辑');
+  assert.equal(findByClass(row, 'dsafm_effort').props.disabled, true, '确认前档位不可编辑');
+  assert.ok(findAllByClass(tree, 'dsafm_map_pending').length >= 1, '应有确认前按兼容规则读取的说明');
+
+  // 确认为「指定 provider」：转为命名规则行；保存写规则清单、旧字典同步清键。
+  confirm.props.onChange({ target: { value: 'named' } });
+  await tick();
+  hookIndex = 0;
+  const confirmed = render(card.component, props);
+  const confirmedRow = findAllByClass(confirmed, 'dsafm_map_row')[0];
+  assert.equal(findByClass(confirmedRow, 'dsafm_map_scope_mode').props.value, 'named', '确认后是命名规则行');
+  assert.equal(findByClass(confirmedRow, 'dsafm_map_parent').props.value, 'deepseek/deepseek-chat', '确认后回显拼接值');
+  assert.equal(findByClass(confirmedRow, 'dsafm_model').props.disabled, false, '确认后审查模型恢复可编辑');
+  const save = findByClass(confirmed, 'dsafm_save');
+  assert.equal(save.props.disabled, false, '确认即是有效改动');
+  save.props.onClick();
+  await tick();
+  const rulesOps = env.writes.filter((op) => op.path.join('.') === 'reviewer.parentModelRules');
+  assert.deepEqual(
+    rulesOps[rulesOps.length - 1].value,
+    [{ parent: { provider: 'deepseek', model: 'deepseek-chat' }, choice: { model: 'zai/glm-5.3', effort: 'low' } }],
+    '确认「指定 provider」应写入命名规则',
+  );
+  const legacyOps = env.writes.filter((op) => op.path.join('.') === 'reviewer.byParentModel');
+  assert.deepEqual(legacyOps[legacyOps.length - 1].value, {}, '旧键确认后应从字典移除（只减不增）');
+});
+
+test('待确认含斜杠旧键：确认「任意 provider」按整键为完整纯 id 入规则（design §7.2）', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    snapshot: {
+      status: 'ready',
+      value: { reviewer: { byParentModel: { 'deepseek/deepseek-chat': { model: 'zai/glm-5.3', effort: '' } } } },
+      base: {},
+      user: {},
+      revision: 1,
+      writable: true,
+    },
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      if (endpoint === 'approveForMe/modelEfforts') return { ok: true, value: { efforts: [{ id: 'low' }], defaultEffort: 'low' } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
+  const props = { t: (key) => key, scope: env.scope, rpcCall: env.rpcCall };
+  const tree = await expandCard(card.component, props);
+  findByClass(findAllByClass(tree, 'dsafm_map_row')[0], 'dsafm_map_confirm').props.onChange({ target: { value: 'any' } });
+  await tick();
+  hookIndex = 0;
+  const confirmed = render(card.component, props);
+  const confirmedRow = findAllByClass(confirmed, 'dsafm_map_row')[0];
+  assert.equal(findByClass(confirmedRow, 'dsafm_map_scope_mode').props.value, 'any', '确认「任意」后是通用规则行');
+  // 整键就是完整纯模型 id：目录没有该 id，走保留选项回显，原样不变形。
+  assert.equal(findByClass(confirmedRow, 'dsafm_map_parent').props.value, 'deepseek/deepseek-chat', '整键作为纯 id 原样回显');
+  const save = findByClass(confirmed, 'dsafm_save');
+  save.props.onClick();
+  await tick();
+  const rulesOps = env.writes.filter((op) => op.path.join('.') === 'reviewer.parentModelRules');
+  assert.deepEqual(
+    rulesOps[rulesOps.length - 1].value,
+    [{ parent: { provider: null, model: 'deepseek/deepseek-chat' }, choice: { model: 'zai/glm-5.3', effort: '' } }],
+    '确认「任意 provider」应按整键写通用规则',
+  );
+});
+
+test('编辑旧字典纯 id 行＝转为结构化行：保存写规则并从字典移除原键（design §7.2）', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    snapshot: {
+      status: 'ready',
+      value: { reviewer: { model: 'zai/glm-5.3', byParentModel: { 'deepseek-chat': { model: 'zai/glm-5.3', effort: 'low' } } } },
+      base: {},
+      user: {},
+      revision: 1,
+      writable: true,
+    },
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'deepseek', models: [{ id: 'deepseek-chat' }] }, { id: 'zai', models: [{ id: 'glm-5.3' }, { id: 'glm-5.3-air' }] }] } };
+      }
+      if (endpoint === 'approveForMe/modelEfforts') return { ok: true, value: { efforts: [{ id: 'low' }], defaultEffort: 'low' } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
+  const props = { t: (key) => key, scope: env.scope, rpcCall: env.rpcCall };
+  const tree = await expandCard(card.component, props);
+  // 只改审查模型：旧键行的条件不动，保存也不得把旧值迁移成新结构（写规则行＝原条件）。
+  findByClass(findAllByClass(tree, 'dsafm_map_row')[0], 'dsafm_model').props.onChange({ target: { value: 'zai/glm-5.3-air' } });
+  await tick();
+  hookIndex = 0;
+  const edited = render(card.component, props);
+  const save = findByClass(edited, 'dsafm_save');
+  assert.equal(save.props.disabled, false, '编辑旧键行是有效改动');
+  save.props.onClick();
+  await tick();
+  const rulesOps = env.writes.filter((op) => op.path.join('.') === 'reviewer.parentModelRules');
+  assert.deepEqual(
+    rulesOps[rulesOps.length - 1].value,
+    [{ parent: { provider: null, model: 'deepseek-chat' }, choice: { model: 'zai/glm-5.3-air', effort: 'low' } }],
+    '编辑后的旧键行按原条件（任意＋纯 id）写入规则清单',
+  );
+  const legacyOps = env.writes.filter((op) => op.path.join('.') === 'reviewer.byParentModel');
+  assert.deepEqual(legacyOps[legacyOps.length - 1].value, {}, '被编辑的旧键应从字典移除');
+  // 改其他字段（默认审查模型）不触碰映射两路路径。
+  hookIndex = 0;
+  const after = render(card.component, props);
+  const modelSelect = findAllByClass(after, 'dsafm_model').find((node) => node.props.id === 'approve-for-me-ctl-reviewer-model');
+  modelSelect.props.onChange({ target: { value: 'zai/glm-5.3-air' } });
+  await tick();
+  hookIndex = 0;
+  const staged = render(card.component, props);
+  const countBefore = env.writes.length;
+  findByClass(staged, 'dsafm_save').props.onClick();
+  await tick();
+  const mapWrites = env.writes.slice(countBefore).filter((op) => op.path[0] === 'reviewer' && (op.path[1] === 'parentModelRules' || op.path[1] === 'byParentModel'));
+  assert.equal(mapWrites.length, 0, '映射表无改动时不应写映射路径');
+});
+
+test('映射表保存失败保留草稿；目录不可读时行值保留、provider 走手输（design §7.2）', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    snapshot: {
+      status: 'ready',
+      value: { reviewer: { byParentModel: { 'deepseek-chat': { model: 'zai/glm-5.3', effort: '' } } } },
+      base: {},
+      user: {},
+      revision: 1,
+      writable: true,
+    },
+    mutateRejects: true,
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/modelCatalog') return { ok: false };
+      if (endpoint === 'approveForMe/modelEfforts') return { ok: true, value: { efforts: [], defaultEffort: '' } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
+  const props = { t: (key) => key, scope: env.scope, rpcCall: env.rpcCall };
+  const tree = await expandCard(card.component, props);
+  // 目录不可读：任意 provider 行保留原值并附保留选项（不因缺目录丢数据）。
+  const row = findAllByClass(tree, 'dsafm_map_row')[0];
+  assert.equal(findByClass(row, 'dsafm_map_parent').props.value, 'deepseek-chat', '目录不可读时回显仍是纯 id');
+  // 切指定 provider：目录不可读时 provider 控件退化为手输。
+  findByClass(row, 'dsafm_map_scope_mode').props.onChange({ target: { value: 'named' } });
+  await tick();
+  hookIndex = 0;
+  let current = render(card.component, props);
+  let currentRow = findAllByClass(current, 'dsafm_map_row')[0];
+  const providerInput = findAllByClass(currentRow, 'dsafm_map_provider').find((node) => node.type === 'input');
+  assert.ok(providerInput, '目录不可读时 provider 应为文本输入');
+  providerInput.props.onChange({ target: { value: 'deepseek' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  currentRow = findAllByClass(current, 'dsafm_map_row')[0];
+  // 目录缺项：模型 id 走「自定义…」手输，完整纯 id 原样入行；指定 provider 的回显是拼接值。
+  const agentSelect = findByClass(currentRow, 'dsafm_map_parent');
+  assert.equal(agentSelect.props.value, 'deepseek/deepseek-chat', '目录不可读时指定 provider 行的值仍按拼接口径保留');
+  agentSelect.props.onChange({ target: { value: '__custom__' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  currentRow = findAllByClass(current, 'dsafm_map_row')[0];
+  const typed = findAllByClass(currentRow, 'dsafm_input').find((node) => node.type === 'input' && node.props.placeholder === 'card.map.placeholder.parent');
+  typed.props.onChange({ target: { value: 'deepseek-chat' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  // 保存被宿主拒绝：显示失败、暂存保留（行仍在、可再次保存）。
+  const save = findByClass(current, 'dsafm_save');
+  assert.equal(save.props.disabled, false, '有改动后保存应可点');
+  save.props.onClick();
+  await tick();
+  hookIndex = 0;
+  const failed = render(card.component, props);
+  assert.match(JSON.stringify(failed), /card\.failed/, '保存失败应显示失败提示');
+  const failedRow = findAllByClass(failed, 'dsafm_map_row')[0];
+  assert.equal(findByClass(failedRow, 'dsafm_map_scope_mode').props.value, 'named', '失败后暂存保留（仍是指定 provider）');
+  const failedSave = findByClass(failed, 'dsafm_save');
+  assert.equal(failedSave.props.disabled, false, '暂存仍在，保存应仍可点');
 });
 
 test('接管预设：多选下拉的选项来自宿主目录，勾选暂存、保存写 trigger.presets（requirements §6.1）', async () => {
@@ -2088,7 +2597,7 @@ test('审批卡片状态条 §10.2：三类原因子句与 deny 空理由省略�
   assert.match(timeout, /等待你决定 · 自动审查超时，未取得有效结论/);
   // 客户端防御（§10.2）：cause 缺失按 error 展示，不裸抛、渲染树里不出现 undefined 原文。
   const noCause = await renderEntry({ callId: 'call_1', state: 'waiting-human', reason: 'boom', startedAt: 1, deadlineAt: null, deadlineKind: null, updatedAt: 1 });
-  assert.match(noCause, /等待你决定 · 自动审查未取得有效结论：boom/, 'cause 缺失按 error 文案兜底');
+  assert.match(noCause, /等待你决定 · 自动审查未取得有效结论：boom/, 'cause 缺失时回退 error 文案');
   assert.ok(!noCause.includes('undefined'));
 });
 
@@ -2195,13 +2704,24 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['field.trigger.auditEverySkip', '逐条记录预设不匹配的审批', "Log every preset-mismatch skip"],
     ['field.trigger.unknown', '无法识别权限预设时', "When the preset cannot be identified"],
     ['card.field.defaultModel', '默认审查模型', "Default reviewer model"],
-    ['card.field.byParentModel', '按执行助手的模型选择审查模型', "Reviewer model by the agent's model"],
+    ['card.field.parentModelRules', '按执行助手的模型选择审查模型', "Reviewer model by the agent's model"],
+    ['card.map.col.scope', '作用范围', "Scope"],
     ['card.map.col.parent', '执行助手模型', "Agent's model"],
     ['card.map.parent', '执行助手模型', "Agent's model"],
     ['card.map.col.reviewer', '审查模型', "Reviewer model"],
     ['card.map.col.effort', '推理强度', "Effort"],
     ['card.map.placeholder.parent', '执行助手模型 id', "Agent model id"],
-    ['card.field.followParent', '无可用审查模型时使用执行助手的模型', "Use the agent's model when no reviewer is available"],
+    ['card.map.placeholder.provider', 'provider id', "Provider id"],
+    ['card.map.duplicate', '匹配条件重复：同一作用范围与执行助手模型只能有一条规则。', "Duplicate match condition: one rule per scope and agent model."],
+    ['card.map.legacy.title', '旧键含斜杠，请确认原意。', "This legacy key contains a slash; confirm its original meaning."],
+    ['option.legacy.any', '任意 provider，模型 id 为 {id}', "Any provider, model id {id}"],
+    ['option.legacy.named', '指定 provider {provider}，模型 id 为 {id}', "Provider {provider}, model id {id}"],
+    ['card.map.legacy.pending', '确认前按兼容规则读取，原值保留。', "Until confirmed, the key keeps its value and is read per the compatibility rules."],
+    ['option.scope.any', '任意 provider', "Any provider"],
+    ['option.scope.named', '指定 provider', "Specific provider"],
+    ['warn.modelIssue.global', '默认审查模型不可用：{reason}。实际使用：{effective}。', "The default reviewer model is unavailable: {reason}. Currently using: {effective}."],
+    ['warn.modelIssue.rule', '此规则选择的审查模型不可用：{reason}。实际使用：{effective}。', "The reviewer model picked by this rule is unavailable: {reason}. Currently using: {effective}."],
+    ['warn.modelIssue.session', '本会话选择的审查模型不可用：{reason}。实际使用：{effective}。', "This session's reviewer model is unavailable: {reason}. Currently using: {effective}."],
     ['field.language.ui', '插件界面语言', "Plugin UI language"],
     ['field.language.agent', '发送给模型的文本语言', "Language of model-facing texts"],
     ['field.reviewer.timeoutMs', '自动审查等待上限（毫秒）', "Auto-review wait limit (ms)"],
@@ -2228,13 +2748,12 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['hint.trigger.presets', '会话使用清单内权限预设时，由本插件接管升权审批。', "Sessions on a listed permission preset hand escalations to this plugin."],
     ['hint.trigger.unknown', '读不到会话权限预设时的处置。', "What happens when the session preset cannot be read."],
     ['hint.trigger.auditEverySkip', '因预设不匹配跳过的审批是否逐条记录。', "Whether approvals skipped for a preset mismatch are each logged."],
-    ['hint.reviewer.model', '全局默认的审查模型与推理强度。', "Global default reviewer model and effort."],
-    ['hint.reviewer.byParentModel', '按执行助手模型选择审查模型的映射表。', "Map from the agent's model to a reviewer model."],
-    ['hint.reviewer.followParent', '更高优先级的选择都不可用时，改用执行助手的模型独立审查。', "When no higher-priority choice works, review with the agent's model."],
+    ['hint.reviewer.model', '全局默认的审查模型与推理强度；未设置时使用执行助手的当前模型。', "Global default reviewer model and effort; unset means the agent's current model."],
+    ['hint.reviewer.parentModelRules', '按执行助手模型匹配的规则表：命中时先于全局默认，会话选择更优先。', "Rules matching the agent's model; a hit beats the global default, a session choice beats both."],
     ['hint.language.ui', '插件界面文案的语言。', "Language of the plugin's UI copy."],
     ['hint.language.agent', '发给审查模型的文本与给执行助手的通知，两者使用的语言。', "Language shared by the texts sent to the reviewer and the notices sent to the agent."],
     ['hint.reviewer.timeoutMs', '自动审查的等待上限（毫秒）；0 取消时限，有常驻风险提醒。', "Auto-review wait limit (ms); 0 removes it, with a standing risk note."],
-    ['hint.reviewer.maxTokens', '审查输出的 token 上限；0 不设上限。', "Review output cap in tokens; 0 sets none."],
+    ['hint.reviewer.maxTokens', '审查输出的 token 上限；0 不向模型传输出上限，仍受供应商默认限制。', "Review output cap in tokens; 0 sends no cap to the model, provider defaults still apply."],
     ['hint.ui.humanCardDuringReview', '审查期间是否提前显示人工审批卡片。', "Whether the human card appears early during review."],
     ['hint.human.timeoutMs', '人工作答的等待上限（毫秒）；0 立即拒绝。', "Human-answer wait limit (ms); 0 rejects immediately."],
     ['hint.human.timeoutFrom', '人工作答从何时开始计时：审批请求发出时，或交人工时。', "Where the human-answer timing starts: at the approval request, or at the handoff."],
@@ -2250,16 +2769,15 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['help.trigger.presets', '会话使用清单内权限预设时，插件按接管规则处理升权审批；其他预设保持宿主原审批流程。清单为空时，任何已知预设都不接管；无法识别的预设按「无法识别权限预设时」的设置处置。选择接管范围不等于授予任意权限。', 'Sessions on a listed preset hand escalation approvals to this plugin; other presets keep the host flow. An empty list takes over no known preset; unidentifiable presets follow "When the preset cannot be identified". Choosing the take-over range grants no extra permissions.'],
     ['help.trigger.unknown', '读不到会话权限预设时的处置。保持宿主原审批流程＝不接管；继续自动审查＝视为命中接管范围。可能原因包括服务缺失、读取失败或没有可用预设信息。', 'What to do when the session preset cannot be read: keep the host flow means no take-over; continue means treat it as covered. Causes include a missing service, a read failure, or no preset information.'],
     ['help.trigger.auditEverySkip', '开启后，每次因预设不匹配而跳过的审批都逐条记录；关闭时同一会话同一原因只记录一条。只改变跳过记录的数量，不影响接管与审批本身，也不表示所有审批都被审查。', 'On: every preset-mismatch skip is logged; off: one line per session and reason. This only changes the number of skip lines, never the take-over itself, and does not imply every approval is reviewed.'],
-    ['help.reviewer.model', '全局默认的审查模型与推理强度。模型引用形如 provider/model；推理强度留空表示自动选择：模型支持 `low` 就使用 `low`，否则不指定、由模型默认值决定，不承诺所有模型都支持或采用相同强度。解析顺序为会话选择 → 按执行助手的模型映射 → 全局默认 → 跟随执行助手模型。', 'Global default reviewer model and effort. The reference reads provider/model; an empty effort is automatic: use `low` when the model supports it, otherwise let the model default decide — no promise that every model supports it or matches the same intensity. Resolution: session choice, by the agent\'s model, global default, then follow the agent\'s model.'],
-    ['help.reviewer.byParentModel', '按执行助手的模型选择审查模型：执行助手所用模型（纯模型 id）对应到审查模型与推理强度，比全局默认更具体，命中即生效；未命中按其余层级解析（顺序见上方「默认审查模型」）。', "Picks the reviewer by the model the acting agent uses: the agent's plain model id maps to a reviewer model and effort, overriding the global default; misses fall through to the remaining layers (see Default reviewer model)."],
-    ['help.reviewer.followParent', '仅在会话选择、按执行助手的模型映射、全局默认都不可用时生效：使用与执行助手相同的模型，独立发起一次审查调用——这是「使用相同模型」，不是由执行助手自己审批。关闭后，全部层级不可用时按审查故障拒绝。', "Applies only when the session choice, the agent-model map and the global default are all unusable: the reviewer then runs on the same model as the agent, as an independent call — the same model, never the agent approving itself. Off: total resolution failure is rejected as a review failure."],
+    ['help.reviewer.model', '全局默认的审查模型与推理强度。模型引用形如 provider/model；推理强度留空表示自动选择：模型支持 `low` 就使用 `low`，否则不指定、由模型默认值决定，不承诺所有模型都支持或采用相同强度。解析顺序为会话选择 → 按执行助手的模型映射 → 全局默认；全局默认未设置时使用执行助手的当前模型——插件仍独立发起一次审查调用，是「使用相同模型」，不是由执行助手自己审批。', 'Global default reviewer model and effort. The reference reads provider/model; an empty effort is automatic: use `low` when the model supports it, otherwise let the model default decide — no promise that every model supports it or matches the same intensity. Resolution: session choice, by the agent\'s model, global default; an unset default reviews on the agent\'s current model — an independent call, the same model, never the agent approving itself.'],
+    ['help.reviewer.parentModelRules', '按执行助手的模型选择审查模型：每条规则含作用范围（任意 provider，或指定 provider 下的完整模型 id）与审查模型、推理强度。会话选择更优先；命中时先于全局默认；未命中按其余层解析。同一作用范围与执行助手模型只能有一条规则，重复的行不能保存。旧字典继续参与匹配：纯模型 id 键按任意 provider 读取；含斜杠的旧键会在表中请求确认原意，确认前按原值读取，不自动改写。', "Picks the reviewer by the model the acting agent uses: each rule carries a scope (any provider, or a specific one) plus the agent's full model id, mapped to a reviewer model and effort. A session choice outranks a hit; a hit outranks the global default; misses fall through to the remaining layers. One rule per scope and agent model — duplicates cannot be saved. The legacy dictionary still matches: plain-id keys read as any-provider; slash-containing keys ask you to confirm their meaning, are read as-is until confirmed, and are never rewritten automatically."],
     ['help.reviewer.timeoutMs', '自动审查的等待上限（毫秒），涵盖等待本次审查结论的全过程，内部重试不另计时。超时按拒绝处理并说明发生环节，不是危险判定。0 表示取消审查时限：审查模型挂起、工具或其他异常可能使请求无限停在自动审批，插件不自动恢复时限；取消与其他人工路径仍按各自条件生效（常驻风险提醒同此）。', 'Auto-review wait limit (ms), covering the whole wait for this review\'s conclusion; internal retries get no fresh budget. A timeout rejects with its stage named — not a danger verdict. 0 removes the limit: a hung model or tooling failure can leave the request stuck in auto-approval forever; the plugin never restores the limit silently, while cancellation and other human paths still apply (same as the standing note).'],
-    ['help.reviewer.maxTokens', '审查输出上限（token）。0 表示不向模型传输出上限，由模型或供应商默认值决定。推理模型可能先把额度用于推理：上限过小可能导致没有有效结论（正文为空，按审查故障处理）；具体数值因模型与推理强度而异，不以个别模型的测量结果作通用保证。', 'Review output cap (tokens). 0 sends no cap, leaving the model or provider default. Reasoning models may spend the budget on reasoning first: too small a cap can leave no usable conclusion (empty body, treated as a review failure); the threshold varies by model and effort, so no single measurement is a general promise.'],
+    ['help.reviewer.maxTokens', 'token 是模型计量文本的单位。审查输出上限（token）。0 表示不向模型传输出上限，由模型或供应商默认值决定。推理模型可能先把额度用于推理：上限过小可能导致没有有效结论（正文为空，按审查故障处理）；具体数值因模型与推理强度而异，不以个别模型的测量结果作通用保证。', 'A token is the unit models use to measure text. Review output cap (tokens). 0 sends no cap, leaving the model or provider default. Reasoning models may spend the budget on reasoning first: too small a cap can leave no usable conclusion (empty body, treated as a review failure); the threshold varies by model and effort, so no single measurement is a general promise.'],
     ['help.human.timeoutMs', '人工作答等待上限（毫秒），仅在「自动审查未允许时＝交给人工决定」时使用。0 表示立即拒绝，不是无限等待。到点按拒绝结算，原因写明人工作答超时。', 'Human-answer wait limit (ms), used only when the fallback is Ask. 0 rejects immediately, not an endless wait. Expiry settles as a rejection citing the human timeout.'],
     ['help.human.timeoutFrom', '人工作答计时的起点：从审批请求起算＝交人工只使用剩余时间；从交人工起算＝交人工时重新开始计时。', 'Where the human timer starts: from the approval request (the handoff only gets the remainder), or from the handoff itself.'],
     ['help.allowEscalationTo', '可自动批准的最高权限，只限制可送审或允许的升权范围；范围内仍须通过规则检查与模型审查，不等于自动批准全部操作。完全访问（默认）＝最宽；工作区内修改＝超出工作区写入的升权不放行。', "The widest permission auto-approval may grant. It bounds what may be reviewed or allowed; everything in range still passes the rule checks and the review — it is not a blanket approval. Full access (default) is widest; workspace write rejects wider escalations."],
     ['help.unknownSubject', '无法辨认本次实际操作（如回查不到命令或参数）时的处置。直接拒绝＝不调用模型、立即拒绝；带缺失说明继续审查＝携带已取得的参数与上下文继续审查，缺失明确标记，不把缺失当作安全。', 'When the actual action cannot be identified (say, no command or arguments could be recovered): reject refuses at once without the model; keep reviewing submits what was recovered with explicit missing-action marks — missing never counts as safe.'],
-    ['help.fallback', '自动审查未允许（拒绝、超时或故障）时的处置。直接拒绝＝按拒绝结算并通知执行助手；交给人工决定＝显示人工审批卡片等待你作答，人工作答等待上限到点按拒绝结算。子代理没有人工通道：未允许一律拒绝。', "What happens when the review does not approve (deny, timeout or failure): reject settles at once and notifies the agent; ask shows the human card until you answer or the human limit rejects. Subagents have no human channel — not allowed always means rejected."],
+    ['help.fallback', '自动审查未允许（拒绝、超时或故障）时的处置。直接拒绝＝按拒绝结算；通知按「给执行助手的审批通知」的设置发送，选择「不发送」时不发任何通知。交给人工决定＝显示人工审批卡片等待你作答，人工作答等待上限到点按拒绝结算。子代理没有人工通道：未允许一律拒绝。', "What happens when the review does not approve (deny, timeout or failure): reject settles as a rejection; notices follow the \"Approval notices to the agent\" setting — send none sends nothing. Ask shows the human card until you answer or the human limit rejects. Subagents have no human channel — not allowed always means rejected."],
     ['help.ui.humanCardDuringReview', '开启时，自动审查进行中即显示人工审批卡片：你可以在审批未完成时抢先作答，人工结果优先；已完成的结果不能由迟到点击推翻。关闭时，仅在确实交给人工后显示卡片。', 'On: the human card shows while the review runs — you may answer first and the human answer wins; a settled result cannot be overturned by a late click. Off: the card appears only once the request is truly handed over.'],
     ['help.ui.inject', '发给执行助手（发起工具操作的 Agent）的审批通知范围：允许、拒绝、超时和故障＝四类都发送；仅拒绝、超时和故障＝允许不发送；选择「不发送」＝一条都不发送。审查记录视图的显示不受本开关影响。', 'Which approval notices reach the acting agent: allow, deny, timeout and failures sends all four; deny, timeout and failures skips allow notices; send none sends no notices. The review-log view is unaffected by this switch.'],
     ['help.ui.injectMaxBytes', '发给执行助手的单条通知的字节上限，超出截断并附截断标记；0 不裁剪。限制对象只是通知，审查记录按会话独立保留，与该上限无关。', 'Byte cap for one notice to the agent; longer text is trimmed with a marker, 0 does not trim. Only notices are capped — review records are kept per session and ignore this limit.'],
@@ -2309,8 +2827,8 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['layer.session', '会话选择（session）', "Session choice (session)"],
     ['layer.parent-map', '按执行助手的模型映射（parent-map）', "By the agent's model (parent-map)"],
     ['layer.global', '全局默认（global）', "Global default (global)"],
-    ['layer.follow-parent', '跟随执行助手模型（follow-parent）', "Follow the agent's model (follow-parent)"],
-    ['layer.unavailable', '全部层级不可用（unavailable）', "No layer available (unavailable)"],
+    ['layer.follow-parent', '全局默认未设置，使用执行助手当前模型（follow-parent）', "Global default unset; using the agent's current model (follow-parent)"],
+    ['layer.unavailable', '无可用审查模型（unavailable）', "No usable reviewer model (unavailable)"],
     ['fieldsDefaulted.risk', '风险分级（risk）', "Risk level (risk)"],
     ['fieldsDefaulted.auth', '授权分级（auth）', "Authorization level (auth)"],
     ['fieldsDefaulted.reason', '理由（reason）', "Rationale (reason)"],
@@ -2318,7 +2836,7 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['degraded.cwd', '会话目录缺失（cwd）', "Working directory missing (cwd)"],
     ['degraded.transcript', '上下文读取失败或截断（transcript）', "Context read failure or truncation (transcript)"],
     ['degraded.entry', '单条证据截断（entry:…）', "Single evidence entry truncated (entry:…)"],
-    ['degraded.all', '模型选择全部不可用（all）', "No model layer available (all)"],
+    ['degraded.all', '审查模型解析无可用结果（all）', "No usable reviewer model (all)"],
     ['degraded.output-truncated', '输出截断（output-truncated）', "Output truncated (output-truncated)"],
     ['degraded.output-empty', '空输出（output-empty）', "Empty output (output-empty)"],
     ['degraded.superseded', '已被其他路径先结算（superseded）', "Settled first by another path (superseded)"],

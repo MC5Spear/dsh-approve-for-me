@@ -75,14 +75,13 @@ test('退役件零命中——重置全部覆盖、当前生效值、分区标�
   }
 });
 
-test('逐项等价：表单字段集与 config schema 的 UI 面一致（21 字段，竖排无分区）', () => {
+test('逐项等价：表单字段集与 config schema 的 UI 面一致（20 字段，竖排无分区）', () => {
   const fields = [
     '启用自动审批的权限预设',
     '无法识别权限预设时',
     '逐条记录预设不匹配的审批',
     '默认审查模型',
     '按执行助手的模型选择审查模型',
-    '无可用审查模型时使用执行助手的模型',
     '插件界面语言',
     '发送给模型的文本语言',
     '自动审查等待上限（毫秒）',
@@ -102,8 +101,11 @@ test('逐项等价：表单字段集与 config schema 的 UI 面一致（21 字�
   const missing = fields.filter((f) => !hasLine(f));
   assert.deepEqual(missing, [], '设置表单丢字段（对照 lib/config.js 的 UI 面）');
   assert.ok(hasLine('保存'), '唯一保存按钮缺失');
-  assert.match(dump, /字段壳 `dsafm_field`＝17/u, '自绘字段壳应 17 个');
-  assert.match(dump, /数字字段 4 个走官方组件标记，合计 21/u, '21 字段＝17 自绘壳＋4 官方数字字段');
+  // followParent 已从 config schema 退役（B1）：页面文本零命中是字段面一致的一部分。
+  assert.equal(pageText.includes('无可用审查模型时使用执行助手的模型'), false, 'followParent 字段标签应零命中（design §7.2 20 字段）');
+  assert.equal(hasLine('作用范围'), true, '映射表头应含作用范围列（五列结构化规则表）');
+  assert.match(dump, /字段壳 `dsafm_field`＝16/u, '自绘字段壳应 16 个');
+  assert.match(dump, /数字字段 4 个走官方组件标记，合计 20/u, '20 字段＝16 自绘壳＋4 官方数字字段');
 });
 
 test('覆盖组「已单独设置＋恢复默认」与用户层键一一对应', () => {
@@ -139,15 +141,15 @@ test('配置区容器无自绘卡片外壳（计算样式）', () => {
   assert.match(dump, /background=`rgba\(0, 0, 0, 0\)`/u, '不应有成片底色');
 });
 
-test('说明入口（§7.2.1）：21 个按钮带可见文字，aria 成对，展开文本为新总开关文案', () => {
-  assert.match(dump, /说明按钮 21 个（17 自绘壳＋4 官方数字字段平铺行 `\.dsafm_f_help`）/u, '说明按钮应 21 个（含数字字段平铺行）');
+test('说明入口（§7.2.1）：20 个按钮带可见文字，aria 成对，展开文本为新总开关文案', () => {
+  assert.match(dump, /说明按钮 20 个（16 自绘壳＋4 官方数字字段平铺行 `\.dsafm_f_help`）/u, '说明按钮应 20 个（含数字字段平铺行）');
   assert.match(dump, /按钮带可见文字「说明／收起说明」（`\.dsafm_helpbtn_text`）/u, '说明按钮应带可见文字');
   assert.match(dump, /`aria-label`＝「字段名：说明」、Enter\/Space 键盘可达/u, '无障碍名格式与键盘可达应在档');
   assert.match(dump, /点击 mode 字段后：aria-expanded=`true`、展开区在场=`true`、同屏展开区数量=1/u, '点击后应展开且仅展开一个');
   assert.match(dump, /展开文本首段＝「总开关：规则检查＋LLM 审查＝正常接管；完全不接管＝等同未安装，宿主审批流程不受影响。」/u, '展开文本应为定稿总开关文案（design §7.2.1）');
   assert.match(dump, /开合不触碰草稿\/保存计划（纯展示状态）/u, '开合纯展示语义应在档');
-  // §1 逐字文本：每个字段名行后紧跟「说明」按钮文字（21 处＝21 字段）。
-  assert.equal((pageText.split('\n').filter((l) => l.trim() === '说明').length), 21, '§1 中「说明」按钮文字应恰 21 处');
+  // §1 逐字文本：每个字段名行后紧跟「说明」按钮文字（20 处＝20 字段）。
+  assert.equal((pageText.split('\n').filter((l) => l.trim() === '说明').length), 20, '§1 中「说明」按钮文字应恰 20 处');
 });
 
 test('交付 CSS 串失效令牌零命中（收窄到本包 style 元素）；长度与规则数对账实算', () => {
@@ -178,16 +180,17 @@ test('交付 CSS 串失效令牌零命中（收窄到本包 style 元素）；�
 
 test('控件清单：生效值就在控件里，id 挂在控件上', () => {
   for (const row of [
-    '| 5 | select | select-one | approve-for-me-ctl-language-ui | zh |',
-    '| 6 | select | select-one | approve-for-me-ctl-language-agent | en |',
+    '| 4 | select | select-one | approve-for-me-ctl-language-ui | zh |',
+    '| 5 | select | select-one | approve-for-me-ctl-language-agent | en |',
     '| 2 | select | select-one | approve-for-me-ctl-reviewer-model | zai/glm-5.3-flash |',
-    '| 7 | input | text | approve-for-me-ctl-reviewer-timeoutMs | 300000 |',
-    '| 10 | input | text | approve-for-me-ctl-human-timeoutMs | 300000 |',
-    '| 12 | select | select-one | approve-for-me-ctl-mode | rules |',
+    '| 6 | input | text | approve-for-me-ctl-reviewer-timeoutMs | 300000 |',
+    '| 9 | input | text | approve-for-me-ctl-human-timeoutMs | 300000 |',
+    '| 11 | select | select-one | approve-for-me-ctl-mode | rules |',
   ]) {
     assert.ok(dump.includes(row), `控件表缺行：${row}`);
   }
   assert.match(dump, /接管预设为多选 picker（button \+ aria-expanded），不计入本表/u, 'picker 不应计入 input 清单');
+  assert.equal(dump.includes('reviewer-followParent'), false, 'followParent 控件行应随字段退役（B1）');
 });
 
 // ── 取值逐项等于生效值（结构断言抓不到整片为空） ─────────────────────────────
@@ -198,12 +201,11 @@ const REAL_PROFILE = {
   ui: { trace: { capture: 'full' } },
   language: { ui: 'zh', agent: 'en' },
 };
-/** 控件 id 尾段 → 生效值路径（与 client.js 的 ctl id 命名一一对应）。 */
+/** 控件 id 尾段 → 生效值路径（与 client.js 的 ctl id 命名一一对应；followParent 随 B1 退役）。 */
 const CTL_PATHS = {
   'trigger-unknown': 'trigger.unknown',
   'trigger-auditEverySkip': 'trigger.auditEverySkip',
   'reviewer-model': 'reviewer.model',
-  'reviewer-followParent': 'reviewer.followParent',
   'language-ui': 'language.ui',
   'language-agent': 'language.agent',
   'reviewer-timeoutMs': 'reviewer.timeoutMs',
@@ -225,9 +227,9 @@ test('控件取值逐项等于生效值（profile 用户层＋默认合并的产
   const effective = normalizeConfig(REAL_PROFILE);
   const at = (path) => path.split('.').reduce((node, key) => node?.[key], effective);
   const rows = [...dump.matchAll(/^\| \d+ \| (\w+) \| [\w-]+ \| approve-for-me-ctl-([\w.-]+) \| (.+) \|$/gmu)];
-  // 反恒真防线：先证明控件表真的解析到了行（恰 19 行带 id 控件＝20 控件减 1 个无 id 的 effort 子选择器；
-  // 丢行会让后续对账漏项，行数不等即红）。
-  assert.equal(rows.length, 19, `控件表解析行数应为 19（实得 ${rows.length}），围栏或表头漂移会让后续断言漏项`);
+  // 反恒真防线：先证明控件表真的解析到了行（恰 18 行带 id 控件＝19 控件减 1 个无 id 的 effort 子选择器，
+  // followParent 复选框随字段退役；丢行会让后续对账漏项，行数不等即红）。
+  assert.equal(rows.length, 18, `控件表解析行数应为 18（实得 ${rows.length}），围栏或表头漂移会让后续断言漏项`);
   for (const [, tag, suffix, cell] of rows) {
     const path = CTL_PATHS[suffix];
     assert.ok(path, `未知控件 id：${suffix}（CTL_PATHS 需同步 client.js 的字段集合）`);

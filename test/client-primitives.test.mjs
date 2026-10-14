@@ -95,12 +95,13 @@ test('核验器本身能失败：0.1.5 时代的图标名在 0.1.7 宿主里确�
   }
 });
 
-test('client.js 图标引用收敛：设置界面帮助图标走宿主基元，其余内联', () => {
+test('client.js 图标引用收敛：设置界面帮助/警告图标走宿主基元，其余内联', () => {
   const source = stripComments(readFileSync(CLIENT, 'utf8'));
-  // 字段帮助按钮统一用官方 IconInfoOutlineRegular（12px），不自造问号图标；
+  // 字段帮助按钮统一用官方 IconInfoOutlineRegular（12px），分置醒目提示行用官方
+  // IconWarningOutlineRegular（12px，design §7.2.0 宿主连接指示器同款配对），不自造图标；
   // 多选触发器的下箭头仍内联 SVG（宿主无 ChevronDownOutline14 旧名）。
   const iconRefs = [...source.matchAll(/primitives\.(Icon\w*)/gu)].map((match) => match[1]);
-  assert.deepEqual(iconRefs, ['IconInfoOutlineRegular'], `图标引用应只有 IconInfoOutlineRegular，实际：${iconRefs.join(', ')}`);
+  assert.deepEqual(iconRefs, ['IconWarningOutlineRegular', 'IconInfoOutlineRegular'], `图标引用应只有警告/信息两个官方图标（按源内首现顺序），实际：${iconRefs.join(', ')}`);
   assert.equal(/const ChevronDownIcon = /u.test(source), true, '内联下箭头组件缺失');
   assert.equal(/const QuestionIcon = /u.test(source), false, '自造问号图标应已删除');
 });

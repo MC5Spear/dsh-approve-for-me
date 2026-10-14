@@ -1,6 +1,6 @@
 # 设置表单 DOM 夹具（结构判据 + 毫秒字段秒数读数；离线回归用）
 
-- 采集：本插件设置详情页（loopback 实例）的页面 DOM 与计算样式导出；采集工具链随仓发布（`tools/browser-shot.mjs` 驱动取证、`tools/build-dom-dump.mjs` 汇编成档），本轮的步骤场景脚本属开发期工件、不随仓发布。CSS 收窄扫描（scoped 段，只读本包注入的 `style[data-plugin-css="dsh-approve-for-me"]`）并入同一脚本。本轮（界面文案与功能说明入口定稿）为手工同步档案；真实页面复核巡检单列待办。
+- 采集：本插件设置详情页（loopback 实例）的页面 DOM 与计算样式导出；采集工具链随仓发布（`tools/browser-shot.mjs` 驱动取证、`tools/build-dom-dump.mjs` 汇编成档），本轮的步骤场景脚本属开发期工件、不随仓发布。CSS 收窄扫描（scoped 段，只读本包注入的 `style[data-plugin-css="dsh-approve-for-me"]`）并入同一脚本。本轮（结构化规则表＋分置提示定稿，20 字段）为手工同步档案；真实页面复核巡检单列待办（loopback 服务实例当前装的是旧版插件副本，重启后才可重拍）。
 - 入口路径：侧栏「插件」→ `dsh-approve-for-me` → 本包详情页；页面身份 `[data-plugin-detail="dsh-approve-for-me"]`。
 - 常驻断言：`test/settings-dom-dump.test.mjs` 读本文件逐项核对（变异验证：篡改本文件对应断言变红）。
 
@@ -53,22 +53,18 @@ low
 high
 max
 
-全局默认的审查模型与推理强度。
+全局默认的审查模型与推理强度；未设置时使用执行助手的当前模型。
 
 按执行助手的模型选择审查模型
 说明
+作用范围
 执行助手模型
 审查模型
 推理强度
 操作
 添加一行
 
-按执行助手模型选择审查模型的映射表。
-
-无可用审查模型时使用执行助手的模型
-说明
-
-更高优先级的选择都不可用时，改用执行助手的模型独立审查。
+按执行助手模型匹配的规则表：命中时先于全局默认，会话选择更优先。
 
 插件界面语言
 说明
@@ -102,7 +98,7 @@ max
 
 审查输出上限（token）
 
-审查输出的 token 上限；0 不设上限。
+审查输出的 token 上限；0 不向模型传输出上限，仍受供应商默认限制。
 
 说明
 
@@ -202,11 +198,11 @@ approve-for-me
 ## 3. 覆盖组与字段结构
 
 自绘覆盖组（`.dsafm_badges`＝Tag「已单独设置」＋文本按钮「恢复默认」）恰好 3 组：已单独设置 恢复默认｜已单独设置 恢复默认｜已单独设置 恢复默认（默认审查模型、插件界面语言、发送给模型的文本语言——与 profile patch 用户层键一一对应；数字字段「已单独设置/恢复默认」在官方 SettingsValueField 内部，见 §1 文本）。
-字段壳 `dsafm_field`＝17（自绘），数字字段 4 个走官方组件标记，合计 21＝21 字段。
+字段壳 `dsafm_field`＝16（自绘），数字字段 4 个走官方组件标记，合计 20＝20 字段（followParent 字段随 B1 退役，design §7.2）。
 
 ## 4. 说明入口点击展开（aria 成对；design §7.2.1）
 
-说明按钮 21 个（17 自绘壳＋4 官方数字字段平铺行 `.dsafm_f_help`），按钮带可见文字「说明／收起说明」（`.dsafm_helpbtn_text`）、图标 `IconInfoOutlineRegular` size=12、`aria-label`＝「字段名：说明」、Enter/Space 键盘可达；全部带 aria-controls，初始 aria-expanded=false；点击 mode 字段后：aria-expanded=`true`、展开区在场=`true`、同屏展开区数量=1、展开文本首段＝「总开关：规则检查＋LLM 审查＝正常接管；完全不接管＝等同未安装，宿主审批流程不受影响。」；开合不触碰草稿/保存计划（纯展示状态）。
+说明按钮 20 个（16 自绘壳＋4 官方数字字段平铺行 `.dsafm_f_help`），按钮带可见文字「说明／收起说明」（`.dsafm_helpbtn_text`）、图标 `IconInfoOutlineRegular` size=12、`aria-label`＝「字段名：说明」、Enter/Space 键盘可达；全部带 aria-controls，初始 aria-expanded=false；点击 mode 字段后：aria-expanded=`true`、展开区在场=`true`、同屏展开区数量=1、展开文本首段＝「总开关：规则检查＋LLM 审查＝正常接管；完全不接管＝等同未安装，宿主审批流程不受影响。」；开合不触碰草稿/保存计划（纯展示状态）。
 
 ## 5. 暂存语义：保存按钮三态与「只有保存才写」
 
@@ -218,9 +214,10 @@ approve-for-me
 
 ## 6. 交付 CSS 串失效令牌零命中（收窄到本包 style 元素）
 
-本包注入样式 9357 字符（92 条规则）：`--dsw-alias-state-warning-primary`×0、`--dsw-alias-label-error`×0、`--dsw-alias-bg-layer-4`×0（页面级命中来自宿主/其它包样式，不属本包交付串）。数字口径＝client.js CSS 数组 `join("")` 后的注入串长度与数组元素数，实算对账见 `test/settings-dom-dump.test.mjs`（档案不自证，随源漂移由测试把关）。
+本包注入样式 10127 字符（99 条规则）：`--dsw-alias-state-warning-primary`×0、`--dsw-alias-label-error`×0、`--dsw-alias-bg-layer-4`×0（页面级命中来自宿主/其它包样式，不属本包交付串）。数字口径＝client.js CSS 数组 `join("")` 后的注入串长度与数组元素数，实算对账见 `test/settings-dom-dump.test.mjs`（档案不自证，随源漂移由测试把关）。分置提示行用 `--dsw-alias-state-warn-tertiary`／`--dsw-alias-state-warn-label`（宿主连接指示器同款配对令牌，design §7.2.0）。
 关键规则原文：`.dsafm_form{display:flex;flex-direction:column;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary)}`；`.dsafm_save{appearance:none;border:1px solid transparent;border-radius:8px;padding:5px 14px;font-family:inherit;font-size:13px;line-height:1.5;cursor:pointer;background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3)}`；`.dsafm_helpbtn{display:inline-flex;align-items:center;gap:4px;justify-content:center;flex:none;min-width:24px;min-height:24px;padding:0 8px;border:0;border-radius:6px;background:none;color:var(--dsw-alias-label-secondary);cursor:pointer;font-family:inherit;font-size:12px;line-height:1.5}`；`.dsafm_input{flex:1;min-width:0;width:100%;height:34px;padding:0 12px;border:.5px solid var(--dsw-alias-border-l4);border-radius:8px;background:var(--dsw-alias-bg-layer-3);font-family:inherit;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-primary)}`。
 分隔线选择器组（design §7.2.1）：`.dsafm_f_sec + div:not(.dsafm_field):not(.dsafm_f_help){border-top:.5px solid var(--dsw-alias-border-l2)}` 与 `.dsafm_f_help + div:not(.dsafm_field){border-top:.5px solid var(--dsw-alias-border-l2)}`；平铺说明行 `.dsafm_f_help{margin:-12px 0 12px}`。
+结构化规则表五列网格（design §7.2）：`.dsafm_map_head,.dsafm_map_row{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1.5fr) minmax(0,1.5fr) minmax(96px,.8fr) auto;gap:8px;align-items:center;min-width:0}`；行级错误 `.dsafm_map_dup{font-size:12px;line-height:1.5;color:var(--dsw-alias-state-error-primary);overflow-wrap:anywhere}`；分置提示行 `.dsafm_warnline{display:flex;align-items:flex-start;gap:6px;padding:6px 10px;border-radius:8px;background:var(--dsw-alias-state-warn-tertiary);color:var(--dsw-alias-state-warn-label);font-size:12px;line-height:1.5;overflow-wrap:anywhere}`（composer 侧座位包裹层 `.dsafm_seatwrap` 同轮入册）。
 
 ## 7. 控件清单（input/select/textarea，按文档序）
 
@@ -230,30 +227,29 @@ approve-for-me
 | 1 | select | select-one | approve-for-me-ctl-trigger-auditEverySkip | false |
 | 2 | select | select-one | approve-for-me-ctl-reviewer-model | zai/glm-5.3-flash |
 | 3 | select | select-one | （无） | high |
-| 4 | input | checkbox | approve-for-me-ctl-reviewer-followParent | on（checked=true） |
-| 5 | select | select-one | approve-for-me-ctl-language-ui | zh |
-| 6 | select | select-one | approve-for-me-ctl-language-agent | en |
-| 7 | input | text | approve-for-me-ctl-reviewer-timeoutMs | 300000 |
-| 8 | input | text | approve-for-me-ctl-reviewer-maxTokens | 0 |
-| 9 | select | select-one | approve-for-me-ctl-ui-humanCardDuringReview | true |
-| 10 | input | text | approve-for-me-ctl-human-timeoutMs | 300000 |
-| 11 | select | select-one | approve-for-me-ctl-human-timeoutFrom | request |
-| 12 | select | select-one | approve-for-me-ctl-mode | rules |
-| 13 | select | select-one | approve-for-me-ctl-allowEscalationTo | danger-full-access |
-| 14 | select | select-one | approve-for-me-ctl-unknownSubject | reject |
-| 15 | select | select-one | approve-for-me-ctl-fallback | reject |
-| 16 | select | select-one | approve-for-me-ctl-ui-inject | all |
-| 17 | input | text | approve-for-me-ctl-ui-injectMaxBytes | 2048 |
-| 18 | textarea | textarea | approve-for-me-ctl-tools | （空） |
-| 19 | textarea | textarea | approve-for-me-ctl-denyPatterns | （空） |
+| 4 | select | select-one | approve-for-me-ctl-language-ui | zh |
+| 5 | select | select-one | approve-for-me-ctl-language-agent | en |
+| 6 | input | text | approve-for-me-ctl-reviewer-timeoutMs | 300000 |
+| 7 | input | text | approve-for-me-ctl-reviewer-maxTokens | 0 |
+| 8 | select | select-one | approve-for-me-ctl-ui-humanCardDuringReview | true |
+| 9 | input | text | approve-for-me-ctl-human-timeoutMs | 300000 |
+| 10 | select | select-one | approve-for-me-ctl-human-timeoutFrom | request |
+| 11 | select | select-one | approve-for-me-ctl-mode | rules |
+| 12 | select | select-one | approve-for-me-ctl-allowEscalationTo | danger-full-access |
+| 13 | select | select-one | approve-for-me-ctl-unknownSubject | reject |
+| 14 | select | select-one | approve-for-me-ctl-fallback | reject |
+| 15 | select | select-one | approve-for-me-ctl-ui-inject | all |
+| 16 | input | text | approve-for-me-ctl-ui-injectMaxBytes | 2048 |
+| 17 | textarea | textarea | approve-for-me-ctl-tools | （空） |
+| 18 | textarea | textarea | approve-for-me-ctl-denyPatterns | （空） |
 
-接管预设为多选 picker（button + aria-expanded），不计入本表。
+接管预设为多选 picker（button + aria-expanded），不计入本表；followParent 复选框随字段退役（B1），结构化规则表在空表时只有表头与「添加一行」按钮，无行控件。
 
 ## 8. dsafm 类清单（容器内去重；退役类零残留）
 
-dsafm_form / dsafm_field / dsafm_f_head / dsafm_labelgroup / dsafm_f_label / dsafm_helpbtn / dsafm_helpbtn_text / dsafm_stack / dsafm_input.dsafm_picker / dsafm_picker_text / dsafm_picker_meta / dsafm_chevron / dsafm_f_hint / dsafm_input / dsafm_badges / dsafm_reset / dsafm_ctl / dsafm_input.dsafm_model / dsafm_input.dsafm_effort / dsafm_map / dsafm_map_head / dsafm_button.dsafm_map_add / dsafm_inlinecheck / dsafm_check / dsafm_f_sec / dsafm_sec_resolved / dsafm_sec_draft / dsafm_f_help / dsafm_input.dsafm_area / dsafm_footer / dsafm_save
+dsafm_form / dsafm_field / dsafm_f_head / dsafm_labelgroup / dsafm_f_label / dsafm_helpbtn / dsafm_helpbtn_text / dsafm_stack / dsafm_input.dsafm_picker / dsafm_picker_text / dsafm_picker_meta / dsafm_chevron / dsafm_f_hint / dsafm_input / dsafm_badges / dsafm_reset / dsafm_ctl / dsafm_input.dsafm_model / dsafm_input.dsafm_effort / dsafm_map / dsafm_map_head / dsafm_button.dsafm_map_add / dsafm_f_sec / dsafm_sec_resolved / dsafm_sec_draft / dsafm_f_help / dsafm_input.dsafm_area / dsafm_footer / dsafm_save
 
-退役类零残留：无 dsafm_row、dsafm_label、dsafm_section、dsafm_divider、dsafm_actions、dsafm_help、dsafm_map_block。`dsafm_chevron` 在场属下拉 picker 箭头；`dsafm_helpbtn_text` 为说明按钮的可见文字 span；`dsafm_f_help` 为官方数字字段后的平铺说明行（design §7.2.1）。
+退役类零残留：无 dsafm_row、dsafm_label、dsafm_section、dsafm_divider、dsafm_actions、dsafm_help、dsafm_map_block；`dsafm_inlinecheck`／`dsafm_check` 随 followParent 字段退役（勾选类控件不再出现在干净页 DOM；多选面板展开时的选项类属面板内部，不在此清单）。行级类（`dsafm_map_rowwrap`、`dsafm_map_scope`、`dsafm_map_dup` 等）与提示行类（`dsafm_warnline`）只在有规则行或诊断条目时进场——本档采集自空表无诊断页，故不在清单。`dsafm_chevron` 在场属下拉 picker 箭头；`dsafm_helpbtn_text` 为说明按钮的可见文字 span；`dsafm_f_help` 为官方数字字段后的平铺说明行（design §7.2.1）。
 
 ## 9. 失败登录计数
 

@@ -56,15 +56,26 @@ window.__ModuleLoader__.load({
 			"card.map.parent": "执行助手模型",
 			"card.map.add": "添加一行",
 			"card.map.remove": "删除",
+			"card.map.col.scope": "作用范围",
 			"card.map.col.parent": "执行助手模型",
 			"card.map.col.reviewer": "审查模型",
 			"card.map.col.effort": "推理强度",
 			"card.map.col.action": "操作",
 			"card.map.custom": "自定义…",
 			"card.map.placeholder.parent": "执行助手模型 id",
+			"card.map.placeholder.provider": "provider id",
+			"card.map.duplicate": "匹配条件重复：同一作用范围与执行助手模型只能有一条规则。",
+			"card.map.legacy.title": "旧键含斜杠，请确认原意。",
+			"option.legacy.any": "任意 provider，模型 id 为 {id}",
+			"option.legacy.named": "指定 provider {provider}，模型 id 为 {id}",
+			"card.map.legacy.pending": "确认前按兼容规则读取，原值保留。",
+			"option.scope.any": "任意 provider",
+			"option.scope.named": "指定 provider",
+			"warn.modelIssue.global": "默认审查模型不可用：{reason}。实际使用：{effective}。",
+			"warn.modelIssue.rule": "此规则选择的审查模型不可用：{reason}。实际使用：{effective}。",
+			"warn.modelIssue.session": "本会话选择的审查模型不可用：{reason}。实际使用：{effective}。",
 			"card.field.defaultModel": "默认审查模型",
-			"card.field.byParentModel": "按执行助手的模型选择审查模型",
-			"card.field.followParent": "无可用审查模型时使用执行助手的模型",
+			"card.field.parentModelRules": "按执行助手的模型选择审查模型",
 			"card.effort.unsupported": "（模型不支持）",
 			"effort.default": "自动选择",
 			"card.override": "已单独设置",
@@ -83,17 +94,16 @@ window.__ModuleLoader__.load({
 			"help.trigger.presets": "会话使用清单内权限预设时，插件按接管规则处理升权审批；其他预设保持宿主原审批流程。清单为空时，任何已知预设都不接管；无法识别的预设按「无法识别权限预设时」的设置处置。选择接管范围不等于授予任意权限。",
 			"help.trigger.unknown": "读不到会话权限预设时的处置。保持宿主原审批流程＝不接管；继续自动审查＝视为命中接管范围。可能原因包括服务缺失、读取失败或没有可用预设信息。",
 			"help.trigger.auditEverySkip": "开启后，每次因预设不匹配而跳过的审批都逐条记录；关闭时同一会话同一原因只记录一条。只改变跳过记录的数量，不影响接管与审批本身，也不表示所有审批都被审查。",
-			"help.reviewer.byParentModel": "按执行助手的模型选择审查模型：执行助手所用模型（纯模型 id）对应到审查模型与推理强度，比全局默认更具体，命中即生效；未命中按其余层级解析（顺序见上方「默认审查模型」）。",
-			"help.reviewer.model": "全局默认的审查模型与推理强度。模型引用形如 provider/model；推理强度留空表示自动选择：模型支持 `low` 就使用 `low`，否则不指定、由模型默认值决定，不承诺所有模型都支持或采用相同强度。解析顺序为会话选择 → 按执行助手的模型映射 → 全局默认 → 跟随执行助手模型。",
-			"help.reviewer.followParent": "仅在会话选择、按执行助手的模型映射、全局默认都不可用时生效：使用与执行助手相同的模型，独立发起一次审查调用——这是「使用相同模型」，不是由执行助手自己审批。关闭后，全部层级不可用时按审查故障拒绝。",
+			"help.reviewer.parentModelRules": "按执行助手的模型选择审查模型：每条规则含作用范围（任意 provider，或指定 provider 下的完整模型 id）与审查模型、推理强度。会话选择更优先；命中时先于全局默认；未命中按其余层解析。同一作用范围与执行助手模型只能有一条规则，重复的行不能保存。旧字典继续参与匹配：纯模型 id 键按任意 provider 读取；含斜杠的旧键会在表中请求确认原意，确认前按原值读取，不自动改写。",
+			"help.reviewer.model": "全局默认的审查模型与推理强度。模型引用形如 provider/model；推理强度留空表示自动选择：模型支持 `low` 就使用 `low`，否则不指定、由模型默认值决定，不承诺所有模型都支持或采用相同强度。解析顺序为会话选择 → 按执行助手的模型映射 → 全局默认；全局默认未设置时使用执行助手的当前模型——插件仍独立发起一次审查调用，是「使用相同模型」，不是由执行助手自己审批。",
 			"help.reviewer.timeoutMs": "自动审查的等待上限（毫秒），涵盖等待本次审查结论的全过程，内部重试不另计时。超时按拒绝处理并说明发生环节，不是危险判定。0 表示取消审查时限：审查模型挂起、工具或其他异常可能使请求无限停在自动审批，插件不自动恢复时限；取消与其他人工路径仍按各自条件生效（常驻风险提醒同此）。",
-			"help.reviewer.maxTokens": "审查输出上限（token）。0 表示不向模型传输出上限，由模型或供应商默认值决定。推理模型可能先把额度用于推理：上限过小可能导致没有有效结论（正文为空，按审查故障处理）；具体数值因模型与推理强度而异，不以个别模型的测量结果作通用保证。",
+			"help.reviewer.maxTokens": "token 是模型计量文本的单位。审查输出上限（token）。0 表示不向模型传输出上限，由模型或供应商默认值决定。推理模型可能先把额度用于推理：上限过小可能导致没有有效结论（正文为空，按审查故障处理）；具体数值因模型与推理强度而异，不以个别模型的测量结果作通用保证。",
 			"help.human.timeoutMs": "人工作答等待上限（毫秒），仅在「自动审查未允许时＝交给人工决定」时使用。0 表示立即拒绝，不是无限等待。到点按拒绝结算，原因写明人工作答超时。",
 			"help.human.timeoutFrom": "人工作答计时的起点：从审批请求起算＝交人工只使用剩余时间；从交人工起算＝交人工时重新开始计时。",
 			"help.mode": "总开关：规则检查＋LLM 审查＝正常接管；完全不接管＝等同未安装，宿主审批流程不受影响。",
 			"help.allowEscalationTo": "可自动批准的最高权限，只限制可送审或允许的升权范围；范围内仍须通过规则检查与模型审查，不等于自动批准全部操作。完全访问（默认）＝最宽；工作区内修改＝超出工作区写入的升权不放行。",
 			"help.unknownSubject": "无法辨认本次实际操作（如回查不到命令或参数）时的处置。直接拒绝＝不调用模型、立即拒绝；带缺失说明继续审查＝携带已取得的参数与上下文继续审查，缺失明确标记，不把缺失当作安全。",
-			"help.fallback": "自动审查未允许（拒绝、超时或故障）时的处置。直接拒绝＝按拒绝结算并通知执行助手；交给人工决定＝显示人工审批卡片等待你作答，人工作答等待上限到点按拒绝结算。子代理没有人工通道：未允许一律拒绝。",
+			"help.fallback": "自动审查未允许（拒绝、超时或故障）时的处置。直接拒绝＝按拒绝结算；通知按「给执行助手的审批通知」的设置发送，选择「不发送」时不发任何通知。交给人工决定＝显示人工审批卡片等待你作答，人工作答等待上限到点按拒绝结算。子代理没有人工通道：未允许一律拒绝。",
 			"help.ui.inject": "发给执行助手（发起工具操作的 Agent）的审批通知范围：允许、拒绝、超时和故障＝四类都发送；仅拒绝、超时和故障＝允许不发送；选择「不发送」＝一条都不发送。审查记录视图的显示不受本开关影响。",
 			"help.ui.injectMaxBytes": "发给执行助手的单条通知的字节上限，超出截断并附截断标记；0 不裁剪。限制对象只是通知，审查记录按会话独立保留，与该上限无关。",
 			"help.tools": "纳入自动审批的工具名单，每行一个工具名。空清单覆盖所有工具的升权审批；填写后只处理名单内工具的升权请求，其余工具保持宿主原流程。",
@@ -205,8 +215,8 @@ window.__ModuleLoader__.load({
 			"layer.session": "会话选择（session）",
 			"layer.parent-map": "按执行助手的模型映射（parent-map）",
 			"layer.global": "全局默认（global）",
-			"layer.follow-parent": "跟随执行助手模型（follow-parent）",
-			"layer.unavailable": "全部层级不可用（unavailable）",
+			"layer.follow-parent": "全局默认未设置，使用执行助手当前模型（follow-parent）",
+			"layer.unavailable": "无可用审查模型（unavailable）",
 			"fieldsDefaulted.risk": "风险分级（risk）",
 			"fieldsDefaulted.auth": "授权分级（auth）",
 			"fieldsDefaulted.reason": "理由（reason）",
@@ -214,7 +224,7 @@ window.__ModuleLoader__.load({
 			"degraded.cwd": "会话目录缺失（cwd）",
 			"degraded.transcript": "上下文读取失败或截断（transcript）",
 			"degraded.entry": "单条证据截断（entry:…）",
-			"degraded.all": "模型选择全部不可用（all）",
+			"degraded.all": "审查模型解析无可用结果（all）",
 			"degraded.output-truncated": "输出截断（output-truncated）",
 			"degraded.output-empty": "空输出（output-empty）",
 			"degraded.superseded": "已被其他路径先结算（superseded）",
@@ -269,13 +279,12 @@ window.__ModuleLoader__.load({
 			"hint.trigger.presets": "会话使用清单内权限预设时，由本插件接管升权审批。",
 			"hint.trigger.unknown": "读不到会话权限预设时的处置。",
 			"hint.trigger.auditEverySkip": "因预设不匹配跳过的审批是否逐条记录。",
-			"hint.reviewer.model": "全局默认的审查模型与推理强度。",
-			"hint.reviewer.byParentModel": "按执行助手模型选择审查模型的映射表。",
-			"hint.reviewer.followParent": "更高优先级的选择都不可用时，改用执行助手的模型独立审查。",
+			"hint.reviewer.model": "全局默认的审查模型与推理强度；未设置时使用执行助手的当前模型。",
+			"hint.reviewer.parentModelRules": "按执行助手模型匹配的规则表：命中时先于全局默认，会话选择更优先。",
 			"hint.language.ui": "插件界面文案的语言。",
 			"hint.language.agent": "发给审查模型的文本与给执行助手的通知，两者使用的语言。",
 			"hint.reviewer.timeoutMs": "自动审查的等待上限（毫秒）；0 取消时限，有常驻风险提醒。",
-			"hint.reviewer.maxTokens": "审查输出的 token 上限；0 不设上限。",
+			"hint.reviewer.maxTokens": "审查输出的 token 上限；0 不向模型传输出上限，仍受供应商默认限制。",
 			"hint.ui.humanCardDuringReview": "审查期间是否提前显示人工审批卡片。",
 			"hint.human.timeoutMs": "人工作答的等待上限（毫秒）；0 立即拒绝。",
 			"hint.human.timeoutFrom": "人工作答从何时开始计时：审批请求发出时，或交人工时。",
@@ -293,15 +302,26 @@ window.__ModuleLoader__.load({
 			"card.map.parent": "Agent's model",
 			"card.map.add": "Add row",
 			"card.map.remove": "Remove",
+			"card.map.col.scope": "Scope",
 			"card.map.col.parent": "Agent's model",
 			"card.map.col.reviewer": "Reviewer model",
 			"card.map.col.effort": "Effort",
 			"card.map.col.action": "Actions",
 			"card.map.custom": "Custom…",
 			"card.map.placeholder.parent": "Agent model id",
+			"card.map.placeholder.provider": "Provider id",
+			"card.map.duplicate": "Duplicate match condition: one rule per scope and agent model.",
+			"card.map.legacy.title": "This legacy key contains a slash; confirm its original meaning.",
+			"option.legacy.any": "Any provider, model id {id}",
+			"option.legacy.named": "Provider {provider}, model id {id}",
+			"card.map.legacy.pending": "Until confirmed, the key keeps its value and is read per the compatibility rules.",
+			"option.scope.any": "Any provider",
+			"option.scope.named": "Specific provider",
+			"warn.modelIssue.global": "The default reviewer model is unavailable: {reason}. Currently using: {effective}.",
+			"warn.modelIssue.rule": "The reviewer model picked by this rule is unavailable: {reason}. Currently using: {effective}.",
+			"warn.modelIssue.session": "This session's reviewer model is unavailable: {reason}. Currently using: {effective}.",
 			"card.field.defaultModel": "Default reviewer model",
-			"card.field.byParentModel": "Reviewer model by the agent's model",
-			"card.field.followParent": "Use the agent's model when no reviewer is available",
+			"card.field.parentModelRules": "Reviewer model by the agent's model",
 			"card.effort.unsupported": " (unsupported by this model)",
 			"effort.default": "Automatic",
 			"card.override": "Set individually",
@@ -320,17 +340,16 @@ window.__ModuleLoader__.load({
 			"help.trigger.presets": "Sessions on a listed preset hand escalation approvals to this plugin; other presets keep the host flow. An empty list takes over no known preset; unidentifiable presets follow \"When the preset cannot be identified\". Choosing the take-over range grants no extra permissions.",
 			"help.trigger.unknown": "What to do when the session preset cannot be read: keep the host flow means no take-over; continue means treat it as covered. Causes include a missing service, a read failure, or no preset information.",
 			"help.trigger.auditEverySkip": "On: every preset-mismatch skip is logged; off: one line per session and reason. This only changes the number of skip lines, never the take-over itself, and does not imply every approval is reviewed.",
-			"help.reviewer.byParentModel": "Picks the reviewer by the model the acting agent uses: the agent's plain model id maps to a reviewer model and effort, overriding the global default; misses fall through to the remaining layers (see Default reviewer model).",
-			"help.reviewer.model": "Global default reviewer model and effort. The reference reads provider/model; an empty effort is automatic: use `low` when the model supports it, otherwise let the model default decide — no promise that every model supports it or matches the same intensity. Resolution: session choice, by the agent's model, global default, then follow the agent's model.",
-			"help.reviewer.followParent": "Applies only when the session choice, the agent-model map and the global default are all unusable: the reviewer then runs on the same model as the agent, as an independent call — the same model, never the agent approving itself. Off: total resolution failure is rejected as a review failure.",
+			"help.reviewer.parentModelRules": "Picks the reviewer by the model the acting agent uses: each rule carries a scope (any provider, or a specific one) plus the agent's full model id, mapped to a reviewer model and effort. A session choice outranks a hit; a hit outranks the global default; misses fall through to the remaining layers. One rule per scope and agent model — duplicates cannot be saved. The legacy dictionary still matches: plain-id keys read as any-provider; slash-containing keys ask you to confirm their meaning, are read as-is until confirmed, and are never rewritten automatically.",
+			"help.reviewer.model": "Global default reviewer model and effort. The reference reads provider/model; an empty effort is automatic: use `low` when the model supports it, otherwise let the model default decide — no promise that every model supports it or matches the same intensity. Resolution: session choice, by the agent's model, global default; an unset default reviews on the agent's current model — an independent call, the same model, never the agent approving itself.",
 			"help.reviewer.timeoutMs": "Auto-review wait limit (ms), covering the whole wait for this review's conclusion; internal retries get no fresh budget. A timeout rejects with its stage named — not a danger verdict. 0 removes the limit: a hung model or tooling failure can leave the request stuck in auto-approval forever; the plugin never restores the limit silently, while cancellation and other human paths still apply (same as the standing note).",
-			"help.reviewer.maxTokens": "Review output cap (tokens). 0 sends no cap, leaving the model or provider default. Reasoning models may spend the budget on reasoning first: too small a cap can leave no usable conclusion (empty body, treated as a review failure); the threshold varies by model and effort, so no single measurement is a general promise.",
+			"help.reviewer.maxTokens": "A token is the unit models use to measure text. Review output cap (tokens). 0 sends no cap, leaving the model or provider default. Reasoning models may spend the budget on reasoning first: too small a cap can leave no usable conclusion (empty body, treated as a review failure); the threshold varies by model and effort, so no single measurement is a general promise.",
 			"help.human.timeoutMs": "Human-answer wait limit (ms), used only when the fallback is Ask. 0 rejects immediately, not an endless wait. Expiry settles as a rejection citing the human timeout.",
 			"help.human.timeoutFrom": "Where the human timer starts: from the approval request (the handoff only gets the remainder), or from the handoff itself.",
 			"help.mode": "Master switch: rule check plus LLM review takes over as configured; off behaves as if uninstalled, leaving host approvals untouched.",
 			"help.allowEscalationTo": "The widest permission auto-approval may grant. It bounds what may be reviewed or allowed; everything in range still passes the rule checks and the review — it is not a blanket approval. Full access (default) is widest; workspace write rejects wider escalations.",
 			"help.unknownSubject": "When the actual action cannot be identified (say, no command or arguments could be recovered): reject refuses at once without the model; keep reviewing submits what was recovered with explicit missing-action marks — missing never counts as safe.",
-			"help.fallback": "What happens when the review does not approve (deny, timeout or failure): reject settles at once and notifies the agent; ask shows the human card until you answer or the human limit rejects. Subagents have no human channel — not allowed always means rejected.",
+			"help.fallback": "What happens when the review does not approve (deny, timeout or failure): reject settles as a rejection; notices follow the \"Approval notices to the agent\" setting — send none sends nothing. Ask shows the human card until you answer or the human limit rejects. Subagents have no human channel — not allowed always means rejected.",
 			"help.ui.inject": "Which approval notices reach the acting agent: allow, deny, timeout and failures sends all four; deny, timeout and failures skips allow notices; send none sends no notices. The review-log view is unaffected by this switch.",
 			"help.ui.injectMaxBytes": "Byte cap for one notice to the agent; longer text is trimmed with a marker, 0 does not trim. Only notices are capped — review records are kept per session and ignore this limit.",
 			"help.tools": "Tools under auto-approval, one name per line. Empty covers every tool's escalations; once filled, only listed tools are handled and the rest keep the host flow.",
@@ -442,8 +461,8 @@ window.__ModuleLoader__.load({
 			"layer.session": "Session choice (session)",
 			"layer.parent-map": "By the agent's model (parent-map)",
 			"layer.global": "Global default (global)",
-			"layer.follow-parent": "Follow the agent's model (follow-parent)",
-			"layer.unavailable": "No layer available (unavailable)",
+			"layer.follow-parent": "Global default unset; using the agent's current model (follow-parent)",
+			"layer.unavailable": "No usable reviewer model (unavailable)",
 			"fieldsDefaulted.risk": "Risk level (risk)",
 			"fieldsDefaulted.auth": "Authorization level (auth)",
 			"fieldsDefaulted.reason": "Rationale (reason)",
@@ -451,7 +470,7 @@ window.__ModuleLoader__.load({
 			"degraded.cwd": "Working directory missing (cwd)",
 			"degraded.transcript": "Context read failure or truncation (transcript)",
 			"degraded.entry": "Single evidence entry truncated (entry:…)",
-			"degraded.all": "No model layer available (all)",
+			"degraded.all": "No usable reviewer model (all)",
 			"degraded.output-truncated": "Output truncated (output-truncated)",
 			"degraded.output-empty": "Empty output (output-empty)",
 			"degraded.superseded": "Settled first by another path (superseded)",
@@ -506,13 +525,12 @@ window.__ModuleLoader__.load({
 			"hint.trigger.presets": "Sessions on a listed permission preset hand escalations to this plugin.",
 			"hint.trigger.unknown": "What happens when the session preset cannot be read.",
 			"hint.trigger.auditEverySkip": "Whether approvals skipped for a preset mismatch are each logged.",
-			"hint.reviewer.model": "Global default reviewer model and effort.",
-			"hint.reviewer.byParentModel": "Map from the agent's model to a reviewer model.",
-			"hint.reviewer.followParent": "When no higher-priority choice works, review with the agent's model.",
+			"hint.reviewer.model": "Global default reviewer model and effort; unset means the agent's current model.",
+			"hint.reviewer.parentModelRules": "Rules matching the agent's model; a hit beats the global default, a session choice beats both.",
 			"hint.language.ui": "Language of the plugin's UI copy.",
 			"hint.language.agent": "Language shared by the texts sent to the reviewer and the notices sent to the agent.",
 			"hint.reviewer.timeoutMs": "Auto-review wait limit (ms); 0 removes it, with a standing risk note.",
-			"hint.reviewer.maxTokens": "Review output cap in tokens; 0 sets none.",
+			"hint.reviewer.maxTokens": "Review output cap in tokens; 0 sends no cap to the model, provider defaults still apply.",
 			"hint.ui.humanCardDuringReview": "Whether the human card appears early during review.",
 			"hint.human.timeoutMs": "Human-answer wait limit (ms); 0 rejects immediately.",
 			"hint.human.timeoutFrom": "Where the human-answer timing starts: at the approval request, or at the handoff.",
@@ -573,8 +591,6 @@ window.__ModuleLoader__.load({
 			".dsafm_helpregion{padding:10px 0 0;font-size:12px;line-height:1.6;color:var(--dsw-alias-label-secondary);overflow-wrap:anywhere}",
 			// 覆盖组：胶囊「已单独设置」（primitives.Tag 自带样式）＋「恢复默认」文本按钮。
 			".dsafm_badges{display:inline-flex;align-items:center;gap:8px}",
-			// 行内勾选（跟随执行助手模型一类）：贴标签行右端（标签组 flex:1 把它推到控制列位置），24px 命中区与说明按钮同规格。
-			".dsafm_inlinecheck{display:inline-flex;align-items:center;flex:none;min-width:24px;min-height:24px;justify-content:center;margin-left:auto}",
 			".dsafm_reset{border:none;background:none;padding:0;font:inherit;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-secondary);cursor:pointer}",
 			".dsafm_reset:hover:not(:disabled){color:var(--dsw-alias-label-primary)}",
 			".dsafm_reset:disabled{cursor:default}",
@@ -604,11 +620,21 @@ window.__ModuleLoader__.load({
 			".dsafm_save:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}",
 			".dsafm_chevron{flex:0 0 auto;color:var(--dsw-alias-label-tertiary)}",
 			".dsafm_ctl{display:flex;gap:6px;min-width:0}",
+			// 分置醒目提示行（design §7.2.0）：警告图标＋文字取 warn-label，行背景取 warn-tertiary
+			// （宿主连接指示器同款配对令牌）；圆角与内边距沿用字段说明区的规格。
+			".dsafm_warnline{display:flex;align-items:flex-start;gap:6px;padding:6px 10px;border-radius:8px;background:var(--dsw-alias-state-warn-tertiary);color:var(--dsw-alias-state-warn-label);font-size:12px;line-height:1.5;overflow-wrap:anywhere}",
+			".dsafm_warnline svg{flex:none;color:var(--dsw-alias-state-warn-label)}",
+			// 结构化规则表（design §7.2）：作用范围／执行助手模型／审查模型／推理强度／操作五列。
 			".dsafm_map{display:flex;flex-direction:column;gap:6px}",
-			".dsafm_map_head,.dsafm_map_row{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1.6fr) minmax(96px,.8fr) auto;gap:8px;align-items:center;min-width:0}",
+			".dsafm_map_head,.dsafm_map_row{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1.5fr) minmax(0,1.5fr) minmax(96px,.8fr) auto;gap:8px;align-items:center;min-width:0}",
 			".dsafm_map_head{font-size:12px;color:var(--dsw-alias-label-tertiary)}",
 			".dsafm_map_row select{width:100%;min-width:0}",
+			".dsafm_map_rowwrap{display:flex;flex-direction:column;gap:4px;min-width:0}",
+			".dsafm_map_scope{display:flex;flex-direction:column;gap:4px;min-width:0}",
 			".dsafm_map_del{justify-self:start;padding:0 10px}",
+			".dsafm_map_dup{font-size:12px;line-height:1.5;color:var(--dsw-alias-state-error-primary);overflow-wrap:anywhere}",
+			".dsafm_map_pending_title{font-size:12px;line-height:1.5;color:var(--dsw-alias-label-primary);overflow-wrap:anywhere}",
+			".dsafm_map_pending{font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary);overflow-wrap:anywhere}",
 			".dsafm_button{border:none;background:none;padding:0;font:inherit;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-secondary);cursor:pointer}",
 			".dsafm_button:hover:not(:disabled){color:var(--dsw-alias-label-primary)}",
 			".dsafm_button:disabled{cursor:default}",
@@ -619,6 +645,8 @@ window.__ModuleLoader__.load({
 			".dsafm_item{display:flex;flex-direction:column}",
 			".dsafm_item_group{font-size:11px;color:var(--dsw-alias-label-tertiary)}",
 			".dsafm_seat_pending{font-size:11px;color:var(--dsw-alias-state-warn-primary);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+			// 会话控件的分置提示挂在座位下方（design §7.2.0/§7.3）：纵向堆叠，不挤压输入行高度。
+			".dsafm_seatwrap{display:inline-flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0}",
 			".dsafm_stack{display:flex;flex-direction:column;gap:6px;min-width:0}",
 			".dsafm_picker{display:flex;align-items:center;gap:8px;width:100%;text-align:left;cursor:pointer}",
 			".dsafm_picker_text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
@@ -750,16 +778,102 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 读 `reviewer.byParentModel`，得到行表；键兼容纯模型 id 与全引用（design §7.2）。
-		 * @param {unknown} value - 映射对象。
-		 * @returns {{parent: string, model: string, effort: string}[]} 行表。
+		 * 规则条件的比较键：provider 归一空值为 null 后与 model 逐字比较，键化为 `[provider, model]` 对。
+		 * 与宿主侧 `lib/config.js` 的 `parentModelRuleKey` 同一口径；重复条件防线在两侧按同一比较对齐（design §6.2/§7.2）。
+		 * @param {string | null} provider - 条件 provider（空值归一为 null）。
+		 * @param {string} model - 条件完整纯模型 id。
+		 * @returns {string} 条件键。
 		 */
-		function rowsOf(value) {
-			if (value === null || typeof value !== "object" || Array.isArray(value)) return [];
-			return Object.keys(value).map((key) => {
-				const choice = choiceOf(value[key]);
-				return { parent: key, model: choice.model, effort: choice.effort };
-			});
+		function conditionKeyOf(provider, model) {
+			const normalized = typeof provider === "string" && provider.trim().length > 0 ? provider : null;
+			return JSON.stringify([normalized, model]);
+		}
+
+		/**
+		 * 含斜杠旧键的兼容读取条件：去掉首个斜杠后的完整纯模型 id（design §6.2 兼容链）。
+		 * 首斜杠在首位或末位的坏键不做猜测恢复，按整键参与比较——与宿主侧 `modelIssues` 的同款口径。
+		 * @param {string} key - 旧字典键。
+		 * @returns {string} 兼容读取条件里的完整纯模型 id。
+		 */
+		function legacyPlainIdOf(key) {
+			const at = key.indexOf("/");
+			return at > 0 && at < key.length - 1 ? key.slice(at + 1) : key;
+		}
+
+		/**
+		 * 映射表的行条件键（design §7.2 重复条件防线）：结构化行与纯 id 旧键行按其四字段条件；
+		 * 待确认含斜杠旧键行按兼容读取条件（任意 provider＋去首斜杠 id）。条件未填的行不参与比较。
+		 * @param {object} row - 行状态。
+		 * @returns {string | null} 条件键；条件为空时 null。
+		 */
+		function rowConditionKeyOf(row) {
+			if (row.kind === "pending") return conditionKeyOf(null, legacyPlainIdOf(row.key));
+			if (typeof row.model !== "string" || row.model.trim().length === 0) return null;
+			return conditionKeyOf(row.provider, row.model);
+		}
+
+		/**
+		 * 读映射表两路输入，得到统一的行状态表（design §7.2）。
+		 * `reviewer.parentModelRules` 的每条规则是一行；旧 `reviewer.byParentModel` 字典按键形分流：
+		 * 不含斜杠（或首斜杠在首位/末位）的键呈现为「任意 provider＋该 id」的规则行（`kind: "legacy"`，
+		 * 未编辑时保留在旧字典），其余呈现为待确认行（`kind: "pending"`）。
+		 * @param {unknown} rules - `reviewer.parentModelRules`。
+		 * @param {unknown} legacy - `reviewer.byParentModel`。
+		 * @returns {{kind: string, provider: string | null, model: string, ref: string, effort: string, key?: string}[]} 行状态表。
+		 */
+		function tableOf(rules, legacy) {
+			const rows = [];
+			if (Array.isArray(rules)) {
+				for (const rule of rules) {
+					const parent = rule !== null && typeof rule === "object" && !Array.isArray(rule) ? rule.parent : undefined;
+					const choice = choiceOf(rule !== null && typeof rule === "object" ? rule.choice : undefined);
+					rows.push({
+						kind: "rule",
+						provider: parent !== null && typeof parent === "object" && typeof parent.provider === "string" && parent.provider.trim().length > 0 ? parent.provider : null,
+						model: parent !== null && typeof parent === "object" && typeof parent.model === "string" ? parent.model : "",
+						ref: choice.model,
+						effort: choice.effort,
+					});
+				}
+			}
+			if (legacy !== null && typeof legacy === "object" && !Array.isArray(legacy)) {
+				for (const key of Object.keys(legacy)) {
+					const choice = choiceOf(legacy[key]);
+					if (key.indexOf("/") > 0 && key.indexOf("/") < key.length - 1) {
+						rows.push({ kind: "pending", provider: null, model: "", ref: choice.model, effort: choice.effort, key });
+						continue;
+					}
+					rows.push({ kind: "legacy", provider: null, model: key, ref: choice.model, effort: choice.effort, key });
+				}
+			}
+			return rows;
+		}
+
+		/**
+		 * 行状态表的持久化形状（design §7.2 保存计划）：结构化行（新建、确认或编辑转来）写入
+		 * `parentModelRules` 全量；未编辑的旧键（纯 id 键与未确认含斜杠键）留在 `byParentModel`，只减不增。
+		 * 只去首尾空白，不切斜杠、不剥前缀（design §6.2）；条件未填的行丢弃。
+		 * @param {object[]} rows - 行状态表。
+		 * @returns {{rules: object[], legacyKeys: string[]}} 新结构规则清单与保留的旧键清单。
+		 */
+		function persistableOf(rows) {
+			const rules = [];
+			const legacyKeys = [];
+			for (const row of rows) {
+				if (row.kind === "legacy" || row.kind === "pending") {
+					legacyKeys.push(row.key);
+					continue;
+				}
+				if (typeof row.model !== "string" || row.model.trim().length === 0) continue;
+				rules.push({
+					parent: {
+						provider: typeof row.provider === "string" && row.provider.trim().length > 0 ? row.provider.trim() : null,
+						model: row.model.trim(),
+					},
+					choice: { model: typeof row.ref === "string" ? row.ref.trim() : "", effort: typeof row.effort === "string" ? row.effort : "" },
+				});
+			}
+			return { rules, legacyKeys };
 		}
 
 		/**
@@ -771,18 +885,6 @@ window.__ModuleLoader__.load({
 			const at = typeof ref === "string" ? ref.indexOf("/") : -1;
 			if (at <= 0 || at === ref.length - 1) return { provider: "", model: "" };
 			return { provider: ref.slice(0, at), model: ref.slice(at + 1) };
-		}
-
-		/**
-		 * 映射键：`provider/model` 取**最后一个** `/` 之后的模型 id，与宿主 `lookupByParentModel`
-		 * 的取法（`lastIndexOf('/')`，design §6.2）一致；输入 `a/b/c` 得 `c`，不再得 `b/c`。
-		 * @param {string} text - 用户输入或目录引用。
-		 * @returns {string} 键；空输入返回空串。
-		 */
-		function keyOf(text) {
-			const raw = typeof text === "string" ? text.trim() : "";
-			const at = raw.lastIndexOf("/");
-			return at === -1 ? raw : raw.slice(at + 1);
 		}
 
 		/**
@@ -801,17 +903,23 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 展示用的执行助手模型引用：键已是全引用时原样返回，否则用目录拼上 provider（design §7.2）。
-		 * @param {string} key - 映射键。
+		 * 执行助手模型列的候选：按完整纯模型 id 去重，附匹配 provider 信息（design §7.2）。
 		 * @param {object | null} catalog - 模型目录。
-		 * @returns {string} 展示引用。
+		 * @returns {{id: string, providers: string[], ref: string}[]} 候选（ref＝该 provider 下的拼接值）。
 		 */
-		function displayRef(key, catalog) {
-			if (key.includes("/")) return key;
+		function parentModelOptionsOf(catalog) {
+			const byId = new Map();
 			for (const provider of catalog?.providers ?? []) {
-				for (const model of provider.models ?? []) if (model.id === key) return `${provider.id}/${model.id}`;
+				for (const model of provider.models ?? []) {
+					const entry = byId.get(model.id) ?? { id: model.id, providers: [], refs: [] };
+					if (!entry.providers.includes(provider.id)) {
+						entry.providers.push(provider.id);
+						entry.refs.push(`${provider.id}/${model.id}`);
+					}
+					byId.set(model.id, entry);
+				}
 			}
-			return key;
+			return [...byId.values()].map((entry) => ({ id: entry.id, providers: entry.providers, refs: entry.refs }));
 		}
 
 		/**
@@ -850,6 +958,43 @@ window.__ModuleLoader__.load({
 						: { efforts: [] },
 				)
 				.catch(() => ({ efforts: [] }));
+		}
+
+		/**
+		 * 审查模型不可用的分置醒目提示行（design §7.2.0）：警告图标＋不可用原因＋实际回退结果。
+		 * 实际结果按 §8.5.1 的层枚举文案呈现：模型引用非空＝「层含义：引用」；空串＝仅层含义
+		 * （无会话求值时无生效引用可填，以层含义承接）。取词只呈现可见性，不改变解析行为。
+		 * @param {(key: string) => string} t - 取词函数。
+		 * @param {string} key - 提示键（`warn.modelIssue.*`）。
+		 * @param {object} issue - `modelIssues` 条目。
+		 * @returns {object} React 元素。
+		 */
+		function modelIssueLine(t, key, issue) {
+			const layerKey = `layer.${issue?.effectiveLayer}`;
+			const rawLayer = t(layerKey);
+			const layerText = rawLayer === layerKey ? t("enum.unknown").replace("{v}", String(issue?.effectiveLayer)) : rawLayer;
+			const model = typeof issue?.effectiveModel === "string" ? issue.effectiveModel : "";
+			const effective = model.length === 0 ? layerText : `${layerText}${/[\u3400-\u9fff]/u.test(layerText) ? "：" : ": "}${model}`;
+			return jsxRuntime.jsxs("div", {
+				className: "dsafm_warnline",
+				children: [
+					jsxRuntime.jsx(primitives.IconWarningOutlineRegular, { size: 12 }),
+					jsxRuntime.jsx("span", {
+						children: t(key).replace("{reason}", String(issue?.reason ?? "")).replace("{effective}", effective),
+					}),
+				],
+			});
+		}
+
+		/**
+		 * `modelIssues` 里按作用域取条目（design §7.2.0）；结果缺字段或非数组时不产生条目。
+		 * @param {unknown} issues - `getState` 的 `modelIssues`。
+		 * @param {"global" | "rule" | "session"} scope - 作用域。
+		 * @returns {object[]} 条目。
+		 */
+		function issuesOf(issues, scope) {
+			if (!Array.isArray(issues)) return [];
+			return issues.filter((issue) => issue !== null && typeof issue === "object" && issue.scope === scope);
 		}
 
 		/**
@@ -1019,7 +1164,15 @@ window.__ModuleLoader__.load({
 			const signatureOf = (value) =>
 				value === undefined || value === null
 					? ""
-					: [value.active, value.preset, value.effective, value.sessionModel, value.sessionEffort, value.layer].join("|");
+					: [
+							value.active,
+							value.preset,
+							value.effective,
+							value.sessionModel,
+							value.sessionEffort,
+							value.layer,
+							JSON.stringify(Array.isArray(value.modelIssues) ? value.modelIssues : []),
+						].join("|");
 			const lastSignatureRef = react.useRef(null);
 			const aliveRef = react.useRef(true);
 			/**
@@ -1220,7 +1373,13 @@ window.__ModuleLoader__.load({
 				],
 			});
 
-			return jsxRuntime.jsx(primitives.Menu, {
+			// 会话作用域的分置醒目提示（design §7.2.0/§7.3.1）：渲染在选择控件附近；
+			// 求值失败或旧宿主无 modelIssues 字段时不产生条目。
+			const sessionWarns = issuesOf(state?.modelIssues, "session").map((issue, index) =>
+				modelIssueLine(t, "warn.modelIssue.session", issue),
+			);
+
+			const menu = jsxRuntime.jsx(primitives.Menu, {
 				open,
 				onClose: () => setOpen(false),
 				items: [
@@ -1244,6 +1403,9 @@ window.__ModuleLoader__.load({
 				portal: true,
 				anchor: seat,
 			});
+			return sessionWarns.length === 0
+				? menu
+				: jsxRuntime.jsxs("div", { className: "dsafm_seatwrap", children: [menu, ...sessionWarns] });
 		}
 
 		/**
@@ -2100,6 +2262,9 @@ window.__ModuleLoader__.load({
 			const [error, setError] = react.useState("");
 			const [catalog, setCatalog] = react.useState(null);
 			const [efforts, setEfforts] = react.useState({});
+			// 审查模型不可用诊断（design §7.2.0）：设置页以无会话状态求值，取 global 与 rule 两类条目；
+			// 求值失败或旧宿主无 modelIssues 字段时不渲染提示，不影响表单本身。
+			const [issues, setIssues] = react.useState(null);
 
 			react.useEffect(() => scope.subscribe(() => setSnapshot(scope.getSnapshot())), [scope]);
 
@@ -2117,6 +2282,23 @@ window.__ModuleLoader__.load({
 				};
 			}, []);
 
+			// 诊断随配置修订重取：保存落库后提示与生效配置同步，不长期显示旧选择（design §6.2）。
+			react.useEffect(() => {
+				if (rpcCall === null) return undefined;
+				let alive = true;
+				Promise.resolve()
+					.then(() => rpcCall("approveForMe/getState", { sessionId: "" }))
+					.then((response) => {
+						if (alive === true && response?.ok === true && Array.isArray(response.value?.modelIssues)) {
+							setIssues(response.value.modelIssues);
+						}
+					})
+					.catch(() => {});
+				return () => {
+					alive = false;
+				};
+			}, [snapshot?.revision]);
+
 			/**
 			 * 按需读档位表并写进缓存；同一引用只请求一次，失败时记空表（design §7.2）。
 			 * @param {string} ref - 模型引用。
@@ -2132,6 +2314,59 @@ window.__ModuleLoader__.load({
 			const value = snapshot?.value ?? {};
 			const base = snapshot?.base ?? {};
 			const writable = snapshot?.writable === true;
+
+			// 映射表（design §7.2）：一条暂存同时驱动两个配置路径——新结构规则清单与旧字典兼容输入；
+			// 显示行状态由两路种子合成，保存计划按表差异分别落两路（见 plan）。
+			const RULES_PATH = ["reviewer", "parentModelRules"];
+			const LEGACY_PATH = ["reviewer", "byParentModel"];
+			const MAP_KEY = RULES_PATH.join(".");
+			const rulesSeedRaw = getPath(value, RULES_PATH);
+			const rulesSeed = Array.isArray(rulesSeedRaw) ? rulesSeedRaw : [];
+			const legacySeedRaw = getPath(value, LEGACY_PATH);
+			const legacySeed =
+				legacySeedRaw !== null && typeof legacySeedRaw === "object" && !Array.isArray(legacySeedRaw) ? legacySeedRaw : {};
+			const rulesBaseRaw = getPath(base, RULES_PATH);
+			const rulesBase = Array.isArray(rulesBaseRaw) ? rulesBaseRaw : [];
+			const legacyBaseRaw = getPath(base, LEGACY_PATH);
+			const legacyBase = legacyBaseRaw !== null && typeof legacyBaseRaw === "object" && !Array.isArray(legacyBaseRaw) ? legacyBaseRaw : {};
+			const mapStaged = staged[MAP_KEY];
+			/** 映射表的显示行状态：暂存 ?? 组合层默认（clear）?? 快照种子。 */
+			const displayTable =
+				mapStaged === undefined
+					? tableOf(rulesSeed, legacySeed)
+					: mapStaged.clear === true
+						? tableOf(rulesBase, legacyBase)
+						: Array.isArray(mapStaged.value)
+							? mapStaged.value
+							: tableOf(rulesSeed, legacySeed);
+			// 重复条件防线（design §7.2）：按行条件键计数，涉事行显示行级错误并阻止保存。
+			const conditionCounts = new Map();
+			for (const row of displayTable) {
+				const key = rowConditionKeyOf(row);
+				if (key === null) continue;
+				conditionCounts.set(key, (conditionCounts.get(key) ?? 0) + 1);
+			}
+			/**
+			 * 行是否处于重复条件状态。
+			 * @param {object} row - 行状态。
+			 * @returns {boolean} 是否重复。
+			 */
+			const duplicateRow = (row) => {
+				const key = rowConditionKeyOf(row);
+				return key !== null && conditionCounts.get(key) > 1;
+			};
+			// rule 作用域的醒目提示按行条件配对（design §7.2.0）：条件键同一比较口径。
+			const ruleIssues = issuesOf(issues, "rule");
+			/**
+			 * 行附近渲染的 rule 作用域提示。
+			 * @param {object} row - 行状态。
+			 * @returns {object[]} 提示元素（通常 0 或 1 条）。
+			 */
+			const rowIssuesOf = (row) => {
+				const key = rowConditionKeyOf(row);
+				if (key === null) return [];
+				return ruleIssues.filter((issue) => key === conditionKeyOf(issue.ruleProvider, typeof issue.ruleModel === "string" ? issue.ruleModel : ""));
+			};
 
 		/**
 			 * 写入一个暂存条目。
@@ -2214,27 +2449,19 @@ window.__ModuleLoader__.load({
 				};
 			};
 
-			/** 行表 → 映射对象：键取纯模型 id，空键行丢弃（design §7.2）。 */
-			const rowsToMap = (rows) => {
-				const map = {};
-				for (const row of rows) {
-					const key = keyOf(row.parent);
-					if (key.length > 0) map[key] = { model: row.model, effort: row.effort };
-				}
-				return map;
-			};
-
-			/** 四个结构化字段的保存规格（与 FIELDS 同一条暂存 → 保存路径）。 */
+			/** 结构化字段的保存规格（与 FIELDS 同一条暂存 → 保存路径）；映射表双路径单独处理（见 plan 内）。 */
 			const SPECIAL_PLAN = [
 				{ path: ["reviewer", "model"], toValue: (val) => val },
-				{ path: ["reviewer", "byParentModel"], toValue: rowsToMap },
-				{ path: ["reviewer", "followParent"], toValue: (val) => val },
 				{ path: ["trigger", "presets"], toValue: (val) => (Array.isArray(val) ? val : []) },
 			];
 
 			/**
 			 * 保存计划：逐暂存条目解析——非法值阻塞（invalid）；与快照现值相同的条目跳过；
 			 * clear 在用户层无键时也无操作（官方 SettingsFormModel.plan 同款语义）。
+			 * 映射表（design §7.2）单独处理：一条暂存同时驱动 `reviewer.parentModelRules` 与
+			 * `reviewer.byParentModel` 两个配置路径——有改动写规则清单全量（只收新建行与确认、编辑转来的行），
+			 * 旧字典按保留键清单重建（只减不增）；两路均与现值相同时不写映射路径。
+			 * 重复条件在此判非法草稿（含旧字典呈现行，见 `rowConditionKeyOf`），阻止保存。
 			 * @returns {{ops: object[], invalid: boolean}} 路径操作与合法性。
 			 */
 			const plan = () => {
@@ -2267,6 +2494,36 @@ window.__ModuleLoader__.load({
 					const current = getPath(value, spec.path);
 					if (JSON.stringify(current ?? null) === JSON.stringify(nextValue ?? null)) continue;
 					ops.push({ op: "set", path: spec.path, value: nextValue });
+				}
+				const mapEntry = staged[MAP_KEY];
+				// 重复条件防线（design §7.2）对显示表恒生效：行级错误在场时保存一并阻止，
+				// 包括未触碰映射只改其他字段的场景——错误在场却可保存会自相矛盾。
+				const table = mapEntry !== undefined && mapEntry.clear !== true && Array.isArray(mapEntry.value) ? mapEntry.value : displayTable;
+				const seen = new Set();
+				for (const row of table) {
+					const key = rowConditionKeyOf(row);
+					if (key === null) continue;
+					if (seen.has(key)) {
+						invalid = true;
+						break;
+					}
+					seen.add(key);
+				}
+				if (mapEntry !== undefined) {
+					if (mapEntry.clear === true) {
+						if (getPath(user, RULES_PATH) !== undefined) ops.push({ op: "unset", path: RULES_PATH });
+						if (getPath(user, LEGACY_PATH) !== undefined) ops.push({ op: "unset", path: LEGACY_PATH });
+					} else if (invalid !== true) {
+						const { rules, legacyKeys } = persistableOf(mapEntry.value);
+						const legacy = {};
+						for (const key of legacyKeys) if (Object.prototype.hasOwnProperty.call(legacySeed, key)) legacy[key] = legacySeed[key];
+						if (JSON.stringify(rulesSeed) !== JSON.stringify(rules)) {
+							ops.push({ op: "set", path: RULES_PATH, value: rules });
+						}
+						if (JSON.stringify(legacySeed) !== JSON.stringify(legacy)) {
+							ops.push({ op: "set", path: LEGACY_PATH, value: legacy });
+						}
+					}
 				}
 				return { ops, invalid };
 			};
@@ -2356,8 +2613,6 @@ window.__ModuleLoader__.load({
 				const hintId = `${NS}-hint-${suffix}`;
 				const helpId = `${NS}-help-${suffix}`;
 				const describedby = [hintId, open ? helpId : ""].filter(Boolean).join(" ");
-				// 行内控件（布尔勾选类）：控件进标签行右端，不再单独占一行（勾孤悬在标签下方会被当成误置元素）。
-				const inline = options.inlineControl === true ? control(controlId, describedby) : null;
 			const [helpButton, helpRegion] = helpToggleOf({ label, helpId, open, setOpen, helpText });
 				return jsxRuntime.jsxs("div", {
 					className: "dsafm_field",
@@ -2387,10 +2642,9 @@ window.__ModuleLoader__.load({
 										],
 									})
 									: null,
-								inline === null ? null : jsxRuntime.jsx("span", { className: "dsafm_inlinecheck", children: inline }),
 							],
 						}),
-						inline === null ? control(controlId, describedby) : null,
+						control(controlId, describedby),
 						jsxRuntime.jsx("p", { id: hintId, className: "dsafm_f_hint", children: hint }),
 						helpRegion,
 					],
@@ -2474,20 +2728,21 @@ window.__ModuleLoader__.load({
 			};
 
 			/**
-			 * 模型下拉：目录里的全部引用，外加目录没有的当前值。
+			 * 模型下拉：目录里的全部引用，外加目录没有的当前值；`locked` 为真时只读（待确认旧键行）。
 			 * @param {string} current - 当前模型引用。
 			 * @param {(ref: string) => void} onChange - 选择回调。
 			 * @param {string} [controlId] - 控件 id（标签行 htmlFor 指向第一个控件）。
 			 * @param {string} [describedby] - aria-describedby。
+			 * @param {boolean} [locked] - 只读标记。
 			 * @returns {object} 元素。
 			 */
-			const modelSelect = (current, onChange, controlId, describedby) =>
+			const modelSelect = (current, onChange, controlId, describedby, locked) =>
 				jsxRuntime.jsxs("select", {
 					id: controlId,
 					className: "dsafm_input dsafm_model",
 					value: current,
 					title: current,
-					disabled: !writable,
+					disabled: !writable || locked === true,
 					"aria-describedby": describedby,
 					onChange: (event) => onChange(event.target.value),
 					children: [
@@ -2497,19 +2752,21 @@ window.__ModuleLoader__.load({
 				});
 
 			/**
-			 * 档位下拉：首项固定「自动选择」；模型未选定或未取到档位时置灰不可写（design §7.2）。
+			 * 档位下拉：首项固定「自动选择」；模型未选定或未取到档位时置灰不可写（design §7.2）；
+			 * `locked` 为真时只读（待确认旧键行）。
 			 * @param {string} ref - 所属模型引用。
 			 * @param {string} current - 当前档位。
 			 * @param {(effort: string) => void} onChange - 选择回调。
+			 * @param {boolean} [locked] - 只读标记。
 			 * @returns {object} 元素。
 			 */
-			const effortSelect = (ref, current, onChange) => {
+			const effortSelect = (ref, current, onChange, locked) => {
 				const view = effortOptions(efforts[ref], current, t("effort.default"), t("card.effort.unsupported"));
 				return jsxRuntime.jsxs("select", {
 					className: "dsafm_input dsafm_effort",
 					value: current,
 					title: current.length === 0 ? t("effort.default") : current,
-					disabled: !writable || !view.writable,
+					disabled: !writable || !view.writable || locked === true,
 					onChange: (event) => onChange(event.target.value),
 					children: view.options.map((option) =>
 						jsxRuntime.jsx(
@@ -2542,15 +2799,13 @@ window.__ModuleLoader__.load({
 				});
 			};
 
-			// 结构化字段的显示值（暂存优先；种子与组合层默认值经归一化后取用）。
+			// 结构化字段的显示值（暂存优先；种子与组合层默认值经归一化后取用）；映射表显示值见 displayTable。
 			const displayChoice = specialOf(["reviewer", "model"], choiceOf).display;
-			const displayRows = specialOf(["reviewer", "byParentModel"], rowsOf).display;
-			const displayFollow = specialOf(["reviewer", "followParent"], (raw) => raw !== false).display;
 			const displayPresets = specialOf(["trigger", "presets"], (raw) => (Array.isArray(raw) ? raw : [])).display;
 
 			react.useEffect(() => {
 				requestEfforts(displayChoice.model);
-				for (const row of displayRows) requestEfforts(row.model);
+				for (const row of displayTable) requestEfforts(row.ref);
 			});
 
 			/** 模型选择字段的暂存入口。 */
@@ -2565,17 +2820,55 @@ window.__ModuleLoader__.load({
 			};
 
 			/**
-			 * 暂存行表（不再即时写库）；键归一化挪到保存计划（rowsToMap）。
-			 * @param {object[]} next - 新行表。
+			 * 暂存映射表的行状态（不即时写库）；持久化形状在保存计划里由 `persistableOf` 生成。
+			 * @param {object[]} next - 新行状态表。
 			 * @returns {void}
 			 */
-			const stageRows = (next) => stageValue(["reviewer", "byParentModel"], next);
+			const stageRows = (next) => stageValue(RULES_PATH, next);
 
-			const patchRow = (index, patch) => stageRows(displayRows.map((row, position) => (position === index ? { ...row, ...patch } : row)));
-			const typeRow = (index, text) => stageRows(displayRows.map((row, position) => (position === index ? { ...row, parent: text } : row)));
+			/**
+			 * 行内编辑：旧字典行（纯 id 键）一经编辑即转为结构化行，保存时从旧字典移除（design §7.2）。
+			 * @param {number} index - 行号。
+			 * @param {object} patch - 行字段补丁。
+			 * @returns {void}
+			 */
+			const patchRow = (index, patch) =>
+				stageRows(
+					displayTable.map((row, position) => {
+						if (position !== index) return row;
+						if (row.kind === "legacy") {
+							return { kind: "rule", provider: row.provider, model: row.model, ref: row.ref, effort: row.effort, ...patch };
+						}
+						return { ...row, ...patch };
+					}),
+				);
+			/**
+			 * 手输执行助手模型 id：完整纯 id 原样入行，不切斜杠、不剥前缀（design §6.2）。
+			 * @param {number} index - 行号。
+			 * @param {string} text - 输入文本。
+			 * @returns {void}
+			 */
+			const typeRow = (index, text) => patchRow(index, { model: text, modelCustom: true });
 			const chooseRowModel = (index, ref) => {
-				const current = displayRows[index]?.effort ?? "";
-				pickEffort(ref, current).then((effort) => patchRow(index, { model: ref, effort }));
+				const current = displayTable[index]?.effort ?? "";
+				pickEffort(ref, current).then((effort) => patchRow(index, { ref, effort }));
+			};
+			/**
+			 * 待确认含斜杠旧键：用户选定一种原意后转为对应结构化行（design §7.2）——
+			 * 任意 provider＝整键为完整纯模型 id；指定 provider＝首段为 provider、余下段为 id。
+			 * @param {number} index - 行号。
+			 * @param {"any" | "named"} intent - 选定的原意。
+			 * @returns {void}
+			 */
+			const confirmPending = (index, intent) => {
+				const row = displayTable[index];
+				if (row?.kind !== "pending") return;
+				const at = row.key.indexOf("/");
+				const next =
+					intent === "named"
+						? { kind: "rule", provider: row.key.slice(0, at), model: row.key.slice(at + 1), ref: row.ref, effort: row.effort }
+						: { kind: "rule", provider: null, model: row.key, ref: row.ref, effort: row.effort };
+				stageRows(displayTable.map((entry, position) => (position === index ? next : entry)));
 			};
 
 			/**
@@ -2646,64 +2939,220 @@ window.__ModuleLoader__.load({
 				});
 			};
 
-			/**
-			 * 映射行：执行助手模型（下拉，列【模型】里注册的全部模型；另留「自定义…」兼顾手输）→
-			 * 审查模型 → 档位 → 删除。四列布局由 `.dsafm_map_row` 的 grid 定义，整表占满卡片宽度；
-			 * 每个下拉的 `title` 取当前完整值，长引用可悬停看全。键仍取纯模型 id，与解析侧一致（design §7.2）。
+				/**
+			 * 作用范围列（design §7.2）：下拉两选项（任意 provider 默认／指定 provider）；选「指定」时
+			 * 行内出现 provider 选择——选项来自目录 providers，目录不可读或选「自定义…」时手输。
+			 * 待确认含斜杠旧键行在此列呈现两种原意，选定后转为结构化行；确认前值不可编辑（design §7.2）。
 			 */
-			const parentRefs = modelRefsOf(catalog, "");
-			const mapRows = displayRows.map((row, index) =>
-				jsxRuntime.jsxs(
+			const providerDefault = () => (catalog?.providers ?? [])[0]?.id ?? "";
+			const providerCell = (row, index) => {
+				if (row.providerCustom === true || catalog === null) {
+					return jsxRuntime.jsx("input", {
+						className: "dsafm_input dsafm_map_provider",
+						type: "text",
+						value: typeof row.provider === "string" ? row.provider : "",
+						title: typeof row.provider === "string" ? row.provider : "",
+						placeholder: t("card.map.placeholder.provider"),
+						disabled: !writable,
+						onChange: (event) => patchRow(index, { provider: event.target.value }),
+					});
+				}
+				const ids = catalog.providers.map((provider) => provider.id);
+				const current = typeof row.provider === "string" ? row.provider : "";
+				return jsxRuntime.jsxs("select", {
+					className: "dsafm_input dsafm_map_provider",
+					value: current === "" || ids.includes(current) ? current : "__keep__",
+					title: current,
+					disabled: !writable,
+					onChange: (event) => {
+						const next = event.target.value;
+						if (next === "__custom__") {
+							patchRow(index, { providerCustom: true });
+							return;
+						}
+						patchRow(index, { provider: next });
+					},
+					children: [
+						jsxRuntime.jsx("option", { value: "", children: t("card.map.placeholder.provider") }, ""),
+						...ids.map((id) => jsxRuntime.jsx("option", { value: id, children: id }, id)),
+						current !== "" && !ids.includes(current)
+							? jsxRuntime.jsx("option", { value: "__keep__", children: current }, "__keep__")
+							: null,
+						jsxRuntime.jsx("option", { value: "__custom__", children: t("card.map.custom") }, "__custom__"),
+					],
+				});
+			};
+			const scopeCell = (row, index) => {
+				if (row.kind === "pending") {
+					const at = row.key.indexOf("/");
+					return jsxRuntime.jsxs("div", {
+						className: "dsafm_map_scope",
+						children: [
+							jsxRuntime.jsx("span", { className: "dsafm_map_pending_title", children: t("card.map.legacy.title") }),
+							jsxRuntime.jsxs("select", {
+								className: "dsafm_input dsafm_map_confirm",
+								value: "",
+								"aria-label": t("card.map.legacy.title"),
+								disabled: !writable,
+								onChange: (event) => {
+									if (event.target.value === "any" || event.target.value === "named") confirmPending(index, event.target.value);
+								},
+								children: [
+									jsxRuntime.jsx("option", { value: "", children: t("card.map.legacy.title") }, ""),
+									jsxRuntime.jsx("option", { value: "any", children: t("option.legacy.any").replace("{id}", row.key) }, "any"),
+									jsxRuntime.jsx(
+										"option",
+										{
+											value: "named",
+											children: t("option.legacy.named").replace("{provider}", row.key.slice(0, at)).replace("{id}", row.key.slice(at + 1)),
+										},
+										"named",
+									),
+								],
+							}),
+							jsxRuntime.jsx("span", { className: "dsafm_map_pending", children: t("card.map.legacy.pending") }),
+						],
+					});
+				}
+				const named = row.provider !== null;
+				return jsxRuntime.jsxs("div", {
+					className: "dsafm_map_scope",
+					children: [
+						jsxRuntime.jsxs("select", {
+							className: "dsafm_input dsafm_map_scope_mode",
+							value: named ? "named" : "any",
+							disabled: !writable,
+							onChange: (event) =>
+								event.target.value === "named"
+									? patchRow(index, { provider: providerDefault() })
+									: patchRow(index, { provider: null, providerCustom: false }),
+							children: [
+								jsxRuntime.jsx("option", { value: "any", children: t("option.scope.any") }, "any"),
+								jsxRuntime.jsx("option", { value: "named", children: t("option.scope.named") }, "named"),
+							],
+						}),
+						named ? providerCell(row, index) : null,
+					],
+				});
+			};
+			/**
+			 * 执行助手模型列：回显由作用范围决定——任意 provider 显示纯模型 id；指定 provider 显示
+			 * provider 与 id 的拼接（design §6.2）。指定 provider 时只列该 provider 的模型，选项值＝拼接值，
+			 * 选择经目录键查回纯 id，不对选择文本做斜杠切分；任意 provider 时按完整纯 id 去重并附 provider
+			 * 信息。目录不可读保留原值，「自定义…」与目录缺项走手输（完整纯 id 原样入行，不切不剥）。
+			 */
+			const agentModelCell = (row, index) => {
+				if (row.kind === "pending") {
+					return jsxRuntime.jsx("input", {
+						className: "dsafm_input dsafm_map_parent",
+						type: "text",
+						value: row.key,
+						title: t("card.map.legacy.title"),
+						disabled: true,
+						readOnly: true,
+					});
+				}
+				if (row.modelCustom === true) {
+					return jsxRuntime.jsx("input", {
+						className: "dsafm_input dsafm_map_parent",
+						type: "text",
+						value: row.model,
+						title: row.model,
+						placeholder: t("card.map.placeholder.parent"),
+						disabled: !writable,
+						onChange: (event) => typeRow(index, event.target.value),
+					});
+				}
+				const named = row.provider !== null && typeof row.provider === "string" && row.provider.length > 0;
+				if (named) {
+					const echo = row.model === "" ? "" : `${row.provider}/${row.model}`;
+					const models = (catalog?.providers ?? []).find((entry) => entry.id === row.provider)?.models ?? [];
+					const byEcho = new Map(models.map((model) => [`${row.provider}/${model.id}`, model.id]));
+					return jsxRuntime.jsxs("select", {
+						className: "dsafm_input dsafm_map_parent",
+						value: echo,
+						title: echo,
+						disabled: !writable,
+						onChange: (event) => {
+							const next = event.target.value;
+							if (next === "__custom__") {
+								patchRow(index, { modelCustom: true });
+								return;
+							}
+							const id = byEcho.get(next);
+							if (id !== undefined) patchRow(index, { model: id, modelCustom: false });
+						},
+						children: [
+							jsxRuntime.jsx("option", { value: "", children: t("card.map.parent") }, ""),
+							...[...byEcho.keys()].map((key) => jsxRuntime.jsx("option", { value: key, children: key }, key)),
+							echo !== "" && !byEcho.has(echo) ? jsxRuntime.jsx("option", { value: echo, children: echo }, "__keep__") : null,
+							jsxRuntime.jsx("option", { value: "__custom__", children: t("card.map.custom") }, "__custom__"),
+						],
+					});
+				}
+				const dedup = parentModelOptionsOf(catalog);
+				return jsxRuntime.jsxs("select", {
+					className: "dsafm_input dsafm_map_parent",
+					value: row.model,
+					title: row.model,
+					disabled: !writable,
+					onChange: (event) => {
+						const next = event.target.value;
+						if (next === "__custom__") {
+							patchRow(index, { modelCustom: true });
+							return;
+						}
+						patchRow(index, { model: next, modelCustom: false });
+					},
+					children: [
+						jsxRuntime.jsx("option", { value: "", children: t("card.map.parent") }, ""),
+						...dedup.map((entry) =>
+							jsxRuntime.jsx("option", { value: entry.id, children: `${entry.id} (${entry.providers.join(", ")})` }, entry.id),
+						),
+						row.model !== "" && !dedup.some((entry) => entry.id === row.model)
+							? jsxRuntime.jsx("option", { value: row.model, children: row.model }, "__keep__")
+							: null,
+						jsxRuntime.jsx("option", { value: "__custom__", children: t("card.map.custom") }, "__custom__"),
+					],
+				});
+			};
+			/**
+			 * 映射行：作用范围 → 执行助手模型 → 审查模型 → 推理强度 → 删除，五列布局由
+			 * `.dsafm_map_row` 的 grid 定义；行级重复错误与 rule 作用域醒目提示挂在行网格下方
+			 * （design §7.2/§7.2.0）。待确认行的审查模型与推理强度在确认前只读。
+			 */
+			const mapRows = displayTable.map((row, index) => {
+				const locked = row.kind === "pending";
+				return jsxRuntime.jsxs(
 					"div",
 					{
-						className: "dsafm_map_row",
+						className: "dsafm_map_rowwrap",
 						children: [
-							row.custom === true
-								? jsxRuntime.jsx("input", {
-									className: "dsafm_input dsafm_map_parent",
-									type: "text",
-									value: row.parent,
-									title: row.parent,
-									placeholder: t("card.map.placeholder.parent"),
-									disabled: !writable,
-									onChange: (event) => typeRow(index, event.target.value),
-								})
-								: jsxRuntime.jsxs("select", {
-									className: "dsafm_input dsafm_map_parent",
-									value: displayRef(row.parent, catalog),
-									title: displayRef(row.parent, catalog),
-									disabled: !writable,
-									onChange: (event) => {
-										const value = event.target.value;
-										if (value === "__custom__") {
-											patchRow(index, { custom: true });
-											return;
-										}
-										patchRow(index, { parent: keyOf(value), custom: false });
-									},
-									children: [
-										jsxRuntime.jsx("option", { value: "", children: t("card.map.parent") }, ""),
-										...parentRefs.map((ref) => jsxRuntime.jsx("option", { value: ref, children: ref }, ref)),
-										row.parent !== "" && !parentRefs.includes(displayRef(row.parent, catalog))
-											? jsxRuntime.jsx("option", { value: displayRef(row.parent, catalog), children: displayRef(row.parent, catalog) }, "__keep__")
-											: null,
-										jsxRuntime.jsx("option", { value: "__custom__", children: t("card.map.custom") }, "__custom__"),
-									],
-								}),
-							modelSelect(row.model, (ref) => chooseRowModel(index, ref)),
-							effortSelect(row.model, row.effort, (effort) => patchRow(index, { effort })),
-							jsxRuntime.jsx("button", {
-								type: "button",
-								className: "dsafm_button dsafm_map_del",
-								disabled: !writable,
-								onClick: () => stageRows(displayRows.filter((entry, position) => position !== index)),
-								children: t("card.map.remove"),
+							jsxRuntime.jsxs("div", {
+								className: "dsafm_map_row",
+								children: [
+									scopeCell(row, index),
+									agentModelCell(row, index),
+									modelSelect(row.ref, (ref) => chooseRowModel(index, ref), undefined, undefined, locked),
+									effortSelect(row.ref, row.effort, (effort) => patchRow(index, { effort }), locked),
+									jsxRuntime.jsx("button", {
+										type: "button",
+										className: "dsafm_button dsafm_map_del",
+										disabled: !writable,
+										onClick: () => stageRows(displayTable.filter((entry, position) => position !== index)),
+										children: t("card.map.remove"),
+									}),
+								],
 							}),
+							duplicateRow(row)
+								? jsxRuntime.jsx("div", { className: "dsafm_map_dup", children: t("card.map.duplicate") })
+								: null,
+							...rowIssuesOf(row).map((issue, position) => modelIssueLine(t, "warn.modelIssue.rule", issue)),
 						],
 					},
 					String(index),
-				),
-			);
+				);
+			});
 
 			/** 默认审查模型行（字段外壳＋模型/档位两个下拉，选择即暂存）。 */
 			const modelRow = () =>
@@ -2723,14 +3172,14 @@ window.__ModuleLoader__.load({
 						}),
 				});
 
-			/** 按执行助手模型映射行（字段外壳＋全宽四列表，增删改只暂存）。 */
+			/** 按执行助手模型映射行（字段外壳＋全宽五列结构化规则表，增删改只暂存）。 */
 			const mapRow = () =>
 				fieldShell({
-					label: t("card.field.byParentModel"),
-					path: ["reviewer", "byParentModel"],
-					hint: t("hint.reviewer.byParentModel"),
-					helpText: t("help.reviewer.byParentModel"),
-					onReset: () => stageClear(["reviewer", "byParentModel"]),
+					label: t("card.field.parentModelRules"),
+					path: RULES_PATH,
+					hint: t("hint.reviewer.parentModelRules"),
+					helpText: t("help.reviewer.parentModelRules"),
+					onReset: () => stageClear(RULES_PATH),
 					control: (controlId, describedby) =>
 						jsxRuntime.jsxs("div", {
 							className: "dsafm_map",
@@ -2740,6 +3189,7 @@ window.__ModuleLoader__.load({
 								jsxRuntime.jsxs("div", {
 									className: "dsafm_map_head",
 									children: [
+										jsxRuntime.jsx("span", { children: t("card.map.col.scope") }),
 										jsxRuntime.jsx("span", { children: t("card.map.col.parent") }),
 										jsxRuntime.jsx("span", { children: t("card.map.col.reviewer") }),
 										jsxRuntime.jsx("span", { children: t("card.map.col.effort") }),
@@ -2751,31 +3201,10 @@ window.__ModuleLoader__.load({
 									type: "button",
 									className: "dsafm_button dsafm_map_add",
 									disabled: !writable,
-									onClick: () => stageRows([...displayRows, { parent: "", model: "", effort: "" }]),
+									onClick: () => stageRows([...displayTable, { kind: "rule", provider: null, model: "", ref: "", effort: "" }]),
 									children: t("card.map.add"),
 								}),
 							],
-						}),
-				});
-
-			/** 跟随执行助手模型行（字段外壳＋复选框，勾选只暂存；复选框置于标签行右端）。 */
-			const followParentRow = () =>
-				fieldShell({
-					label: t("card.field.followParent"),
-					path: ["reviewer", "followParent"],
-					hint: t("hint.reviewer.followParent"),
-					helpText: t("help.reviewer.followParent"),
-					onReset: () => stageClear(["reviewer", "followParent"]),
-					inlineControl: true,
-					control: (controlId, describedby) =>
-						jsxRuntime.jsx("input", {
-							id: controlId,
-							className: "dsafm_check",
-							type: "checkbox",
-							checked: displayFollow === true,
-							disabled: !writable,
-							"aria-describedby": describedby,
-							onChange: (event) => stageValue(["reviewer", "followParent"], event.target.checked),
 						}),
 				});
 
@@ -2799,17 +3228,19 @@ window.__ModuleLoader__.load({
 						}),
 				});
 
-			// 打开即见＋字段顺序（design §7.2「21 字段」清单，无分区标题）：
-			// 接管预设 → 触发两行 → 默认审查模型 → 映射 → 跟随执行助手模型 → 高级其余行；插件标题/描述由宿主页面自己画。
+			// 打开即见＋字段顺序（design §7.2「20 字段」清单，无分区标题）：
+			// 接管预设 → 触发两行 → 默认审查模型 → 映射 → 高级其余行；插件标题/描述由宿主页面自己画。
+			// global 作用域的醒目提示渲染在表单顶部、第一个字段之前（design §7.2.0）。
+			const globalWarns = issuesOf(issues, "global").map((issue, index) => modelIssueLine(t, "warn.modelIssue.global", issue));
 			return jsxRuntime.jsxs("div", {
 				className: "dsafm_form",
 				children: [
 					writable ? null : jsxRuntime.jsx("p", { className: "dsafm_readonly", role: "status", children: t("card.readonly") }),
+					...globalWarns,
 					presetsRow(),
 					...FIELDS.filter((field) => field.section === "trigger").map((field) => fieldRow(field)),
 					modelRow(),
 					mapRow(),
-					followParentRow(),
 					...FIELDS.filter((field) => field.section === "advanced").map((field) => fieldRow(field)),
 					jsxRuntime.jsxs("div", {
 						className: "dsafm_footer",
