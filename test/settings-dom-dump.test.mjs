@@ -190,7 +190,7 @@ test('控件清单：生效值就在控件里，id 挂在控件上', () => {
     assert.ok(dump.includes(row), `控件表缺行：${row}`);
   }
   assert.match(dump, /接管预设为多选 picker（button \+ aria-expanded），不计入本表/u, 'picker 不应计入 input 清单');
-  assert.equal(dump.includes('reviewer-followParent'), false, 'followParent 控件行应随字段退役');
+  assert.equal(dump.includes('reviewer-followParent'), false, 'followParent 控件行不在 20 字段清单');
 });
 
 // ── 取值逐项等于生效值（结构断言抓不到整片为空） ─────────────────────────────
@@ -201,7 +201,7 @@ const REAL_PROFILE = {
   ui: { trace: { capture: 'full' } },
   language: { ui: 'zh', agent: 'en' },
 };
-/** 控件 id 尾段 → 生效值路径（与 client.js 的 ctl id 命名一一对应；followParent 已退役）。 */
+/** 控件 id 尾段 → 生效值路径（与 client.js 的 ctl id 命名一一对应；followParent 字段不在 20 字段清单）。 */
 const CTL_PATHS = {
   'trigger-unknown': 'trigger.unknown',
   'trigger-auditEverySkip': 'trigger.auditEverySkip',
@@ -228,7 +228,7 @@ test('控件取值逐项等于生效值（profile 用户层＋默认合并的产
   const at = (path) => path.split('.').reduce((node, key) => node?.[key], effective);
   const rows = [...dump.matchAll(/^\| \d+ \| (\w+) \| [\w-]+ \| approve-for-me-ctl-([\w.-]+) \| (.+) \|$/gmu)];
   // 反恒真防线：先证明控件表真的解析到了行（恰 18 行带 id 控件＝19 控件减 1 个无 id 的 effort 子选择器，
-  // followParent 复选框随字段退役；丢行会让后续对账漏项，行数不等即红）。
+  // followParent 字段不在 20 字段清单；丢行会让后续对账漏项，行数不等即红）。
   assert.equal(rows.length, 18, `控件表解析行数应为 18（实得 ${rows.length}），围栏或表头漂移会让后续断言漏项`);
   for (const [, tag, suffix, cell] of rows) {
     const path = CTL_PATHS[suffix];

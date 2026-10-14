@@ -1,6 +1,6 @@
 # 设置表单 DOM 夹具（结构判据 + 毫秒字段秒数读数；离线回归用）
 
-- 采集：本插件设置详情页（loopback 实例）的页面 DOM 与计算样式导出；采集工具链随仓发布（`tools/browser-shot.mjs` 驱动取证、`tools/build-dom-dump.mjs` 汇编成档），本轮的步骤场景脚本属开发期工件、不随仓发布。CSS 收窄扫描（scoped 段，只读本包注入的 `style[data-plugin-css="dsh-approve-for-me"]`）并入同一脚本。本轮（结构化规则表＋分置提示定稿，20 字段）经真实页面复核抽查对齐：§1/§2/§3/§4/§6/§7/§8/§10 全量比对、mode 说明开合、两字段「恢复默认→保存」往返（覆盖组回 3、非表单键 `ui.trace` 保留）；证据见 `开发期图证记录表（不随仓发布）`；§5 的 zh→auto 往返按同型语义执行。
+- 采集：本插件设置详情页（loopback 实例）的页面 DOM 与计算样式导出；采集工具链随仓发布（`tools/browser-shot.mjs` 驱动取证、`tools/build-dom-dump.mjs` 汇编成档），本次采集的步骤场景脚本属开发期工件、不随仓发布。CSS 收窄扫描（scoped 段，只读本包注入的 `style[data-plugin-css="dsh-approve-for-me"]`）并入同一脚本。本档经真实页面复核抽查对齐：§1/§2/§3/§4/§6/§7/§8/§10 全量比对、mode 说明开合、两字段「恢复默认→保存」往返（覆盖组回 3、非表单键 `ui.trace` 保留）；证据见 `开发期图证记录表（不随仓发布）`；§5 的 zh→auto 往返按同型语义执行。
 - 入口路径：侧栏「插件」→ `dsh-approve-for-me` → 本包详情页；页面身份 `[data-plugin-detail="dsh-approve-for-me"]`。
 - 常驻断言：`test/settings-dom-dump.test.mjs` 读本文件逐项核对（变异验证：篡改本文件对应断言变红）。
 
@@ -250,11 +250,11 @@ approve-for-me
 
 dsafm_form / dsafm_field / dsafm_f_head / dsafm_labelgroup / dsafm_f_label / dsafm_helpbtn / dsafm_helpbtn_text / dsafm_stack / dsafm_input.dsafm_picker / dsafm_picker_text / dsafm_picker_meta / dsafm_chevron / dsafm_f_hint / dsafm_input / dsafm_badges / dsafm_reset / dsafm_ctl / dsafm_input.dsafm_model / dsafm_input.dsafm_effort / dsafm_map / dsafm_map_head / dsafm_button.dsafm_map_add / dsafm_f_sec / dsafm_sec_resolved / dsafm_sec_draft / dsafm_f_help / dsafm_input.dsafm_area / dsafm_footer / dsafm_save
 
-退役类零残留：无 dsafm_row、dsafm_label、dsafm_section、dsafm_divider、dsafm_actions、dsafm_help、dsafm_map_block；`dsafm_inlinecheck`／`dsafm_check` 随 followParent 字段退役（勾选类控件不再出现在干净页 DOM；多选面板展开时的选项类属面板内部，不在此清单）。行级类（`dsafm_map_rowwrap`、`dsafm_map_scope`、`dsafm_map_dup` 等）与提示行类（`dsafm_warnline`）只在有规则行或诊断条目时进场——本档采集自空表无诊断页，故不在清单。`dsafm_chevron` 在场属下拉 picker 箭头；`dsafm_helpbtn_text` 为说明按钮的可见文字 span；`dsafm_f_help` 为官方数字字段后的平铺说明行（design §7.2.1）。
+退役类零残留：无 dsafm_row、dsafm_label、dsafm_section、dsafm_divider、dsafm_actions、dsafm_help、dsafm_map_block；followParent 字段不在 20 字段清单，勾选类控件不出现在干净页 DOM；多选面板展开时的选项类属面板内部，不在此清单。行级类（`dsafm_map_rowwrap`、`dsafm_map_scope`、`dsafm_map_dup` 等）与提示行类（`dsafm_warnline`）只在有规则行或诊断条目时进场——本档采集自空表无诊断页，故不在清单。`dsafm_chevron` 在场属下拉 picker 箭头；`dsafm_helpbtn_text` 为说明按钮的可见文字 span；`dsafm_f_help` 为官方数字字段后的平铺说明行（design §7.2.1）。
 
 ## 9. 失败登录计数
 
-- 采集前 `BadPasswordAttempts=未读`，采集后 `=未读`（Get-LocalUser 返回 null，如实留档未读；本轮复核抽查启动无头 Edge 4 次，10 分钟窗口阈值内）。
+- 采集前 `BadPasswordAttempts=未读`，采集后 `=未读`（Get-LocalUser 返回 null，如实留档未读；本次复核抽查启动无头 Edge 4 次，10 分钟窗口阈值内）。
 
 ## 10. 毫秒字段换算读数（.dsafm_f_sec，干净页＝无暂存）
 

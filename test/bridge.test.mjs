@@ -24,8 +24,9 @@ async function loadBridge() {
 }
 
 const bridge = await loadBridge();
-// model-resolver 被 bridge.js 静态依赖：bridge 可加载 ⇒ 它必然可加载；bridge 缺失时本文件已整体跳过。
+// model-resolver 与 config 都被 bridge.js 传递依赖：bridge 可加载 ⇒ 它们必然可加载；bridge 缺失时本文件已整体跳过。
 const resolverModule = bridge === undefined ? undefined : await import('../lib/model-resolver.js');
+const configModule = bridge === undefined ? undefined : await import('../lib/config.js');
 /** 离线（宿主包不可解析）时本文件不注册任何用例，避免把「跳过」当成「通过」。 */
 const testHost = bridge === undefined ? test.skip : test;
 
@@ -64,12 +65,15 @@ function service(options = {}) {
       return true;
     },
   };
+  // 快照读取口可注入（默认回放静态 value）：真实配置栈用例传经 normalizeConfig 现算的读取器，
+  // 与 lib/index.js 的 settingsSnapshot＝() => ({ revision, value: current() }) 同型。
+  const settingsSnapshot = options.settingsSnapshot ?? (() => snapshot);
   const resolver =
     options.resolver ??
-    resolverModule.createResolver({ llm, settingsSnapshot: () => snapshot, sessionModelOf: bridge.createSessionChoiceReader(store), audit: () => {} });
+    resolverModule.createResolver({ llm, settingsSnapshot, sessionModelOf: bridge.createSessionChoiceReader(store), audit: () => {} });
   return {
     ctx: { get: (name) => (name === 'permissionPresets' ? options.service : undefined), llm },
-    deps: { settingsSnapshot: () => snapshot, sessionStore: store, pending: options.pending, audit: (fields) => audits.push(fields), traceStore: options.traceStore, llm, resolver },
+    deps: { settingsSnapshot, sessionStore: store, pending: options.pending, audit: (fields) => audits.push(fields), traceStore: options.traceStore, llm, resolver },
     writes,
     audits,
     choiceOf: bridge.createSessionChoiceReader(store),
@@ -518,6 +522,29 @@ testHost('getState 遇可见配置错误不抛错：按 unavailable 呈现（审
   const state = await instance.getState('s1');
   assert.equal(state.layer, 'unavailable');
   assert.equal(state.effective, '');
+});
+
+testHost('getState 快照读取本身抛错不整体抛 RPC：volatile 重复条件经真实 normalizeConfig 呈现不可用', async () => {
+  // 真实配置栈：快照值经 normalizeConfig 现算（与 lib/index.js 的 current() 同型）。volatile 层写入
+  // 重复条件时读取本身抛错（「重复条件是可见配置错误」）——状态通道按读不到配置呈现，不抛给 RPC。
+  const volatile = {
+    reviewer: {
+      parentModelRules: [
+        { parent: { provider: null, model: 'chat' }, choice: { model: 'zai/glm-5.3', effort: '' } },
+        { parent: { provider: '', model: 'chat' }, choice: { model: 'zai/glm-5.3', effort: '' } },
+      ],
+    },
+    trigger: { presets: ['auto-approve'], unknown: 'skip' },
+  };
+  const instance = service({
+    session: { id: 's1', snapshotEvents: () => [{ type: 'model/selection', data: { provider: 'zai', model: 'chat' } }] },
+    settingsSnapshot: () => ({ revision: 2, value: configModule.normalizeConfig(volatile) }),
+  });
+  const state = await instance.getState('s1');
+  assert.equal(state.layer, 'unavailable', '读不到配置按无可用模型呈现');
+  assert.equal(state.effective, '');
+  assert.equal(state.modelIssues.length, 1, 'reviewer 降级为空：只发空全局默认条目');
+  assert.equal(state.modelIssues[0].configured, '');
 });
 
 // ── §8.2/§8.5：traceRecords 合并行与 traceRecord 合并详情 ────────────────────

@@ -212,7 +212,7 @@ test('会话选择不可用：跳过映射层直取全局默认（映射规则�
   assert.equal(cfg.resolution.layer, 'global');
   assert.equal(cfg.resolution.model, 'deepseek-v4-pro');
   assert.equal(cfg.resolution.degraded, 'session:unknown provider ghost');
-  // 映射目标可用也不被校验：映射层未参与本轮解析。
+  // 映射目标可用也不被校验：映射层未参与本次解析。
   assert.equal(calls.includes('zai/glm-5.3'), false);
   assert.ok(audits.some((entry) => entry.degraded === 'session:unknown provider ghost'), 'degraded 保留会话层原因');
   assert.equal(audits.some((entry) => entry.layer === 'parent-map'), false, '映射层不应留任何审计行');
@@ -789,23 +789,57 @@ test('空全局默认不发 session 作用域条目：会话已选择时宿主�
 test('空目标规则行发 rule 条目：reason 与不可解析目标同族，空值旧键不发', async () => {
   // 空目标（choice.model 空串）命中时选择层按候选不可用直退全局默认（design §6.2）；
   // 诊断推演同口径（design §7.2.0：空目标规则行按不可解析目标同族发 rule 条目）；空目标不判非法草稿，保存不受阻。
+  // 空值旧键排在断言条目之前：若空值旧键未被跳过（异常被外层 try 吞掉），条目收集中断、后面的断言变红。
   const issues = await collectModelIssues({
     llm: issuesLlm(),
     reviewer: {
       model: 'zai/glm-5.3',
       parentModelRules: [{ parent: { provider: null, model: 'chat' }, choice: { model: '', effort: '' } }],
-      byParentModel: { 'inert-legacy': '' },
+      byParentModel: { 'inert-legacy': '', 'legacy-ghost': 'ghost/nope' },
     },
     sessionChoice: undefined,
     parent: { provider: 'zai', model: 'glm-5.3' },
   });
-  const rule = issues.find((issue) => issue.scope === 'rule');
+  const rule = issues.find((issue) => issue.scope === 'rule' && issue.ruleModel === 'chat');
   assert.ok(rule !== undefined, '空目标规则行应发 rule 条目');
   assert.equal(rule.ruleProvider, null);
-  assert.equal(rule.ruleModel, 'chat');
   assert.equal(rule.configured, '', 'configured 保留空目标原文');
   assert.equal(rule.reason, 'unparsable model reference', 'reason 与不可解析目标同一文案');
   assert.equal(rule.effectiveLayer, 'global');
   assert.equal(rule.effectiveModel, 'zai/glm-5.3');
+  // 空值旧键之后的条目必须在场：异常若在空值旧键处中断收集，此断言最先变红。
+  const trailing = issues.find((issue) => issue.scope === 'rule' && issue.ruleModel === 'legacy-ghost');
+  assert.ok(trailing !== undefined, '空值旧键之后的规则行条目必须在场');
+  assert.equal(trailing.configured, 'ghost/nope');
   assert.equal(issues.some((issue) => issue.scope === 'rule' && issue.ruleModel === 'inert-legacy'), false, '空值旧键不被任何路径选中，不发条目');
+});
+
+test('无会话求值：规则目标为纯 id 且目录可解析时不发 rule 条目（诊断与选择同口径回退 provider）', async () => {
+  // 设置页无会话求值：无父模型时缺省 provider 取首个已注册 provider（与 selectReviewerModel 同口径），
+  // 纯 id 目标可解析且可用即无条目，不误报「unparsable model reference」。
+  const issues = await collectModelIssues({
+    llm: issuesLlm(),
+    reviewer: {
+      model: 'zai/glm-5.3',
+      parentModelRules: [{ parent: { provider: null, model: 'chat' }, choice: { model: 'glm-5.3', effort: '' } }],
+    },
+    sessionChoice: undefined,
+    parent: undefined,
+  });
+  assert.deepEqual(issues, [], '纯 id 目标按首个已注册 provider 解析且可用，无条目');
+});
+
+test('无会话求值：目录无已注册 provider 时纯 id 目标仍按不可用发 rule 条目', async () => {
+  const issues = await collectModelIssues({
+    llm: issuesLlm({ providers: [] }),
+    reviewer: {
+      model: 'zai/glm-5.3',
+      parentModelRules: [{ parent: { provider: null, model: 'chat' }, choice: { model: 'glm-5.3', effort: '' } }],
+    },
+    sessionChoice: undefined,
+    parent: undefined,
+  });
+  const rule = issues.find((issue) => issue.scope === 'rule');
+  assert.ok(rule !== undefined, '无 provider 可回退时纯 id 目标不可解析，仍按不可用发条目');
+  assert.equal(rule.reason, 'unparsable model reference');
 });

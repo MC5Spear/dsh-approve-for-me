@@ -2534,7 +2534,7 @@ window.__ModuleLoader__.load({
 				}
 				const mapEntry = staged[MAP_KEY];
 				// 重复条件防线（design §7.2）对显示表恒生效：行级错误在场时保存一并阻止，
-				// 包括未触碰映射只改其他字段的场景——错误在场却可保存会自相矛盾。
+				// 包括未触碰映射只改其他字段时——错误在场却可保存会自相矛盾。
 				const table = mapEntry !== undefined && mapEntry.clear !== true && Array.isArray(mapEntry.value) ? mapEntry.value : displayTable;
 				const seen = new Set();
 				for (const row of table) {
