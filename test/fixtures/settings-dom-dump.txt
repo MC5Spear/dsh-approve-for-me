@@ -244,13 +244,13 @@ approve-for-me
 | 17 | textarea | textarea | approve-for-me-ctl-tools | （空） |
 | 18 | textarea | textarea | approve-for-me-ctl-denyPatterns | （空） |
 
-接管预设为多选 picker（button + aria-expanded），不计入本表；followParent 复选框不再出现，结构化规则表在空表时只有表头与「添加一行」按钮，无行控件。
+接管预设为多选 picker（button + aria-expanded），不计入本表。
 
 ## 8. dsafm 类清单（容器内去重；退役类零残留）
 
 dsafm_form / dsafm_field / dsafm_f_head / dsafm_labelgroup / dsafm_f_label / dsafm_helpbtn / dsafm_helpbtn_text / dsafm_stack / dsafm_input.dsafm_picker / dsafm_picker_text / dsafm_picker_meta / dsafm_chevron / dsafm_f_hint / dsafm_input / dsafm_badges / dsafm_reset / dsafm_ctl / dsafm_input.dsafm_model / dsafm_input.dsafm_effort / dsafm_map / dsafm_map_head / dsafm_button.dsafm_map_add / dsafm_f_sec / dsafm_sec_resolved / dsafm_sec_draft / dsafm_f_help / dsafm_input.dsafm_area / dsafm_footer / dsafm_save
 
-退役类零残留：无 dsafm_row、dsafm_label、dsafm_section、dsafm_divider、dsafm_actions、dsafm_help、dsafm_map_block；followParent 字段不在 20 字段清单，勾选类控件不出现在干净页 DOM；多选面板展开时的选项类属面板内部，不在此清单。行级类（`dsafm_map_rowwrap`、`dsafm_map_scope`、`dsafm_map_dup` 等）与提示行类（`dsafm_warnline`）只在有规则行或诊断条目时进场——本档采集自空表无诊断页，故不在清单。`dsafm_chevron` 在场属下拉 picker 箭头；`dsafm_helpbtn_text` 为说明按钮的可见文字 span；`dsafm_f_help` 为官方数字字段后的平铺说明行（design §7.2.1）。
+退役类零残留：无 dsafm_row、dsafm_label、dsafm_section、dsafm_divider、dsafm_actions、dsafm_help、dsafm_map_block。`dsafm_chevron` 在场属下拉 picker 箭头；`dsafm_helpbtn_text` 为说明按钮的可见文字 span；`dsafm_f_help` 为官方数字字段后的平铺说明行（design §7.2.1）。
 
 ## 9. 失败登录计数
 

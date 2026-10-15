@@ -278,7 +278,7 @@ testHost('getState 与审批同一选择：映射层精确规则优先于通用�
   const state = await instance.getState('s1');
   assert.equal(state.layer, 'parent-map');
   assert.equal(state.effective, 'deepseek-official/deepseek-v4-pro');
-  // 状态结果不再携带映射字典：映射表经设置页 configForms 读取（design §7.1）。
+  // 状态结果不携带映射字典：映射表经设置页 configForms 读取（design §7.1）。
   assert.equal('byParentModel' in state, false);
 });
 

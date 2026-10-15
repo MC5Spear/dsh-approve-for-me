@@ -9,8 +9,7 @@ import { fileURLToPath } from 'node:url';
  *
  * 预设注入主路径＝本包 cordis.patch.yml 的 permission 行四档重述（随包装卸）；
  * pnpm 不执行依赖卸载脚本，生命周期脚本不能承载卸载清理；本文件断言防止重新引入。
- * 本文件不解析 YAML（无解析依赖）：按行定位做定向断言，与既有手术合同的历史形态
- * 的锚点式文本编辑同一哲学——不猜结构，找不到锚点就红。
+ * 本文件不解析 YAML（无解析依赖）：按行定位做定向断言——不猜结构，找不到锚点就红。
  */
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -166,7 +165,7 @@ test('发布范围守护：files 白名单与 hooks 缺席', () => {
   for (const entry of ['cordis.patch.yml', 'lib']) {
     assert.ok(files.includes(entry), `files 白名单缺少 ${entry}`);
   }
-  // 配置清理工具随手术机制整体退役，发布产物不携带。
+  // 发布产物不携带配置清理工具与 hooks；本组断言防止重新引入。
   assert.ok(!files.includes('tools/permission-preset.mjs'), 'files 白名单不得再含配置清理工具');
   assert.equal(existsSync(join(root, 'tools', 'permission-preset.mjs')), false, '配置清理工具脚本必须删除');
   assert.ok(!files.includes('hooks'), 'files 白名单不得再含 hooks');

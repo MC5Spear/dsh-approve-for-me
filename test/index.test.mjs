@@ -684,14 +684,14 @@ test('真接线：装载→停用/卸载全程不解析、不改写用户 YAML�
     return { ctx, disposers };
   };
   try {
-    // 1) mode=off 早退形态：不注册任何 effect（防护已退役）。
+    // 1) mode=off 早退形态：不注册任何 effect。
     const offEnv = guardCtx({ profileContext: { dir: profileDir } });
     host.apply(offEnv.ctx, { mode: 'off' });
-    assert.equal(offEnv.disposers.length, 0, 'mode=off 早退不注册 effect（默认预设悬空防护已退役）');
-    // 2) 正常形态同样不注册 effect（不随接线注册配置手术）。
+    assert.equal(offEnv.disposers.length, 0, 'mode=off 早退不注册 effect');
+    // 2) 正常形态同样不注册 effect（不随接线改写配置）。
     const env = guardCtx({ profileContext: { dir: profileDir }, sessions: { list: () => [] }, permissionPresets: {} });
     host.apply(env.ctx, { mode: 'rules', enabled: true });
-    assert.equal(env.disposers.length, 0, '正常接线不注册任何配置手术 effect');
+    assert.equal(env.disposers.length, 0, '正常接线不注册任何配置改写 effect');
     // 3) 执行全部 disposer＝卸载时点：用户 YAML 逐字节不变。
     for (const dispose of env.disposers) await dispose();
     for (const dispose of offEnv.disposers) await dispose();

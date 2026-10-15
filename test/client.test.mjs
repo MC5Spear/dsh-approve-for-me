@@ -658,7 +658,7 @@ test('说明入口（§10.2）：20 个字段全覆盖，图标＋可见文字�
     assert.ok(button.props['aria-controls'], '说明按钮必须带 aria-controls');
     assert.ok(button.props['aria-label'], '说明按钮必须带 aria-label（无障碍名含字段名与状态）');
     assert.equal(typeof button.props.onKeyDown, 'function', '键盘路径必须可达（Enter/Space，design §7.2.1）');
-    // 可见文字与图标同置按钮内（help.expand/collapse），不再是纯图标按钮。
+    // 可见文字与图标同置按钮内（help.expand/collapse），非纯图标按钮。
     const textSpan = (button.props.children ?? []).find((child) => child?.props?.className === 'dsafm_helpbtn_text');
     assert.ok(textSpan, '说明按钮必须带可见文字 span');
     assert.match(String(textSpan.props.children), /^help\.(expand|collapse)$/);
@@ -1183,7 +1183,7 @@ test('composer 下拉：宿主里没有该会话时仍可写（会话开始前�
   assert.equal(seat.props.disabled, false, '会话未激活不得禁用控件');
   assert.equal(seat.props.title, 'composer.pendingSession', '改为说明「会话开始后生效」');
   assert.match(JSON.stringify(seat.props.children), /composer\.pendingSession/);
-  // 不再出现「会话未激活，请先发一条消息」这类阻止性提示。
+  // 不出现「会话未激活，请先发一条消息」这类阻止性提示。
   assert.doesNotMatch(JSON.stringify(seat.props), /composer\.inactive/);
 
   // 且确实能写入：写会话级选择时不因 found=false 而拒绝。

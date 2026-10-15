@@ -1308,7 +1308,7 @@ window.__ModuleLoader__.load({
 				return null;
 			}
 
-			// `found=false` 只是「宿主里没有这个活会话」，不再是禁用理由：写入按会话 id 落文件载体，
+			// `found=false` 只是「宿主里没有这个活会话」，不是禁用理由：写入按会话 id 落文件载体，
 			// 会话开始后生效（requirements §6.2）。
 			const pendingSession = state.found === false;
 			const model = typeof state.effective === "string" ? state.effective : "";
