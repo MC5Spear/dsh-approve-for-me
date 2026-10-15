@@ -1767,7 +1767,7 @@ test('映射行重复条件同口径 trim：空白前后缀条件判重复并禁
   assert.equal(env.writes.length, 0, '禁存：不写库（避免入库成重复规则后 normalizeConfig 读取抛错）');
 });
 
-test('映射行重复条件 provider 侧空白：快照两行『foo』与『 foo 』即报行级重复并禁存', async () => {
+test('映射行重复条件 provider 侧空白：快照两行「foo」与「 foo 」即报行级重复并禁存', async () => {
   resetHooks();
   const client = loadClient();
   // 快照直构（不走真实 normalizeConfig——重复对会在读取层即被拦截，到不了行级防线断言）。
@@ -3340,7 +3340,7 @@ test('设置表单恒渲染：无折叠头、无分区标题，字段与唯一�
   // 折叠头已移除（下拉基元自带 aria-expanded，不在此断言）。
   assert.equal(flat.includes('dsafm_head'), false, '折叠头已移除，不应再有 dsafm_head');
   assert.equal(flat.includes('dsafm_card'), false, '折叠外壳已移除，不应再有 dsafm_card');
-  // 分区标题退役；唯一保存按钮首屏在场且初始置灰；全局重置不再渲染。
+  // 设置表单不渲染分区标题；唯一保存按钮首屏在场且初始置灰；全局重置不渲染。
   assert.equal(flat.includes('card.section.'), false, '分区标题已退役');
   assert.notEqual(flat.indexOf('card.save'), -1, '保存控件应首屏在场');
   assert.equal(flat.includes('card.resetAll'), false, '重置控件已删除');
@@ -3787,7 +3787,7 @@ test('静态扫描：退役文案与失效令牌零命中、外壳类退役', as
   }
   // 笔误修正：警示色用现行别名 state-warn-primary。
   assert.ok(SOURCE.includes('--dsw-alias-state-warn-primary'), '警示色应使用现行别名');
-  // 卡片外壳退役（源码侧）：.dsafm_form 不再声明 border/radius/底色。
+  // 卡片外观（源码侧）：.dsafm_form 不声明 border/radius/底色。
   const formRule = /\.dsafm_form\{[^}]*\}/u.exec(SOURCE)?.[0] ?? '';
   assert.ok(formRule.length > 0, '应有 .dsafm_form 规则');
   assert.equal(/border(?!-top)/u.test(formRule), false, '.dsafm_form 不应再带边框');

@@ -64,7 +64,7 @@ test('退役件零命中——重置全部覆盖、当前生效值、分区标�
   assert.equal(pageText.includes('主模型'), false, '「主模型」用户可见字样应零命中（执行助手模型）');
   assert.equal(pageText.includes('档位'), false, '「档位」用户可见字样应零命中（推理强度）');
   assert.equal(pageText.includes('跳过（不接管）'), false, '旧选项文案「跳过（不接管）」应零命中');
-  // 分区标题退役：正文里不得出现独立的「触发」「高级」行（「审查模型」是映射表列头，按类清单判）。
+  // 正文里不得出现独立的「触发」「高级」分区标题行（「审查模型」是映射表列头，按类清单判）；本断言防止重新引入。
   assert.equal(hasLine('触发'), false, '分区标题「触发」应退役');
   assert.equal(hasLine('高级'), false, '分区标题「高级」应退役');
   const classLine = dump.split('\n').find((l) => l.trim().startsWith('dsafm_form /'));

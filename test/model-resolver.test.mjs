@@ -534,7 +534,7 @@ test('匹配语义：条件侧去首尾空白参与比较，精确规则仍优�
   });
   const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'foo', model: 'm' } }) } });
   assert.equal(cfg.resolution.layer, 'parent-map');
-  assert.equal(cfg.resolution.model, 'glm-5.3', '条件『 foo 』『 m 』去首尾空白后命中父模型 foo/m');
+  assert.equal(cfg.resolution.model, 'glm-5.3', '条件「 foo 」「 m 」去首尾空白后命中父模型 foo/m');
   assert.equal(cfg.resolution.effort, 'low', '通用规则在前不改变精确优先的层内顺序');
   // 父模型侧按原值参与比较：带空白不参与归一命中，按未命中路径继续。
   const miss = await resolver.configFor({ agent: { session: session({ parent: { provider: 'foo', model: ' m' } }) } });
