@@ -13,7 +13,7 @@
  * 它被原样交给 `clickText(text)` 做文本比较，写成 `{"click":{"text":"…"}}` 对象形式
  * 会永远匹配失败返回 not found）：
  * `{"click":"插件"}`（按可见文本精确匹配，取最近的 button/a/li/[role] 祖先点击）、
- * `{"clickSelector":".dsafm_head"}`、`{"send":"文本"}`（写入 composer）、
+ * `{"clickSelector":".dsafm_helpbtn"}`、`{"send":"文本"}`（写入 composer）、
  * `{"enter":true}`（composer 派发回车）、`{"clickSend":true}`（点发送按钮）、
  * `{"scroll":".dialog-scroll"}`（选择器最内层可滚动祖先滚到底）、
  * `{"shot":"card-collapsed"}`、`{"shotClip":"选择器"}`（元素级裁切截图）、

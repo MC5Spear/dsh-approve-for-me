@@ -70,7 +70,7 @@ test('退役件零命中——重置全部覆盖、当前生效值、分区标�
   const classLine = dump.split('\n').find((l) => l.trim().startsWith('dsafm_form /'));
   assert.ok(classLine, '找不到类清单行（应以 dsafm_form / 开头）');
   const classTokens = classLine.trim().split(' / ').map((token) => token.split('.')[0]);
-  for (const gone of ['dsafm_row', 'dsafm_label', 'dsafm_section', 'dsafm_divider', 'dsafm_actions', 'dsafm_help']) {
+  for (const gone of ['dsafm_row', 'dsafm_label', 'dsafm_section', 'dsafm_divider', 'dsafm_actions', 'dsafm_help', 'dsafm_f_help']) {
     assert.equal(classTokens.includes(gone), false, `退役类残留于类清单：${gone}`);
   }
 });
@@ -104,21 +104,20 @@ test('逐项等价：表单字段集与 config schema 的 UI 字段集一致（2
   // followParent 字段不出现在页面文本：零命中是字段集一致的一部分。
   assert.equal(pageText.includes('无可用审查模型时使用执行助手的模型'), false, 'followParent 字段标签应零命中（design §7.2 20 字段）');
   assert.equal(hasLine('作用范围'), true, '映射表头应含作用范围列（五列结构化规则表）');
-  assert.match(dump, /字段壳 `dsafm_field`＝16/u, '自绘字段壳应 16 个');
-  assert.match(dump, /数字字段 4 个走官方组件标记，合计 20/u, '20 字段＝16 自绘壳＋4 官方数字字段');
+  assert.match(dump, /字段壳 `dsafm_field`＝20（七类字段统一外壳，数字字段外套 `\.dsafm_numhost` 承载官方输入组件，design §7\.2\.1）/u, '字段壳应 20 个（七类统一外壳）');
 });
 
 test('覆盖组「已单独设置＋恢复默认」与用户层键一一对应', () => {
-  assert.match(dump, /恰好 3 组/u, '自绘覆盖组应恰好 3 组（reviewer.model/language.ui/language.agent）');
+  assert.match(dump, /恰好 4 组/u, '自绘覆盖组应恰好 4 组（reviewer.model/language.ui/language.agent/reviewer.timeoutMs）');
   // 自绘字段：标签行后 3 行内出现「说明」「已单独设置」与「恢复默认」。
   for (const label of ['默认审查模型', '插件界面语言', '发送给模型的文本语言']) {
     assert.ok(hasOverrideNear(label), `${label} 缺覆盖组`);
   }
-  // 数字字段：覆盖组在官方 SettingsValueField 内部（§1 文本仍逐字可见）。
+  // 数字字段：覆盖组由字段外壳自绘（§1 文本仍逐字可见）。
   // human.timeoutMs 无用户层键（profile 的 human 为空节，300000＝默认值），
-  // 官方组件内覆盖组只剩 reviewer.timeoutMs 一处。
+  // 覆盖组只剩 reviewer.timeoutMs 一处。
   for (const label of ['自动审查等待上限（毫秒）']) {
-    assert.ok(hasOverrideNear(label, 3), `${label} 缺官方组件内的覆盖组`);
+    assert.ok(hasOverrideNear(label, 3), `${label} 缺字段外壳自绘的覆盖组`);
   }
   // 未覆盖字段不得误报：无用户层键的字段旁不得出现覆盖组。
   assert.equal(hasOverrideNear('模式'), false, 'mode 无用户层键，不应有覆盖组');
@@ -129,9 +128,9 @@ test('覆盖组「已单独设置＋恢复默认」与用户层键一一对应',
 test('暂存语义：保存按钮三态与「只有保存才写」的行为差异', () => {
   assert.match(dump, /初始（无改动）：保存 disabled=`true`/u, '初始应置灰');
   assert.match(dump, /点 language\.ui「恢复默认」（只暂存）：控件值 `auto`、保存 disabled=`false`/u, '暂存后应可点');
-  assert.match(dump, /重开页面（不保存）：控件值回到 `zh`、覆盖组回 3 组、保存 disabled=`true`——暂存丢弃、写库没发生/u, '重开读旧值＝没写库');
-  assert.match(dump, /再暂存＋点保存：控件值 `auto`、覆盖组 2 组、保存 disabled=`true`——unset 落库、覆盖消失/u, '保存才落库');
-  assert.match(dump, /取证后复原（设回 zh＋保存）：控件值 `zh`、覆盖组 3 组/u, '取证后现场应复原');
+  assert.match(dump, /重开页面（不保存）：控件值回到 `zh`、覆盖组回 4 组、保存 disabled=`true`——暂存丢弃、写库没发生/u, '重开读旧值＝没写库');
+  assert.match(dump, /再暂存＋点保存：控件值 `auto`、覆盖组 3 组、保存 disabled=`true`——unset 落库、覆盖消失/u, '保存才落库');
+  assert.match(dump, /取证后复原（设回 zh＋保存）：控件值 `zh`、覆盖组 4 组/u, '取证后现场应复原');
 });
 
 test('配置区容器无自绘卡片外壳（计算样式）', () => {
@@ -142,7 +141,7 @@ test('配置区容器无自绘卡片外壳（计算样式）', () => {
 });
 
 test('说明入口（§7.2.1）：20 个按钮带可见文字，aria 成对，展开文本为新总开关文案', () => {
-  assert.match(dump, /说明按钮 20 个（16 自绘壳＋4 官方数字字段平铺行 `\.dsafm_f_help`）/u, '说明按钮应 20 个（含数字字段平铺行）');
+  assert.match(dump, /说明按钮 20 个（全部位于字段外壳标签行的 `\.dsafm_labelgroup` 内，标签旁）/u, '说明按钮应 20 个（全部经字段外壳标签行）');
   assert.match(dump, /按钮带可见文字「说明／收起说明」（`\.dsafm_helpbtn_text`）/u, '说明按钮应带可见文字');
   assert.match(dump, /`aria-label`＝「字段名：说明」、Enter\/Space 键盘可达/u, '无障碍名格式与键盘可达应在档');
   assert.match(dump, /点击 mode 字段后：aria-expanded=`true`、展开区在场=`true`、同屏展开区数量=1/u, '点击后应展开且仅展开一个');
@@ -171,11 +170,17 @@ test('交付 CSS 串失效令牌零命中（收窄到本包 style 元素）；�
   assert.match(dump, /\.dsafm_save\{[^}]*border-radius:8px;padding:5px 14px;/u, '保存按钮应取官方规格');
   assert.match(dump, /\.dsafm_helpbtn\{[^}]*min-width:24px;min-height:24px;/u, '说明按钮应为 24×24 最小命中区（文字按钮，design §7.2.1）');
   assert.match(dump, /\.dsafm_input\{[^}]*height:34px;padding:0 12px;border:\.5px solid var\(--dsw-alias-border-l4\);border-radius:8px;/u, '输入应取官方规格');
-  // 分隔线选择器组（design §7.2.1）：两条规则原文在档，且在实算注入串中原样在场（档案↔源码双向对账）。
-  assert.match(dump, /\.dsafm_f_sec \+ div:not\(\.dsafm_field\):not\(\.dsafm_f_help\)\{border-top:\.5px solid var\(--dsw-alias-border-l2\)\}/u, '秒数行后继排除说明行');
-  assert.match(dump, /\.dsafm_f_help \+ div:not\(\.dsafm_field\)\{border-top:\.5px solid var\(--dsw-alias-border-l2\)\}/u, '说明行作锚恢复分隔线');
-  assert.match(dump, /\.dsafm_f_help\{margin:-12px 0 12px\}/u, '平铺说明行负边距应在档');
-  assert.ok(cssRules.join('').includes('.dsafm_f_help{margin:-12px 0 12px}'), '平铺说明行规则应在实算注入串中');
+  // 数字字段承载规则（design §7.2.1）：两条 numhost 规则原文在档，且在实算注入串中原样在场（档案↔源码双向对账）；
+  // 旧分隔线选择器组与 .dsafm_f_help 规则在档与实算串双零命中；字段间分隔线统一 .dsafm_field + .dsafm_field 在场。
+  assert.match(dump, /\.dsafm_numhost > div\{padding:0\}/u, 'numhost 承载规则一（归零官方根内边距）应在档');
+  assert.match(dump, /\.dsafm_numhost > div > div:first-child\{display:none\}/u, 'numhost 承载规则二（收起官方空标签行）应在档');
+  assert.ok(cssRules.join('').includes('.dsafm_numhost > div{padding:0}'), '承载规则一应在实算注入串中');
+  assert.ok(cssRules.join('').includes('.dsafm_numhost > div > div:first-child{display:none}'), '承载规则二应在实算注入串中');
+  assert.equal(cssRules.join('').includes('dsafm_f_help'), false, '退役类 dsafm_f_help 在实算注入串中应零命中');
+  assert.equal(dump.includes('.dsafm_f_sec + div:not(.dsafm_field)'), false, '旧分隔线选择器一在档应零命中');
+  assert.equal(dump.includes('.dsafm_f_help + div:not(.dsafm_field)'), false, '旧分隔线选择器二在档应零命中');
+  assert.match(dump, /\.dsafm_field \+ \.dsafm_field\{border-top:\.5px solid var\(--dsw-alias-border-l2\)\}/u, '字段间分隔线统一为 .dsafm_field + .dsafm_field（应在档）');
+  assert.ok(cssRules.join('').includes('.dsafm_field + .dsafm_field{border-top:.5px solid var(--dsw-alias-border-l2)}'), '统一分隔线规则应在实算注入串中');
 });
 
 test('控件清单：生效值就在控件里，id 挂在控件上', () => {
@@ -264,15 +269,13 @@ test('毫秒字段换算读数常驻（生效值＝控件值、样式与分隔�
   ]) {
     assert.ok(dump.includes(row), `换算读数行缺失或漂移：${row}`);
   }
-  // 行样式与官方 .hint 同规格：12px／三级色；上边距 -12px 抵官方字段底 padding（贴住说明行），
-  // 下边距 12px 还给后继分隔线（同官方字段底部节奏）。
-  assert.match(dump, /fontSize=`12px`、color=`rgb\(129, 133, 140\)`、marginTop=`-12px`/u, '读数行应为 12px 三级色＋-12px 负边距（贴住说明行不隔行）');
-  // Fragment 平铺＋平铺说明行（design §7.2.1）：秒数行的后继是本字段的说明行（无边框）；
-  // 说明行之后才恢复分隔线（官方字段容器 1px；自绘字段 1px）。宿主 CSS 模块哈希随宿主版本变化
-  // （ui-primitives 改版后为 `_field_bjqpo_3`，0.2.0-rc.2 实测未变）；宿主升级后复核本档 DOM。
-  assert.match(dump, /后继节点 class=`dsafm_f_help`、borderTopWidth=`0px`/u, '秒数行的直接后继是平铺说明行，不分隔');
-  assert.match(dump, /class=`_field_bjqpo_3`、borderTopWidth=`1px`/u, '说明行后的官方字段应恢复分隔线');
-  assert.match(dump, /class=`dsafm_field`、borderTopWidth=`1px`/u, '说明行后的自绘字段应恢复分隔线');
+  // 行样式与官方 .hint 同规格：12px／三级色；负 margin 抵 numhost 与读数行之间的外壳 gap（贴住官方校验文案行）。
+  // 新结构（design §7.2.1）：外壳 gap＝6px，负边距定值按真页实测同步（-6px）。
+  assert.match(dump, /fontSize=`12px`、color=`rgb\(129, 133, 140\)`、marginTop=`-6px`/u, '读数行应为 12px 三级色＋-6px 负边距（贴住官方校验文案行）');
+  // 新结构（design §7.2.1）：数字字段进字段外壳后，秒数行的后继是展开说明区（展开时）或下一字段的
+  // .dsafm_field；字段间分隔线统一 .dsafm_field + .dsafm_field，不再有平铺说明行锚点。宿主 CSS 模块哈希
+  // 随宿主版本变化（ui-primitives 改版后为 `_field_bjqpo_3`，0.2.0-rc.2 实测未变）；宿主升级后复核本档 DOM。
+  assert.match(dump, /后继节点 class=`dsafm_field`/u, '秒数行的后继应为下一字段的外壳（或展开说明区）');
   // 实时行为边界声明在档。
   assert.match(dump, /实时行为（键入即换算、占位、非法、保存重开、en 档单位）的验证不在本档范围/u, '实时行为边界声明应在档');
 });

@@ -24,7 +24,7 @@ test('毫秒字段上界：2147483647 通过、2147483648 拒绝（加载失败�
   }
 });
 
-test('毫秒字段 0 是合法值（各字段 0 语义：不设超时/立即拒绝/不限）', () => {
+test('毫秒字段 0 是合法值（各字段 0 语义：等待类一律立即到点）', () => {
   for (const [section, field] of MS_FIELDS) {
     // Config 解析产物里 volatile 字段是引用，读值过 normalizeConfig。
     const merged = normalizeConfig(Config({ [section]: { [field]: 0 } }));

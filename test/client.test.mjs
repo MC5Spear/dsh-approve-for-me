@@ -367,7 +367,7 @@ test('中英字典齐备：每个字段都有 help 与 hint 键，覆盖组文�
   for (const key of Object.keys(dicts.zh)) {
     assert.equal(key.startsWith('card.help.'), false, `前缀写错的 help 键：${key}`);
   }
-  // 覆盖组文案（官方词表）：「已覆盖」「恢复默认」与数字非法提示，中英成对。
+  // 覆盖组文案（官方词表）：「已单独设置」「恢复默认」与数字非法提示，中英成对。
   for (const key of ['card.override', 'card.resetField', 'card.invalidNumber']) {
     assert.ok(dicts.zh[key], `缺中文 ${key}`);
     assert.ok(dicts.en[key], `缺英文 ${key}`);
@@ -428,13 +428,12 @@ test('设置表单首屏：字段竖排、覆盖组在场、保存置灰、无�
   assert.equal(serialized.includes('card.resetAll'), false, '不应再有「重置全部覆盖」');
   assert.equal(serialized.includes('card.section.'), false, '不应再有分区标题');
   assert.equal(serialized.includes('card.resolved'), false, '不应再有「当前生效值」灰字行');
-  // 字段竖排：自绘字段一个 dsafm_field 壳（16＝20 字段－4 个官方数字字段），数字字段走官方组件标记；
-  // 覆盖字段有「已覆盖」＋「恢复默认」。
+  // 字段竖排：20 个字段各一个 dsafm_field 壳；数字字段的输入仍走官方组件（外套标签行外置的外壳）；
+  // 覆盖字段有「已单独设置」＋「恢复默认」。
   const fields = findAllByClass(form, 'dsafm_field');
-  assert.equal(fields.length, 16, `自绘字段壳数量应＝16，实际 ${fields.length}`);
+  assert.equal(fields.length, 20, `字段壳数量应＝20（design §7.2），实际 ${fields.length}`);
   const markers = findAllNodes(form, (node) => node.type === primitivesStub.SettingsValueField);
   assert.equal(markers.length, 4, '数字字段应走官方 SettingsValueField（timeoutMs/maxTokens/human.timeoutMs/injectMaxBytes）');
-  assert.equal(fields.length + markers.length, 20, '字段总数应＝20（design §7.2）');
   const overridden = fields.filter((field) => JSON.stringify(field).includes('card.override'));
   assert.equal(overridden.length, 1, '只有 user 层带键的 fallback 字段显示覆盖组');
   const fallbackField = overridden[0];
@@ -636,7 +635,7 @@ test('设置页空全局默认提示（§7.2.0）：旧宿主无 modelIssues 字
   const props = { t: (key) => key, scope: env.scope, rpcCall: env.rpcCall };
   const tree = await expandCard(card.component, props);
   assert.equal(findAllByClass(tree, 'dsafm_warnline').length, 0, '旧宿主无字段时不应渲染提示行');
-  assert.equal(findAllByClass(tree, 'dsafm_field').length, 16, '表单本体不受影响（20 字段）');
+  assert.equal(findAllByClass(tree, 'dsafm_field').length, 20, '表单本体不受影响（20 字段）');
 });
 
 test('说明入口（§10.2）：20 个字段全覆盖，图标＋可见文字，aria 成对，键盘 Enter/Space 可达', async () => {
@@ -647,9 +646,15 @@ test('说明入口（§10.2）：20 个字段全覆盖，图标＋可见文字�
   const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
   const props = { t: (key) => key, scope: env.scope };
   const first = render(card.component, props);
-  // 20 字段全覆盖：16 个自绘壳 ＋ 4 个官方数字字段的平铺说明行（design §7.2.1）。
+  // 20 字段全覆盖：全部经字段外壳标签行的说明入口（design §7.2.1）。
   const buttons = findAllByClass(first, 'dsafm_helpbtn');
-  assert.equal(buttons.length, 20, `说明按钮应 20 个（16 自绘＋4 平铺），实际 ${buttons.length}`);
+  assert.equal(buttons.length, 20, `说明按钮应 20 个（全部经字段外壳标签行），实际 ${buttons.length}`);
+  // 按钮挂在标签行的 dsafm_labelgroup 内（与标签同组，数字字段不再平铺在字段下方）。
+  const groupedButtons = findAllByClass(first, 'dsafm_labelgroup').reduce(
+    (sum, group) => sum + findAllByClass(group, 'dsafm_helpbtn').length,
+    0,
+  );
+  assert.equal(groupedButtons, buttons.length, `说明按钮应全部位于 dsafm_labelgroup 内，实际 ${groupedButtons}/${buttons.length}`);
   const iconNodes = findAllNodes(first, (node) => node.type === primitivesStub.IconInfoOutlineRegular);
   assert.equal(iconNodes.length, 20, '说明按钮图标统一用官方 IconInfoOutlineRegular（size=12）');
   assert.equal(JSON.stringify(first).includes('Tooltip'), false, '设置界面不应再用 Tooltip');
@@ -711,16 +716,16 @@ test('说明入口（§10.2）：开合不改动草稿、保存计划与常驻�
   const props = { t: (key) => key, scope: env.scope };
   const first = render(card.component, props);
   const saveBefore = findByClass(first, 'dsafm_save').props.disabled;
-  // 常驻风险提醒（design §7.2.2）：审查时限为 0 时始终在场，开合说明不得将其挤掉。
-  assert.equal(findAllByClass(first, 'dsafm_sec_warn').length, 1, 'timeoutMs=0 的常驻风险提醒应在场');
+  // 退役键零残留（ISS-30）：warn.noLimit 随渲染分支退役，任何状态下都不再出现。
+  assert.equal(findAllByClass(first, 'dsafm_sec_warn').length, 0, 'timeoutMs=0 不再有常驻风险提醒（分支已退役）');
   const marker = 'approve-for-me-help-mode';
   const buttonBefore = findAllByClass(first, 'dsafm_helpbtn').find((node) => node.props['aria-controls'] === marker);
-  // 连续开合数次（不同字段、含数字字段平铺行）。
+  // 连续开合数次（不同字段、含数字字段标签旁说明按钮）。
   buttonBefore.props.onClick();
   hookIndex = 0;
   const mid = render(card.component, props);
   const humanButton = findAllByClass(mid, 'dsafm_helpbtn').find((node) => node.props['aria-controls'] === 'approve-for-me-help-human-timeoutMs');
-  assert.ok(humanButton, '数字字段的平铺说明按钮应在场');
+  assert.ok(humanButton, '数字字段的标签旁说明按钮应在场');
   humanButton.props.onClick();
   hookIndex = 0;
   const mid2 = render(card.component, props);
@@ -732,7 +737,7 @@ test('说明入口（§10.2）：开合不改动草稿、保存计划与常驻�
   assert.equal(findByClass(after, 'dsafm_save').props.disabled, saveBefore, '开合说明不得触碰保存计划');
   assert.equal(env.writes.length, 0, '开合说明不得写库');
   assert.equal(findAllByClass(after, 'dsafm_helpregion').length, 1, '其他字段的展开区保持不动');
-  assert.equal(findAllByClass(after, 'dsafm_sec_warn').length, 1, '常驻风险提醒在开合后仍在场（不受纯展示状态影响）');
+  assert.equal(findAllByClass(after, 'dsafm_sec_warn').length, 0, '开合说明不 resurrect 退役提醒');
 });
 
 test('非 loopback（不可写）时卡片显示只读提示', () => {
@@ -2389,7 +2394,7 @@ test('审批卡片状态条：取不到会话 id 时不轮询，仅渲染命令'
   assert.equal(calls.includes('approveForMe/pendingState'), false, '没有会话 id 就不该发请求');
 });
 
-test('审批卡片状态条：审查中显示审查时限，无时限时说明不会自动拒绝', async () => {
+test('审批卡片状态条：审查中显示审查时限倒计时；截止缺失的回退防御不渲染无时限文案（ISS-30 退役）', async () => {
   resetHooks();
   let clock = 1_700_000_000_000;
   const realNow = Date.now;
@@ -2408,7 +2413,9 @@ test('审批卡片状态条：审查中显示审查时限，无时限时说明�
     hookIndex = 0;
     const text = JSON.stringify(render(detail.component, props));
     assert.match(text, /cardstate\.reviewing/);
-    assert.match(text, /countdown\.unlimited/, '审查无时限时应说明没有自动拒绝时限');
+    // 审查截止缺失（回退防御形态）：不渲染无时限文案（分支已退役，ISS-30），也不渲染倒计时。
+    assert.ok(!text.includes('countdown.unlimited'), 'countdown.unlimited 已退役，不得出现');
+    assert.ok(!text.includes('countdown.review'), '缺失截止不得渲染倒计时');
   } finally {
     Date.now = realNow;
   }
@@ -2496,16 +2503,18 @@ const REVIEW_TEXT = {
   'layer.session': '会话选择（session）',
   'layer.parent-map': '按执行助手的模型映射（parent-map）',
   'layer.global': '全局默认（global）',
-  'layer.follow-parent': '跟随执行助手模型（follow-parent）',
-  'layer.unavailable': '全部层级不可用（unavailable）',
+  'layer.follow-parent': '全局默认未设置，使用执行助手当前模型（follow-parent）',
+  'layer.unavailable': '无可用审查模型（unavailable）',
   'fieldsDefaulted.risk': '风险分级（risk）',
   'fieldsDefaulted.auth': '授权分级（auth）',
   'fieldsDefaulted.reason': '理由（reason）',
   'degraded.command': '无法辨认本次操作（command）',
   'degraded.cwd': '会话目录缺失（cwd）',
   'degraded.transcript': '上下文读取失败或截断（transcript）',
+  'degraded.transcript-read-failed': '上下文读取失败（transcript-read-failed）',
+  'degraded.transcript-truncated': '上下文截断（transcript-truncated）',
   'degraded.entry': '单条证据截断（entry:…）',
-  'degraded.all': '模型选择全部不可用（all）',
+  'degraded.all': '审查模型解析无可用结果（all）',
   'degraded.output-truncated': '输出截断（output-truncated）',
   'degraded.output-empty': '空输出（output-empty）',
   'degraded.superseded': '已被其他路径先结算（superseded）',
@@ -2522,6 +2531,7 @@ const REVIEW_TEXT = {
   'source.signal': '取消（signal）',
   'source.error': '异常（error）',
   'stage.queue': '排队（queue）',
+  'stage.assembly': '装配（assembly）',
   'stage.review': '审查（review）',
   'stage.human': '人工（human）',
   'origin.main': '主会话（main）',
@@ -2538,10 +2548,10 @@ const TRACE_ROWS = [
   { approvalId: 'apB', callId: 'call_B', toolName: 'edit', origin: 'main', escalation: null, startedAt: 1_700_000_010_000, endedAt: 1_700_000_010_500, queueMs: 0, reviewMs: 500, humanWaitMs: null, decision: 'deny', outcome: 'rejected', source: 'llm', model: 'zai/glm-5.3', effort: 'low', risk: 'high', auth: 'low', reason: '改动敏感文件', subject: 'edit x.ts', truncated: false },
   { approvalId: 'apC', callId: 'call_C', toolName: 'pwsh', origin: 'subagent', escalation: null, startedAt: 1_700_000_020_000, endedAt: 1_700_000_020_010, queueMs: null, reviewMs: null, humanWaitMs: null, decision: null, outcome: 'rejected', source: 'llm', model: null, effort: null, risk: null, auth: null, reason: '审查未执行：queue-overflow', subject: 'npm run build', truncated: false },
 ];
-/** 详情：A 有 humanWaitMs 与两段全文（input/reasoning 缺，tools=0 证实未调用取证工具）；B 摘要档且审查已执行（全文段均缺）；C 全段缺失且 stage=queue（审查未执行）。 */
+/** 详情：A 有 humanWaitMs 与两段全文（input/reasoning 缺，tools=0 证实未调用取证工具）；B 摘要档且审查已执行（全文段均缺，capture 标记证实 summary）；C 全段缺失且 stage=queue（审查未执行）。 */
 const TRACE_DETAILS = {
   apA: { ...TRACE_ROWS[0], humanWaitMs: 400, prompt: 'PROMPT-A', output: 'OUTPUT-A', layer: 'session', attempts: 1, tokens: 32, tools: 0, preset: 'auto-approve', configTag: 'a1b2c3d4e5f6', policyTag: 'zh:missing' },
-  apB: { ...TRACE_ROWS[1], humanWaitMs: 0, layer: 'session', attempts: 1 },
+  apB: { ...TRACE_ROWS[1], humanWaitMs: 0, layer: 'session', attempts: 1, capture: 'summary' },
   apC: { ...TRACE_ROWS[2], stage: 'queue', degraded: 'queue-overflow' },
 };
 /** 记录表快照：call_A 有结算工具行（X=5000ms），call_B 故意没有。 */
@@ -2701,6 +2711,39 @@ test('审查视图：合并行主判定为 outcome、判定与结算并存可分
   assert.ok(!cText.includes('最终审批结果: null'), 'C 行 decision 缺失时模型结论段不渲染');
 });
 
+test('审查视图：装配环节超时结算行——环节标签渲染为装配（assembly）（design §8.5.1）', async () => {
+  resetHooks();
+  const client = loadClient();
+  const row = { approvalId: 'apD', callId: 'call_D', toolName: 'pwsh', origin: 'main', escalation: 'danger-full-access', startedAt: 1_700_000_030_000, endedAt: 1_700_000_030_020, queueMs: null, reviewMs: null, humanWaitMs: null, decision: null, outcome: 'rejected', source: 'timeout', model: null, effort: null, risk: null, auth: null, reason: '装配超时：配置读取、审查模型解析或操作回查未在时限内完成', subject: 'npm i', truncated: false };
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/traceRecords') return { ok: true, value: { records: [row], readFailed: false } };
+      if (endpoint === 'approveForMe/traceRecord') return { ok: true, value: { record: { ...row, stage: 'assembly' } } };
+      if (endpoint === 'approveForMe/getState') return { ok: true, value: { trace: { capture: 'summary', ownView: true, turnSummary: true } } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const view = env.registrations.find((entry) => entry.options.name === 'conversation.view');
+  const props = { t: reviewT, useTrajectory: (selector) => selector({ eventNodes: [] }), ...view.options.inject() };
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const heads = findAllByClass(render(view.component, props), 'dsafm_review_head');
+  assert.equal(heads.length, 1, '恰一条记录');
+  heads[0].props.onClick();
+  hookIndex = 0;
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const text = JSON.stringify(render(view.component, props));
+  assert.match(text, /环节: 装配（assembly）/, 'stage=assembly 渲染定稿环节标签');
+  assert.match(text, /装配超时/, '理由段携带装配超时原因');
+});
+
 test('审查视图：readFailed=true 时显示读取降级提示，详情缺段一律按一级缺省归「本次未记录此项」（design §8.3/§8.5.1）', async () => {
   resetHooks();
   const client = loadClient();
@@ -2812,6 +2855,42 @@ test('审查视图 §10.2：degraded 含 transcript 反证「未取上下文」�
   assert.match(text, /缺失或异常情况: 会话目录缺失（cwd）、上下文读取失败或截断（transcript）/, '读取失败原因由 degraded 段承载');
 });
 
+test('审查视图 §10.2：degraded 含新标记 transcript-read-failed 反证「未取上下文」，文案按新键（T8）', async () => {
+  resetHooks();
+  const client = loadClient();
+  // ISS-20 拆分后的新标记：读取失败与总量截断各自成键；渲染链（store→bridge→视图）按新键取词，
+  // 反证语义与旧值一致——不显示「未取上下文」，具体原因由 degraded 段承载。
+  const rows = [{ ...TRACE_ROWS[0], approvalId: 'apR', callId: 'call_R', decision: 'deny', outcome: 'rejected', source: 'llm' }];
+  const detail = { ...rows[0], humanWaitMs: 0, prompt: 'PROMPT-R', output: 'OUTPUT-R', probes: 'grep: ok', degraded: 'transcript-read-failed' };
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint, args) => {
+      if (endpoint === 'approveForMe/traceRecords') return { ok: true, value: { records: rows, readFailed: false } };
+      if (endpoint === 'approveForMe/traceRecord') return { ok: true, value: { record: args?.approvalId === 'apR' ? detail : null } };
+      if (endpoint === 'approveForMe/getState') return { ok: true, value: { trace: { capture: 'full', ownView: true, turnSummary: true } } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const view = env.registrations.find((entry) => entry.options.name === 'conversation.view');
+  const props = { t: reviewT, ...view.options.inject() };
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  findAllByClass(render(view.component, props), 'dsafm_review_head')[0].props.onClick();
+  hookIndex = 0;
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const text = JSON.stringify(render(view.component, props));
+  assert.ok(!text.includes('未取上下文'), 'degraded 含 transcript-read-failed 时 evidence 缺失不得归「未取上下文」');
+  assert.equal((text.match(/本次未记录此项/g) ?? []).length, 2, 'evidence 与 input 两段缺失归统一缺省');
+  assert.match(text, /缺失或异常情况: 上下文读取失败（transcript-read-failed）/, '新标记按新键取词（不混旧两义文案）');
+  assert.ok(!text.includes('上下文读取失败或截断'), '不得回落旧两义文案');
+});
+
 test('审查视图 §10.2：output 缺失且 decision=error 归「模型未提供」，无 transcript 反证时不误报（design §8.5.1）', async () => {
   resetHooks();
   const client = loadClient();
@@ -2850,6 +2929,62 @@ test('审查视图 §10.2：output 缺失且 decision=error 归「模型未提�
   assert.equal((text.match(/模型未提供/g) ?? []).length, 1, 'output 缺失且 decision=error → 模型未提供（§8.5.1 二级分派）');
   assert.equal((text.match(/本次未记录此项/g) ?? []).length, 1, 'input 缺失（全文采集下无反证）→ 本次未记录此项');
   assert.ok(!text.includes('未开启全文采集'), '全文采集证实时 output 缺失不得归「未开启全文采集」');
+});
+
+test('审查视图：capture 生效标记三分派——旧记录缺失与 capture=full 全文缺失归统一缺省（design §8.5.1）', async () => {
+  resetHooks();
+  const client = loadClient();
+  // 旧记录（无 capture 字段）与 capture=full 但全文段缺失（模型不可用早退、提示构建抛错）：
+  // 「全文段均不在场」不构成「未开启」的证据，全部缺段归「本次未记录此项」（不冒充可确认原因）。
+  const rows = [
+    { ...TRACE_ROWS[1], approvalId: 'apL', callId: 'call_L', subject: 'legacy edit' },
+    { ...TRACE_ROWS[1], approvalId: 'apF', callId: 'call_F', subject: 'full lost edit' },
+  ];
+  const details = {
+    apL: { ...TRACE_ROWS[1], approvalId: 'apL', humanWaitMs: 0, layer: 'session', attempts: 1 },
+    apF: { ...TRACE_ROWS[1], approvalId: 'apF', humanWaitMs: 0, layer: 'session', attempts: 2, capture: 'full' },
+  };
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint, args) => {
+      if (endpoint === 'approveForMe/traceRecords') return { ok: true, value: { records: rows, readFailed: false } };
+      if (endpoint === 'approveForMe/traceRecord') return { ok: true, value: { record: details[args?.approvalId] ?? null } };
+      if (endpoint === 'approveForMe/getState') return { ok: true, value: { trace: { capture: 'summary', ownView: true, turnSummary: true } } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const view = env.registrations.find((entry) => entry.options.name === 'conversation.view');
+  const props = { t: reviewT, ...view.options.inject() };
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  // 点开旧记录：capture 缺失 → 无法确认采集档，六个缺段全部统一缺省。
+  const heads = findAllByClass(render(view.component, props), 'dsafm_review_head');
+  heads.find((entry) => JSON.stringify(entry).includes('legacy edit')).props.onClick();
+  hookIndex = 0;
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const legacyText = JSON.stringify(render(view.component, props));
+  assert.equal((legacyText.match(/本次未记录此项/g) ?? []).length, 6, 'capture 缺失（旧记录）的全部缺段归统一缺省');
+  assert.ok(!legacyText.includes('未开启全文采集'), '无 capture 标记不得判「未开启全文采集」');
+  assert.ok(!legacyText.includes('未取上下文'), '旧记录 evidence 缺失不得归「未取上下文」');
+
+  // 切到 capture=full 但全文段缺失：全文未形成（早退/抛错），同样不构成「未开启」的证据。
+  hookIndex = 0;
+  const heads2 = findAllByClass(render(view.component, props), 'dsafm_review_head');
+  heads2.find((entry) => JSON.stringify(entry).includes('full lost edit')).props.onClick();
+  hookIndex = 0;
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const fullText = JSON.stringify(render(view.component, props));
+  assert.equal((fullText.match(/本次未记录此项/g) ?? []).length, 6, 'capture=full 全文段缺失的全部缺段归统一缺省');
+  assert.ok(!fullText.includes('未开启全文采集'), 'capture=full 时全文缺失不得误报「未开启全文采集」');
 });
 
 test('审查视图：旧格式行（无 outcome）主位＝模型结论并附「未记录最终审批结果」，详情同样说明缺失（design §8.5）', async () => {
@@ -3036,9 +3171,10 @@ test('审批卡片状态条 §7.4：倒计时按状态锚定，deadlineKind 与�
     const swappedKind2 = await renderEntry({ callId: 'call_1', state: 'reviewing', reason: null, startedAt: 1, deadlineAt: 1_090_000, deadlineKind: 'human', updatedAt: 1 });
     assert.match(swappedKind2, /审查时限剩余/, 'reviewing 一律按审查截止渲染审查时限');
     assert.ok(!swappedKind2.includes('后自动拒绝'), 'deadlineKind 与状态矛盾时不得串显自动拒绝倒计时');
-    // 常规组合仍按各自语义：reviewing + review + null 截止 → 审查无时限。
-    const unlimited = await renderEntry({ callId: 'call_1', state: 'reviewing', reason: null, startedAt: 1, deadlineAt: null, deadlineKind: 'review', updatedAt: 1 });
-    assert.match(unlimited, /审查无时限/);
+    // 常规组合仍按各自语义：reviewing + review + null 截止 → 回退防御（无倒计时、无已退役的无时限文案）。
+    const noDeadline = await renderEntry({ callId: 'call_1', state: 'reviewing', reason: null, startedAt: 1, deadlineAt: null, deadlineKind: 'review', updatedAt: 1 });
+    assert.ok(!noDeadline.includes('审查无时限'), 'countdown.unlimited 已退役（ISS-30），不得出现');
+    assert.ok(!noDeadline.includes('审查时限剩余'), '缺失截止不得渲染倒计时');
   } finally {
     Date.now = realNow;
   }
@@ -3058,8 +3194,14 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
   assert.equal(zh['cardstate.waiting'], '等待你决定');
   assert.equal(zh['cardstate.waiting.deny'], '自动审查结论为拒绝：{reason}');
   assert.equal(zh['cardstate.waiting.timeout'], '自动审查超时，未取得有效结论');
-  assert.equal(zh['countdown.unlimited'], '审查无时限');
-  assert.equal(en['countdown.unlimited'], 'No review deadline');
+  // 退役键零残留（ISS-30，design §7.5）：countdown.unlimited 与 warn.noLimit 随分支一并删除。
+  assert.equal(zh['countdown.unlimited'], undefined);
+  assert.equal(en['countdown.unlimited'], undefined);
+  assert.equal(zh['warn.noLimit'], undefined);
+  assert.equal(en['warn.noLimit'], undefined);
+  // 时限零值 hint 定稿（ISS-30，§7.2.2）。
+  assert.equal(zh['hint.reviewer.timeoutMs'], '自动审查的等待上限（毫秒）；0 立即超时。');
+  assert.equal(en['hint.reviewer.timeoutMs'], 'Auto-review wait limit (ms); 0 times out immediately.');
   // 列表双标注主槽与回退（§8.5.1）。
   assert.equal(zh['list.outcome'], '最终审批：{v}');
   assert.equal(zh['list.decision'], '模型结论：{v}');
@@ -3121,8 +3263,9 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['warn.modelIssue.global', '默认审查模型不可用：{reason}。实际使用：{effective}。', "The default reviewer model is unavailable: {reason}. Currently using: {effective}."],
     ['warn.modelIssue.rule', '此规则选择的审查模型不可用：{reason}。实际使用：{effective}。', "The reviewer model picked by this rule is unavailable: {reason}. Currently using: {effective}."],
     ['warn.modelIssue.session', '本会话选择的审查模型不可用：{reason}。实际使用：{effective}。', "This session's reviewer model is unavailable: {reason}. Currently using: {effective}."],
-    ['warn.modelIssue.globalUnset', '默认审查模型未设置：审查跟随执行助手的当前模型，独立发起审查调用——是「使用相同模型」，不是由执行助手自己审批。实际使用：{effective}。', "The default reviewer model is not set: reviews follow the agent's current model as an independent call — the same model, never the agent approving itself. Currently using: {effective}."],
+    ['warn.modelIssue.globalUnset', '默认审查模型未设置：仅当解析实际落到全局默认层（无有效会话选择且无有效映射）时，审查跟随执行助手的当前模型，独立发起审查调用——是「使用相同模型」，不是由执行助手自己审批。', "The default reviewer model is not set: only when resolution actually falls through to the global default (no effective session choice and no effective rule) do reviews follow the agent's current model as an independent call — the same model, never the agent approving itself."],
     ['warn.modelIssue.followParent', '本会话未单独选择审查模型，按未设置的全局默认跟随执行助手的当前模型：独立发起审查调用——是「使用相同模型」，不是由执行助手自己审批。实际使用：{effective}。', "This session has no reviewer of its own and the global default is unset, so reviews follow the agent's current model as an independent call — the same model, never the agent approving itself. Currently using: {effective}."],
+    ['warn.modelIssue.globalUnsetShadowed', '默认审查模型未设置：仅当解析落到全局默认层时，审查才跟随执行助手的当前模型并独立发起审查调用。实际使用：{effective}。', "The default reviewer model is not set: reviews follow the agent's current model, as an independent call, only when resolution falls through to the global default. Currently using: {effective}."],
     ['warn.modelIssue.layer', '当前生效：{layer}。', "Currently effective: {layer}."],
     ['field.language.ui', '插件界面语言', "Plugin UI language"],
     ['field.language.agent', '发送给模型的文本语言', "Language of model-facing texts"],
@@ -3154,7 +3297,7 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['hint.reviewer.parentModelRules', '按执行助手模型匹配的规则表：命中时先于全局默认，会话选择更优先。', "Rules matching the agent's model; a hit beats the global default, a session choice beats both."],
     ['hint.language.ui', '插件界面文案的语言。', "Language of the plugin's UI copy."],
     ['hint.language.agent', '发给审查模型的文本与给执行助手的通知，两者使用的语言。', "Language shared by the texts sent to the reviewer and the notices sent to the agent."],
-    ['hint.reviewer.timeoutMs', '自动审查的等待上限（毫秒）；0 取消时限，有常驻风险提醒。', "Auto-review wait limit (ms); 0 removes it, with a standing risk note."],
+    ['hint.reviewer.timeoutMs', '自动审查的等待上限（毫秒）；0 立即超时。', "Auto-review wait limit (ms); 0 times out immediately."],
     ['hint.reviewer.maxTokens', '审查输出的 token 上限；0 不向模型传输出上限，仍受供应商默认限制。', "Review output cap in tokens; 0 sends no cap to the model, provider defaults still apply."],
     ['hint.ui.humanCardDuringReview', '审查期间是否提前显示人工审批卡片。', "Whether the human card appears early during review."],
     ['hint.human.timeoutMs', '人工作答的等待上限（毫秒）；0 立即拒绝。', "Human-answer wait limit (ms); 0 rejects immediately."],
@@ -3167,14 +3310,13 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['hint.ui.injectMaxBytes', '单条通知的字节上限；0 不裁剪。', "Byte cap per notice; 0 does not trim."],
     ['hint.tools', '纳入自动审批的工具，每行一个；空清单覆盖全部工具。', "Tools under auto-approval, one per line; empty covers all."],
     ['hint.denyPatterns', '每行一条正则表达式；命中即直接拒绝，模型与人工都不能推翻。', "One regex per line; a hit rejects outright, beyond model or human."],
-    ['warn.noLimit', '风险：审查模型挂起、工具或其他异常可能使请求无限停在自动审批；插件不会自动恢复时限，取消与其他人工路径按各自条件生效。', "Risk: a hung review model, a tool failure or another error can leave the request stuck in auto-approval forever; the plugin does not restore the limit automatically — cancel and other human paths still apply per their conditions."],
     // —— §7.2.2 展开说明表 ——
     ['help.trigger.presets', '会话使用清单内权限预设时，插件按接管规则处理升权审批；其他预设保持宿主原审批流程。清单为空时，任何已知预设都不接管；无法识别的预设按「无法识别权限预设时」的设置处置。选择接管范围不等于授予任意权限。', 'Sessions on a listed preset hand escalation approvals to this plugin; other presets keep the host flow. An empty list takes over no known preset; unidentifiable presets follow "When the preset cannot be identified". Choosing the take-over range grants no extra permissions.'],
     ['help.trigger.unknown', '读不到会话权限预设时的处置。保持宿主原审批流程＝不接管；继续自动审查＝视为命中接管范围。可能原因包括服务缺失、读取失败或没有可用预设信息。', 'What to do when the session preset cannot be read: keep the host flow means no take-over; continue means treat it as covered. Causes include a missing service, a read failure, or no preset information.'],
     ['help.trigger.auditEverySkip', '开启后，每次因预设不匹配而跳过的审批都逐条记录；关闭时同一会话同一原因只记录一条。只改变跳过记录的数量，不影响接管与审批本身，也不表示所有审批都被审查。', 'On: every preset-mismatch skip is logged; off: one line per session and reason. This only changes the number of skip lines, never the take-over itself, and does not imply every approval is reviewed.'],
     ['help.reviewer.model', '全局默认的审查模型与推理强度。模型引用形如 provider/model；推理强度留空表示自动选择：模型支持 `low` 就使用 `low`，否则不指定、由模型默认值决定，不承诺所有模型都支持或采用相同强度。解析顺序为会话选择 → 按执行助手的模型映射 → 全局默认；全局默认未设置时使用执行助手的当前模型——插件仍独立发起一次审查调用，是「使用相同模型」，不是由执行助手自己审批。', 'Global default reviewer model and effort. The reference reads provider/model; an empty effort is automatic: use `low` when the model supports it, otherwise let the model default decide — no promise that every model supports it or matches the same intensity. Resolution: session choice, by the agent\'s model, global default; an unset default reviews on the agent\'s current model — an independent call, the same model, never the agent approving itself.'],
     ['help.reviewer.parentModelRules', '按执行助手的模型选择审查模型：每条规则含作用范围（任意 provider，或指定 provider 下的完整模型 id）与审查模型、推理强度。会话选择更优先；命中时先于全局默认；未命中按其余层解析。同一作用范围与执行助手模型只能有一条规则，重复的行不能保存。旧字典继续参与匹配：纯模型 id 键按任意 provider 读取；含斜杠的旧键会在表中请求确认原意，确认前按原值读取，不自动改写。', "Picks the reviewer by the model the acting agent uses: each rule carries a scope (any provider, or a specific one) plus the agent's full model id, mapped to a reviewer model and effort. A session choice outranks a hit; a hit outranks the global default; misses fall through to the remaining layers. One rule per scope and agent model — duplicates cannot be saved. The legacy dictionary still matches: plain-id keys read as any-provider; slash-containing keys ask you to confirm their meaning, are read as-is until confirmed, and are never rewritten automatically."],
-    ['help.reviewer.timeoutMs', '自动审查的等待上限（毫秒），涵盖等待本次审查结论的全过程，内部重试不另计时。超时按拒绝处理并说明发生环节，不是危险判定。0 表示取消审查时限：审查模型挂起、工具或其他异常可能使请求无限停在自动审批，插件不自动恢复时限；取消与其他人工路径仍按各自条件生效（常驻风险提醒同此）。', 'Auto-review wait limit (ms), covering the whole wait for this review\'s conclusion; internal retries get no fresh budget. A timeout rejects with its stage named — not a danger verdict. 0 removes the limit: a hung model or tooling failure can leave the request stuck in auto-approval forever; the plugin never restores the limit silently, while cancellation and other human paths still apply (same as the standing note).'],
+    ['help.reviewer.timeoutMs', '自动审查的等待上限（毫秒），涵盖装配与等待本次审查结论的全过程，内部重试不另计时。超时按拒绝处理并说明发生环节，不是危险判定。0 立即超时；需要较长等待时设较大的值。', "Auto-review wait limit (ms), covering assembly and the whole wait for this review's conclusion; internal retries get no fresh budget. A timeout rejects with its stage named — not a danger verdict. 0 times out immediately; set a larger value for longer waits."],
     ['help.reviewer.maxTokens', 'token 是模型计量文本的单位。审查输出上限（token）。0 表示不向模型传输出上限，由模型或供应商默认值决定。推理模型可能先把额度用于推理：上限过小可能导致没有有效结论（正文为空，按审查故障处理）；具体数值因模型与推理强度而异，不以个别模型的测量结果作通用保证。', 'A token is the unit models use to measure text. Review output cap (tokens). 0 sends no cap, leaving the model or provider default. Reasoning models may spend the budget on reasoning first: too small a cap can leave no usable conclusion (empty body, treated as a review failure); the threshold varies by model and effort, so no single measurement is a general promise.'],
     ['help.human.timeoutMs', '人工作答等待上限（毫秒），仅在「自动审查未允许时＝交给人工决定」时使用。0 表示立即拒绝，不是无限等待。到点按拒绝结算，原因写明人工作答超时。', 'Human-answer wait limit (ms), used only when the fallback is Ask. 0 rejects immediately, not an endless wait. Expiry settles as a rejection citing the human timeout.'],
     ['help.human.timeoutFrom', '人工作答计时的起点：从审批请求起算＝交人工只使用剩余时间；从交人工起算＝交人工时重新开始计时。', 'Where the human timer starts: from the approval request (the handoff only gets the remainder), or from the handoff itself.'],
@@ -3238,6 +3380,8 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['degraded.command', '无法辨认本次操作（command）', "Action cannot be identified (command)"],
     ['degraded.cwd', '会话目录缺失（cwd）', "Working directory missing (cwd)"],
     ['degraded.transcript', '上下文读取失败或截断（transcript）', "Context read failure or truncation (transcript)"],
+    ['degraded.transcript-read-failed', '上下文读取失败（transcript-read-failed）', "Context read failure (transcript-read-failed)"],
+    ['degraded.transcript-truncated', '上下文截断（transcript-truncated）', "Context truncated (transcript-truncated)"],
     ['degraded.entry', '单条证据截断（entry:…）', "Single evidence entry truncated (entry:…)"],
     ['degraded.all', '审查模型解析无可用结果（all）', "No usable reviewer model (all)"],
     ['degraded.output-truncated', '输出截断（output-truncated）', "Output truncated (output-truncated)"],
@@ -3402,21 +3546,23 @@ test('恢复默认：只暂存回退值、保存才落 unset', async () => {
   const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
   const props = { t: (key) => key, scope: env.scope, ...card.options.inject() };
   const tree = await expandCard(card.component, props);
-  // 三个覆盖字段都显示覆盖状态：自绘字段（fallback/mode）有「已覆盖＋恢复默认」按钮，
-  // 数字字段（reviewer.timeoutMs）的覆盖组在官方 SettingsValueField 内部（props 传 overridden/resetLabel）。
+  // 三个覆盖字段都显示覆盖状态：自绘覆盖组（fallback/mode/reviewer.timeoutMs）各有
+  // 「已单独设置＋恢复默认」；数字字段的输入仍走官方组件（标签行外置）。
   const resetButtons = findAllByClass(tree, 'dsafm_reset');
-  assert.equal(resetButtons.length, 2, `自绘覆盖字段应各有恢复默认，实际 ${resetButtons.length}`);
+  assert.equal(resetButtons.length, 3, `自绘覆盖字段应各有恢复默认，实际 ${resetButtons.length}`);
   const numberMarker = findAllNodes(tree, (node) => node.type === primitivesStub.SettingsValueField)
     .find((node) => node.props.id === 'approve-for-me-ctl-reviewer-timeoutMs');
   assert.ok(numberMarker, 'reviewer.timeoutMs 应走官方数字字段');
-  assert.equal(numberMarker.props.overridden, true, '官方组件应收到 overridden=true');
-  assert.equal(numberMarker.props.resetLabel, 'card.resetField', '官方组件应收到恢复默认文案');
+  assert.equal(numberMarker.props.overridden, undefined, '官方组件不再收 overridden（覆盖组由外壳自绘）');
+  assert.equal(numberMarker.props.resetLabel, undefined, '官方组件不再收 resetLabel');
+  assert.equal(numberMarker.props.onReset, undefined, '官方组件不再收 onReset（恢复默认走外壳按钮）');
+  assert.equal(numberMarker.props.label, undefined, '官方组件不再收 label（标签行由外壳承载）');
   assert.equal(numberMarker.props.text, '95000', '官方组件的显示文本就是生效值');
-  // 覆盖标记计数：胶囊 Tag 恰好 2 个（自绘覆盖字段），官方组件收到 overridden=true 的恰好 1 个。
+  // 覆盖标记计数：胶囊 Tag 恰好 3 个（自绘覆盖组含数字字段），官方组件不再收覆盖组 props。
   const tags = findAllNodes(tree, (node) => node.type === primitivesStub.Tag && node.props.children === 'card.override');
-  assert.equal(tags.length, 2, '已覆盖胶囊应恰好 2 个（fallback/mode）');
+  assert.equal(tags.length, 3, '已单独设置胶囊应恰好 3 个（fallback/mode/reviewer.timeoutMs）');
   const overriddenMarkers = findAllNodes(tree, (node) => node.type === primitivesStub.SettingsValueField && node.props.overridden === true);
-  assert.equal(overriddenMarkers.length, 1, '官方数字字段里只有 timeoutMs 被覆盖');
+  assert.equal(overriddenMarkers.length, 0, '官方数字字段不再携带覆盖状态');
 
   // 点 fallback 的「恢复默认」：控件立即显示组合层默认值 reject，但没写库。
   const fields = findAllByClass(tree, 'dsafm_field');
@@ -3430,7 +3576,7 @@ test('恢复默认：只暂存回退值、保存才落 unset', async () => {
   const stagedField = findAllByClass(staged, 'dsafm_field').find((field) => JSON.stringify(field).includes('"approve-for-me-ctl-fallback"'));
   const stagedSelect = findAllByClass(stagedField, 'dsafm_input').find((node) => node.type === 'select');
   assert.equal(stagedSelect.props.value, 'reject', '恢复默认后控件应立即显示组合层默认值');
-  assert.equal(JSON.stringify(stagedField).includes('card.override'), false, '暂存 clear 后不再显示已覆盖');
+  assert.equal(JSON.stringify(stagedField).includes('card.override'), false, '暂存 clear 后不再显示已单独设置');
   assert.equal(env.writes.length, 0, '恢复默认不应写库（保存才落 unset）');
 
   // 保存：写入 unset（用户层键消失才是真回退）。
@@ -3560,24 +3706,18 @@ test('毫秒字段秒数读数：生效值常驻、草稿随输入实时换算',
   assert.equal(secSpan(sub, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_draft').props.children, '草稿：1.0 秒', '999 → 1.0 秒（非整数秒一位小数）');
   const zero = await afterEdit('0');
   assert.equal(secSpan(zero, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_draft').props.children, '草稿：0 秒', '0 按字面显示 0 秒');
-  // 草稿为 0 → 无上限风险提醒固定渲染在审查时限字段的秒数读数行内（design §7.2），
-  // 可见性不依赖帮助区；只描述风险不改写输入（0 仍可保存）。人工时限字段的 0 是「立即拒绝」，不显示。
-  const warnZero = secSpan(zero, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_warn');
-  assert.ok(warnZero, '草稿为 0 时无上限提醒必须在场');
-  assert.match(String(warnZero.props.children), /无限停/u);
-  assert.equal(secSpan(zero, 'approve-for-me-sec-human-timeoutMs', 'dsafm_sec_warn'), undefined, '人工时限的 0 不显示该提醒');
+  // 草稿为 0 → 零值语义是「立即超时」（ISS-30）：退役的提醒分支不再渲染，0 仍可保存。
+  assert.equal(secSpan(zero, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_warn'), undefined, '退役提醒不随 0 草稿出现');
   // en 档单位 s（同一暂存文本，读数跟随语言）。
   const enProps = { t: (key) => dicts.en[key] ?? key, scope: env.scope, ...card.options.inject() };
   hookIndex = 0;
   const enTree = render(card.component, enProps);
   assert.equal(secSpan(enTree, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_resolved').props.children, 'Effective: 300 s', 'en 档生效值读数单位 s');
   assert.equal(secSpan(enTree, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_draft').props.children, 'Draft: 0 s', 'en 档草稿读数单位 s');
-  // 中英成对：en 档提醒文本同样在场。
-  const warnEn = secSpan(enTree, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_warn');
-  assert.ok(warnEn && /forever/u.test(String(warnEn.props.children)), 'en 档无上限提醒在场');
+  assert.equal(secSpan(enTree, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_warn'), undefined, 'en 档退役提醒不再渲染');
 });
 
-test('生效值为 0 即显示无上限提醒（保存读回语义）；草稿改回非零不撤销提醒', async () => {
+test('生效值为 0 不再渲染退役提醒（保存读回语义，ISS-30）；hint 随处可见「立即超时」语义', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
@@ -3599,10 +3739,9 @@ test('生效值为 0 即显示无上限提醒（保存读回语义）；草稿�
   assert.ok(line, '审查时限秒数读数行应在场');
   const resolved = findAllByClass(line, 'dsafm_sec_resolved')[0];
   assert.equal(resolved.props.children, '生效：0 秒', '生效值读数为 0 秒');
-  const warn = findAllByClass(line, 'dsafm_sec_warn')[0];
-  assert.ok(warn, '生效值为 0 即显示提醒（保存读回仍可见）');
-  assert.match(String(warn.props.children), /不会自动恢复时限/u);
-  // 草稿分支互补：生效值仍为 0、草稿键入非零 → 提醒必须仍在场（design §7.2「草稿为 0 或生效值为 0」）。
+  assert.equal(findAllByClass(line, 'dsafm_sec_warn').length, 0, '生效值为 0 无退役提醒（分支已删除）');
+  // 零值语义进入字段 hint（design §7.2.2 定稿）。
+  assert.match(dicts.zh['hint.reviewer.timeoutMs'], /0 立即超时/u);
   const marker = findAllNodes(tree, (node) => node.type === primitivesStub.SettingsValueField)
     .find((node) => node.props.id === 'approve-for-me-ctl-reviewer-timeoutMs');
   marker.props.onEdit('120000');
@@ -3611,7 +3750,7 @@ test('生效值为 0 即显示无上限提醒（保存读回语义）；草稿�
   const typed = render(card.component, props);
   const typedLine = findAllNodes(typed, (node) => node.props?.id === 'approve-for-me-sec-reviewer-timeoutMs')[0];
   assert.equal(findAllByClass(typedLine, 'dsafm_sec_draft')[0].props.children, '草稿：120 秒', '草稿读数随键入换算');
-  assert.ok(findAllByClass(typedLine, 'dsafm_sec_warn')[0], '生效值为 0 时草稿非零不撤销提醒');
+  assert.equal(findAllByClass(typedLine, 'dsafm_sec_warn').length, 0, '草稿改非零后仍无退役提醒');
 });
 
 test('秒数读数占位：清空与非数字走占位、生效值读数仍在场', async () => {
@@ -3685,8 +3824,12 @@ test('秒数读数与「恢复默认」／保存：clear 后按默认值换算�
   const tree = await expandCard(card.component, props);
   const marker = findAllNodes(tree, (node) => node.type === primitivesStub.SettingsValueField)
     .find((node) => node.props.id === 'approve-for-me-ctl-reviewer-timeoutMs');
-  // 恢复默认：控件显示组合层默认值 90000，草稿读数按该文本换算，生效值读数仍是快照生效值。
-  marker.props.onReset();
+  // 恢复默认走外壳复位按钮（官方组件不再收 onReset，design §7.2.1）：定位 reviewer.timeoutMs 字段壳触发
+  // dsafm_reset 的 onClick（与 fallback 字段同款模式）；控件显示组合层默认值 90000，草稿读数按该文本换算，
+  // 生效值读数仍是快照生效值。
+  const timeoutField = findAllByClass(tree, 'dsafm_field').find((field) => JSON.stringify(field).includes('"approve-for-me-ctl-reviewer-timeoutMs"'));
+  assert.ok(timeoutField, 'reviewer.timeoutMs 字段壳应在场');
+  findByClass(timeoutField, 'dsafm_reset').props.onClick();
   await tick();
   hookIndex = 0;
   const reset = render(card.component, props);
@@ -3805,16 +3948,14 @@ test('静态扫描：退役文案与失效令牌零命中、外壳类退役', as
   assert.equal(helpBtnRule.includes('font-family:inherit;font-size:12px'), true, '文字随表单字体');
   assert.ok(SOURCE.includes(".dsafm_helpbtn:hover,.dsafm_helpbtn[aria-expanded='true']{color:var(--dsw-alias-label-primary)}"), '悬停/展开转主标签色');
   assert.ok(SOURCE.includes('.dsafm_helpbtn:focus-visible{outline:2px solid var(--dsw-alias-brand-primary)'), '键盘聚焦轮廓用品牌色');
-  // 分隔线选择器组（§10.2）：秒数行后的下一字段不画线（说明行可能插在中间）；说明行后的字段恢复 0.5px 线。
-  assert.ok(
-    SOURCE.includes('.dsafm_f_sec + div:not(.dsafm_field):not(.dsafm_f_help){border-top:.5px solid var(--dsw-alias-border-l2)}'),
-    '秒数行的后继排除说明行（design §7.2.1）',
-  );
-  assert.ok(
-    SOURCE.includes('.dsafm_f_help + div:not(.dsafm_field){border-top:.5px solid var(--dsw-alias-border-l2)}'),
-    '说明行作为锚恢复后继字段的分隔线',
-  );
-  assert.ok(SOURCE.includes('.dsafm_f_help{margin:-12px 0 12px}'), '平铺说明行与秒数行同一负边距');
+  // 数字字段承载规则（design §7.2.1）：归零官方根内边距＋收起空标签行两条 numhost 规则在场；
+  // 旧分隔线选择器组与 .dsafm_f_help 规则零命中；字段间分隔线回归统一 .dsafm_field + .dsafm_field。
+  assert.ok(SOURCE.includes('.dsafm_numhost > div{padding:0}'), 'numhost 承载规则一：官方根内边距归零');
+  assert.ok(SOURCE.includes('.dsafm_numhost > div > div:first-child{display:none}'), 'numhost 承载规则二：收起官方空标签行');
+  assert.equal(SOURCE.includes('.dsafm_f_sec + div:not(.dsafm_field)'), false, '旧分隔线选择器一应零命中');
+  assert.equal(SOURCE.includes('.dsafm_f_help + div:not(.dsafm_field)'), false, '旧分隔线选择器二应零命中');
+  assert.equal(SOURCE.includes('dsafm_f_help'), false, '退役类 dsafm_f_help 应零命中');
+  assert.ok(SOURCE.includes('.dsafm_field + .dsafm_field{border-top:.5px solid var(--dsw-alias-border-l2)}'), '字段间分隔线统一为 .dsafm_field + .dsafm_field');
   // 醒目提示行分主题取色（design §7.2.0）：浅色取插件内深琥珀 #92400e——requirements §6.5 的 ≥4.5:1 优先于
   // 宿主 warn-label 令牌取值（浅色 amber-600 #dd8629 对 warn-tertiary #fef5e7 仅 2.585:1；宿主静态令牌族
   // 无 amber-800）；深色按宿主 body[data-ds-dark-theme] 机制回 warn-label；背景两主题不动。

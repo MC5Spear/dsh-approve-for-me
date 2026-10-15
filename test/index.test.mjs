@@ -434,6 +434,10 @@ test('装配接线：rt.review 按请求构造工具上下文快照并随任务�
   assert.ok(source.includes('tools: taskTools'), '审查循环必须使用请求绑定门面');
   // 审计读取器并入 context.redactPatterns——全部 reason 出口在 createAudit 层统一覆盖。
   assert.ok(/redactPatterns:\s*current\(\)\?\.context\?\.redactPatterns/u.test(source), '审计读取器必须并入 context.redactPatterns');
+  // 装配期超时计数接线（design §5.3）：rt 契约提供 countTimeout，直连真 scheduler.record('error')。
+  assert.ok(/countTimeout:\s*\(\)\s*=>\s*scheduler\.record\('error'\)/u.test(source), '装配期超时须与真实超时同一路径计数');
+  // 启动审计行缺省显示与 schema 默认同源（REVIEWER_TIMEOUT_DEFAULT_MS 单一来源）。
+  assert.ok(/reviewTimeout=\$\{cfg\?\.reviewer\?\.timeoutMs \?\? REVIEWER_TIMEOUT_DEFAULT_MS\}/u.test(source), '启动行缺省时限取导出常量，不硬编码');
 });
 
 // ── 冷却计数接线（真 seam；requirements §4.4／design §5.3）─────────────────
@@ -461,6 +465,15 @@ async function wiredEnv(options = {}) {
     sessions: { list: () => [] },
   });
   env.injected = [];
+  // 模型目录延迟测试缝（ISS-17 真接线反例）：resolveModelInfo 延迟把等待注入装配阶段，
+  // 人工 request 起算的预算从请求进入就开始消耗。
+  if (options.resolveDelayMs !== undefined) {
+    const originalResolve = env.ctx.llm.resolveModelInfo.bind(env.ctx.llm);
+    env.ctx.llm.resolveModelInfo = async (...args) => {
+      await new Promise((resolve) => setTimeout(resolve, options.resolveDelayMs));
+      return originalResolve(...args);
+    };
+  }
   const state = { streamCalls: 0, behavior: { delay: 0, ...options.behavior } };
   env.ctx.llm.stream = (streamOptions) => (async function* generate() {
     state.streamCalls += 1;
@@ -538,6 +551,51 @@ test('真接线：有机 error ×3 打开冷却，第 4 个请求零流调用并
     assert.match(written.join(''), /审查未执行：breaker-open（冷却中，拒绝密集或故障密集）/u);
     const attemptLines = written.join('').match(/phase=review [^\n]*reason="attempt 2\/2: provider 500"/g) ?? [];
     assert.equal(attemptLines.length, 3, '三次有机失败各留一条 attempt 2/2 的 review 审计');
+  } finally {
+    process.stderr.write = original;
+    if (previousHome === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = previousHome;
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('真接线 I1：resolver 模型目录延迟 100ms × 人工预算 20ms（request 起算、关卡）→ 按人工超时拒绝', async (t) => {
+  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const previousHome = process.env.DSH_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'afm-i1-'));
+  process.env.DSH_HOME = home;
+  const written = [];
+  const original = process.stderr.write;
+  process.stderr.write = (chunk) => {
+    written.push(String(chunk));
+    return true;
+  };
+  try {
+    const wired = await wiredEnv({
+      resolveDelayMs: 100,
+      config: {
+        fallback: 'ask',
+        human: { timeoutMs: 20, timeoutFrom: 'request' },
+        ui: { humanCardDuringReview: false, inject: 'all', injectMaxBytes: 2048 },
+      },
+    });
+    if (wired === undefined) {
+      t.skip('宿主包不可解析（离线环境）');
+      return;
+    }
+    let nextCalls = 0;
+    const next = () => {
+      nextCalls += 1;
+      return new Promise(() => {});
+    };
+    const outcome = await wired.answerer(wired.makeRequest('c-i1'), next);
+    assert.equal(outcome, 'rejected');
+    assert.equal(nextCalls, 0, '关卡模式＋预算耗尽：不调人工 next');
+    const injectedText = wired.env.injected.at(-1).content[0].text;
+    assert.match(injectedText, /超时环节：人工未在时限内响应 20 ms/u, '注入超时文案环节为人工');
+    assert.ok(wired.state.streamCalls >= 1, '审查照常执行（预算耗尽不吞审查）');
   } finally {
     process.stderr.write = original;
     if (previousHome === undefined) delete process.env.DSH_HOME;

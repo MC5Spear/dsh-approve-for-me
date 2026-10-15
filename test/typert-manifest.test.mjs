@@ -117,3 +117,40 @@ test('getState 三处同步：类型声明与成员描述都含 modelIssues，�
   assert.match(member.jsDoc, /modelIssues/u);
   assert.match(member.summary, /diagnostics/u);
 });
+
+// ── traceRecord 详情 capture 字段（design §8.2 词汇表／ISS-19 三处同步） ────────
+
+/** 从清单取 traceRecord 的 invocation 与服务模型声明。 */
+function getTraceRecordParts() {
+  const invocation = TYPERT.invocations.find((item) => item.method === 'traceRecord');
+  const serviceModel = TYPERT.model.services.find((entry) => entry.key === 'approveForMe');
+  const member = serviceModel.members.find((entry) => entry.name === 'traceRecord');
+  const type = serviceModel.types.find((entry) => entry.name === 'TraceRecordResult');
+  return { invocation, member, type };
+}
+
+test('traceRecord 三处同步：结果 schema、类型声明与成员描述都含 capture 生效标记', () => {
+  const { invocation, member, type } = getTraceRecordParts();
+  assert.ok(invocation, 'traceRecord invocation 应在清单');
+  // ① 结果 schema：capture 为可选字符串，能透传三档值（缺任何一处声明该字段在校验或投影环节丢失）。
+  const schema = invocation.result.create();
+  const base = {
+    record: {
+      approvalId: 'a-1', callId: null, toolName: null, origin: null, escalation: null,
+      startedAt: 1, endedAt: 2, queueMs: 0, reviewMs: 0, humanWaitMs: null,
+      decision: 'rejected', outcome: 'rejected', source: 'llm', model: null, effort: null,
+      risk: null, auth: null, reason: '', subject: null, truncated: false,
+    },
+  };
+  for (const tier of ['off', 'summary', 'full']) {
+    const parsed = schema.parse({ record: { ...base.record, capture: tier } });
+    assert.equal(parsed.record.capture, tier, `capture=${tier} 应通过校验并保留`);
+  }
+  const without = schema.parse(base);
+  assert.equal('capture' in without.record, false, '旧记录无 capture 应照常通过（可选字段）');
+  // ② 类型声明串：`capture?: string;` 在 tools 与 degraded 之间。
+  assert.match(type.declaration, /tools\?: number; capture\?: string; fieldsDefaulted\?: string;/u, 'TraceRecordResult 类型声明应含 capture（tools 后）');
+  // ③ 成员 jsDoc：提及写入时采集档。
+  assert.match(member.jsDoc, /capture/u, 'traceRecord 成员 jsDoc 应提及 capture 采集档');
+  assert.match(member.jsDoc, /off\/summary\/full/u, 'jsDoc 应写明三档取值与缺省');
+});

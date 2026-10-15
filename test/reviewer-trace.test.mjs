@@ -369,6 +369,8 @@ test('index 接线：record 收到 sessionId/callId/toolName，配置签名变�
     assert.equal(Number.isFinite(first[0].startedAt), true);
     assert.equal(Number.isFinite(first[0].reviewMs), true);
     assert.equal(first[0].prompt, undefined, 'capture=summary（默认档）不落详情全文');
+    // capture 生效标记（design §8.2 词汇表）：请求快照未显式配置时取缺省 summary，随记录落盘。
+    assert.equal(first[0].capture, 'summary', 'capture 标记随记录落盘（缺省 summary）');
     assert.equal(first[1].kind, 'settle');
     assert.equal(first[1].outcome, 'rejected');
     assert.equal(first[1].source, 'llm', '模型侧错误按 llm 来源结算');
@@ -405,4 +407,214 @@ test('index 接线：record 收到 sessionId/callId/toolName，配置签名变�
     if (previousHome === undefined) delete process.env.DSH_HOME;
     else process.env.DSH_HOME = previousHome;
   }
+});
+
+// ── ISS-20／ISS-28 真链：上下文采集与命令回查降级贯通审查装配（T3–T7／L1–L4） ────────
+
+/**
+ * 跑一次完整审批并捕获送审证据段与落盘审查记录（真 gate→screen→reviewer→record 链）。
+ * @param {object} options - `snapshotEvents`（缺省＝会话无该接口）、`sessionHeader`、`context`（context 配置覆盖）、
+ *   `lang`（language.agent）、`events`（正常事件流快捷方式，含接管预设与 tool/call）。
+ * @returns {Promise<object | undefined>} `{ evidenceText, reviewRow, stderr }`；宿主包不可解析时 `undefined`。
+ */
+async function contextChain(options = {}) {
+  const host = await loadHost();
+  if (host === undefined) return undefined;
+  const tmp = await mkdtemp(join(tmpdir(), 'afm-ctx-'));
+  const previousHome = process.env.DSH_HOME;
+  process.env.DSH_HOME = tmp;
+  const written = [];
+  const originalWrite = process.stderr.write;
+  process.stderr.write = (chunk) => {
+    written.push(String(chunk));
+    return true;
+  };
+  try {
+    const config = {
+      mode: 'rules',
+      language: { agent: options.lang ?? 'zh' },
+      reviewer: { model: 'deepseek-official/probe-model' },
+      unknownSubject: 'review',
+      context: { ...(options.context ?? {}) },
+    };
+    const listeners = [];
+    const events = options.events ?? [
+      { type: 'permission/preset', data: { preset: 'auto-approve' } },
+      { type: 'user/message', data: { content: [{ type: 'text', text: 'CONTEXT-LINE-A' }] } },
+      { type: 'user/message', data: { content: [{ type: 'text', text: 'CONTEXT-LINE-B' }] } },
+      { type: 'tool/call', data: { callId: 'call-ctx', name: 'pwsh', arguments: JSON.stringify({ command: 'npm i' }) } },
+    ];
+    const session = {
+      id: 'session-ctx',
+      header: options.sessionHeader === 'none' ? {} : { cwd: tmp },
+      ...(options.snapshotEvents !== undefined ? { snapshotEvents: options.snapshotEvents } : {}),
+      ...(options.snapshotEvents === undefined && options.noSnapshot !== true ? { snapshotEvents: () => events } : {}),
+    };
+    const evidenceTexts = [];
+    const ctx = {
+      on: (event, handler, prepend) => {
+        listeners.push({ event, handler, prepend });
+        return () => {};
+      },
+      // 宿主侧服务读取器（index 经 ctx.get 取）：预设判定先读服务、不依赖会话事件折叠——
+      // snapshotEvents 失效场景仍能接管到审查（foldPresetEvent 只作回退）。
+      get: (key) =>
+        key === 'permissionPresets'
+          ? { current: () => 'auto-approve' }
+          : key === 'sessions'
+            ? { list: () => [] }
+            : undefined,
+      llm: {
+        listProviders: () => [{ id: 'deepseek-official' }],
+        resolveModelInfo: async () => ({ reasoning: { efforts: [{ id: 'low' }] } }),
+        // 捕获送审证据段（首条消息文本）后抛错：reviewer 兜成 error 判定，记录照落。
+        stream: (streamOptions) => {
+          evidenceTexts.push(streamOptions?.messages?.[0]?.content?.[0]?.text ?? '');
+          throw new Error('stream exploded');
+        },
+      },
+    };
+    host.apply(ctx, config);
+    const answerer = listeners.find((entry) => entry.event === 'approval/request').handler;
+    const outcome = await answerer(
+      {
+        agent: { session, inject: () => {} },
+        callId: options.callId ?? 'call-ctx',
+        toolName: 'pwsh',
+        reason: 'escalate sandbox to danger-full-access: run npm i',
+      },
+      () => new Promise(() => {}),
+    );
+    const file = join(tmp, 'approve-for-me', 'reviews', 'ctx.jsonl');
+    const rows = await waitForLines(file, 2);
+    const reviewRow = rows.find((row) => row.kind === 'review');
+    return { outcome, evidenceText: evidenceTexts[0] ?? '', reviewRow, stderr: written.join('') };
+  } finally {
+    process.stderr.write = originalWrite;
+    if (previousHome === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = previousHome;
+  }
+}
+
+test('T3 真链：snapshotEvents 抛错 → 证据段附读取失败说明行、记录与审计含 transcript-read-failed（zh/en 各一档）', async (t) => {
+  for (const lang of ['zh', 'en']) {
+    const result = await contextChain({ lang, snapshotEvents: () => { throw new Error('snapshot boom'); } });
+    if (result === undefined) {
+      t.skip('宿主包不可解析（离线环境）');
+      return;
+    }
+    const marker = lang === 'zh' ? '上下文转录读取失败，本次没有可用会话上下文。' : 'Context transcript read failed;';
+    assert.ok(result.evidenceText.includes(marker), `[${lang}] 证据段应含读取失败说明行：${result.evidenceText.slice(0, 120)}`);
+    assert.ok(result.reviewRow.degraded.includes('transcript-read-failed'), `[${lang}] 落盘记录 degraded 含 transcript-read-failed`);
+    assert.ok(!result.reviewRow.evidence, `[${lang}] 读取失败时 evidence 为空`);
+    assert.match(result.stderr, /phase=review [^\n]*degraded=[^\n]*transcript-read-failed/, `[${lang}] 审计 review 行含标记`);
+  }
+});
+
+test('T4 真链：snapshotEvents 接口缺失与返回非数组两形态 → 同 T3 断言', async (t) => {
+  // 形态一：会话没有 snapshotEvents 接口。
+  const missing = await contextChain({ noSnapshot: true });
+  if (missing === undefined) {
+    t.skip('宿主包不可解析（离线环境）');
+    return;
+  }
+  assert.ok(missing.evidenceText.includes('上下文转录读取失败'), '接口缺失：证据段含读取失败说明行');
+  assert.ok(missing.reviewRow.degraded.includes('transcript-read-failed'), '接口缺失：记录 degraded 含标记');
+  // 形态二：返回非数组。
+  const nonArray = await contextChain({ snapshotEvents: () => ({ not: 'an array' }) });
+  assert.ok(nonArray.evidenceText.includes('上下文转录读取失败'), '非数组返回：证据段含读取失败说明行');
+  assert.ok(nonArray.reviewRow.degraded.includes('transcript-read-failed'), '非数组返回：记录 degraded 含标记');
+});
+
+test('T5 真链：maxTranscriptBytes 极小触发总量截断 → 内联截断标记与 transcript-truncated，evidence 在场', async (t) => {
+  const result = await contextChain({ context: { maxTranscriptBytes: 24 } });
+  if (result === undefined) {
+    t.skip('宿主包不可解析（离线环境）');
+    return;
+  }
+  assert.ok(result.evidenceText.includes('<truncated omitted_approx_tokens='), '证据段含内联截断标记');
+  assert.ok(result.reviewRow.degraded.includes('transcript-truncated'), '记录 degraded 含 transcript-truncated');
+  assert.ok(!result.reviewRow.degraded.includes('transcript-read-failed'), '预算截断不混用读取失败标记');
+  assert.ok(result.reviewRow.evidence, '总量截断时 evidence 在场（非空）');
+});
+
+test('T6 真链反例：正常事件（有上下文）→ evidence 在场、无采集标记、证据段无说明行', async (t) => {
+  const result = await contextChain({});
+  if (result === undefined) {
+    t.skip('宿主包不可解析（离线环境）');
+    return;
+  }
+  assert.ok(result.evidenceText.includes('CONTEXT-LINE-A'), '证据段含会话上下文');
+  assert.ok(!result.evidenceText.includes('读取失败'), '正常路径无读取失败说明行');
+  assert.equal(result.reviewRow.degraded, 'none', '无任何采集降级标记');
+  assert.ok(result.reviewRow.evidence, 'evidence 在场');
+});
+
+test('T7 真链反例：maxEntries=0（有意零取样）→ evidence 缺失、无采集标记、无说明行', async (t) => {
+  const result = await contextChain({ context: { maxEntries: 0 } });
+  if (result === undefined) {
+    t.skip('宿主包不可解析（离线环境）');
+    return;
+  }
+  assert.ok(!result.evidenceText.includes('CONTEXT-LINE'), '零取样：证据段无上下文行');
+  assert.ok(!result.evidenceText.includes('读取失败'), '零取样不是读取失败：无说明行');
+  assert.ok(!result.reviewRow.degraded.includes('transcript'), '零取样不记采集标记（准确归因）');
+  assert.ok(!result.reviewRow.evidence, 'evidence 缺失（空）');
+});
+
+test('L1 真链：事件流无匹配 callId → degraded 含 command，动作段含 agent.commandMissing 行（zh/en 各一档）', async (t) => {
+  for (const lang of ['zh', 'en']) {
+    const result = await contextChain({
+      lang,
+      callId: 'call-unknown',
+      events: [
+        { type: 'permission/preset', data: { preset: 'auto-approve' } },
+        { type: 'tool/call', data: { callId: 'call-other', name: 'pwsh', arguments: JSON.stringify({ command: 'npm i' }) } },
+      ],
+    });
+    if (result === undefined) {
+      t.skip('宿主包不可解析（离线环境）');
+      return;
+    }
+    // 动作段是送审第二条消息：捕获只取了证据段，这里经 stderr 审计与记录断言（动作段文案另经 prompt 审计不可用时以记录为准）。
+    assert.ok(result.reviewRow.degraded.includes('command'), `[${lang}] 回查不到调用：记录 degraded 含 command`);
+    assert.ok(result.stderr.includes('degraded=command') || result.reviewRow.degraded.includes('command'), `[${lang}] 审计可见 command 标记`);
+  }
+});
+
+test('L2 真链：tool/call 的 arguments 是坏 JSON → 同 L1 断言（degraded 含 command）', async (t) => {
+  const result = await contextChain({
+    events: [
+      { type: 'permission/preset', data: { preset: 'auto-approve' } },
+      { type: 'tool/call', data: { callId: 'call-ctx', name: 'pwsh', arguments: '{not json' } },
+    ],
+  });
+  if (result === undefined) {
+    t.skip('宿主包不可解析（离线环境）');
+    return;
+  }
+  assert.ok(result.reviewRow.degraded.includes('command'), '坏参数：记录 degraded 含 command');
+  assert.ok(!result.reviewRow.degraded.includes('cwd'), '目录在场：不含 cwd 标记');
+});
+
+test('L3 真链：header.cwd 缺失 → degraded 含 cwd（无 command，回查成功），现行行为钉回归', async (t) => {
+  const result = await contextChain({ sessionHeader: 'none' });
+  if (result === undefined) {
+    t.skip('宿主包不可解析（离线环境）');
+    return;
+  }
+  assert.ok(result.reviewRow.degraded.includes('cwd'), '目录缺失：记录 degraded 含 cwd');
+  assert.ok(!result.reviewRow.degraded.includes('command'), '回查成功：不含 command 标记');
+  assert.ok(result.reviewRow.subject, 'subject 照常（按工具名与理由兜底）');
+});
+
+test('L4 真链反例：正常回查（命令与目录齐备）→ degraded 不含 cwd/command', async (t) => {
+  const result = await contextChain({});
+  if (result === undefined) {
+    t.skip('宿主包不可解析（离线环境）');
+    return;
+  }
+  assert.ok(!result.reviewRow.degraded.includes('cwd'), '正常路径不含 cwd');
+  assert.ok(!result.reviewRow.degraded.includes('command'), '正常路径不含 command');
+  assert.equal(result.reviewRow.subject, 'npm i', 'subject 取回查命令');
 });

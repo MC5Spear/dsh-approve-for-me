@@ -2,7 +2,7 @@
  * dsh-approve-for-me — client 半（单文件，工厂式 CJS）。
  *
  * 加载器只提供 `react` / `react/jsx-runtime` 等模块表里的包名，相对路径 `require` 会抛错，
- * 因此三个挂点（composer 的审查模型下拉、设置页卡片、审批卡片 body 的自动审批状态条）都在同一个 factory 闭包内实现。
+ * 因此四个挂点（composer 的审查模型下拉、设置页卡片、审批卡片 body 的自动审批状态条、会话审查记录视图）都在同一个 factory 闭包内实现。
  * 卡片外壳（「等待审批」条与两个按钮）仍由宿主渲染；插件只接管 body 里的 `conversation.approval.detail`，
  * 并自己渲染关联命令以保证非接管预设下的观感不变（design §7.1）。
  */
@@ -48,7 +48,7 @@ window.__ModuleLoader__.load({
 		const NS = "approve-for-me";
 		/** 包名；Plugins 页 keyed 槽的键是 `<包名>#<行id>`）。 */
 		const PACKAGE_NAME = "dsh-approve-for-me";
-		/** RPC 端点前缀；三个端点共用同一份 TYPERT 清单（design §7.1）。 */
+		/** RPC 端点前缀；八项 RPC 共用同一份 TYPERT 清单（design §7.1）。 */
 		const RPC_CHANNEL = "/api";
 
 		const zh = {
@@ -74,8 +74,9 @@ window.__ModuleLoader__.load({
 			"warn.modelIssue.global": "默认审查模型不可用：{reason}。实际使用：{effective}。",
 			"warn.modelIssue.rule": "此规则选择的审查模型不可用：{reason}。实际使用：{effective}。",
 			"warn.modelIssue.session": "本会话选择的审查模型不可用：{reason}。实际使用：{effective}。",
-			"warn.modelIssue.globalUnset": "默认审查模型未设置：审查跟随执行助手的当前模型，独立发起审查调用——是「使用相同模型」，不是由执行助手自己审批。实际使用：{effective}。",
+			"warn.modelIssue.globalUnset": "默认审查模型未设置：仅当解析实际落到全局默认层（无有效会话选择且无有效映射）时，审查跟随执行助手的当前模型，独立发起审查调用——是「使用相同模型」，不是由执行助手自己审批。",
 			"warn.modelIssue.followParent": "本会话未单独选择审查模型，按未设置的全局默认跟随执行助手的当前模型：独立发起审查调用——是「使用相同模型」，不是由执行助手自己审批。实际使用：{effective}。",
+			"warn.modelIssue.globalUnsetShadowed": "默认审查模型未设置：仅当解析落到全局默认层时，审查才跟随执行助手的当前模型并独立发起审查调用。实际使用：{effective}。",
 			"warn.modelIssue.layer": "当前生效：{layer}。",
 			"card.field.defaultModel": "默认审查模型",
 			"card.field.parentModelRules": "按执行助手的模型选择审查模型",
@@ -90,7 +91,6 @@ window.__ModuleLoader__.load({
 			"seconds.resolved": "生效：{v}",
 			"seconds.draft": "草稿：{v}",
 			"seconds.unit": "秒",
-			"warn.noLimit": "风险：审查模型挂起、工具或其他异常可能使请求无限停在自动审批；插件不会自动恢复时限，取消与其他人工路径按各自条件生效。",
 			"card.readonly": "当前页面不可写入设置（非 loopback），可用 profile patch 配置。",
 			"help.expand": "说明",
 			"help.collapse": "收起说明",
@@ -99,7 +99,7 @@ window.__ModuleLoader__.load({
 			"help.trigger.auditEverySkip": "开启后，每次因预设不匹配而跳过的审批都逐条记录；关闭时同一会话同一原因只记录一条。只改变跳过记录的数量，不影响接管与审批本身，也不表示所有审批都被审查。",
 			"help.reviewer.parentModelRules": "按执行助手的模型选择审查模型：每条规则含作用范围（任意 provider，或指定 provider 下的完整模型 id）与审查模型、推理强度。会话选择更优先；命中时先于全局默认；未命中按其余层解析。同一作用范围与执行助手模型只能有一条规则，重复的行不能保存。旧字典继续参与匹配：纯模型 id 键按任意 provider 读取；含斜杠的旧键会在表中请求确认原意，确认前按原值读取，不自动改写。",
 			"help.reviewer.model": "全局默认的审查模型与推理强度。模型引用形如 provider/model；推理强度留空表示自动选择：模型支持 `low` 就使用 `low`，否则不指定、由模型默认值决定，不承诺所有模型都支持或采用相同强度。解析顺序为会话选择 → 按执行助手的模型映射 → 全局默认；全局默认未设置时使用执行助手的当前模型——插件仍独立发起一次审查调用，是「使用相同模型」，不是由执行助手自己审批。",
-			"help.reviewer.timeoutMs": "自动审查的等待上限（毫秒），涵盖等待本次审查结论的全过程，内部重试不另计时。超时按拒绝处理并说明发生环节，不是危险判定。0 表示取消审查时限：审查模型挂起、工具或其他异常可能使请求无限停在自动审批，插件不自动恢复时限；取消与其他人工路径仍按各自条件生效（常驻风险提醒同此）。",
+			"help.reviewer.timeoutMs": "自动审查的等待上限（毫秒），涵盖装配与等待本次审查结论的全过程，内部重试不另计时。超时按拒绝处理并说明发生环节，不是危险判定。0 立即超时；需要较长等待时设较大的值。",
 			"help.reviewer.maxTokens": "token 是模型计量文本的单位。审查输出上限（token）。0 表示不向模型传输出上限，由模型或供应商默认值决定。推理模型可能先把额度用于推理：上限过小可能导致没有有效结论（正文为空，按审查故障处理）；具体数值因模型与推理强度而异，不以个别模型的测量结果作通用保证。",
 			"help.human.timeoutMs": "人工作答等待上限（毫秒），仅在「自动审查未允许时＝交给人工决定」时使用。0 表示立即拒绝，不是无限等待。到点按拒绝结算，原因写明人工作答超时。",
 			"help.human.timeoutFrom": "人工作答计时的起点：从审批请求起算＝交人工只使用剩余时间；从交人工起算＝交人工时重新开始计时。",
@@ -155,7 +155,6 @@ window.__ModuleLoader__.load({
 			"countdown.seconds": "剩余 {n} 秒后自动拒绝",
 			"countdown.minutes": "剩余 {m} 分 {s} 秒后自动拒绝",
 			"countdown.review": "审查时限剩余 {n} 秒",
-			"countdown.unlimited": "审查无时限",
 			"view.review": "审查记录",
 			"view.needSession": "请先打开一个会话",
 			"view.empty": "本会话还没有自动审批记录",
@@ -226,6 +225,8 @@ window.__ModuleLoader__.load({
 			"degraded.command": "无法辨认本次操作（command）",
 			"degraded.cwd": "会话目录缺失（cwd）",
 			"degraded.transcript": "上下文读取失败或截断（transcript）",
+			"degraded.transcript-read-failed": "上下文读取失败（transcript-read-failed）",
+			"degraded.transcript-truncated": "上下文截断（transcript-truncated）",
 			"degraded.entry": "单条证据截断（entry:…）",
 			"degraded.all": "审查模型解析无可用结果（all）",
 			"degraded.output-truncated": "输出截断（output-truncated）",
@@ -243,6 +244,7 @@ window.__ModuleLoader__.load({
 			"source.gateway": "通道关闭（gateway）",
 			"source.signal": "取消（signal）",
 			"source.error": "异常（error）",
+			"stage.assembly": "装配（assembly）",
 			"stage.queue": "排队（queue）",
 			"stage.review": "审查（review）",
 			"stage.human": "人工（human）",
@@ -286,7 +288,7 @@ window.__ModuleLoader__.load({
 			"hint.reviewer.parentModelRules": "按执行助手模型匹配的规则表：命中时先于全局默认，会话选择更优先。",
 			"hint.language.ui": "插件界面文案的语言。",
 			"hint.language.agent": "发给审查模型的文本与给执行助手的通知，两者使用的语言。",
-			"hint.reviewer.timeoutMs": "自动审查的等待上限（毫秒）；0 取消时限，有常驻风险提醒。",
+			"hint.reviewer.timeoutMs": "自动审查的等待上限（毫秒）；0 立即超时。",
 			"hint.reviewer.maxTokens": "审查输出的 token 上限；0 不向模型传输出上限，仍受供应商默认限制。",
 			"hint.ui.humanCardDuringReview": "审查期间是否提前显示人工审批卡片。",
 			"hint.human.timeoutMs": "人工作答的等待上限（毫秒）；0 立即拒绝。",
@@ -323,8 +325,9 @@ window.__ModuleLoader__.load({
 			"warn.modelIssue.global": "The default reviewer model is unavailable: {reason}. Currently using: {effective}.",
 			"warn.modelIssue.rule": "The reviewer model picked by this rule is unavailable: {reason}. Currently using: {effective}.",
 			"warn.modelIssue.session": "This session's reviewer model is unavailable: {reason}. Currently using: {effective}.",
-			"warn.modelIssue.globalUnset": "The default reviewer model is not set: reviews follow the agent's current model as an independent call — the same model, never the agent approving itself. Currently using: {effective}.",
+			"warn.modelIssue.globalUnset": "The default reviewer model is not set: only when resolution actually falls through to the global default (no effective session choice and no effective rule) do reviews follow the agent's current model as an independent call — the same model, never the agent approving itself.",
 			"warn.modelIssue.followParent": "This session has no reviewer of its own and the global default is unset, so reviews follow the agent's current model as an independent call — the same model, never the agent approving itself. Currently using: {effective}.",
+			"warn.modelIssue.globalUnsetShadowed": "The default reviewer model is not set: reviews follow the agent's current model, as an independent call, only when resolution falls through to the global default. Currently using: {effective}.",
 			"warn.modelIssue.layer": "Currently effective: {layer}.",
 			"card.field.defaultModel": "Default reviewer model",
 			"card.field.parentModelRules": "Reviewer model by the agent's model",
@@ -339,7 +342,6 @@ window.__ModuleLoader__.load({
 			"seconds.resolved": "Effective: {v}",
 			"seconds.draft": "Draft: {v}",
 			"seconds.unit": "s",
-			"warn.noLimit": "Risk: a hung review model, a tool failure or another error can leave the request stuck in auto-approval forever; the plugin does not restore the limit automatically — cancel and other human paths still apply per their conditions.",
 			"card.readonly": "Settings are read-only on this page (non-loopback). Use a profile patch instead.",
 			"help.expand": "Details",
 			"help.collapse": "Hide details",
@@ -348,7 +350,7 @@ window.__ModuleLoader__.load({
 			"help.trigger.auditEverySkip": "On: every preset-mismatch skip is logged; off: one line per session and reason. This only changes the number of skip lines, never the take-over itself, and does not imply every approval is reviewed.",
 			"help.reviewer.parentModelRules": "Picks the reviewer by the model the acting agent uses: each rule carries a scope (any provider, or a specific one) plus the agent's full model id, mapped to a reviewer model and effort. A session choice outranks a hit; a hit outranks the global default; misses fall through to the remaining layers. One rule per scope and agent model — duplicates cannot be saved. The legacy dictionary still matches: plain-id keys read as any-provider; slash-containing keys ask you to confirm their meaning, are read as-is until confirmed, and are never rewritten automatically.",
 			"help.reviewer.model": "Global default reviewer model and effort. The reference reads provider/model; an empty effort is automatic: use `low` when the model supports it, otherwise let the model default decide — no promise that every model supports it or matches the same intensity. Resolution: session choice, by the agent's model, global default; an unset default reviews on the agent's current model — an independent call, the same model, never the agent approving itself.",
-			"help.reviewer.timeoutMs": "Auto-review wait limit (ms), covering the whole wait for this review's conclusion; internal retries get no fresh budget. A timeout rejects with its stage named — not a danger verdict. 0 removes the limit: a hung model or tooling failure can leave the request stuck in auto-approval forever; the plugin never restores the limit silently, while cancellation and other human paths still apply (same as the standing note).",
+			"help.reviewer.timeoutMs": "Auto-review wait limit (ms), covering assembly and the whole wait for this review's conclusion; internal retries get no fresh budget. A timeout rejects with its stage named — not a danger verdict. 0 times out immediately; set a larger value for longer waits.",
 			"help.reviewer.maxTokens": "A token is the unit models use to measure text. Review output cap (tokens). 0 sends no cap, leaving the model or provider default. Reasoning models may spend the budget on reasoning first: too small a cap can leave no usable conclusion (empty body, treated as a review failure); the threshold varies by model and effort, so no single measurement is a general promise.",
 			"help.human.timeoutMs": "Human-answer wait limit (ms), used only when the fallback is Ask. 0 rejects immediately, not an endless wait. Expiry settles as a rejection citing the human timeout.",
 			"help.human.timeoutFrom": "Where the human timer starts: from the approval request (the handoff only gets the remainder), or from the handoff itself.",
@@ -404,7 +406,6 @@ window.__ModuleLoader__.load({
 			"countdown.seconds": "Auto-rejects in {n}s",
 			"countdown.minutes": "Auto-rejects in {m}m {s}s",
 			"countdown.review": "Review deadline in {n}s",
-			"countdown.unlimited": "No review deadline",
 			"view.review": "Review log",
 			"view.needSession": "Open a session first",
 			"view.empty": "No auto-approval records in this session yet",
@@ -475,6 +476,8 @@ window.__ModuleLoader__.load({
 			"degraded.command": "Action cannot be identified (command)",
 			"degraded.cwd": "Working directory missing (cwd)",
 			"degraded.transcript": "Context read failure or truncation (transcript)",
+			"degraded.transcript-read-failed": "Context read failure (transcript-read-failed)",
+			"degraded.transcript-truncated": "Context truncated (transcript-truncated)",
 			"degraded.entry": "Single evidence entry truncated (entry:…)",
 			"degraded.all": "No usable reviewer model (all)",
 			"degraded.output-truncated": "Output truncated (output-truncated)",
@@ -492,6 +495,7 @@ window.__ModuleLoader__.load({
 			"source.gateway": "card closed (gateway)",
 			"source.signal": "cancelled (signal)",
 			"source.error": "error",
+			"stage.assembly": "assembly",
 			"stage.queue": "queue",
 			"stage.review": "review",
 			"stage.human": "human",
@@ -535,7 +539,7 @@ window.__ModuleLoader__.load({
 			"hint.reviewer.parentModelRules": "Rules matching the agent's model; a hit beats the global default, a session choice beats both.",
 			"hint.language.ui": "Language of the plugin's UI copy.",
 			"hint.language.agent": "Language shared by the texts sent to the reviewer and the notices sent to the agent.",
-			"hint.reviewer.timeoutMs": "Auto-review wait limit (ms); 0 removes it, with a standing risk note.",
+			"hint.reviewer.timeoutMs": "Auto-review wait limit (ms); 0 times out immediately.",
 			"hint.reviewer.maxTokens": "Review output cap in tokens; 0 sends no cap to the model, provider defaults still apply.",
 			"hint.ui.humanCardDuringReview": "Whether the human card appears early during review.",
 			"hint.human.timeoutMs": "Human-answer wait limit (ms); 0 rejects immediately.",
@@ -602,14 +606,15 @@ window.__ModuleLoader__.load({
 			".dsafm_reset:disabled{cursor:default}",
 			".dsafm_f_hint{margin:0;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary);overflow-wrap:anywhere}",
 			// 毫秒字段的秒数读数行——自绘在官方组件之外（官方 hint 在字段非法时被非法文案顶掉）。
-			// 负 margin 把它拉进官方字段自己的 12px 底部内边距区，与官方字段内 6px 间隙对齐（视觉归属该字段）。
-			".dsafm_f_sec{margin:-12px 0 12px;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary);overflow-wrap:anywhere}",
-			// 分隔线选择器组（design §7.2.1）：第一条在秒数行后排除说明行（不加分隔线）；
-			// 第二条以说明行为锚恢复后继字段的 0.5px 分隔线（覆盖毫秒与非毫秒两种顺序）。
-			".dsafm_f_sec + div:not(.dsafm_field):not(.dsafm_f_help){border-top:.5px solid var(--dsw-alias-border-l2)}",
-			".dsafm_f_help + div:not(.dsafm_field){border-top:.5px solid var(--dsw-alias-border-l2)}",
-			// 数字字段的平铺说明行（design §7.2.1）：与秒数读数行同一负边距，视觉归属该字段。
-			".dsafm_f_help{margin:-12px 0 12px}",
+			// 负 margin 抵 numhost 与读数行之间的外壳 gap（6px），使读数行紧贴官方校验文案行（视觉归属该字段）。
+			".dsafm_f_sec{margin:-6px 0 0;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary);overflow-wrap:anywhere}",
+			// 数字字段承载规则（design §7.2.1）之一：官方根容器内边距归零——官方 .field 自带 padding:12px 0
+			//（与插件外壳同规格），嵌进外壳后不归零会使「标签行→输入框」间距 18px 且每字段加高约 24px；
+			// 归零后官方根内部 gap:6px 保留，纵向间距回到外壳节奏。
+			".dsafm_numhost > div{padding:0}",
+			// 承载规则之二：收起官方组件不传 label 时残留的空标签行——官方根 div 的第一个子 div 即标签行，
+			// 结构假设由真页巡检与 DOM dump 断言钉住，不依赖随宿主版本变化的 CSS 模块哈希类名。
+			".dsafm_numhost > div > div:first-child{display:none}",
 			".dsafm_sec_invalid{color:var(--dsw-alias-state-error-primary)}",
 			".dsafm_sec_warn{display:block;margin-top:2px;color:var(--dsw-alias-state-warn-primary,#b8860b)}",
 			// 控件本体：官方输入规格（34px/0 12px/0.5px border-l4/8px/bg-layer-3；聚焦与非法边框）。
@@ -974,14 +979,14 @@ window.__ModuleLoader__.load({
 				.catch(() => ({ efforts: [] }));
 		}
 
-		/** 空串省略后需以层含义句承接回退结果的不可用键（design §7.2.0）。 */
-		const WARN_LAYER_SENTENCE_KEYS = new Set(["warn.modelIssue.global", "warn.modelIssue.rule", "warn.modelIssue.session"]);
+		/** 空串省略后需以层含义句承接回退结果的不可用键与空默认遮蔽键（design §7.2.0；globalUnsetShadowed 空串时以层含义句承接）。 */
+		const WARN_LAYER_SENTENCE_KEYS = new Set(["warn.modelIssue.global", "warn.modelIssue.rule", "warn.modelIssue.session", "warn.modelIssue.globalUnsetShadowed"]);
 
 		/**
 		 * 审查模型分置醒目提示行（design §7.2.0）：警告图标＋原因＋实际回退结果。
 		 * `effectiveModel` 有值时按「实际使用：层含义：引用」呈现（层文案取 §8.5.1 枚举词）；
-		 * 为空串时省略「实际使用」句，三类不可用键其后以 `warn.modelIssue.layer` 层含义独立
-		 * 成句承接（不丢实际生效层），空全局默认两键不补层句——首句已承载层含义。
+		 * 为空串时省略「实际使用」句，三类不可用键与 `globalUnsetShadowed` 键其后以 `warn.modelIssue.layer`
+		 * 层含义独立成句承接（不丢实际生效层），空全局默认键（`globalUnset`／`followParent`）不补层句——首句已承载层含义。
 		 * 取词只呈现可见性，不改变解析行为。
 		 * @param {(key: string) => string} t - 取词函数。
 		 * @param {string} key - 提示键（`warn.modelIssue.*`）。
@@ -1405,11 +1410,11 @@ window.__ModuleLoader__.load({
 				],
 			});
 
-			// 会话作用域的分置醒目提示（design §7.2.0/§7.3.1）：渲染在选择控件附近。
-			// 空全局默认条目在「全局默认为空且会话未单独选择审查模型」时用 followParent 键渲染
-			// （effectiveModel 有值即会话执行助手模型，随「实际使用」句展示）；它与 session 不可用
-			// 条目条件互斥（选择空 vs 已选择且不可用），控件附近至多一条——已选择且不可用时跟随
-			// 状态由该不可用条目的回退结果承载，不另渲染空默认行。求值失败或旧宿主无
+			// 会话作用域的分置醒目提示（design §7.2.0/§7.3.1）：空全局默认条目在「全局默认为空且
+			// 会话未单独选择审查模型」时渲染，按 `effectiveLayer` 选键——`follow-parent` 用
+			// followParent 键声称当前跟随（此时为真）；被有效映射截住或父模型引用不可用（`unavailable`）
+			// 用 globalUnsetShadowed 键，实际生效按真实解析呈现，不声称当前跟随。它与 session 不可用
+			// 条目条件互斥（选择空 vs 已选择且不可用），控件附近至多一条；求值失败或旧宿主无
 			// modelIssues 字段时不产生条目。
 			const sessionModelRef = typeof state?.sessionModel === "string" ? state.sessionModel : "";
 			const sessionIssues = issuesOf(state?.modelIssues, "session");
@@ -1417,7 +1422,13 @@ window.__ModuleLoader__.load({
 			const followParentIssue =
 				sessionModelRef.length === 0 && sessionIssues.length === 0 && unsetIssue !== null ? unsetIssue : null;
 			const sessionWarns = [
-				...(followParentIssue !== null ? [modelIssueLine(t, "warn.modelIssue.followParent", followParentIssue)] : []),
+				...(followParentIssue !== null
+					? [modelIssueLine(
+						t,
+						followParentIssue.effectiveLayer === "follow-parent" ? "warn.modelIssue.followParent" : "warn.modelIssue.globalUnsetShadowed",
+						followParentIssue,
+					)]
+					: []),
 				...sessionIssues.map((issue, index) => modelIssueLine(t, "warn.modelIssue.session", issue)),
 			];
 
@@ -1653,15 +1664,15 @@ window.__ModuleLoader__.load({
 			const stateText = entry.state === "waiting-human" ? `${t("cardstate.waiting")} · ${causeText}` : t("cardstate.reviewing");
 			// 倒计时分派（design §7.4）：reviewing 状态读审查截止（review），waiting-human 读人工
 			// 截止（human），两类时限不得互串——deadlineKind 与状态矛盾（如交人工却标 review）属
-			// 归一化错误，按状态锚定，不让倒计时整段消失或串显另一类时限；审查截止为 null →
-			// 「审查无时限」（审查时限配置为 0 时承接层对该形态写 null/null），人工阶段 null 截止
-			// 不渲染倒计时（零时限立即结算，无瞬态）。
+			// 归一化错误，按状态锚定，不让倒计时整段消失或串显另一类时限。审查截止恒有值
+			// （零值与装配耗尽在写入前已按立即超时结算，不进入倒计时显示态）；缺失形态按回退
+			// 推断防御处理，不渲染倒计时。人工阶段 null 截止不渲染倒计时（零时限立即结算，无瞬态）。
 			const deadlineKind = entry.state === "waiting-human" ? "human" : "review";
 			const remaining = entry.deadlineAt === null ? null : Math.max(0, Math.ceil((entry.deadlineAt - now) / 1000));
 			const countdown =
 				deadlineKind === "review"
 					? remaining === null
-						? t("countdown.unlimited")
+						? null
 						: t("countdown.review").replace("{n}", String(remaining))
 					: deadlineKind === "human" && remaining !== null
 						? remaining >= 60
@@ -1939,34 +1950,42 @@ window.__ModuleLoader__.load({
 				const fullTextPresent =
 					typeof detail?.prompt === "string" || typeof detail?.input === "string" || typeof detail?.output === "string";
 				// 第二级反证依据（design §8.5.1）：degraded 多值拆分与 multiEnumText 同口径（逗号与 +
-				// 分隔），token 精确等于 transcript 即证实采集环节读取失败；tools 缺失时无法反证「未调用」。
-				const degradedHasTranscript =
-					typeof detail?.degraded === "string" && detail.degraded.split(/[,+]/u).some((token) => token === "transcript");
+				// 分隔），token 属上下文采集异常标记（transcript-read-failed／transcript-truncated／
+				// 既有记录的 transcript）即证实采集环节异常，evidence 缺失不归「未取上下文」；tools 缺失时无法反证「未调用」。
+				const degradedHasTranscriptIssue =
+					typeof detail?.degraded === "string" &&
+					detail.degraded.split(/[,+]/u).some((token) => ["transcript-read-failed", "transcript-truncated", "transcript"].includes(token));
 				const toolsCount = typeof detail?.tools === "number" ? detail.tools : undefined;
+				// 记录级 capture 生效标记（design §8.2/§8.5.1）：写入时的全文采集档，旧记录缺失＝无法确认。
+				const captureOfDetail = typeof detail?.capture === "string" ? detail.capture : undefined;
 				/**
 				 * 缺段说明的三级分派（design §8.5.1）：①读取失败在场 → 一律「本次未记录此项」；
-				 * ②全文采集证实（任一全文段在场）先查反证——evidence 缺且 degraded 含 transcript（读取
-				 * 失败，具体原因由 degraded 段承载）、probes 缺且 tools 大于 0 或缺失（计数证伪「未调用」）
-				 * 时走「本次未记录此项」；无反证时 evidence→未取上下文、probes 缺且 tools 在场为 0→未调用
-				 * 取证工具、reasoning→模型未提供、output 缺且结算为故障类（decision=error）→模型未提供、
-				 * 其余→「本次未记录此项」；
-				 * ③全文段均不在场：仅审查已执行（decision 在场）时 prompt/input/output/reasoning 显示
-				 * 「未开启全文采集」；审查未执行（decision 缺失）的记录本就不产生全文段，不构成「未开启」
-				 * 的证据——该级 evidence/probes/reason 与审查未执行的全部缺段均走「本次未记录此项」。
+				 * ②全文采集证实（任一全文段在场）先查反证——evidence 缺且 degraded 含上下文采集异常
+				 * 标记（读取失败或截断，具体原因由 degraded 段承载）、probes 缺且 tools 大于 0 或缺失
+				 * （计数证伪「未调用」）时走「本次未记录此项」；无反证时 evidence→未取上下文、
+				 * probes 缺且 tools 在场为 0→未调用取证工具、reasoning→模型未提供、output 缺且结算为
+				 * 故障类（decision=error）→模型未提供、其余→「本次未记录此项」；
+				 * ③全文段均不在场：以记录级 capture 标记为唯一可靠依据——审查已执行（decision 在场）
+				 * 且 capture 为 summary/off（写入时确实未开启全文采集）时 prompt/input/output/reasoning
+				 * 显示「未开启全文采集」；capture=full 但全文段缺失（模型不可用早退、提示构建抛错，
+				 * 全文未形成）与 capture 缺失（旧记录，无法确认）走「本次未记录此项」；审查未执行
+				 * （decision 缺失）的全部缺段同样走「本次未记录此项」。
 				 * @param {string} segment - 段名（reason/evidence/probes/prompt/input/reasoning/output）。
 				 * @returns {string} absent 字典键。
 				 */
 				const absentKeyOf = (segment) => {
 					if (readFailed) return "absent.unknown";
 					if (fullTextPresent) {
-						if (segment === "evidence") return degradedHasTranscript ? "absent.unknown" : "absent.noContext";
+						if (segment === "evidence") return degradedHasTranscriptIssue ? "absent.unknown" : "absent.noContext";
 						if (segment === "probes") return toolsCount === 0 ? "absent.noProbes" : "absent.unknown";
 						if (segment === "reasoning") return "absent.modelNotProvided";
 						if (segment === "output" && record.decision === "error") return "absent.modelNotProvided";
 						return "absent.unknown";
 					}
 					if ((segment === "prompt" || segment === "input" || segment === "output" || segment === "reasoning") && hasDecision) {
-						return "absent.notFullCapture";
+						// 记录级 capture 标记（design §8.5.1 修订）是「未开启全文采集」的唯一可靠依据：
+						// 从全文缺失反推配置会把 full 早退/抛错与旧记录误报为未开启，故仅 summary/off 判定。
+						return captureOfDetail === "summary" || captureOfDetail === "off" ? "absent.notFullCapture" : "absent.unknown";
 					}
 					return "absent.unknown";
 				};
@@ -2278,9 +2297,9 @@ window.__ModuleLoader__.load({
 		 * 插件设置卡（挂 Plugins 页本包详情 `plugins.bundle.config`）：读 `configForms` 控制器快照（与旧 scope 同形）。
 		 *
 		 * 外观照官方设置表单重绘（规格与自绘落点见 docs/design.md）——无卡片外壳与分区标题、字段竖排、
-		 * 覆盖＝胶囊「已覆盖」＋「恢复默认」、说明常驻＋帮助点击展开、底部唯一「保存」且无改动/非法/保存中置灰；
-		 * 一切编辑（含接管预设、模型/档位、映射表、跟随执行助手模型）先暂存，只有「保存」写库，离开页面丢弃（requirements §6.1）。
-		 * 嵌套路径沿用 `mutate` 的路径操作；数字字段直接用官方 `SettingsValueField`，其余控件按官方输入规格自绘。
+		 * 覆盖＝胶囊「已单独设置」＋「恢复默认」、说明常驻＋帮助点击展开、底部唯一「保存」且无改动/非法/保存中置灰；
+		 * 一切编辑（含接管预设、模型/档位、映射表）先暂存，只有「保存」写库，离开页面丢弃（requirements §6.1）。
+		 * 嵌套路径沿用 `mutate` 的路径操作；数字字段的输入与校验走官方 `SettingsValueField`（外套字段外壳，标签行与覆盖组外置），其余控件按官方输入规格自绘。
 		 * 写通道注意：控制器的 `mutate` 对「宿主拒绝」解析 `false` 而不抛错，保存后按返回值定相位并依赖订阅回读快照。
 		 * @param {object} props - 注入的 `scope`（configForms 控制器）、`rpcCall`、`t` 与页面主的 `view`。
 		 * @returns {object} React 元素。
@@ -2468,7 +2487,7 @@ window.__ModuleLoader__.load({
 			 * 覆盖标记：暂存 clear → 无；暂存写 → 有（保存将留下覆盖，与基线同值也算）；
 			 * 无暂存 → 用户层有该键（键在场，不是值比较）。
 			 * @param {readonly string[]} path - 字段路径。
-			 * @returns {boolean} 是否显示「已覆盖」。
+			 * @returns {boolean} 是否显示「已单独设置」。
 			 */
 			const overriddenOf = (path) => {
 				const entry = staged[path.join(".")];
@@ -2477,7 +2496,7 @@ window.__ModuleLoader__.load({
 			};
 
 			/**
-			 * 结构化字段的显示值与暂存入口（模型选择、行表、跟随执行助手模型、预设数组）。
+			 * 结构化字段的显示值与暂存入口（模型选择、行表、预设数组）。
 			 * @param {readonly string[]} path - 字段路径。
 			 * @param {(seed: unknown, baseSeed: unknown) => unknown} [normalize] - 种子归一化。
 			 * @returns {{display: unknown, set: (next: unknown) => void}} 显示值与暂存函数。
@@ -2603,14 +2622,16 @@ window.__ModuleLoader__.load({
 			/**
 			 * 字段外壳（design §7.2）：标签行（label ＋帮助按钮 ＋覆盖组）→ 控件 → 常驻说明 →（展开的）帮助区。
 			 * 帮助按钮 24×24、`IconInfoOutlineRegular`（12px）、`aria-expanded`/`aria-controls` 成对、键盘可达；
-			 * 覆盖组＝`Tag`「已覆盖」＋文本按钮「恢复默认」（只暂存 `{clear}`，不写库）。
+			 * 覆盖组＝`Tag`「已单独设置」＋文本按钮「恢复默认」（只暂存 `{clear}`，不写库）。
+			 * `hint` 允许 `null`：数字字段不渲染外壳自己的常驻短句（官方 message 行承载，design §7.2.1），
+			 * 此时无 `dsafm_f_hint` 段、`describedby` 不含 `hintId`；其余六类传参不变、行为不变。
 			 * @param {object} options - `label`/`path`/`hint`/`helpText`/`onReset` 与 `control(controlId, describedby)`。
 			 * @returns {object} 元素。
 			 */
 			/**
 		 * 说明开关（design §7.2.1）：图标与可见文字「说明／收起说明」同置按钮内，Enter 与 Space
 		 * 键盘路径承载同一开合动作（`preventDefault` 防 Space 滚动与双触发）；展开区 `role="region"`、
-		 * 无障碍名与按钮一致。字段外壳与数字字段的平铺说明行共用同一实现。
+		 * 无障碍名与按钮一致。七类字段的字段外壳共用同一实现。
 		 * @param {object} options - `label`/`helpId`/`open`/`setOpen`/`helpText`。
 		 * @returns {object[]} 二元组 `[按钮, 展开区]`（收起时展开区为 null）。
 		 */
@@ -2654,7 +2675,8 @@ window.__ModuleLoader__.load({
 				const controlId = `${NS}-ctl-${suffix}`;
 				const hintId = `${NS}-hint-${suffix}`;
 				const helpId = `${NS}-help-${suffix}`;
-				const describedby = [hintId, open ? helpId : ""].filter(Boolean).join(" ");
+				// hint 为 null（数字字段）时无外壳常驻短句段：describedby 不含 hintId，input 关联走官方原生通路。
+				const describedby = [hint === null ? "" : hintId, open ? helpId : ""].filter(Boolean).join(" ");
 			const [helpButton, helpRegion] = helpToggleOf({ label, helpId, open, setOpen, helpText });
 				return jsxRuntime.jsxs("div", {
 					className: "dsafm_field",
@@ -2687,15 +2709,16 @@ window.__ModuleLoader__.load({
 							],
 						}),
 						control(controlId, describedby),
-						jsxRuntime.jsx("p", { id: hintId, className: "dsafm_f_hint", children: hint }),
+						hint === null ? null : jsxRuntime.jsx("p", { id: hintId, className: "dsafm_f_hint", children: hint }),
 						helpRegion,
 					],
 				});
 			};
 
 			/**
-			 * 纯数字字段直接用官方 `SettingsValueField`（自带标签行/覆盖组/非法文案全套，其 CSS 无失效令牌；官方组件不传 help——纯图标按钮无法承载文字，design §7.2.1）。
-			 * 说明入口改为官方字段之后平铺一行自绘说明行（毫秒字段顺序＝官方字段 → 秒数读数行 → 说明行，非毫秒字段说明行紧随官方字段，design §7.2.1）。
+			 * 纯数字字段的输入与校验文案走官方 `SettingsValueField`（其 CSS 无失效令牌）；标签行与覆盖组外置到字段外壳——
+			 * 官方组件不传 label/help/overridden（标签行内部插不进文字按钮，纯图标按钮不满足 §6.5，design §7.2.1），
+			 * 说明按钮随外壳标签行、覆盖组由外壳自绘。不传 label 时官方组件残留的空标签行由 `.dsafm_numhost` 收行选择器收起。
 			 * 读数自绘在官方组件之外——官方 hint 在字段非法时被非法文案整段顶掉，拼进去会让生效值读数消失。
 			 * @param {object} field - 字段定义。
 			 * @returns {object} 元素。
@@ -2704,29 +2727,33 @@ window.__ModuleLoader__.load({
 				const key = field.path.join(".");
 				const entry = staged[key];
 				const invalid = entry !== undefined && entry.clear !== true && fromDraft(entry.text, field, t).ok !== true;
-				const control = jsxRuntime.jsx(primitives.SettingsValueField, {
-					id: `${NS}-ctl-${key.replace(/\./gu, "-")}`,
+				return fieldShell({
 					label: t(field.labelKey),
-					hint: t(`hint.${key}`),
-					overriddenLabel: t("card.override"),
-					resetLabel: t("card.resetField"),
-					invalidLabel: t("card.invalidNumber"),
-					numeric: true,
-					disabled: !writable,
-					overridden: overriddenOf(field.path),
-					invalid,
-					text: draftOf(field),
-					onEdit: (text) => stageText(field, text),
+					path: field.path,
+					hint: null,
+					helpText: t(`help.${key}`),
 					onReset: () => stageClear(field.path),
+					control: (controlId) =>
+						jsxRuntime.jsxs(react.Fragment, {
+							children: [
+								// 官方组件只承载输入与校验文案（design §7.2.1）；空标签行与内边距由两条 numhost 承载规则处置。
+								jsxRuntime.jsx("div", {
+									className: "dsafm_numhost",
+									children: jsxRuntime.jsx(primitives.SettingsValueField, {
+										id: controlId,
+										hint: t(`hint.${key}`),
+										invalidLabel: t("card.invalidNumber"),
+										numeric: true,
+										disabled: !writable,
+										invalid,
+										text: draftOf(field),
+										onEdit: (text) => stageText(field, text),
+									}),
+								}),
+								field.unit === "ms" ? secondsLine(field) : null,
+							],
+						}),
 				});
-				// 说明入口平铺（design §7.2.1）：官方组件不传 help（纯图标按钮无法承载文字），钩子顺序＝
-				// 数字字段固定次序（每个数字字段恰一次 useState），真 React 与测试替身都稳定。
-				const [open, setOpen] = react.useState(false);
-				const helpId = `${NS}-help-${key.replace(/\./gu, "-")}`;
-				const [helpButton, helpRegion] = helpToggleOf({ label: t(field.labelKey), helpId, open, setOpen, helpText: t(`help.${key}`) });
-				const helpLine = jsxRuntime.jsxs("div", { className: "dsafm_f_help", children: [helpButton, helpRegion] });
-				if (field.unit !== "ms") return jsxRuntime.jsxs(react.Fragment, { children: [control, helpLine] });
-				return jsxRuntime.jsxs(react.Fragment, { children: [control, secondsLine(field), helpLine] });
 			};
 
 			/**
@@ -2743,14 +2770,6 @@ window.__ModuleLoader__.load({
 				const draftNumber = draftRaw.length === 0 ? null : secondsNumberText(Number(draftRaw));
 				const fill = (number) => (number === null ? "—" : `${number} ${unit}`);
 				const draftInvalid = draftRaw.length > 0 && draftNumber === null;
-				// 无上限风险提醒固定渲染在审查时限字段的秒数读数行内（design §7.2），可见性不依赖
-				// 帮助区展开；草稿为 0 或生效值为 0 时显示。只描述风险，不改写输入：草稿为 0 仍可保存。
-				// 人工时限字段的 0 是「立即拒绝」，不显示该提醒。
-				const noLimitWarn =
-					field.path.join(".") === "reviewer.timeoutMs" &&
-					(resolvedNumber === "0" || draftNumber === "0")
-						? t("warn.noLimit")
-						: null;
 				return jsxRuntime.jsxs("p", {
 					id: `${NS}-sec-${field.path.join("-")}`,
 					className: "dsafm_f_sec",
@@ -2764,7 +2783,6 @@ window.__ModuleLoader__.load({
 							className: draftInvalid ? "dsafm_sec_draft dsafm_sec_invalid" : "dsafm_sec_draft",
 							children: t("seconds.draft").replace("{v}", fill(draftNumber)),
 						}),
-						noLimitWarn === null ? null : jsxRuntime.jsx("span", { className: "dsafm_sec_warn", children: noLimitWarn }),
 					],
 				});
 			};

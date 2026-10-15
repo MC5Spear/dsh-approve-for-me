@@ -394,6 +394,15 @@ test('setter 现读生效、非法值不改变现值', async () => {
   tools.setToolTimeoutMs(Number.NaN);
   const still = await tools.run('read_file', { path: 'x' });
   assert.equal(still.isError, true, '非法超时不得改写现值：仍按 15ms 生效');
+
+  // ISS-30：单工具超时零值＝字面立即超时（不再表示不限时）——挂起任务与同步快任务
+  // 都不得赢得竞速：不发起调用、直接按超时返回失败说明。
+  delayMs = 0;
+  tools.setToolTimeoutMs(0);
+  const immediate = await tools.run('read_file', { path: 'x' });
+  assert.equal(immediate.isError, true, '0 立即超时');
+  assert.match(immediate.text, /超时/u, '超时失败说明在场');
+  assert.ok(!immediate.text.includes('done'), '同步快返回的任务结果不得胜出（requirements §4.2 字面立即）');
 });
 
 test('超时真实触发：慢任务＋小超时 → 超时形态且结算落在超时值邻域', async () => {

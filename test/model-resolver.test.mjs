@@ -754,9 +754,83 @@ test('空全局默认条目两态 effectiveModel：无会话父模型时取空�
   assert.equal(issues[0].effectiveModel, '', '无会话求值无值可填，取空串');
 });
 
-test('空全局默认条目不校验父模型可用性：父模型不在目录仍填引用并记 follow-parent', async () => {
-  // 状态提示而非故障（design §7.2.0）：父模型已知即填全引用；父模型不可用的故障由解析侧
-  // layer='unavailable' 承载，空默认条目不改写层含义（design §10.2 判据锚）。
+test('空默认条目映射命中：effectiveLayer=parent-map、填目标引用（design §7.2.0／requirements §5.1、§6.1 修订）', async () => {
+  // 零值语义生效但解析被有效映射截住：条目仍按 scope=global＋configured 空串识别，
+  // effectiveLayer／effectiveModel 取真实解析（parent-map＋目标引用），客户端走 globalUnsetShadowed 键。
+  const issues = await collectModelIssues({
+    llm: issuesLlm(),
+    reviewer: { byParentModel: { 'glm-5.3': 'deepseek-official/deepseek-v4-pro' } },
+    sessionChoice: undefined,
+    parent: { provider: 'zai', model: 'glm-5.3' },
+  });
+  const empty = issues.find((issue) => issue.scope === 'global' && issue.configured === '');
+  assert.ok(empty !== undefined, '空默认条目应在场');
+  assert.equal(empty.reason, '全局默认审查模型未设置');
+  assert.equal(empty.effectiveLayer, 'parent-map', '映射命中即被截住，不落到零值语义');
+  assert.equal(empty.effectiveModel, 'deepseek-official/deepseek-v4-pro', '填映射目标引用');
+});
+
+test('空默认条目会话可用：effectiveLayer=session（会话选择已设置即不查映射）', async () => {
+  const issues = await collectModelIssues({
+    llm: issuesLlm(),
+    reviewer: { byParentModel: { 'glm-5.3': 'deepseek-official/deepseek-v4-pro' } },
+    sessionChoice: { kind: 'set', model: 'deepseek-official/deepseek-v4-pro', effort: '' },
+    parent: { provider: 'zai', model: 'glm-5.3' },
+  });
+  const empty = issues.find((issue) => issue.scope === 'global' && issue.configured === '');
+  assert.ok(empty !== undefined, '空默认条目应在场（全局层为空与是否查映射无关）');
+  assert.equal(empty.effectiveLayer, 'session', '会话选择可用即生效，不查映射');
+  assert.equal(empty.effectiveModel, 'deepseek-official/deepseek-v4-pro', '填会话选择引用');
+});
+
+test('空默认条目会话不可用：不查映射、直退终点（含映射可用也不参与）', async () => {
+  // 会话选择已设置但不可用：按与 selectReviewerModel 同口径直退终点，映射层不参与求值。
+  const issues = await collectModelIssues({
+    llm: issuesLlm(),
+    reviewer: { byParentModel: { 'glm-5.3': 'deepseek-official/deepseek-v4-pro' } },
+    sessionChoice: { kind: 'set', model: 'ghost/nope', effort: '' },
+    parent: { provider: 'zai', model: 'glm-5.3' },
+  });
+  const sessionIssue = issues.find((issue) => issue.scope === 'session');
+  assert.ok(sessionIssue !== undefined, '会话不可用条目应在场（承载原因）');
+  const empty = issues.find((issue) => issue.scope === 'global' && issue.configured === '');
+  assert.ok(empty !== undefined, '空默认条目应在场');
+  assert.equal(empty.effectiveLayer, 'follow-parent', '不可用直退终点＝父模型可用，不取 parent-map');
+  assert.equal(empty.effectiveModel, 'zai/glm-5.3', '填执行助手当前模型引用');
+});
+
+test('空默认条目映射目标不可用：级联直退终点，不取 parent-map', async () => {
+  const issues = await collectModelIssues({
+    llm: issuesLlm(),
+    reviewer: { byParentModel: { 'glm-5.3': 'ghost/nope' } },
+    sessionChoice: undefined,
+    parent: { provider: 'zai', model: 'glm-5.3' },
+  });
+  const empty = issues.find((issue) => issue.scope === 'global' && issue.configured === '');
+  assert.ok(empty !== undefined, '空默认条目应在场');
+  assert.equal(empty.effectiveLayer, 'follow-parent', '映射目标不可用级联直退终点');
+  assert.equal(empty.effectiveModel, 'zai/glm-5.3', '终点填执行助手当前模型引用');
+});
+
+test('ISS-25：byParentModel 对象值 {model,effort} 端到端——映射层带档位生效', async () => {
+  // requirements §5.1：映射值允许对象形态（模型引用＋推理强度）；端到端经 harness 走完整解析链。
+  const { resolver } = harness({
+    snapshot: {
+      revision: 1,
+      value: { reviewer: { byParentModel: { 'glm-5.3': { model: 'deepseek-official/deepseek-v4-pro', effort: 'high' } } }, model: 'zai/glm-5.3' },
+      base: {},
+      user: {},
+    },
+  });
+  const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'zai', model: 'glm-5.3' } }) } });
+  assert.equal(cfg.resolution.layer, 'parent-map');
+  assert.equal(cfg.resolution.model, 'deepseek-v4-pro');
+  assert.equal(cfg.resolution.effort, 'high', '对象值显式档位随映射生效');
+});
+
+test('空默认条目直退终点取真实解析：父模型引用校验失败记 unavailable＋空串', async () => {
+  // 空默认条目按求值上下文取真实解析（design §7.2.0／requirements §5.1、§6.1 修订）：无有效会话选择且无有效映射
+  // 截住时落到直退终点——父模型引用校验失败（不可用）即 unavailable＋空串，不声称当前跟随。
   const issues = await collectModelIssues({
     llm: issuesLlm(),
     reviewer: {},
@@ -765,8 +839,8 @@ test('空全局默认条目不校验父模型可用性：父模型不在目录�
   });
   assert.equal(issues.length, 1);
   assert.equal(issues[0].configured, '');
-  assert.equal(issues[0].effectiveLayer, 'follow-parent');
-  assert.equal(issues[0].effectiveModel, 'ghost/nope', '父模型已知即填引用，不因不在目录改判 unavailable');
+  assert.equal(issues[0].effectiveLayer, 'unavailable');
+  assert.equal(issues[0].effectiveModel, '', '引用校验失败无值可填，取空串');
 });
 
 test('空全局默认与「已设置但不可用」global 条目互斥（reviewer.model 空与非空二态）', async () => {

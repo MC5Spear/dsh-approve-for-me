@@ -122,7 +122,7 @@ function harness(turns, options = {}) {
     review: (reviewOpts) => reviewer.review(
       { toolName: 'pwsh', reason: 'escalate sandbox to danger-full-access: x' },
       { command: 'npm i' },
-      { fields: {}, evidence: 'E' },
+      options.pre ?? { fields: {}, evidence: 'E' },
       cfg,
       { id: 'r1', signal: new AbortController().signal, ...reviewOpts },
     ),
@@ -293,6 +293,37 @@ test('review：无模型可用时不发起请求，返回 error 并记录 degrad
   assert.equal(verdict.decision, 'error');
   assert.equal(h.requests.length, 0);
   assert.equal(verdict.fields.degraded, 'all');
+});
+
+test('T10 早退路径不丢采集状态：layer=unavailable 时 evidenceDegraded 并入降级清单与 all', async () => {
+  const h = harness([{ blocks: [text('{}')] }], {
+    cfg: { resolution: { layer: 'unavailable', effort: 'none', degraded: 'all' } },
+    pre: { fields: { degraded: 'none' }, evidence: '', evidenceDegraded: ['transcript-read-failed'] },
+  });
+  const verdict = await h.review();
+  assert.equal(verdict.decision, 'error');
+  // 三源合并（seed→degraded）：早退路径的 fields.degraded 同含采集标记与 all，顺序＝采集标记在前。
+  assert.equal(verdict.fields.degraded, 'transcript-read-failed,all');
+  const reviewLine = h.audits.find((entry) => entry.phase === 'review');
+  assert.equal(reviewLine.degraded, 'transcript-read-failed,all', '审计 review 行同口径');
+});
+
+test('L5 三源合并与去重：evidenceDegraded＋locatedDegraded＋fields.degraded 同给 → 各标记恰一次', async () => {
+  const h = harness([{ blocks: [text('{"outcome":"deny","rationale":"x"}')] }], {
+    pre: {
+      fields: { degraded: 'command' },
+      evidence: 'E',
+      evidenceDegraded: ['transcript-truncated'],
+      locatedDegraded: ['command', 'cwd'],
+    },
+  });
+  const verdict = await h.review();
+  assert.equal(verdict.decision, 'deny');
+  // command 在 locatedDegraded 与 fields.degraded 同给 → verdictFields.degraded 中恰一次；
+  // 多值顺序＝降级初值（三源 Set 去重）接续审查期标记。
+  assert.equal(verdict.fields.degraded, 'transcript-truncated,command,cwd');
+  const reviewLine = h.audits.find((entry) => entry.phase === 'review');
+  assert.equal(reviewLine.degraded, 'transcript-truncated,command,cwd', '审计与判定同源');
 });
 
 test('review：Verdict.fields 是审计字段的唯一投影（design §8.2 词汇表）', async () => {

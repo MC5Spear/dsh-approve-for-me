@@ -23,7 +23,7 @@ export const modelIssueSchema = z.object({
   configured: z.string(),
   /** 可核实的不可用原因。 */
   reason: z.string(),
-  /** 实际生效层（直退语义下只会是 `global`／`follow-parent`／`unavailable`）。 */
+  /** 实际生效层：`rule`／`session` 条目在直退语义下只会是 `global`／`follow-parent`／`unavailable`；空默认条目按求值上下文取真实解析，另可为 `session`／`parent-map`。 */
   effectiveLayer: z.string(),
   /** 该生效层对应的模型引用；无生效或无会话值可填时为空串。 */
   effectiveModel: z.string(),
@@ -142,6 +142,8 @@ export const traceRecordResultSchema = z.object({
       layer: z.string().optional(),
       attempts: z.number().optional(),
       tools: z.number().optional(),
+      /** 本条审查记录写入时的全文采集档（`off`／`summary`／`full`，缺省 `summary`）：详情缺段分派「未开启全文采集」的唯一可靠依据。 */
+      capture: z.string().optional(),
       fieldsDefaulted: z.string().optional(),
       degraded: z.string().optional(),
       preset: z.string().optional(),
@@ -366,7 +368,7 @@ export const TYPERT = {
             signature: '@Remote("traceRecord") traceRecord(args: { sessionId: string; approvalId: string }): TraceRecordResult',
             summary: 'Read one approval merged detail, full texts only when captured as full.',
             jsDoc:
-              '/**\n * Read one approval merged detail by approvalId.\n * @param args - session id and the approvalId from a traceRecords row.\n * @returns the merged record, or null when it is outside the read-back window.\n */',
+              '/**\n * Read one approval merged detail by approvalId.\n * @param args - session id and the approvalId from a traceRecords row.\n * @returns the merged record, or null when it is outside the read-back window. `record.capture` is the full-text capture tier at write time (off/summary/full, default summary).\n */',
           },
         ],
         types: [
@@ -412,7 +414,7 @@ export const TYPERT = {
           {
             name: 'TraceRecordResult',
             declaration:
-              'export interface TraceRecordResult { record: { approvalId: string; callId: string | null; toolName: string | null; origin: string | null; escalation: string | null; startedAt: number | null; endedAt: number | null; queueMs: number | null; reviewMs: number | null; humanWaitMs: number | null; decision: string | null; outcome: string | null; source: string | null; model: string | null; effort: string | null; risk: string | null; auth: string | null; reason: string | null; subject: string | null; truncated: boolean; stage?: string; layer?: string; attempts?: number; tools?: number; fieldsDefaulted?: string; degraded?: string; preset?: string; evidence?: string; probes?: string; configTag?: string; policyTag?: string; tokens?: number; prompt?: string; input?: string; reasoning?: string; output?: string; } | null; }',
+              'export interface TraceRecordResult { record: { approvalId: string; callId: string | null; toolName: string | null; origin: string | null; escalation: string | null; startedAt: number | null; endedAt: number | null; queueMs: number | null; reviewMs: number | null; humanWaitMs: number | null; decision: string | null; outcome: string | null; source: string | null; model: string | null; effort: string | null; risk: string | null; auth: string | null; reason: string | null; subject: string | null; truncated: boolean; stage?: string; layer?: string; attempts?: number; tools?: number; capture?: string; fieldsDefaulted?: string; degraded?: string; preset?: string; evidence?: string; probes?: string; configTag?: string; policyTag?: string; tokens?: number; prompt?: string; input?: string; reasoning?: string; output?: string; } | null; }',
           },
         ],
       },

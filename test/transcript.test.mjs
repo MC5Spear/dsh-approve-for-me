@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { collectEvidence, locate, redact } from '../lib/transcript.js';
+import { collectEvidence, locate, redact, TRANSCRIPT_READ_FAILED, TRANSCRIPT_TRUNCATED } from '../lib/transcript.js';
 
 /**
  * 构造一条 user/message 事件。
@@ -51,7 +51,7 @@ test('双截断标记成对：entry 与 transcript 两级都插 <truncated …/>
   assert.ok(markers.length >= 1, `截断标记在场且带估算 token 数：${result.text}`);
   assert.ok(result.text.startsWith('user: A'), '保留头部（命令与结论常在尾部，首尾都留）');
   assert.ok(result.text.includes('TAIL'), '保留尾部');
-  assert.ok(result.degraded.includes('entry:user/message') && result.degraded.includes('transcript'), '两级截断都记入 degraded');
+  assert.ok(result.degraded.includes('entry:user/message') && result.degraded.includes('transcript-truncated'), '两级截断都记入 degraded');
 });
 
 test('证据里的 </ 先转义：闭合标签不得被模型当成提示词结构', () => {
@@ -88,4 +88,64 @@ test('回查双事件名兼容：tool/call 与 code-dispatch/ptc-dispatch 都命
   assert.equal(locate(callOf('tool/call', 'callId', '{"command":"direct"}')).command, 'direct');
   assert.equal(locate(callOf('tool/code-dispatch-start', 'subCallId', { command: 'dispatched' })).command, 'dispatched');
   assert.equal(locate(callOf('tool/ptc-dispatch-start', 'subCallId', { command: 'ptc' })).command, 'ptc');
+});
+
+// ── ISS-20：采集层四类状态可分辨（design §3.1／§3.2） ──────────────────────
+
+test('T1 读取失败三形态（抛错／接口缺失／返回非数组）→ 恰为 transcript-read-failed、text 空、entries 0、truncated false', () => {
+  // 形态一：snapshotEvents 抛错。
+  const thrown = collectEvidence({ snapshotEvents: () => { throw new Error('boom'); } }, {});
+  assert.deepEqual(thrown, { text: '', entries: 0, truncated: false, degraded: [TRANSCRIPT_READ_FAILED] });
+  // 形态二：会话没有 snapshotEvents 接口。
+  const missing = collectEvidence({}, {});
+  assert.deepEqual(missing, { text: '', entries: 0, truncated: false, degraded: [TRANSCRIPT_READ_FAILED] });
+  // 形态三：返回非数组。
+  const nonArray = collectEvidence({ snapshotEvents: () => ({ not: 'array' }) }, {});
+  assert.deepEqual(nonArray, { text: '', entries: 0, truncated: false, degraded: [TRANSCRIPT_READ_FAILED] });
+  assert.equal(TRANSCRIPT_READ_FAILED, 'transcript-read-failed', '标记值与词汇表一致');
+});
+
+test('T2 总量截断恰记 transcript-truncated，单条截断仍是 entry:<类型> 前缀族', () => {
+  const long = () => `${'A'.repeat(2000)}TAIL`;
+  const result = collectEvidence(sessionWith([userMessage(long()), userMessage(long())]), {
+    maxEntries: 5,
+    maxEntryBytes: 100,
+    maxTranscriptBytes: 150,
+  });
+  assert.ok(result.degraded.includes(TRANSCRIPT_TRUNCATED), '总量截断恰记 transcript-truncated');
+  assert.equal(TRANSCRIPT_TRUNCATED, 'transcript-truncated', '标记值与词汇表一致');
+  assert.ok(result.degraded.some((mark) => mark.startsWith('entry:')), '单条截断保持 entry:<事件类型> 前缀族');
+  assert.equal(result.truncated, true);
+  // 反例：读取失败标记不与预算截断混用。
+  assert.equal(result.degraded.includes(TRANSCRIPT_READ_FAILED), false);
+});
+
+test('L6 locate 三形态的 degraded 值：回查不到＝command、坏参数＝command、仅目录缺失＝cwd', () => {
+  // 回查不到（无匹配 callId）且目录同时缺失 → cwd 与 command 并存（locate 先记目录缺失再记回查缺失）。
+  const both = locate({
+    agent: { session: { header: {}, snapshotEvents: () => [{ type: 'tool/call', data: { callId: 'x', arguments: '{"command":"ls"}' } }] } },
+    callId: 'missing',
+  });
+  assert.deepEqual(both.degraded, ['cwd', 'command']);
+  // 坏 JSON 参数（命令不可辨认）→ command。
+  const bad = locate({
+    agent: { session: { header: { cwd: 'C:\\w' }, snapshotEvents: () => [{ type: 'tool/call', data: { callId: 'c1', arguments: '{oops' } }] } },
+    callId: 'c1',
+  });
+  assert.deepEqual(bad.degraded, ['command']);
+  // 参数对象可解析但无命令键 → 回查成功（arguments 透传作证据），不记 command（钉现行行为）。
+  const noCommandKey = locate({
+    agent: { session: { header: { cwd: 'C:\\w' }, snapshotEvents: () => [{ type: 'tool/call', data: { callId: 'c2', arguments: '{"path":"a.txt"}' } }] } },
+    callId: 'c2',
+  });
+  assert.deepEqual(noCommandKey.degraded, []);
+  assert.equal(noCommandKey.command, undefined);
+  assert.deepEqual(noCommandKey.arguments, { path: 'a.txt' });
+  // 仅目录缺失（回查成功）→ cwd。
+  const cwdOnly = locate({
+    agent: { session: { header: {}, snapshotEvents: () => [{ type: 'tool/call', data: { callId: 'c3', arguments: '{"command":"npm i"}' } }] } },
+    callId: 'c3',
+  });
+  assert.deepEqual(cwdOnly.degraded, ['cwd']);
+  assert.equal(cwdOnly.command, 'npm i');
 });

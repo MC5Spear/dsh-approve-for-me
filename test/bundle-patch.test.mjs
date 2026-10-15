@@ -148,8 +148,8 @@ test('发布范围守护：package.json 禁止生命周期脚本（design §9.1�
 });
 
 test('发布范围守护：生命周期禁令按规则判全——npm 全集键与影子钩子逐一命中，自有脚本名不误伤', () => {
-  // 反例对照：十键人工名单漏 prepublish/preprepare/postprepare，注入后 7/7 假绿。
-  // 规则化后任何 pre*/post* 与裸事件键都必须被拦下——新增任何生命周期键无需改本名单即红。
+  // 反例对照：注入的每个生命周期键都必须被拦下——任何 pre*/post* 与裸事件键都算，
+  // 新增生命周期键无需改名单即红。
   for (const key of LIFECYCLE_MUTANTS) {
     assert.equal(isBannedScriptKey(key), true, `规则必须拦截生命周期键：${key}`);
   }

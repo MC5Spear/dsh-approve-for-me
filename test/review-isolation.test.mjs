@@ -366,9 +366,9 @@ test('脱敏快照持值拷贝：宿主原地改数组不穿透在飞任务', as
 test('语言隔离（直测）：run 的上下文语言优先于实例状态', async () => {
   const tools = createReadonlyTools({ rootDir: process.cwd() });
   tools.setLang('zh');
-  const en = await tools.run('no_such_tool', {}, undefined, { rootDir: process.cwd(), lang: 'en', toolTimeoutMs: 0, redactPatterns: [] });
+  const en = await tools.run('no_such_tool', {}, undefined, { rootDir: process.cwd(), lang: 'en', toolTimeoutMs: 5000, redactPatterns: [] });
   assert.match(en.text, /Unknown tool/u);
-  const zh = await tools.run('no_such_tool', {}, undefined, { rootDir: process.cwd(), lang: 'zh', toolTimeoutMs: 0, redactPatterns: [] });
+  const zh = await tools.run('no_such_tool', {}, undefined, { rootDir: process.cwd(), lang: 'zh', toolTimeoutMs: 5000, redactPatterns: [] });
   assert.match(zh.text, /未知工具/u);
 });
 
@@ -406,7 +406,7 @@ test('脱敏隔离（直测）：上下文清单优先于实例清单', async ()
     redact: (text, patterns) => redact(text, patterns),
     invoke: async () => ({ text: 'AAA=1 BBB=2', isError: false, denied: false }),
   });
-  const out = await tools.run('read_file', {}, undefined, { rootDir: process.cwd(), lang: 'en', toolTimeoutMs: 0, redactPatterns: ['BBB=[^ ]+'] });
+  const out = await tools.run('read_file', {}, undefined, { rootDir: process.cwd(), lang: 'en', toolTimeoutMs: 5000, redactPatterns: ['BBB=[^ ]+'] });
   assert.ok(out.text.includes('AAA=1') && !out.text.includes('BBB=2'), '按上下文清单遮 BBB、放 AAA');
 });
 
@@ -414,7 +414,7 @@ test('基准目录隔离（直测）：相对路径按上下文基准解析', as
   const { a, b } = makePair();
   const tools = createReadonlyTools({ rootDir: a });
   tools.setRoot(b);
-  const out = await tools.run('read_file', { path: 'target.txt' }, undefined, { rootDir: a, lang: 'en', toolTimeoutMs: 0, redactPatterns: [] });
+  const out = await tools.run('read_file', { path: 'target.txt' }, undefined, { rootDir: a, lang: 'en', toolTimeoutMs: 5000, redactPatterns: [] });
   assert.equal(out.isError, false);
   assert.ok(out.text.includes('A_TARGET_ACTUAL'), '按上下文基准目录读到 A 内容');
 });

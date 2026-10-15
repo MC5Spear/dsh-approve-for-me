@@ -1,11 +1,11 @@
 /**
- * Read-only probe over the dsh session logs.
+ * dsh 会话日志的只读探针。
  *
- * Two modes, both grounded in the real `session.jsonl.zstd` container:
+ * 两种模式，都直接读真实的 `session.jsonl.zstd` 容器：
  *   node tools/probe-sessions.mjs <needle> [maxLinesPerSession]
- *       print JSONL lines containing <needle>
+ *       打印包含 <needle> 的 JSONL 行
  *   node tools/probe-sessions.mjs --events [typeFilter]
- *       census of every event `type` with counts and one sample line each
+ *       统计每种事件 `type` 的出现次数，各附一行样本
  *
  * @module tools/probe-sessions
  */
