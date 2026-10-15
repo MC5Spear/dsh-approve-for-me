@@ -1,7 +1,7 @@
 /**
  * 回归测试：设置界面 DOM dump 留档（夹具 test/fixtures/settings-dom-dump.txt）。
  *
- * 判定口径（requirements §6.1；实测口径 design §10.3）：0.1.7 上宣称成立的条目必须以真实实例实测为准；
+ * 条目判定以真实实例实测为准（requirements §6.1；实测口径 design §10.3）；
  * 可用性判据是本包详情页的页面 DOM 与计算样式（注入表命中不算）。
  * 本测试把采集的 dump 变成常驻断言：结构判据（requirements §6.1）的回归（重置按钮回潮、覆盖组丢失、
  * 保存按钮启用状态失守、卡片外壳回潮、帮助折叠回潮、失效令牌混入）与毫秒换算读数
@@ -273,8 +273,8 @@ test('毫秒字段换算读数常驻（生效值＝控件值、样式与分隔�
   assert.match(dump, /后继节点 class=`dsafm_f_help`、borderTopWidth=`0px`/u, '秒数行的直接后继是平铺说明行，不分隔');
   assert.match(dump, /class=`_field_bjqpo_3`、borderTopWidth=`1px`/u, '说明行后的官方字段应恢复分隔线');
   assert.match(dump, /class=`dsafm_field`、borderTopWidth=`1px`/u, '说明行后的自绘字段应恢复分隔线');
-  // 实时性取证指针在档。
-  assert.match(dump, /实时性（键入即换算、占位、非法、保存重开、en 档单位）见/u, '实时性取证指针应在档');
+  // 实时行为边界声明在档。
+  assert.match(dump, /实时行为（键入即换算、占位、非法、保存重开、en 档单位）的验证不在本档范围/u, '实时行为边界声明应在档');
 });
 
 test('反恒真对照：匹配器能命中（正向）、表单无幽灵字段（反向）', () => {

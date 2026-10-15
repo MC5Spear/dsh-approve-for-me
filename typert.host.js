@@ -47,7 +47,7 @@ export const getStateResultSchema = z.object({
   trace: z.object({ capture: z.string(), ownView: z.boolean(), turnSummary: z.boolean(), legacyRow: z.boolean() }),
 });
 
-/** `modelEfforts` 结果：某模型支持的推理档位。 */
+/** `modelEfforts` 结果：某模型支持的档位。 */
 export const modelEffortsResultSchema = z.object({
   efforts: z.array(z.object({ id: z.string() })),
   defaultEffort: z.string(),

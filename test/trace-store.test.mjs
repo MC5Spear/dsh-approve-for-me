@@ -402,7 +402,7 @@ test('内存侧会话键对齐 maxSessions（design §8.3）：淘汰防「文�
   assert.equal(store.list('a').length, 1);
 });
 
-test('零预算回退（设计 §8.2/§8.3）：maxBytes=0 与 maxRecords=0 都回默认值，不裁空也不清零窗口', async (t) => {
+test('零预算回退（design §8.2/§8.3）：maxBytes=0 与 maxRecords=0 都回默认值，不裁空也不清零窗口', async (t) => {
   const dir = makeDir(t);
   // maxBytes=0：full 档单字段按默认预算裁剪，不把详情裁成空串。
   const store = createTraceStore({ dir, capture: 'full', maxBytes: 0 });

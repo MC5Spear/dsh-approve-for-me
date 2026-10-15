@@ -493,6 +493,54 @@ test('运行时重复条件：按可见配置错误抛出，不按清单顺序�
   );
 });
 
+test('运行时重复条件：首尾空白对按同一键拒绝（与装载/读取同口径）', async () => {
+  const { resolver } = harness({
+    snapshot: {
+      revision: 90,
+      value: {
+        reviewer: {
+          parentModelRules: [
+            { parent: { provider: 'foo', model: 'm' }, choice: { model: 'zai/glm-5.3', effort: '' } },
+            { parent: { provider: ' foo ', model: ' m ' }, choice: { model: 'zai/glm-5.3', effort: 'low' } },
+          ],
+        },
+      },
+      base: {},
+      user: {},
+    },
+  });
+  await assert.rejects(
+    () => resolver.configFor({ agent: { session: session({ parent: { provider: 'foo', model: 'm' } }) } }),
+    /重复匹配条件/u,
+    '空白对必须按可见配置错误拒绝结算',
+  );
+});
+
+test('匹配语义：条件侧去首尾空白参与比较，精确规则仍优先于在前的通用规则', async () => {
+  const { resolver } = harness({
+    snapshot: {
+      revision: 91,
+      value: {
+        reviewer: {
+          parentModelRules: [
+            { parent: { provider: null, model: ' m ' }, choice: { model: 'deepseek-official/deepseek-v4-pro', effort: '' } },
+            { parent: { provider: ' foo ', model: ' m ' }, choice: { model: 'zai/glm-5.3', effort: 'low' } },
+          ],
+        },
+      },
+      base: {},
+      user: {},
+    },
+  });
+  const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'foo', model: 'm' } }) } });
+  assert.equal(cfg.resolution.layer, 'parent-map');
+  assert.equal(cfg.resolution.model, 'glm-5.3', '条件『 foo 』『 m 』去首尾空白后命中父模型 foo/m');
+  assert.equal(cfg.resolution.effort, 'low', '通用规则在前不改变精确优先的层内顺序');
+  // 父模型侧按原值参与比较：带空白不参与归一命中，按未命中路径继续。
+  const miss = await resolver.configFor({ agent: { session: session({ parent: { provider: 'foo', model: ' m' } }) } });
+  assert.notEqual(miss.resolution.layer, 'parent-map', '父模型值带空白不得经归一命中条件');
+});
+
 test('新结构规则带档位：choice.effort 随映射生效', async () => {
   const { resolver } = harness({
     snapshot: {

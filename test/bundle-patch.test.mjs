@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
  * bundle patch 形状守护＋发布范围守护（design §9.1）。
  *
  * 预设注入主路径＝本包 cordis.patch.yml 的 permission 行四档重述（随包装卸）；
- * 生命周期脚本是被实测否决的路径（pnpm 不执行依赖卸载脚本），禁止回潮。
+ * pnpm 不执行依赖卸载脚本，生命周期脚本不能承载卸载清理；本文件断言防止重新引入。
  * 本文件不解析 YAML（无解析依赖）：按行定位做定向断言，与既有手术合同的历史形态
  * 的锚点式文本编辑同一哲学——不猜结构，找不到锚点就红。
  */
@@ -145,7 +145,7 @@ test('发布范围守护：package.json 禁止生命周期脚本（design §9.1�
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
   const scripts = Object.keys(pkg.scripts ?? {});
   const lifecycle = scripts.filter(isBannedScriptKey);
-  assert.deepEqual(lifecycle, [], `scripts 不得声明生命周期键或影子钩子（实测否决的通道）：${lifecycle.join(', ')}`);
+  assert.deepEqual(lifecycle, [], `scripts 不得声明生命周期键或影子钩子（pnpm 不执行依赖卸载脚本，不能承载卸载清理）：${lifecycle.join(', ')}`);
 });
 
 test('发布范围守护：生命周期禁令按规则判全——npm 全集键与影子钩子逐一命中，自有脚本名不误伤', () => {

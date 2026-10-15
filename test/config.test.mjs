@@ -249,16 +249,46 @@ test('followParent 残留键：装载按未声明键处理——不读取、不�
   assert.doesNotThrow(() => Config({}), 'schema 声明不含 followParent，默认装载不受影响');
 });
 
-test('normalizeRuleProvider 与 parentModelRuleKey：归一空值与逐字比较的单一实现', () => {
+test('normalizeRuleProvider 与 parentModelRuleKey：归一空值与去首尾空白组键的单一实现', () => {
   assert.equal(normalizeRuleProvider(null), null);
   assert.equal(normalizeRuleProvider(undefined), null);
   assert.equal(normalizeRuleProvider(''), null);
   assert.equal(normalizeRuleProvider('  '), null);
   assert.equal(normalizeRuleProvider('openrouter'), 'openrouter');
+  assert.equal(normalizeRuleProvider(' openrouter '), 'openrouter', '非空 provider 去首尾空白后返回');
   assert.equal(normalizeRuleProvider(3), undefined, '非字符串非空值返回 undefined 标记非法');
-  // 空值归一后同键；model 逐字比较（不 trim、不切斜杠）。
+  // 空值归一后同键；model 去首尾空白组键（不切斜杠）。
   assert.equal(parentModelRuleKey(null, 'chat'), parentModelRuleKey('', 'chat'));
   assert.notEqual(parentModelRuleKey(null, 'chat'), parentModelRuleKey('zai', 'chat'));
   assert.notEqual(parentModelRuleKey(null, 'claude-3'), parentModelRuleKey(null, 'anthropic/claude-3'));
   assert.notEqual(parentModelRuleKey('a', 'b/c'), parentModelRuleKey('a/b', 'c'), '条件键不得被斜杠拼接歧义碰撞');
+  assert.equal(parentModelRuleKey(' foo ', ' m '), parentModelRuleKey('foo', 'm'), '条件两字段去首尾空白后同键');
+});
+
+test('重复条件：首尾空白条件与去空白条件同键，装载路径按同一比较拒绝', () => {
+  const pair = {
+    reviewer: {
+      parentModelRules: [
+        { parent: { provider: 'foo', model: 'm' }, choice: { model: 'zai/glm-5.3' } },
+        { parent: { provider: ' foo ', model: ' m ' }, choice: { model: 'zai/glm-5.3' } },
+      ],
+    },
+  };
+  // 直传装载：同一比较抛错——空白前后缀不构成新条件。
+  assert.throws(() => normalizeConfig(pair), /重复匹配条件/u, '直传装载：首尾空白对必须按同键拒绝');
+  // Config 调用产物再装载：同一比较抛错（装载失败、错误可见）。
+  assert.throws(() => normalizeConfig(Config(pair)), /重复匹配条件/u);
+  // 错误信息渲染归一后取值（provider=model=键组成值），按消息可直接定位重复两行。
+  assert.throws(() => normalizeConfig(pair), /provider=foo、model=m/u, '错误信息应渲染归一后取值');
+});
+
+test('重复条件：volatile 写路径对首尾空白对按同一比较拒绝', () => {
+  // 模拟宿主对 volatile 字段的原地更新：装载成功的配置对象被替换为空白对规则后，
+  // 读取（normalizeConfig）是程序化写入的最后一层防线，与装载路径同一键口径。
+  const base = normalizeConfig(Config({}));
+  const poisoned = { ...base, reviewer: { ...base.reviewer, parentModelRules: [
+    { parent: { provider: 'foo', model: 'm' }, choice: { model: 'zai/glm-5.3' } },
+    { parent: { provider: ' foo ', model: ' m ' }, choice: { model: 'zai/glm-5.3', effort: 'low' } },
+  ] } };
+  assert.throws(() => normalizeConfig(poisoned), /重复匹配条件/u, '读取路径必须把空白对按同键拒绝');
 });

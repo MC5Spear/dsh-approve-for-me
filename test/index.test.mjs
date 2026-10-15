@@ -286,7 +286,7 @@ test('normalizeConfig 深度解包 volatile 引用（要求 schemastery ≥3.18.
  * 构造一次「应答者逃逸异常」请求：`request.agent.session.id` 的 getter 抛错。
  * gate.js 在 `try` 之外读取该字段（`const sessionId = request?.agent?.session?.id`），
  * 异常因此穿透 I2 承接层、直达 index.js 应答者最外层 catch——即逃逸通知路径
- * （通道故障模板＋`gate.escape.reason` 原因段，设计 §4.4）。
+ * （通道故障模板＋`gate.escape.reason` 原因段，design §4.4）。
  * （不能改 `crypto.randomUUID` 造逃逸：注入消息工厂 `createUserMessage` 内部也用它。）
  * @param {object[]} injected - 收集注入消息的数组。
  * @returns {object} 审批请求。
@@ -347,7 +347,7 @@ test('逃逸通知走通道故障模板并按 language.agent 切换：zh 中文�
   // 若逃逸通知退回专用拒绝正文（缺通道故障要素），两首行断言双红。
 });
 
-test('退役静态扫描：源码零补丁框架/旧档位键/旧宿主 API 残留（设计 §10.2 判据）', async () => {
+test('退役静态扫描：源码零补丁框架/旧档位键/旧宿主 API 残留（design §10.2 判据）', async () => {
   const { readFileSync, readdirSync } = await import('node:fs');
   const { join, dirname } = await import('node:path');
   const { fileURLToPath } = await import('node:url');
@@ -382,7 +382,7 @@ test('退役静态扫描：源码零补丁框架/旧档位键/旧宿主 API 残�
     const hits = bannedIn(readFileSync(file, 'utf8'));
     if (hits.length > 0) offenders.push(`${file}: ${hits.join(', ')}`);
   }
-  assert.deepEqual(offenders, [], `退役残留必须为零（设计 §10.2）：\n${offenders.join('\n')}`);
+  assert.deepEqual(offenders, [], `退役残留必须为零（design §10.2）：\n${offenders.join('\n')}`);
 });
 
 // ── 装配层接线：逃逸出口脱敏＋热改现设（requirements §5.2／design §8.1）──────

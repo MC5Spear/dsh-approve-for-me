@@ -333,7 +333,7 @@ test('注册四个挂点：设置卡片、composer 下拉、审批卡片状态�
   assert.ok(detail.options.priority < 0, `priority 必须是负数，实际 ${detail.options.priority}`);
   // 该 seat 的 owner props 只有 `callId`，标准 props 里要用 `useChat` 自己渲染命令。
   assert.equal(typeof detail.component, 'function');
-  // 会话视图（设计 §8.5）：`list` 座位按 priority 再 order 升序，20 排在 chat(0)/trajectory(10) 之后；
+  // 会话视图（design §8.5）：`list` 座位按 priority 再 order 升序，20 排在 chat(0)/trajectory(10) 之后；
   // label 是 thunk（宿主 resolveSlotLabel 会调用它），注册时机早于字典也会安全退回键名。
   const view = env.registrations.find((entry) => entry.options.name === 'conversation.view');
   assert.equal(view.options.id, 'approve-for-me');
@@ -1765,6 +1765,42 @@ test('映射行重复条件同口径 trim：空白前后缀条件判重复并禁
   assert.equal(findAllByClass(current, 'dsafm_map_dup').length, 2, '「chat」与「 chat」两行都应报行级重复错误');
   assert.equal(findByClass(current, 'dsafm_save').props.disabled, true, '重复条件应阻止保存');
   assert.equal(env.writes.length, 0, '禁存：不写库（避免入库成重复规则后 normalizeConfig 读取抛错）');
+});
+
+test('映射行重复条件 provider 侧空白：快照两行『foo』与『 foo 』即报行级重复并禁存', async () => {
+  resetHooks();
+  const client = loadClient();
+  // 快照直构（不走真实 normalizeConfig——重复对会在读取层即被拦截，到不了行级防线断言）。
+  const env = makeCtx({
+    snapshot: {
+      status: 'ready',
+      value: {
+        reviewer: {
+          parentModelRules: [
+            { parent: { provider: 'foo', model: 'deepseek-chat' }, choice: { model: 'zai/glm-5.3', effort: '' } },
+            { parent: { provider: ' foo ', model: 'deepseek-chat' }, choice: { model: 'zai/glm-5.3', effort: '' } },
+          ],
+        },
+      },
+      base: {},
+      user: {},
+      revision: 1,
+      writable: true,
+    },
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'deepseek', models: [{ id: 'deepseek-chat' }] }, { id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      if (endpoint === 'approveForMe/modelEfforts') return { ok: true, value: { efforts: [{ id: 'low' }], defaultEffort: 'low' } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
+  const props = { t: (key) => key, scope: env.scope, rpcCall: env.rpcCall };
+  const tree = await expandCard(card.component, props);
+  assert.equal(findAllByClass(tree, 'dsafm_map_dup').length, 2, 'provider 去空白行与首尾空白行都应报行级重复');
+  assert.equal(findByClass(tree, 'dsafm_save').props.disabled, true, '重复条件应阻止保存');
 });
 
 test('待确认含斜杠旧键：确认「指定 provider」转为命名规则，旧键从字典移除（design §7.2）', async () => {
@@ -3566,7 +3602,7 @@ test('生效值为 0 即显示无上限提醒（保存读回语义）；草稿�
   const warn = findAllByClass(line, 'dsafm_sec_warn')[0];
   assert.ok(warn, '生效值为 0 即显示提醒（保存读回仍可见）');
   assert.match(String(warn.props.children), /不会自动恢复时限/u);
-  // 草稿分支互补：生效值仍为 0、草稿键入非零 → 提醒必须仍在场（设计 §7.2「草稿为 0 或生效值为 0」）。
+  // 草稿分支互补：生效值仍为 0、草稿键入非零 → 提醒必须仍在场（design §7.2「草稿为 0 或生效值为 0」）。
   const marker = findAllNodes(tree, (node) => node.type === primitivesStub.SettingsValueField)
     .find((node) => node.props.id === 'approve-for-me-ctl-reviewer-timeoutMs');
   marker.props.onEdit('120000');

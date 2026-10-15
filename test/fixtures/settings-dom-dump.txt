@@ -263,4 +263,4 @@ dsafm_form / dsafm_field / dsafm_f_head / dsafm_labelgroup / dsafm_f_label / dsa
 - `approve-for-me-sec-reviewer-timeoutMs`：`生效：300 秒 · 草稿：300 秒`（生效＝`生效：300 秒`、草稿＝`草稿：300 秒`、draftInvalid=false）；行样式 fontSize=`12px`、color=`rgb(129, 133, 140)`、marginTop=`-12px`；后继节点 class=`dsafm_f_help`、borderTopWidth=`0px`（本字段的平铺说明行紧随秒数行，不分隔；说明行后的官方字段容器 class=`_field_bjqpo_3`、borderTopWidth=`1px` 恢复 0.5px 分隔线，design §7.2.1 分隔线选择器组）。
 - `approve-for-me-sec-human-timeoutMs`：`生效：300 秒 · 草稿：300 秒`（生效＝`生效：300 秒`、草稿＝`草稿：300 秒`、draftInvalid=false）；行样式 fontSize=`12px`、color=`rgb(129, 133, 140)`、marginTop=`-12px`；后继节点 class=`dsafm_f_help`、borderTopWidth=`0px`（同上；说明行后的下一自绘字段 class=`dsafm_field`、borderTopWidth=`1px` 恢复分隔线）。
 
-生效值读数与控件值一致（§7 控件表同 id 行）；初始草稿＝生效值文本。实时性（键入即换算、占位、非法、保存重开、en 档单位）见 `开发期读数档（不随仓发布）`（`开发期采集脚本（不随仓发布）` 取证）。
+生效值读数与控件值一致（§7 控件表同 id 行）；初始草稿＝生效值文本。实时行为（键入即换算、占位、非法、保存重开、en 档单位）的验证不在本档范围，由开发期工件承载、不随仓发布。

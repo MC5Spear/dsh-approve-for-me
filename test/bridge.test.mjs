@@ -398,6 +398,29 @@ testHost('modelIssues：rule 作用域——结构化行与旧字典呈现行按
   assert.equal(rows.some((issue) => issue.configured === 'zai/glm-5.3'), false);
 });
 
+testHost('modelIssues：rule 作用域诊断取值随归一——ruleProvider 去首尾空白、ruleModel 按原值透出', async () => {
+  const instance = service({
+    session: undefined,
+    config: {
+      reviewer: {
+        model: 'zai/glm-5.3',
+        parentModelRules: [
+          { parent: { provider: ' openrouter ', model: ' claude-3 ' }, choice: { model: 'ghost/nope', effort: '' } },
+        ],
+      },
+      trigger: { presets: ['auto-approve'], unknown: 'skip' },
+    },
+  });
+  const state = await instance.getState('s1');
+  const rows = state.modelIssues.filter((issue) => issue.scope === 'rule');
+  assert.equal(rows.length, 1, '目录外目标的坏行恰一条');
+  const structured = rows[0];
+  assert.equal(structured.ruleProvider, 'openrouter', '诊断 provider 值随条件键归一（去首尾空白）');
+  assert.equal(structured.ruleModel, ' claude-3 ', '诊断 model 值不经归一、按原值透出');
+  assert.equal(structured.configured, 'ghost/nope');
+  assert.match(structured.reason, /unknown provider ghost/u);
+});
+
 testHost('modelIssues：session 作用域仅会话场景产生；无会话不产生', async () => {
   const withChoice = service({
     session: undefined,

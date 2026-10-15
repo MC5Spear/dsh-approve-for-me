@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { createReviewer } from '../lib/reviewer.js';
 
 /**
- * 审查记录接线测试（设计 §8.2/§8.3）。
+ * 审查记录接线测试（design §8.2/§8.3）。
  *
  * 覆盖两层：`lib/reviewer.js` 的 onReview 契约（成功路径的字段一致性、采集档开关、fire-and-forget），
  * 以及 `lib/index.js` 的端到端接线（gate 补的审批上下文 → reviewer → onReview → JSONL 落盘、

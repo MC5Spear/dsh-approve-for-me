@@ -71,7 +71,7 @@ if (!Array.isArray(seconds) || seconds.length === 0) {
 	for (const s of seconds) {
 		lines.push(`- \`${s.id}\`：\`${s.text}\`（生效＝\`${s.resolvedText}\`、草稿＝\`${s.draftText}\`、draftInvalid=${String(s.draftInvalid)}）；行样式 fontSize=\`${s.fontSize}\`、color=\`${s.color}\`、marginTop=\`${s.marginTop}\`；后继节点 class=\`${s.nextSiblingClass}\`、borderTopWidth=\`${s.nextBorderTop}\`（design §7.2.1 分隔线选择器组：秒数行后继为本字段平铺说明行时不分隔，说明行后的下一字段恢复 0.5px 分隔线）。`);
 	}
-	lines.push('', '生效值读数与控件值一致（§7 控件表同 id 行）；初始草稿＝生效值文本。实时性（键入即换算、占位、非法、保存重开、en 档单位）见 `开发期读数档（不随仓发布）`（`开发期采集脚本（不随仓发布）` 取证）。', '');
+	lines.push('', '生效值读数与控件值一致（§7 控件表同 id 行）；初始草稿＝生效值文本。实时行为（键入即换算、占位、非法、保存重开、en 档单位）的验证不在本档范围，由开发期工件承载、不随仓发布。', '');
 }
 writeFileSync(outPath, lines.join('\n') + '\n', 'utf8');
 console.log(`WROTE ${outPath} (controls=${inputs.length}, helpButtons=${dumpA.value.helpButtons.length}, cssLength=${cssScope.cssLength}, secLines=${Array.isArray(seconds) ? seconds.length : 0})`);
