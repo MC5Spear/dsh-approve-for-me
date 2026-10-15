@@ -1181,7 +1181,7 @@ test('composer 下拉：宿主里没有该会话时仍可写（会话开始前�
   const menu = findNode(tree, primitivesStub.Menu);
   const seat = menu.props.anchor;
   assert.equal(seat.props.disabled, false, '会话未激活不得禁用控件');
-  assert.equal(seat.props.title, 'composer.pendingSession', '改为说明「会话开始后生效」');
+  assert.equal(seat.props.title, 'composer.pendingSession', '说明「会话开始后生效」');
   assert.match(JSON.stringify(seat.props.children), /composer\.pendingSession/);
   // 不出现「会话未激活，请先发一条消息」这类阻止性提示。
   assert.doesNotMatch(JSON.stringify(seat.props), /composer\.inactive/);
@@ -2183,7 +2183,7 @@ test('composer 下拉：旧宿主没有 active 字段时照常渲染（混合部
   assert.ok(findNode(tree, primitivesStub.Menu), '缺 active 字段时不应隐藏控件');
 });
 
-test('composer 下拉：权限预设一变就立即重拉（design §7.3，不再等轮询）', async () => {
+test('composer 下拉：权限预设一变就立即重拉（design §7.3，不等轮询）', async () => {
   resetHooks();
   const client = loadClient();
   const realSetInterval = globalThis.setInterval;

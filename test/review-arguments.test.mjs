@@ -431,6 +431,6 @@ test('详情采集不中止审查：full/summary/off 下异常参数都实际送
     await new Promise((r) => setTimeout(r, 50));
   }
   assert.ok(lines.length > 0, 'full 档 trace 记录已落盘');
-  assert.ok(lines.includes('"input":"[unserializable]"'), 'details.input 为安全占位（不再走 String() 无保护转换）');
+  assert.ok(lines.includes('"input":"[unserializable]"'), 'details.input 为安全占位（不走 String() 无保护转换）');
   assert.ok(!lines.includes('Cannot convert object to primitive value'), 'trace 无通道故障文本');
 });

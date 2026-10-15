@@ -173,7 +173,7 @@ test('已设置全局默认不可用 → unavailable（故障，不退执行助�
   // 审计的 degraded 与返回值同源，必须带层名前缀（design §6.2 逐层校验留原因／§8.2 词汇表）。
   const degrade = audits.find((entry) => entry.degraded === 'global:unknown provider ghost');
   assert.equal(degrade.layer, 'global');
-  // 直退语义：reason 文案不再出现「降级到下一层」式表述。
+  // 直退语义：reason 文案不出现「降级到下一层」式表述。
   assert.match(String(degrade.reason), /直接使用全局默认/u);
   assert.equal(cfg.resolution.degraded, 'all');
   assert.match(String(audits[audits.length - 1].reason), /global:unknown provider ghost/u);

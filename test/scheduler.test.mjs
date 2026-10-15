@@ -224,7 +224,7 @@ test('无 callId 的并发请求各自执行；大批量顺序执行后状态干
 
 // ── 排队与冷却零值的现行边界（requirements §4.4；验证留档，不改语义） ────────
 
-test('queueMax=0 → 满载时不再排队，直接按 queue-overflow 拒绝', async () => {
+test('queueMax=0 → 满载时不排队，直接按 queue-overflow 拒绝', async () => {
   const scheduler = createScheduler({ max: 1, queueMax: 0, queueTimeoutMs: 1000 });
   const hold = deferred();
   const running = scheduler.run({ sessionId: 'a', callId: '1' }, () => hold.promise);
