@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test, { after } from 'node:test';
 import { readFileSync } from 'node:fs';
+import { DEFAULT_RATIONALE } from '../lib/reviewer.js';
 
 /** 文件级收尾：清掉最后一个用例留下的轮询定时器，否则测试进程不退出。 */
 after(() => {
@@ -716,7 +717,7 @@ test('说明入口（§10.2）：开合不改动草稿、保存计划与常驻�
   const props = { t: (key) => key, scope: env.scope };
   const first = render(card.component, props);
   const saveBefore = findByClass(first, 'dsafm_save').props.disabled;
-  // 退役键零残留（ISS-30）：warn.noLimit 随渲染分支退役，任何状态下都不再出现。
+  // 退役键零残留：warn.noLimit 随渲染分支退役，任何状态下都不再出现。
   assert.equal(findAllByClass(first, 'dsafm_sec_warn').length, 0, 'timeoutMs=0 不再有常驻风险提醒（分支已退役）');
   const marker = 'approve-for-me-help-mode';
   const buttonBefore = findAllByClass(first, 'dsafm_helpbtn').find((node) => node.props['aria-controls'] === marker);
@@ -951,6 +952,19 @@ test('映射表（design §7.2）：旧字典纯 id 键呈现为「任意 provid
   assert.equal(findByClass(mapRow, 'dsafm_effort').props.title, 'low', '档位下拉的 title 应当是当前档位');
   assert.match(String(findByClass(mapRow, 'dsafm_map_del').props.className), /dsafm_button/, '删除按钮沿用 dsafm_button');
   assert.match(String(findByClass(tree, 'dsafm_map_add').props.className), /dsafm_button/, '添加一行沿用 dsafm_button');
+  // 层叠顺序回归（真页曾因此漏网）：.dsafm_map_add 的边框/底色/内边距规则必须排在 .dsafm_button 之后，
+  // 同为单类选择器时靠后者胜出——排在前面会被 .dsafm_button 的 border:none/background:none/padding:0
+  // 覆盖回纯文本形态。
+  {
+    const cssAt = SOURCE.indexOf('const CSS = [');
+    const cssEnd = SOURCE.indexOf('].join("")', cssAt);
+    const rules = new Function(`return ${SOURCE.slice(cssAt + 'const CSS = '.length, cssEnd + 1)}`)().join('\n');
+    const addButton = rules.indexOf('.dsafm_button{');
+    const addMap = rules.indexOf('.dsafm_map_add{');
+    assert.ok(addButton !== -1 && addMap !== -1, '两条规则都应在 CSS 串中');
+    assert.ok(addMap > addButton, '空态按钮规则必须排在 .dsafm_button 之后（层叠顺序）');
+    assert.match(rules.slice(addMap, addMap + 200), /border:\.5px solid/, '空态按钮应带边框形态');
+  }
   // 任意 provider 列的选项按纯 id 去重并附 provider 信息（design §7.2）。
   const optionTexts = findByClass(mapRow, 'dsafm_map_parent').props.children.filter(Boolean).map((option) => option.props.children);
   assert.ok(optionTexts.some((text) => String(text).startsWith('deepseek-chat (deepseek)')), `选项应附 provider 信息，实际 ${JSON.stringify(optionTexts)}`);
@@ -1501,6 +1515,60 @@ test('composer 空全局默认提示（§7.2.0）：effectiveModel 空串时省�
   assert.match(text, /本会话未单独选择审查模型/, '用 warn.modelIssue.followParent 文案');
   assert.doesNotMatch(text, /实际使用/, 'effectiveModel 为空串时省略「实际使用」句');
   assert.doesNotMatch(text, /全局默认未设置，使用执行助手当前模型（follow-parent）/u, '空默认键不补层含义句——首句已承载层含义（design §7.2.0）');
+});
+
+test('composer 空全局默认提示（§7.2.0）：被有效映射截住（shadowed）时用 globalUnsetShadowed 键渲染', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/getState') {
+        // 空全局默认条目的 effectiveLayer＝parent-map（解析被有效映射截住，未落到零值语义）→
+        // 控件用 globalUnsetShadowed 键：不声称当前跟随，实际生效按真实解析呈现（design §7.3.1）。
+        return {
+          ok: true,
+          value: {
+            found: true,
+            active: true,
+            preset: 'auto-approve',
+            sessionModel: null,
+            sessionEffort: '',
+            globalDefault: '',
+            globalEffort: '',
+            modelIssues: [
+              { scope: 'global', ruleProvider: null, ruleModel: '', configured: '', reason: '全局默认审查模型未设置', effectiveLayer: 'parent-map', effectiveModel: 'zai/glm-5.3' },
+            ],
+            effective: 'zai/glm-5.3',
+            effectiveEffort: '',
+            layer: 'parent-map',
+          },
+        };
+      }
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      return { ok: true, value: { efforts: [{ id: 'low' }] } };
+    },
+  });
+  client.apply(env.ctx);
+  const dicts = env.dictionaries[0].dicts;
+  const dropdown = env.registrations.find((entry) => entry.options.name === 'conversation.input.left');
+  const props = { t: (key) => dicts.zh[key] ?? key, ...dropdown.options.inject() };
+  render(dropdown.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const tree = render(dropdown.component, props);
+  const wrap = findByClass(tree, 'dsafm_seatwrap');
+  assert.ok(wrap, 'shadowed 条目应渲染座位包裹层');
+  const warns = findAllByClass(wrap, 'dsafm_warnline');
+  assert.equal(warns.length, 1, '控件附近至多一条');
+  const text = JSON.stringify(warns[0]);
+  assert.match(text, /默认审查模型未设置：仅当解析落到全局默认层时/, '用 warn.modelIssue.globalUnsetShadowed 文案（条件从句）');
+  assert.match(text, /实际使用：按执行助手的模型映射（parent-map）：zai\/glm-5\.3/, 'shadowed 变体带「实际使用：层含义：引用」尾句（design §7.2.2 定稿表）');
+  assert.doesNotMatch(text, /按未设置的全局默认跟随/u, '被映射截住不得声称当前跟随（design §10.2 巡检判据）');
+  assert.doesNotMatch(text, /本会话未单独选择审查模型/, '不得误用 followParent 键文案');
 });
 
 test('composer 提示互斥（§7.2.0）：会话已选择且不可用时只渲染 session 条目，不另渲染空默认行', async () => {
@@ -2358,6 +2426,47 @@ test('审批卡片状态条：显示状态行与倒计时，并自己渲染关�
   }
 });
 
+test('审批卡片状态条：协议回落理由按界面语言改写，zh 卡片无英文行', async () => {
+  resetHooks();
+  const clock = 1_700_000_000_000;
+  const realNow = Date.now;
+  Date.now = () => clock;
+  try {
+    const client = loadClient();
+    const env = makeCtx({
+      currentSession: 's1',
+      call: async (endpoint) => {
+        if (endpoint === 'approveForMe/pendingState') {
+          return { ok: true, value: { entries: [{ callId: 'call_1', state: 'waiting-human', cause: 'deny', reason: DEFAULT_RATIONALE, startedAt: clock, deadlineAt: clock + 90_000, deadlineKind: 'human', updatedAt: clock }] } };
+        }
+        return { ok: true, value: {} };
+      },
+    });
+    client.apply(env.ctx);
+    const detail = env.registrations.find((entry) => entry.options.name === 'conversation.approval.detail');
+    const t = (key) =>
+      ({
+        'cardstate.waiting': '等待你决定',
+        'cardstate.waiting.deny': '自动审查结论为拒绝：{reason}',
+        'cardstate.waiting.timeout': '自动审查超时，未取得有效结论',
+        'cardstate.waiting.error': '自动审查未取得有效结论：{reason}',
+        'countdown.seconds': '剩余 {n} 秒后自动拒绝',
+        'countdown.minutes': '剩余 {m} 分 {s} 秒后自动拒绝',
+        'cardstate.reviewing': '正在自动审批',
+        'view.reasonDefaulted': '审查器未提供理由',
+      })[key] ?? key;
+    const props = { callId: 'call_1', t, useChat: () => 'rm -rf /tmp/x', ...detail.options.inject() };
+    render(detail.component, props);
+    await tick();
+    hookIndex = 0;
+    const text = JSON.stringify(render(detail.component, props));
+    assert.match(text, /自动审查结论为拒绝：审查器未提供理由/, '协议回落理由在 zh 卡片按界面语言改写');
+    assert.ok(!text.includes(DEFAULT_RATIONALE), 'zh 卡片不得出现英文回落行');
+  } finally {
+    Date.now = realNow;
+  }
+});
+
 test('审批卡片状态条：没有状态数据时只渲染命令（非接管预设观感不变）', async () => {
   resetHooks();
   const client = loadClient();
@@ -2394,7 +2503,7 @@ test('审批卡片状态条：取不到会话 id 时不轮询，仅渲染命令'
   assert.equal(calls.includes('approveForMe/pendingState'), false, '没有会话 id 就不该发请求');
 });
 
-test('审批卡片状态条：审查中显示审查时限倒计时；截止缺失的回退防御不渲染无时限文案（ISS-30 退役）', async () => {
+test('审批卡片状态条：审查中显示审查时限倒计时；截止缺失的回退防御不渲染无时限文案（退役分支）', async () => {
   resetHooks();
   let clock = 1_700_000_000_000;
   const realNow = Date.now;
@@ -2413,7 +2522,7 @@ test('审批卡片状态条：审查中显示审查时限倒计时；截止缺�
     hookIndex = 0;
     const text = JSON.stringify(render(detail.component, props));
     assert.match(text, /cardstate\.reviewing/);
-    // 审查截止缺失（回退防御形态）：不渲染无时限文案（分支已退役，ISS-30），也不渲染倒计时。
+    // 审查截止缺失（回退防御形态）：不渲染无时限文案（分支已退役），也不渲染倒计时。
     assert.ok(!text.includes('countdown.unlimited'), 'countdown.unlimited 已退役，不得出现');
     assert.ok(!text.includes('countdown.review'), '缺失截止不得渲染倒计时');
   } finally {
@@ -2456,6 +2565,7 @@ const REVIEW_TEXT = {
   'list.outcome': '最终审批：{v}',
   'list.decision': '模型结论：{v}',
   'view.noOutcome': '未记录最终审批结果',
+  'view.reasonDefaulted': '审查器未提供理由',
   'decision.allow': '放行（allow）',
   'decision.allowed-once': '放行（allowed-once）',
   'decision.deny': '拒绝（deny）',
@@ -2527,6 +2637,7 @@ const REVIEW_TEXT = {
   'source.human': '人工（human）',
   'source.timeout': '超时（timeout）',
   'source.rule': '规则（rule）',
+  'source.hard': '硬性拦截（hard）',
   'source.gateway': '通道关闭（gateway）',
   'source.signal': '取消（signal）',
   'source.error': '异常（error）',
@@ -2595,6 +2706,40 @@ test('审查视图：空会话只显示提示，空列表显示空文案', async
   const tree = render(view2.component, props);
   assert.match(JSON.stringify(tree), /本会话还没有自动审批记录/);
   assert.match(JSON.stringify(tree), /共 0 条/);
+});
+
+test('审查视图：协议回落理由按界面语言改写，zh 详情无英文行', async () => {
+  resetHooks();
+  const client = loadClient();
+  // 记录与详情的 reason 都是协议回落值（审查器未给理由时的存储形态，直接取 lib 常量锁同步）。
+  const row = { approvalId: 'apD', callId: 'call_D', toolName: 'pwsh', origin: 'main', escalation: null, startedAt: 1_700_000_030_000, endedAt: 1_700_000_030_500, queueMs: 0, reviewMs: 500, humanWaitMs: null, decision: 'deny', outcome: 'rejected', source: 'llm', model: 'zai/glm-5.3', effort: 'low', risk: 'high', auth: 'low', reason: DEFAULT_RATIONALE, subject: 'npm run dev', truncated: false };
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/traceRecords') return { ok: true, value: { records: [row], readFailed: false } };
+      if (endpoint === 'approveForMe/traceRecord') return { ok: true, value: { record: { ...row, layer: 'session', attempts: 1, capture: 'summary' } } };
+      if (endpoint === 'approveForMe/getState') return { ok: true, value: { trace: { capture: 'summary', ownView: true, turnSummary: true } } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const view = env.registrations.find((entry) => entry.options.name === 'conversation.view');
+  const props = { t: reviewT, useTrajectory: (selector) => selector(TRAJECTORY_SNAPSHOT), ...view.options.inject() };
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const listTree = render(view.component, props);
+  const head = findAllByClass(listTree, 'dsafm_review_head')[0];
+  head.props.onClick();
+  hookIndex = 0;
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const text = JSON.stringify(render(view.component, props));
+  assert.ok(text.includes('审查器未提供理由'), '协议回落理由在 zh 记录详情按界面语言改写');
+  assert.ok(!text.includes(DEFAULT_RATIONALE), 'zh 记录详情不得出现英文回落行');
 });
 
 test('审查视图：合并行主判定为 outcome、判定与结算并存可分辨，Z 只累加在场分段；详情按 approvalId 拉', async () => {
@@ -2858,7 +3003,7 @@ test('审查视图 §10.2：degraded 含 transcript 反证「未取上下文」�
 test('审查视图 §10.2：degraded 含新标记 transcript-read-failed 反证「未取上下文」，文案按新键（T8）', async () => {
   resetHooks();
   const client = loadClient();
-  // ISS-20 拆分后的新标记：读取失败与总量截断各自成键；渲染链（store→bridge→视图）按新键取词，
+  // 读取失败与总量截断各自成键：渲染链（store→bridge→视图）按各自键取词，
   // 反证语义与旧值一致——不显示「未取上下文」，具体原因由 degraded 段承载。
   const rows = [{ ...TRACE_ROWS[0], approvalId: 'apR', callId: 'call_R', decision: 'deny', outcome: 'rejected', source: 'llm' }];
   const detail = { ...rows[0], humanWaitMs: 0, prompt: 'PROMPT-R', output: 'OUTPUT-R', probes: 'grep: ok', degraded: 'transcript-read-failed' };
@@ -3173,7 +3318,7 @@ test('审批卡片状态条 §7.4：倒计时按状态锚定，deadlineKind 与�
     assert.ok(!swappedKind2.includes('后自动拒绝'), 'deadlineKind 与状态矛盾时不得串显自动拒绝倒计时');
     // 常规组合仍按各自语义：reviewing + review + null 截止 → 回退防御（无倒计时、无已退役的无时限文案）。
     const noDeadline = await renderEntry({ callId: 'call_1', state: 'reviewing', reason: null, startedAt: 1, deadlineAt: null, deadlineKind: 'review', updatedAt: 1 });
-    assert.ok(!noDeadline.includes('审查无时限'), 'countdown.unlimited 已退役（ISS-30），不得出现');
+    assert.ok(!noDeadline.includes('审查无时限'), 'countdown.unlimited 已退役，不得出现');
     assert.ok(!noDeadline.includes('审查时限剩余'), '缺失截止不得渲染倒计时');
   } finally {
     Date.now = realNow;
@@ -3194,12 +3339,12 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
   assert.equal(zh['cardstate.waiting'], '等待你决定');
   assert.equal(zh['cardstate.waiting.deny'], '自动审查结论为拒绝：{reason}');
   assert.equal(zh['cardstate.waiting.timeout'], '自动审查超时，未取得有效结论');
-  // 退役键零残留（ISS-30，design §7.5）：countdown.unlimited 与 warn.noLimit 随分支一并删除。
+  // 退役键零残留（design §7.5）：countdown.unlimited 与 warn.noLimit 随分支一并删除。
   assert.equal(zh['countdown.unlimited'], undefined);
   assert.equal(en['countdown.unlimited'], undefined);
   assert.equal(zh['warn.noLimit'], undefined);
   assert.equal(en['warn.noLimit'], undefined);
-  // 时限零值 hint 定稿（ISS-30，§7.2.2）。
+  // 时限零值 hint 定稿（§7.2.2）。
   assert.equal(zh['hint.reviewer.timeoutMs'], '自动审查的等待上限（毫秒）；0 立即超时。');
   assert.equal(en['hint.reviewer.timeoutMs'], 'Auto-review wait limit (ms); 0 times out immediately.');
   // 列表双标注主槽与回退（§8.5.1）。
@@ -3361,6 +3506,7 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['list.outcome', '最终审批：{v}', "Final approval: {v}"],
     ['list.decision', '模型结论：{v}', "Model conclusion: {v}"],
     ['view.noOutcome', '未记录最终审批结果', "No final outcome recorded"],
+    ['view.reasonDefaulted', '审查器未提供理由', "No rationale provided by the reviewer."],
     ['view.retention', '记录跟随产生它的会话；每会话回读最近一个窗口（默认 200 条，随 ui.trace.maxRecords 可配置），磁盘最多保留 50 个会话文件（固定上限），超限删除最旧；减少采集不删除已有记录。', 'Records follow the session that produced them. Each session reads back the most recent window (200 entries by default, configurable via ui.trace.maxRecords); at most 50 session files are kept on disk (a fixed cap), the oldest deleted first. Reducing capture never deletes existing records.'],
     // —— §8.5.1 缺段说明表 ——
     ['absent.noContext', '未取上下文', "No context collected"],
@@ -3706,7 +3852,7 @@ test('毫秒字段秒数读数：生效值常驻、草稿随输入实时换算',
   assert.equal(secSpan(sub, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_draft').props.children, '草稿：1.0 秒', '999 → 1.0 秒（非整数秒一位小数）');
   const zero = await afterEdit('0');
   assert.equal(secSpan(zero, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_draft').props.children, '草稿：0 秒', '0 按字面显示 0 秒');
-  // 草稿为 0 → 零值语义是「立即超时」（ISS-30）：退役的提醒分支不再渲染，0 仍可保存。
+  // 草稿为 0 → 零值语义是「立即超时」：退役的提醒分支不渲染，0 仍可保存。
   assert.equal(secSpan(zero, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_warn'), undefined, '退役提醒不随 0 草稿出现');
   // en 档单位 s（同一暂存文本，读数跟随语言）。
   const enProps = { t: (key) => dicts.en[key] ?? key, scope: env.scope, ...card.options.inject() };
@@ -3717,7 +3863,7 @@ test('毫秒字段秒数读数：生效值常驻、草稿随输入实时换算',
   assert.equal(secSpan(enTree, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_warn'), undefined, 'en 档退役提醒不再渲染');
 });
 
-test('生效值为 0 不再渲染退役提醒（保存读回语义，ISS-30）；hint 随处可见「立即超时」语义', async () => {
+test('生效值为 0 不渲染退役提醒（保存读回语义）；hint 随处可见「立即超时」语义', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({

@@ -17,6 +17,12 @@ window.__ModuleLoader__.load({
 		const primitives = require("@deepseek-ai/dsh-client-ui-primitives");
 
 		/**
+		 * 审查器未提供理由时记录里存的协议回落值。展示层据此识别并按界面语言改写，
+		 * 不改协议字段本身；与 `lib/reviewer.js` 的 `DEFAULT_RATIONALE` 逐字一致，由测试锁定同步。
+		 */
+		const REASON_DEFAULTED = "No rationale provided by the reviewer.";
+
+		/**
 		 * 14px 下箭头（内联 SVG）。
 		 *
 		 * 为什么不用 `primitives.IconChevronDownOutline14`：0.1.7 把图标改成尺寸变体命名
@@ -44,7 +50,7 @@ window.__ModuleLoader__.load({
 				}),
 			});
 
-		/** 设置命名空间（＝宿主行 id，0.1.7 起即设置命名空间）。 */
+		/** 设置命名空间（＝宿主行 id）。 */
 		const NS = "approve-for-me";
 		/** 包名；Plugins 页 keyed 槽的键是 `<包名>#<行id>`）。 */
 		const PACKAGE_NAME = "dsh-approve-for-me";
@@ -168,6 +174,7 @@ window.__ModuleLoader__.load({
 			"list.outcome": "最终审批：{v}",
 			"list.decision": "模型结论：{v}",
 			"view.noOutcome": "未记录最终审批结果",
+			"view.reasonDefaulted": "审查器未提供理由",
 			"decision.allow": "放行（allow）",
 			"decision.allowed-once": "放行（allowed-once）",
 			"decision.deny": "拒绝（deny）",
@@ -238,6 +245,7 @@ window.__ModuleLoader__.load({
 			"degraded.inject-fail": "通知失败（inject-fail）",
 			"enum.unknown": "{v}（含义未知）",
 			"source.rule": "规则（rule）",
+			"source.hard": "硬性拦截（hard）",
 			"source.llm": "审查（llm）",
 			"source.human": "人工（human）",
 			"source.timeout": "超时（timeout）",
@@ -419,6 +427,7 @@ window.__ModuleLoader__.load({
 			"list.outcome": "Final approval: {v}",
 			"list.decision": "Model conclusion: {v}",
 			"view.noOutcome": "No final outcome recorded",
+			"view.reasonDefaulted": "No rationale provided by the reviewer.",
 			"decision.allow": "Allowed (allow)",
 			"decision.allowed-once": "Allowed (allowed-once)",
 			"decision.deny": "Denied (deny)",
@@ -489,6 +498,7 @@ window.__ModuleLoader__.load({
 			"degraded.inject-fail": "Notice delivery failure (inject-fail)",
 			"enum.unknown": "{v} (unknown meaning)",
 			"source.rule": "rule",
+			"source.hard": "hard",
 			"source.llm": "review (llm)",
 			"source.human": "human",
 			"source.timeout": "timeout",
@@ -583,7 +593,7 @@ window.__ModuleLoader__.load({
 
 		/** 注入样式；同一 tagId 只插入一次，避免重复挂载时样式叠加。 */
 		const CSS = [
-			// 设置界面照官方设置表单重绘（规格来源见 docs/design.md；0.1.7 令牌表不存在的别名零命中）。
+			// 设置界面照官方设置表单重绘（规格来源见 docs/design.md；现行宿主令牌表不存在的别名零命中）。
 			// 外壳：无卡片边框/圆角/底色，只做纵向布局（按计算样式核）。
 			".dsafm_form{display:flex;flex-direction:column;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary)}",
 			".dsafm_readonly{margin:0 0 12px;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary)}",
@@ -594,7 +604,7 @@ window.__ModuleLoader__.load({
 			".dsafm_labelgroup{display:flex;align-items:center;gap:4px;flex:1;min-width:0}",
 			".dsafm_f_label{font-size:13px;font-weight:500;line-height:1.5;color:var(--dsw-alias-label-primary)}",
 			// 说明按钮（design §7.2.1）：图标＋可见文字「说明／收起说明」，命中区不小于 24×24，
-			// 依 label-secondary→primary 取色（官方 .helpButton:hover 引用的底色别名在 0.1.7 令牌表不存在，不得照抄）。
+			// 依 label-secondary→primary 取色（官方 .helpButton:hover 引用的底色别名在现行宿主令牌表不存在，不得照抄）。
 			".dsafm_helpbtn{display:inline-flex;align-items:center;gap:4px;justify-content:center;flex:none;min-width:24px;min-height:24px;padding:0 8px;border:0;border-radius:6px;background:none;color:var(--dsw-alias-label-secondary);cursor:pointer;font-family:inherit;font-size:12px;line-height:1.5}",
 			".dsafm_helpbtn:hover,.dsafm_helpbtn[aria-expanded='true']{color:var(--dsw-alias-label-primary)}",
 			".dsafm_helpbtn:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}",
@@ -654,6 +664,11 @@ window.__ModuleLoader__.load({
 			".dsafm_button{border:none;background:none;padding:0;font:inherit;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-secondary);cursor:pointer}",
 			".dsafm_button:hover:not(:disabled){color:var(--dsw-alias-label-primary)}",
 			".dsafm_button:disabled{cursor:default}",
+			// 空态「添加一行」做成可见的边框按钮（纯文本居中可点性弱，窄窗无表头时更难识别为可点）。
+			// 层叠顺序：必须排在 .dsafm_button 之后——同为单类选择器，靠后的规则胜出，
+			// 排在前面会被 .dsafm_button 的 border:none/background:none/padding:0 覆盖回纯文本形态。
+			".dsafm_map_add{align-self:center;display:inline-flex;align-items:center;padding:4px 14px;border:.5px solid var(--dsw-alias-border-l4);border-radius:8px;background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-secondary)}",
+			".dsafm_map_add:hover:not(:disabled){color:var(--dsw-alias-label-primary)}",
 			".dsafm_badge{font-size:11px;color:var(--dsw-alias-state-warn-primary);margin-left:6px}",
 			".dsafm_hint{color:var(--dsw-alias-label-tertiary);font-size:12px;overflow-wrap:anywhere}",
 			".dsafm_seat{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 8px;border:none;border-radius:14px;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:12px;cursor:pointer}",
@@ -704,7 +719,10 @@ window.__ModuleLoader__.load({
 			".dsafm_review_text{font-family:var(--ds-font-family-code);font-size:12px;line-height:18px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto;background:var(--dsw-alias-bg-module-platform);border-radius:8px;padding:8px 10px;color:var(--dsw-alias-label-primary)}",
 			".dsafm_review_absent{color:var(--dsw-alias-label-tertiary);font-size:12px}",
 			".dsafm_review_hint{color:var(--dsw-alias-label-tertiary);font-size:12px;overflow-wrap:anywhere}",
-			"@media (max-width:520px){.dsafm_map_head{display:none}.dsafm_map_row{grid-template-columns:minmax(0,1fr)}}",
+			// 窄窗（≤520px）：规则表收单列、表头隐藏（五列放不下）；标签行整体换行——标签组独占一行，
+			// 「① 说明／已单独设置／恢复默认」右组换行到下一行（右组不收缩会把长标签挤成两三行、
+			// 断点落在括号内，如「自动审查等待上限（毫秒）」折三行）。
+			"@media (max-width:520px){.dsafm_map_head{display:none}.dsafm_map_row{grid-template-columns:minmax(0,1fr)}.dsafm_f_head{flex-wrap:wrap}.dsafm_labelgroup{min-width:100%}}",
 		].join("");
 		if (typeof document !== "undefined" && document.querySelector('style[data-plugin-css="dsh-approve-for-me"]') === null) {
 			const tag = document.createElement("style");
@@ -1659,7 +1677,11 @@ window.__ModuleLoader__.load({
 						? t("cardstate.waiting.timeout")
 						: causeOf() === "deny" && (entry.reason ?? "") === ""
 							? t("cardstate.waiting.deny").replace(/[:：]\s*\{reason\}/u, "")
-							: t(`cardstate.waiting.${causeOf()}`).replace("{reason}", entry.reason ?? "")
+							: t(`cardstate.waiting.${causeOf()}`).replace(
+									"{reason}",
+									// 协议回落值按界面语言改写，中文界面不出现英文行（与记录视图同一口径）。
+									entry.reason === REASON_DEFAULTED ? t("view.reasonDefaulted") : entry.reason ?? "",
+								)
 					: null;
 			const stateText = entry.state === "waiting-human" ? `${t("cardstate.waiting")} · ${causeText}` : t("cardstate.reviewing");
 			// 倒计时分派（design §7.4）：reviewing 状态读审查截止（review），waiting-human 读人工
@@ -2116,7 +2138,8 @@ window.__ModuleLoader__.load({
 														].join(""),
 													}),
 													metaParts.length === 0 ? null : jsxRuntime.jsx("div", { className: "dsafm_review_meta", children: metaParts.join(" · ") }),
-													sectionOf("detail.reason", absentKeyOf("reason"), detail.reason, truncated),
+													// 协议回落值按界面语言改写，中文界面不出现英文行。
+													sectionOf("detail.reason", absentKeyOf("reason"), detail.reason === REASON_DEFAULTED ? t("view.reasonDefaulted") : detail.reason, truncated),
 													sectionOf("detail.evidence", absentKeyOf("evidence"), detail.evidence, truncated),
 													sectionOf("detail.probes", absentKeyOf("probes"), detail.probes, truncated),
 													sectionOf("detail.prompt", absentKeyOf("prompt"), detail.prompt, truncated),

@@ -66,7 +66,7 @@
 - 非 seed 委派：`parentSession` 有、`isSeeded=false`、`delegationDepth` 不小于 1，`origin='subagent'`；
 - seed 式委派：`parentSession` 有、`isSeeded=true`、`delegationDepth` 不小于 1，`origin='subagent'`。宿主 dsh-subagent 的 `childSessionMeta` 以 seed 是否传入决定 `isSeeded`；`origin='subagent'` 恒设，与 `isSeeded` 无关。委派工具的 fork 后端（dsh-subagent-fork-in-process）经同一 `childSessionMeta` 构造，恒 `origin='subagent'`、`delegationDepth` 不小于 1，属委派子代理，不因构造方式判成分叉。
 
-识别规则：会话头带 `parentSession` 且 `delegationDepth` 不小于 1 的会话是委派子代理，含 seed 式委派。`delegationDepth` 不小于 1 的会话恒带 `parentSession`（见现存形态），本条件与需求按 `delegationDepth` 单独定义的外延相同。带 `parentSession` 且 `isSeeded` 为真、`delegationDepth` 为 0（或缺席）的会话是分叉会话，不是委派子代理。分叉判定用「`isSeeded` 为真且 `delegationDepth` 为 0（或缺席）」的联合条件，不能按「或」放宽——seed 式委派同样 `isSeeded` 为真，单看该字段会把子代理误判成分叉。`delegationDepth` 按数值判定，非数值按缺席处理。
+识别规则：会话头 `parentSession` 为非空字符串且 `delegationDepth` 不小于 1 的会话是委派子代理，含 seed 式委派。`delegationDepth` 不小于 1 的会话恒带非空 `parentSession`（见现存形态），本条件与需求按 `delegationDepth` 单独定义的外延相同。带 `parentSession` 且 `isSeeded` 为真、`delegationDepth` 为 0（或缺席）的会话是分叉会话，不是委派子代理。分叉判定用「`isSeeded` 为真且 `delegationDepth` 为 0（或缺席）」的联合条件，不能按「或」放宽——seed 式委派同样 `isSeeded` 为真，单看该字段会把子代理误判成分叉。`delegationDepth` 按数值判定，非数值按缺席处理。
 
 seed 边界标记（`session/end-seed`）就地追加事件、不改会话头；续传沿用原会话头，两者不产生上述之外的形态。其余带 `parentSession` 的组合不在现存形态内，按主会话对待：不追加策略、不关人工备用通道。
 
@@ -91,7 +91,7 @@ seed 边界标记（`session/end-seed`）就地追加事件、不改会话头；
 
 ### 3.2 上下文取材与脱敏
 
-取最近的请求头、步骤结果、用户／助手消息、工具调用及结果、两种派发事件。默认条数和预算见需求 5.3。`maxEntries=0` 主动不取事件，不标读取错误；两个字节预算为零时分别跳过对应裁剪。
+取最近的请求头、步骤结果、用户／助手消息、工具调用及结果、两种派发事件。默认条数和预算见需求 5.3。事件读取用会话的 `snapshotEvents()` 无参同步读法一次取得全量事件数组；上游分页读法（`snapshotEvents(fromSeq, toSeqExclusive)`）稳定前不迁移，宿主升级时重验该读法。`maxEntries=0` 主动不取事件，不标读取错误；两个字节预算为零时分别跳过对应裁剪。
 
 读取服务缺失、抛错或返回非事件数组时，产生空证据、零条数、未截断与 `degraded=transcript-read-failed`，采集降级标记随装配进入审查降级清单与送审证据段（读取失败说明行）。每条和总量分别保留首尾，插入 `<truncated omitted_approx_tokens="N" />`，`N` 为本次超预算 UTF-8 字节数除以四向上取整；总量截断记录 `degraded=transcript-truncated`。极小预算优先保留完整标记，最终可能超过名义预算，尾部可能为空。
 
@@ -116,7 +116,7 @@ Authorization:\s*[^\r\n]+
 
 输入为普通对象／数组，内容属于 JSON 值域且无环时，在受支持深度和未裁剪范围内，序列化结果与 `JSON.stringify` 相同；重复引用的无环对象在每处完整呈现。仅祖先回边为 `[circular]`。非普通对象、BigInt、函数或遍历异常使用 `[unserializable]`；`undefined` 属性及 Symbol 键按 JSON 语义省略，非有限数和数组空洞为 `null`。这些标记表示缺证，不表示无害。
 
-参数经结构转义、请求清单脱敏，再用 `context.maxEntryBytes` 保留首尾和标记。动作 JSON 的五个字符串字段也先脱敏，不能只脱敏参数段而让命令或理由从另一处泄漏。详情采集失败用安全占位，不能在模型调用前将已有占位证据的审查变成异常。
+参数经结构转义、请求清单脱敏，再用 `context.maxEntryBytes` 保留首尾和标记。动作 JSON 的五个字符串字段也先脱敏，不能只脱敏参数段而让命令或理由从另一处外泄。详情采集失败用安全占位，不能在模型调用前将已有占位证据的审查变成异常。
 
 ### 3.4 只读工具与资源限制
 
@@ -140,7 +140,7 @@ DSH 敏感范围按实际 home 根判断，环境变量优先、缺省 `~/.dsh`�
 
 ### 3.5 可选拒绝规则
 
-实际默认值只引用需求 5.3，不把参考清单装填为默认。规则检查在 `screen` 内的次序固定：`mode=off`、`tools` 过滤、非升权三类跳过分支先判，未接管的请求不运行规则扫描；升权超过 `allowEscalationTo` 的确定性拒绝先于规则扫描；随后编译并全量扫描拒绝规则；`unknownSubject` 的处置最后判定。全部确定性判定先于模型调用，通过 `allowEscalationTo` 检查的接管请求（含 `unknownSubject` 两种取值），规则扫描都执行。
+实际默认值只引用需求 5.3，不把参考清单装填为默认。规则检查在 `screen` 内的次序固定：`mode=off`、`tools` 过滤、非升权三类跳过分支先判，未接管的请求不运行规则扫描；升权超过 `allowEscalationTo` 的确定性拒绝先于规则扫描；随后运行硬性危险拦截层（12.1），先于用户规则；随后编译并全量扫描拒绝规则；`unknownSubject` 的处置最后判定。全部确定性判定先于模型调用，通过 `allowEscalationTo` 检查的接管请求（含 `unknownSubject` 两种取值），硬性拦截与规则扫描都执行。
 
 扫描全部受支持深度的自有字符串参数值（与 3.3 的参数呈现边界一致），键名用于定位但不作为字符串值扫描；命中说明键路径和模式，键路径为点分与下标组合（如 `env.PAYLOAD`、`args[0]`）。回查失败时无值可扫，按 `unknownSubject` 处置。回查参数无命令类键（即无法辨认实际操作）时，规则命中与 `unknownSubject` 的交叉语义如下：
 
@@ -151,7 +151,7 @@ DSH 敏感范围按实际 home 根判断，环境变量优先、缺省 `~/.dsh`�
 
 规则命中的两格不置 `command` 降级标记，命中信息由拒绝理由的键路径承载。
 
-以下八条为可显式配置的参考源，不是语义安全保证：
+以下八条为可显式配置的参考清单，不是语义安全保证：
 
 ```text
 (^|[^A-Za-z0-9])(mkfs|diskpart|fdisk|parted)\b
@@ -184,7 +184,7 @@ DSH 敏感范围按实际 home 根判断，环境变量优先、缺省 `~/.dsh`�
 
 ### 3.8 随包安全策略与系统提示
 
-`lib/agent-texts.js` 提供两套模板与策略读取入口；英文策略为 `assets/tenant-policy.md`，中文为 `assets/tenant-policy.zh.md`。`lib/prompt.js` 按请求语言读取正文，替换模板中的 `{{ tenant_policy_config }}`，再追加需求 3.5 的输出契约。正常加载必须确认五类安全规则实际进入系统提示，不能只因模板构建成功就声称已应用策略。
+`lib/agent-texts.js` 提供两套模板与策略读取入口；英文策略为 `assets/tenant-policy.md`，中文为 `assets/tenant-policy.zh.md`。`lib/prompt.js` 按请求语言读取正文，替换模板中的 `{{ tenant_policy_config }}`，再追加需求 3.5 的输出契约。正常加载必须确认策略文件的六类安全规则与「重送指引」段实际进入系统提示，不能只因模板构建成功就声称已应用策略。来源口径：前五类逐字源自 Codex 租户策略——这里的「租户策略」不是 3.4 的 denyPatterns 出厂参考清单（本仓文档中的「参考清单」一词专指后者）；「触网打开」与「重送指引」两段为本插件增补（见 12.1）。
 
 所选文件缺失、读取抛错或为空时使用同语言占位键 `agent.tenantPolicyMissing`，不读取另一语言补位；占位说明和基础风险审查遵守需求 3.3。每种语言的读取结果在模块实例内保存，包括读取失败；修复文件后重新加载模块才刷新。验证通过独立模块或读取替身构造缺失、空文件和失败，不删除真实随包策略；正常对照确认正文存在。
 
@@ -278,7 +278,7 @@ DSH 敏感范围按实际 home 根判断，环境变量优先、缺省 `~/.dsh`�
 
 三层解析顺序与档位规则只引用需求 5.1：会话选择 → 父模型映射 → 全局默认。每层校验 provider 可用及模型信息可解析；任一层候选不可用时，记录层级原因、实际层级和路由，直接使用全局默认，不在其余层级间逐层回退，映射层内精确规则不可用时也不改试通用规则。落到全局默认层时：未设置（空）按零值语义使用执行助手当前模型，审计层值记 `follow-parent`；已设置但不可用按故障处理，审计层值记 `unavailable`，不静默选任意模型。全局默认为空且执行助手当前模型不可得（会话既无 `model/selection` 事件、请求头也无路由）时，同样按 `unavailable` 处理。父模型从最近 `model/selection`，缺失则从请求头读取。
 
-父模型映射的查找接收完整父模型 `{provider, model}`，层内顺序固定：先精确匹配（provider 非空且相等、model 相等），后通用匹配（provider 为空值且 model 相等）。旧 `reviewer.byParentModel` 字典保留为兼容输入，接在新结构之后构成同一层的完整查找链：新结构精确规则 → 新结构通用规则 → 旧字典纯模型 id 键（按通用匹配）→ 旧字典全引用键读作去掉首个斜杠后的完整纯模型 id（按通用匹配）。多个旧全引用键去首斜杠后归一到同一通用条件时，按选择值判定：归一后的选择一致，命中结果与字典枚举顺序无关，正常使用；不一致时不使用该条件下的冲突别名，映射层按未命中处理、解析按三层序继续全局默认，冲突在审计留痕。旧键按字面参与匹配，不做猜测恢复；含斜杠旧键的迁移须经用户确认原意（7.2）。未被编辑的旧配置不自动重写或迁移。`reviewer.followParent` 不在 schema 声明内：装载按未声明键处理——不读取、不迁移、不报错。
+父模型映射的查找接收完整父模型 `{provider, model}`，层内顺序固定：先精确匹配（provider 非空且相等、model 相等），后通用匹配（provider 为空值且 model 相等）。旧 `reviewer.byParentModel` 字典保留为兼容输入，接在新结构之后构成同一层的完整查找链：新结构精确规则 → 新结构通用规则 → 旧字典纯模型 id 键（按通用匹配）→ 旧字典全引用键读作去掉首个斜杠后的完整纯模型 id（按通用匹配）。多个旧全引用键去首斜杠后归一到同一通用条件时，按选择值判定：归一后的选择一致，命中结果与字典枚举顺序无关，正常使用；不一致时不使用该条件下的冲突别名，映射层按未命中处理、解析按三层序继续全局默认，冲突在审计留痕。旧键按字面参与匹配，不做猜测恢复；含斜杠旧键的迁移须经用户确认原意（7.2）。未被编辑的旧配置不自动重写或迁移。不在声明内的旧配置键按未声明键处理——不读取、不迁移、不报错。
 
 匹配条件不依赖字符串形态或目录猜测。设置页映射行的行状态保存四个独立字段：作用范围 provider（空值或指定 id）、完整纯模型 id、目标模型引用、推理强度。执行助手模型下拉选中一项只把该项的完整模型 id 写入 `parent.model`；选择、暂存、保存各环节都不对模型 id 做斜杠切分或前缀剥离，保存函数无需识别输入是否已经是纯 id。回显由作用范围字段决定：任意 provider 显示纯模型 id；指定 provider 显示 provider 与 id 的拼接。不按有无斜杠推断作用范围，不按目录首命中为通用规则补 provider。
 
@@ -429,8 +429,9 @@ aria 语义：`aria-expanded` 表开合；`aria-controls` 关联展开区域 `he
 | `warn.modelIssue.global` | 默认审查模型不可用：{reason}。实际使用：{effective}。 | The default reviewer model is unavailable: {reason}. Currently using: {effective}. |
 | `warn.modelIssue.rule` | 此规则选择的审查模型不可用：{reason}。实际使用：{effective}。 | The reviewer model picked by this rule is unavailable: {reason}. Currently using: {effective}. |
 | `warn.modelIssue.session` | 本会话选择的审查模型不可用：{reason}。实际使用：{effective}。 | This session's reviewer model is unavailable: {reason}. Currently using: {effective}. |
-| `warn.modelIssue.globalUnset` | 默认审查模型未设置：审查跟随执行助手的当前模型，独立发起审查调用——是「使用相同模型」，不是由执行助手自己审批。实际使用：{effective}。 | The default reviewer model is not set: reviews follow the agent's current model as an independent call — the same model, never the agent approving itself. Currently using: {effective}. |
+| `warn.modelIssue.globalUnset` | 默认审查模型未设置：仅当解析实际落到全局默认层（无有效会话选择且无有效映射）时，审查跟随执行助手的当前模型，独立发起审查调用——是「使用相同模型」，不是由执行助手自己审批。 | The default reviewer model is not set: only when resolution actually falls through to the global default (no effective session choice and no effective rule) do reviews follow the agent's current model as an independent call — the same model, never the agent approving itself. |
 | `warn.modelIssue.followParent` | 本会话未单独选择审查模型，按未设置的全局默认跟随执行助手的当前模型：独立发起审查调用——是「使用相同模型」，不是由执行助手自己审批。实际使用：{effective}。 | This session has no reviewer of its own and the global default is unset, so reviews follow the agent's current model as an independent call — the same model, never the agent approving itself. Currently using: {effective}. |
+| `warn.modelIssue.globalUnsetShadowed` | 默认审查模型未设置：仅当解析落到全局默认层时，审查才跟随执行助手的当前模型并独立发起审查调用。实际使用：{effective}。 | The default reviewer model is not set: reviews follow the agent's current model, as an independent call, only when resolution falls through to the global default. Currently using: {effective}. |
 | `warn.modelIssue.layer` | 当前生效：{layer}。 | Currently effective: {layer}. |
 | `card.map.col.reviewer` | 审查模型 | Reviewer model |
 | `card.map.col.effort` | 推理强度 | Effort |
@@ -627,7 +628,7 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
 
 旧格式行兼容按字段缺失判定：既有存储行没有 `kind` 与 `approvalId` 字段即为旧格式，不按 `reviewId` 的段数或第三段含义识别——既有旧记录的第三段可能是审批事件序号，也可能是开始时刻。旧格式行在读取路径合成 `approvalId`：取该行自身 `reviewId` 全文，仅读取时使用、不落盘。合成后独立成行，`outcome`、`source` 等新字段按缺失呈现，不与其他行合并，也不写回磁盘。
 
-每会话串行追加，默认窗口、会话文件上限及轮转行为引用需求 5.3、7.3。`ui.trace.maxRecords=0` 使用需求 5.3 的默认窗口，不表示不保存记录或无限窗口。达到轮转条件时重写只保留最近窗口；超过会话文件上限时按修改时间、同时间按名字淘汰，新触发文件不进入删除候选。内存窗口、行计数、读取标记和写队列随文件淘汰回收。
+每会话串行追加，默认窗口、会话文件上限及轮转行为引用需求 5.3、7.3。`ui.trace.maxRecords=0` 使用需求 5.3 的默认窗口，不表示不保存记录或无限窗口。达到轮转条件时重写只保留最近窗口；超过会话文件上限时按修改时间、同时间按名字淘汰，新触发文件不进入删除候选。旧记录保持可见，直到有记录的会话数超过上限；可见期即最近 50 个有记录的会话（上限值见需求 5.3），接近上限时可见期相应缩短。内存窗口、行计数与已加载会话键随文件淘汰回收，仍有在飞写入的会话键本轮跳过、留待下轮；写队列随写任务落定摘除；读失败标记随整文件重写成功清除。
 
 读取失败在会话级暴露降级状态：存储层为发生读取失败或末行撕裂的会话维护读失败标记，列表结果携带该标记（`readFailed`），不把失败静默折叠成空列表；文件缺失是合法空，不标记。末行撕裂跳过，后续写入前补分隔，坏行不变成伪造审批。写入失败记录暂留内存但标未持久化，重启会丢失。一个目录只支持一个进程写者，轮转不能依赖跨进程单行原子性。
 
@@ -640,11 +641,11 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
 | 字段 | 取值 |
 | --- | --- |
 | `outcome` | `allowed-once`、`rejected`、`cancelled`，与应答者返回值一致 |
-| `source` | `rule` 规则命中、升权超过上限或 `unknownSubject=reject` 的确定性拒绝；`llm` 模型判定直接结算（含审查故障按默认拒绝），队列已满或冷却中未执行审查的通道故障结算同归此来源；`human` 人工抢答或人工阶段作答；`timeout` 装配、审查、排队或人工时限到点（装配环节的计时回调抛错按装配超时结算，同归此来源，见 5.3 分置）；`gateway` 人工通道关闭；`signal` 原始请求取消；`error` 计时或中止回调抛错（装配环节除外）、内部异常、应答者逃逸 |
+| `source` | `hard` 硬性危险拦截命中（12.1 的 H1～H3 形态）的确定性拒绝；`rule` 规则命中、升权超过上限或 `unknownSubject=reject` 的确定性拒绝；`llm` 模型判定直接结算（含审查故障按默认拒绝），队列已满或冷却中未执行审查的通道故障结算同归此来源；`human` 人工抢答或人工阶段作答；`timeout` 装配、审查、排队或人工时限到点（装配环节的计时回调抛错按装配超时结算，同归此来源，见 5.3 分置）；`gateway` 人工通道关闭；`signal` 原始请求取消；`error` 计时或中止回调抛错（装配环节除外）、内部异常、应答者逃逸 |
 | `stage` | 超时或故障结算能辨认环节时携带：`assembly`、`queue`、`review`、`human`。装配阶段到点取 `assembly`；队列已满与冷却未执行发生在调度环节，取 `queue`；无法辨认环节的（如中止回调抛错）省略；其余来源不带（前句已列者除外） |
 | `reason` | 结算原因，先脱敏再按 `context.maxEntryBytes` 裁剪；规则直拒带命中键路径与规则 |
 
-应答者逃逸指审批应答函数主流程抛出、被入口最外层捕获并按拒绝结算的异常。结算记录与审查记录经 `approvalId` 关联，落同一会话文件。结算记录按 8.2 词汇表携带可取得字段：身份与背景字段（会话、callId、toolName、origin、escalation、preset）、起止时间与在场的排队观测（`queueMs`）可取得时必带；模型侧字段（model、effort、layer、risk、auth 等）未执行审查时缺失。规则直拒、排队未执行、冷却未执行与应答者逃逸路径没有审查记录，合并列表行只取自结算记录，上述字段保其可查。全部未执行审查的调度失败（队列已满、排队超时、冷却未执行）的结算 `reason` 以固定前缀「审查未执行：」开头、后接具体原因；前缀措辞固定，不随语言或环境变化。调度失败的辨认以 `source` 为准：排队超时为 `timeout` 且 `stage` 为 `queue`，实际等待时长由 `queueMs` 承载；队列已满与冷却未执行为 `llm`。迟到审查结论不改判：结算后审查被中止仍可落一条带中止标记的审查记录（观测留痕），不产生第二条结算记录，不覆盖已落结算。取不到的字段明确缺失。
+应答者逃逸指审批应答函数主流程抛出、被入口最外层捕获并按拒绝结算的异常。结算记录与审查记录经 `approvalId` 关联，落同一会话文件。结算记录按 8.2 词汇表携带可取得字段：身份与背景字段（会话、callId、toolName、origin、escalation、preset）、起止时间与在场的排队观测（`queueMs`）可取得时必带；模型侧字段（model、effort、layer、risk、auth 等）未执行审查时缺失。规则直拒、硬性拦截直拒、排队未执行、冷却未执行与应答者逃逸路径没有审查记录，合并列表行只取自结算记录，上述字段保其可查。全部未执行审查的调度失败（队列已满、排队超时、冷却未执行）的结算 `reason` 以固定前缀「审查未执行：」开头、后接具体原因；前缀措辞固定，不随语言或环境变化。调度失败的辨认以 `source` 为准：排队超时为 `timeout` 且 `stage` 为 `queue`，实际等待时长由 `queueMs` 承载；队列已满与冷却未执行为 `llm`。迟到审查结论不改判：结算后审查被中止仍可落一条带中止标记的审查记录（观测留痕），不产生第二条结算记录，不覆盖已落结算。取不到的字段明确缺失。
 
 ### 8.5 自有视图与耗时
 
@@ -684,6 +685,7 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
 | `list.outcome` | 最终审批：{v} | Final approval: {v} |
 | `list.decision` | 模型结论：{v} | Model conclusion: {v} |
 | `view.noOutcome` | 未记录最终审批结果 | No final outcome recorded |
+| `view.reasonDefaulted` | 审查器未提供理由 | No rationale provided by the reviewer. |
 | `view.retention` | 记录跟随产生它的会话；每会话回读最近一个窗口（默认 200 条，随 ui.trace.maxRecords 可配置），磁盘最多保留 50 个会话文件（固定上限），超限删除最旧；减少采集不删除已有记录。 | Records follow the session that produced them. Each session reads back the most recent window (200 entries by default, configurable via ui.trace.maxRecords); at most 50 session files are kept on disk (a fixed cap), the oldest deleted first. Reducing capture never deletes existing records. |
 
 详情缺段说明（`sectionOf` 的缺省分支按优先级链分派；无法确认时用统一文案）：
@@ -771,7 +773,7 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
 | 主题 | 验证方式 |
 | --- | --- |
 | 接管与子代理 | 主／子会话、根链、未知预设、跳过、不改沙箱、创建监听失败及无人工通道矩阵；分叉会话（`isSeeded` 真＋`delegationDepth` 为 0／缺席）不判子代理、不追加策略、落本会话预设分支且人工备用在场——该键缺席为内存新建的主用例，持久化回读为 0 作补充，两种形态都测；seed 式委派（`isSeeded` 真＋`delegationDepth` 不小于 1）仍判子代理；被覆盖子代理的审批通知直接送达发起操作的子代理 |
-| 动作与授权 | 直接和双派发事件、非命令工具、零上下文、缺目录、真实参数／特殊自有键／共享无环对象／循环和深度边界；恶意指令只在证据段；无命令类键而其他键含危险字符串、命中显式规则时按规则直拒、理由带键路径，`unknownSubject` 两种取值交叉下规则扫描都执行 |
+| 动作与授权 | 直接和双派发事件、非命令工具、零上下文、缺目录、真实参数／特殊自有键／共享无环对象／循环和深度边界；恶意指令只在证据段；无命令类键而其他键含危险字符串、命中显式规则时按规则直拒、理由带键路径，`unknownSubject` 两种取值交叉下规则扫描都执行；硬性拦截矩阵按 12.1——删除标志组合与目标字面性的各形态正反例、远程内容入口、随行文字不命中、混淆写法回落审查层 |
 | 敏感与资源 | 真文件、凭据名、DSH 根及链接别名、超大文件和候选、病态模式与事件循环响应；失败／超时不直接改判断 |
 | 输出 | 完整 JSON、最小 allow、散文恢复、字段补全、畸形、空、截断即使局部合法仍拒；原始与内部字段来源 |
 | 竞速 | 人工先答、审查先答、所有取消和时限（含装配到点与装配期间取消，装配慢但有限不误杀）、回调失败、迟到流；注入异常不改结果，next 至多一次，资源释放；结算收尾恢复原始信号（同一性守卫、冻结对象无恢复、取消与关闭用例不回归）；逃逸出口在配置不可读时回退默认值，自身不抛，恰落一条结算记录且审计行照常写出，通知按通道故障模板呈现 |
@@ -806,13 +808,13 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
 - 卡片与记录状态巡检：对安全拒绝、超时、模型故障、队列已满、冷却未执行、人工先答与迟到点击分别截同帧卡片，核对文案不误报危险、不暗示已完成的审批还能改判；记录列表中模型结论与最终结果不一致的行双标注可见，详情缺段按 `absent.*` 五类说明，摘要级记录不依赖开启全文解释；旧记录行附「未记录最终审批结果」。
 - 分置提示巡检：构造全局默认、映射规则、会话选择各自不可用的配置，核对三类提示按 7.2.0 位置出现、内容含可核实原因与实际回退结果；级联情形（规则与全局默认同时不可用）两处提示同屏保留；目标恢复可用后提示消失；提示不改变回退语义；空全局默认（零值语义生效）时设置页顶部与 composer 提示出现、视觉与不可用提示同规格、设置默认后提示消失；解析落到零值语义的 composer 文案含跟随与「使用相同模型」区分句式，被有效映射截住的 composer 文案用 `globalUnsetShadowed`、不出现「按未设置的全局默认跟随」句式；空全局默认两形态（零值语义与有效映射命中）在真实页面保存并重开设置页后各自成立、提示与配置一致；空串成句规则——不可用键与 `globalUnsetShadowed` 键空串时「实际使用」句省略且层含义句（`warn.modelIssue.layer`）在场，`globalUnset`／`followParent` 键无冗余层句；浅色与深色主题下分别用计算样式读取提示文字与背景取值，按 WCAG 相对亮度公式断言对比度 ≥4.5:1（与说明按钮巡检同法；浅色主题断言文字取插件声明的 `#92400e` 而非 warn-label 令牌值，深色主题断言 warn-label 令牌值）。
 
-静态 DOM 判据由 `tools/build-dom-dump.mjs` 三件套（`test/settings-dom-dump.test.mjs`、`test/fixtures/settings-dom-dump.txt`）同步承载：说明按钮计数 20 个、全部带可见文字与成对 aria 属性、点击后展开区在场；字段清单与 7.2 的 20 字段逐项对账，退役字段不出现在 dump。旧截图与接口返回不作为界面验证证据。
+静态 DOM 判据由 `tools/build-dom-dump.mjs` 三件套（`test/settings-dom-dump.test.mjs`、`test/fixtures/settings-dom-dump.txt`）同步承载：说明按钮计数 20 个、全部带可见文字与成对 aria 属性、点击后展开区在场；字段清单对照测试内转抄的 20 字段标签清单逐项核对（转抄清单不随字段集增删自动变红，字段集变更须重采夹具），控件取值经 `normalizeConfig` 与生效配置动态对账，退役字段不出现在 dump。旧截图与接口返回不作为界面验证证据。
 
 ## 11. 当前实施与验证待办
 
 本章是当前实施与验证差距的唯一工作清单。完成后删除对应项，不保存修正历史。仍待办理：
 
-- 真实宿主核验余量（10.3 清单，宿主环境阻塞）：allow 后实际工具执行、卡片状态与同帧截图等待真机审批流——服务实例（session 0，沙箱后端不可用：`CreateRestrictedToken prerequisite failed: no logon SID`）升权在到达审批通道前失败，待交互式会话宿主环境后补验；反向双标注与旧格式行的真页面样本未取得，由单元测试与真页面机制验证覆盖。
+- 真实宿主核验余量（10.3 清单）：反向双标注与旧格式行的真页面样本未取得，由单元测试与真页面机制验证覆盖；冷却样本维持离线验证——现场触发以故意配置不可用的审查模型为前提，不属常规验证操作。
 - 分置提示真页巡检余量（10.3）：会话指定不可用与 followParent 行互斥的真页形态——测试实例模型目录内引用全部可用，该状态环境不可达，由单元测试（设置页与 composer 分置提示、互斥至多一条）覆盖。
 - 发布链核验未执行（9.3）：发布产物读取的完整版本、完整 Git 标签隔离安装、宿主管理界面展示、Release 标题。标签与 Release 在发布流程执行时创建，不移动已有发布标签。
 
@@ -820,4 +822,28 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
 
 本章承接需求第 10 章的已批准增补项，注明需求标识、机制、边界和验证方法。变更已有机制时同时修正原主题，不能在此保留另一套相反方案。维护者定期并回第 1 至第 10 章，完成后删除第 11 章对应项，历史由 Git 保存。
 
-当前无未归并的增补设计。
+当前未归并的增补设计如下。
+
+### 12.1 硬性危险拦截层（需求增补 H1、H2、H3）
+
+内置的确定性拦截层，承接需求第 10 章增补 H1（删除类命令带强制或递归标志）、H2（删除目标无法从字面确定）、H3（系统入口加载网址）。判定为纯文本函数，由 `lib/policy.js` 导出、`screen` 编排调用，不引用宿主服务，可 `node --test` 直测；命中即直接拒绝，不调用 LLM、不交人工，与规则直拒同一结算语义。
+
+管线位置：`screen` 内、升权上限检查之后、`denyPatterns` 编译之前（次序见 3.5）。三类跳过分支仍最先判定——跳过即不接管，由宿主原流程负责，本层随插件接管生效；「不可配置关闭」指接管生效后没有关闭本层的配置项，`mode=off` 等同未安装，不构成例外。
+
+匹配对象与随行文字排除：匹配对象是回查参数中的命令文本，不是全部字符串值。命令文本装配沿用 3.5 的遍历口径（自有枚举、深度不超过四），四种形态：`command`、`cmd`、`script` 三键的字符串值各为一段，同一参数对象内 `args`／`argv` 数组的字符串元素按序以单空格拼接到该段之后（嵌套数组只展开一层，更深的层数静默丢弃——这是装配上限，不属无法归一）；三键值为数组时按序拼接；参数对象无三键而独有 `args`／`argv` 时该数组本身即命令词序列；参数根本身为数组时字符串元素按序拼接、对象元素继续按前三形态探取。数组只在参数根与 `args`／`argv` 两处产出命令段——非命令键的数组值与字符串值一样属随行文字，不参与装配。理由、说明、提交信息等非命令键不参与装配：随行文字含相同字样不命中，实现口径即上述三键白名单，不做内容启发；作为命令文本一部分出现的引号文本（如 pwsh 命令行内的 `git commit -m "..."` 提交说明）按命令文本处理，同样不做内容级排除——内容级排除可被伪装成提交信息的载荷绕过。回查失败或无 `command`／`cmd`／`script` 键（亦无独立 `args`／`argv`）时本层无可判定对象、不命中，请求按 `unknownSubject` 与审查层路径继续；用户 `denyPatterns` 层继续按 3.5 全字符串扫描，两层独立。
+
+命令文本归一化：每段命令文本按换行与分号拆成语句，逐语句判定；不做字符串边界解析，拆分粒度的误差只偏向多拦或无法归一，不产生漏拦。语句匹配大小写不敏感；PowerShell 别名 `rm`、`ri`、`del`、`erase`、`rd`、`rmdir` 与 `Remove-Item` 等价。包装语句（首词去路径后为 `powershell`／`pwsh`／`cmd`／`bash`／`sh`／`zsh`／`dash`／`ksh` 之一，且带 `-Command`／`-c`／`/c` 执行标志）剥出内层文本递归判定，深度至多三层；超深或内层无法提取，该语句按无法归一处理。无法归一＝经剥层与归一后仍未得到可判定的动词与标志结构（混淆字符、编码负载、非常规写法）：不命中、不猜测解码，回落审查层按需求 3.3 第 4 条保守处理——无法归一是缺失上下文，不是安全证据。
+
+H1 删除标志组合：语句命中删除动词与强制或递归标志的组合即拒绝，不看目标。动词取语句内任意 token（管道中段、`start`／`&` 前置、`&&` 串联等形态同判），标志按整语句归属——判定的误差只偏多拦（如 `echo rm -rf /` 一类纯回显文本也会命中），这是有意口径：无 shell 上下文的静态判定无法区分回显与执行，偏多拦交由「改写后重送不属绕过」条款消化。PowerShell `Remove-Item`（含全部别名）带 `-Force` 或 `-Recurse`——接受不区分大小写的完整参数名与实测可绑定成功的无歧义前缀缩写：`-r`、`-re`、`-rec`、`-recu`、`-recur`、`-recurs` 归 `-Recurse`，`-fo`、`-for`、`-forc` 归 `-Force`（裸 `-f` 歧义排除；`-zzz` 一类无法绑定的串不算前缀）；开关绑定写法（`-Force:$true`）按绑定真值计，假值（`:$false`、`:0`）不命中；仅 `-f` 歧义于 `-Filter` 与 `-Force`、实际绑定失败，不单凭其命中。判定序上 `-r` 一律按 `-Recurse` 缩写读（经 `-WhatIf` 实测裁定），因此任何 shell 语境的 `rm -r`（含 `git rm -r` 一类）都按 PowerShell 分支命中并直接拒绝——需求 POSIX 分支的「同时带递归与强制」边界由本裁定吞并，属「至少包括」下的额外覆盖。POSIX `rm` 同时带递归与强制即命中：`-rf`／`-fr` 聚合、`-r -f` 拆分、`--recursive`／`--force` 长选项任意组合；字母簇只认 1–3 字母短簇，`-force`、`-filter` 等 4 字母以上单词旗标是参数拼写不当簇读；仅带强制的 `rm -f` 属常见清理操作，有意不命中，交审查层。CMD `del`／`erase` 带 `/f`，`rd`／`rmdir` 同时带 `/s` 与 `/q`；CMD 旗标取单字母（`/f`）、斜杠分隔（`/s/q`）与合并簇（`/sq`）三种写法同判（cmd 实测合并与分隔写法均合法）。
+
+H2 目标字面可判定：H1 未命中而语句仍属强制或递归删除族——POSIX `rm` 仅带递归（`-r` 短旗标已被 H1 的 PowerShell 分支吞并，本族实际只剩 `--recursive` 长选项与短簇无强制形态）、CMD `rd`／`rmdir` 仅带 `/s`、`del`／`erase` 仅带 `/s`——时判定删除目标操作数，命中即拒绝。字面可确定＝操作数是不含变量引用和命令替换的字面路径 token；`$` 变量、`$env:`、`%VAR%`、`$( )`、反引号替换、波浪线（引用运行时主目录）都算不可确定；无操作数同样按不可确定处理（目标无从证明字面，宁可误拦）。旗标跳过规则按动词族区分：CMD 族（`del`／`erase`／`rd`／`rmdir`）跳过 `/f`、`/s/q` 一类斜杠旗标与 1–3 字母合并簇（4 字母以上如 `/data` 按操作数），POSIX 语境（`rm`）不跳过斜杠 token——`/a` 一类单字母根路径是操作数不是旗标。脚本内先以字面量为变量赋值、再引用该变量的情形按不可确定处理，宁可误拦：变量赋值可能静默失败，作用域与大小写规则使静态追踪不可靠——本层不建只读自动变量清单、不做赋值追踪，「非字面即不可确定」的通用判定漏判面更小。执行 Agent 改写字面值路径重送不属绕过。PowerShell 无标志的 `Remove-Item $x` 不属强制或递归形态、不在本项，由策略层的破坏性操作与被遮蔽公共变量条款承接。仅强制形态（`rm -f`、`rd /q` 一类）同样不属本项族：这是对需求「强制或递归」的有意窄化，依据是 H1 对仅强制 `rm` 已作整类不命中、交审查层的裁定，本项不反向收紧该类。
+
+H3 远程内容入口：语句内任一 token 基名为 `mshta`（含 `.exe` 后缀）且语句含 `http://`／`https://` 地址，或任一 token 基名为 `rundll32` 且另有 token 等于 `url.dll,FileProtocolHandler`（去路径前缀、忽略大小写）、语句含 http／https 地址时，命中拒绝——与 H1 同取动词任意位置口径，`start mshta`、`& mshta`、`&&` 串联等前置形态不豁免。仅拉起浏览器或资源管理器打开网址的形态（`Start-Process`、`explorer` 等不含入口 token）不做硬性拦截，按需求 3.3 第 6 条由审查器判断；能直接执行远程内容的入口不走该条酌情。
+
+结算、审计与通知：命中经 `screen` 返回拒绝，结算 `source` 取 `hard`（8.4），`reason` 说明命中形态与位置（形态名、命令键路径、包装层数），不置 `command` 降级标记；无审查记录，合并列表行只取自结算记录；通知走既有拒绝模板（4.4）。审计 `screen` 行的 `reason` 携带稳定形态短码（如 `hard-h1-powershell`、`hard-h1-posix`、`hard-h1-cmd`、`hard-h2-target`、`hard-h3-entry`，全集由实现枚举并经测试钉住），与该行 `source=hard` 对应。记录视图枚举按 8.5.1 现行「中文（原值）」形式补 `source=hard` 词条（中文「硬性拦截（hard）」，与 client.js 字典实现同步定稿）；取词是探测式，缺键不致视图失败。
+
+与配置及界面的关系：本层默认开启，无任何配置项——schema 不声明字段、`normalizeConfig` 不合并、设置页与 7.2 的 20 字段不变、client.js 无新增露出。理由：无用户可调参数、无独立可显示状态；命中经拒绝通知与审查记录视图可见，界面露出无信息量。
+
+提示词与随包策略衔接：基础风险分级的「不因删除语法判高风险」句继续只作用于未命中本层的删除（字面目标、无标志形态），H1 形态到不了模型，无冲突。`assets/tenant-policy.md` 与 `assets/tenant-policy.zh.md` 增补第六段「触网打开」：经系统入口打开网址按潜在外发处理，目的地址不可信或载荷不清为高风险、授权不足即拒绝；能直接执行远程内容的入口不走本条酌情，由本层拒绝。随包策略同时明示审查器侧指引：执行 Agent 改用无强制标志的删除、先移入回收位置、请用户自行打开网址或先把内容取到本地经审查后再打开后重新送审，不属绕过拦截；审查器不得仅因改写后重送就判为恶意规避。策略标识（`policyTag`，8.2）随策略文件内容变化自动更新。
+
+验证方法：纯函数矩阵直测覆盖各形态正反例。H1：`Remove-Item` 本名与六个别名×单标志与组合、前缀缩写命中（`-r`、`-fo` 一类）、开关绑定真值（`-Force:$true`）命中与假值反例、`-f` 反例（歧义绑定失败）、POSIX 聚合与拆分标志与长选项、POSIX 仅 `-f` 反例（有意不命中）、CMD 单字母／斜杠分隔／合并簇三种旗标写法。H2：仅递归族（含 `del`／`erase` 仅 `/s`）×字面路径（不命中）与变量引用、`$env:`、`%VAR%`、命令替换、波浪线、脚本内字面赋值再引用（均命中）；仅强制形态（`rm -f`、`rd /q`）反例；POSIX 单字母根路径（`/a`）按操作数不按旗标的反例。H3：两个入口形态正例、入口在语句中段的正例（`start mshta` 一类），`Start-Process` 与 `explorer` 反例（不触发硬性拦截但仍进审查层）。共用反例：随行文字（理由／说明／提交信息键）含相同字样不命中（含含网址样本），无命令键不命中，普通读写与不带标志的删除不命中。装配：`args`／`argv` 拆分数组、三键值为数组、独立 `args`／`argv`、参数根数组的拼接命中。包装：两层包装正例、深度上限与内层无法提取的回落用例、Unicode 破折号与编码负载等混淆写法不命中且仍进审查。接线测试断言管线次序（本层先于 `denyPatterns`）、`source=hard` 的结算与审计行、命中不建审查记录、跳过分支不运行本层。真机验收用无害文本触发（形如危险命令、实际无破坏力的字符串），不做真实删除。

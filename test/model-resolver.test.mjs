@@ -133,10 +133,10 @@ test('全局默认未设置的零值语义：使用执行助手当前模型（la
   assert.equal(cfg.resolution.model, 'deepseek-v4-flash');
 });
 
-test('followParent 残留键不参与解析：未声明键不读取，零值语义照常生效', async () => {
+test('未声明配置键不参与解析：不读取，零值语义照常生效', async () => {
   const { resolver } = harness({
-    // 残留键以原值出现在快照里（存量配置未迁移的形态）；解析不读取它。
-    snapshot: { revision: 1, value: { reviewer: { followParent: false } }, base: {}, user: {} },
+    // 未声明键以原值出现在快照里（存量配置未迁移的形态）；解析不读取它。
+    snapshot: { revision: 1, value: { reviewer: { someRetiredKnob: false } }, base: {}, user: {} },
   });
   const cfg = await resolver.configFor({ agent: { session: session({ parent: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } }) } });
   assert.equal(cfg.resolution.layer, 'follow-parent');
@@ -812,7 +812,7 @@ test('空默认条目映射目标不可用：级联直退终点，不取 parent-
   assert.equal(empty.effectiveModel, 'zai/glm-5.3', '终点填执行助手当前模型引用');
 });
 
-test('ISS-25：byParentModel 对象值 {model,effort} 端到端——映射层带档位生效', async () => {
+test('byParentModel 对象值 {model,effort} 端到端——映射层带档位生效', async () => {
   // requirements §5.1：映射值允许对象形态（模型引用＋推理强度）；端到端经 harness 走完整解析链。
   const { resolver } = harness({
     snapshot: {
@@ -908,16 +908,14 @@ test('空全局默认不发 session 作用域条目：会话已选择时宿主�
   assert.equal(issues[0].configured, '');
 });
 
-test('空目标规则行发 rule 条目：reason 与不可解析目标同族，空值旧键不发', async () => {
-  // 空目标（choice.model 空串）命中时选择层按候选不可用直退全局默认（design §6.2）；
-  // 诊断推演同口径（design §7.2.0：空目标规则行按不可解析目标同族发 rule 条目）；空目标不判非法草稿，保存不受阻。
-  // 空值旧键排在断言条目之前：若空值旧键未被跳过（异常被外层 try 吞掉），条目收集中断、后面的断言变红。
+test('空目标规则行发 rule 条目：reason 与不可解析目标同族（design §6.2/§7.2.0）', async () => {
+  // 空目标（choice.model 空串）命中时选择层按候选不可用直退全局默认；诊断推演同口径——
+  // 空目标规则行按不可解析目标同族发 rule 条目。空目标不判非法草稿，保存不受阻。
   const issues = await collectModelIssues({
     llm: issuesLlm(),
     reviewer: {
       model: 'zai/glm-5.3',
       parentModelRules: [{ parent: { provider: null, model: 'chat' }, choice: { model: '', effort: '' } }],
-      byParentModel: { 'inert-legacy': '', 'legacy-ghost': 'ghost/nope' },
     },
     sessionChoice: undefined,
     parent: { provider: 'zai', model: 'glm-5.3' },
@@ -927,13 +925,40 @@ test('空目标规则行发 rule 条目：reason 与不可解析目标同族，�
   assert.equal(rule.ruleProvider, null);
   assert.equal(rule.configured, '', 'configured 保留空目标原文');
   assert.equal(rule.reason, 'unparsable model reference', 'reason 与不可解析目标同一文案');
-  assert.equal(rule.effectiveLayer, 'global');
+  assert.equal(rule.effectiveLayer, 'global', '空目标按不可用直退全局默认');
   assert.equal(rule.effectiveModel, 'zai/glm-5.3');
-  // 空值旧键之后的条目必须在场：异常若在空值旧键处中断收集，此断言最先变红。
-  const trailing = issues.find((issue) => issue.scope === 'rule' && issue.ruleModel === 'legacy-ghost');
-  assert.ok(trailing !== undefined, '空值旧键之后的规则行条目必须在场');
-  assert.equal(trailing.configured, 'ghost/nope');
+});
+
+test('空值旧键不发条目：跳过不外抛，收集不中断', async () => {
+  // 空值旧键（目标为空串）不被任何路径选中、不发条目；若未被跳过而外抛（异常被外层 try 吞掉），
+  // 条目收集中断——用排在后面的旧键条目在场证明收集走完。
+  const issues = await collectModelIssues({
+    llm: issuesLlm(),
+    reviewer: {
+      model: 'zai/glm-5.3',
+      byParentModel: { 'inert-legacy': '', 'legacy-ghost': 'ghost/nope' },
+    },
+    sessionChoice: undefined,
+    parent: { provider: 'zai', model: 'glm-5.3' },
+  });
   assert.equal(issues.some((issue) => issue.scope === 'rule' && issue.ruleModel === 'inert-legacy'), false, '空值旧键不被任何路径选中，不发条目');
+  const trailing = issues.find((issue) => issue.scope === 'rule' && issue.ruleModel === 'legacy-ghost');
+  assert.ok(trailing !== undefined, '空值旧键之后的条目必须在场（收集未中断）');
+});
+
+test('不可用目标旧键发 rule 条目：configured 保留目标引用原文', async () => {
+  const issues = await collectModelIssues({
+    llm: issuesLlm(),
+    reviewer: {
+      model: 'zai/glm-5.3',
+      byParentModel: { 'legacy-ghost': 'ghost/nope' },
+    },
+    sessionChoice: undefined,
+    parent: { provider: 'zai', model: 'glm-5.3' },
+  });
+  const ghost = issues.find((issue) => issue.scope === 'rule' && issue.ruleModel === 'legacy-ghost');
+  assert.ok(ghost !== undefined, '不可用目标旧键应发 rule 条目');
+  assert.equal(ghost.configured, 'ghost/nope', 'configured 保留目标引用原文');
 });
 
 test('无会话求值：规则目标为纯 id 且目录可解析时不发 rule 条目（诊断与选择同口径回退 provider）', async () => {

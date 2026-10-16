@@ -238,15 +238,38 @@ test('规则 schema 随一跳/两跳序列化往返保留：合法规则通过�
   }
 });
 
-test('followParent 残留键：装载按未声明键处理——不读取、不迁移、不报错', () => {
+test('未声明配置键：装载按未声明键处理——不读取、不迁移、不报错', () => {
   // 未声明键经 schema 解析原样保留、校验不报错；行为等同未提供（零值语义由解析层承载）。
-  const merged = normalizeConfig(Config({ reviewer: { followParent: false, model: 'zai/glm-5.3' } }));
-  assert.equal(merged.reviewer.followParent, false, '残留键原样保留（不迁移）');
+  const merged = normalizeConfig(Config({ reviewer: { someRetiredKnob: false, model: 'zai/glm-5.3' } }));
+  assert.equal(merged.reviewer.someRetiredKnob, false, '未声明键原样保留（不迁移）');
   assert.equal(merged.reviewer.model, 'zai/glm-5.3');
-  assert.doesNotThrow(() => normalizeConfig({ reviewer: { followParent: true } }), '残留键不触发装载错误');
-  const source = readFileSync(new URL('../lib/config.js', import.meta.url), 'utf8');
-  assert.match(source, /followParent/u, 'schema 注释应写明残留键的处理口径');
-  assert.doesNotThrow(() => Config({}), 'schema 声明不含 followParent，默认装载不受影响');
+  assert.doesNotThrow(() => normalizeConfig({ reviewer: { someRetiredKnob: true } }), '未声明键不触发装载错误');
+  assert.doesNotThrow(() => Config({}), 'schema 声明不含未声明键，默认装载不受影响');
+});
+
+test('normalizeConfig 读取路径复查毫秒上限：五个毫秒字段超限或非整数按加载失败拒绝（requirements §4.2）', () => {
+  const fields = [
+    ['reviewer', 'timeoutMs'],
+    ['reviewer', 'toolTimeoutMs'],
+    ['human', 'timeoutMs'],
+    ['concurrency', 'queueTimeoutMs'],
+    ['breaker', 'cooldownMs'],
+  ];
+  for (const [group, key] of fields) {
+    // 直接组对象绕开 schema（模拟 volatile 写路径原地更新引用后的读取形态），逐字段验证读取层复查。
+    assert.throws(
+      () => normalizeConfig({ [group]: { [key]: 2_147_483_648 } }),
+      new RegExp(`${group}\\.${key}`),
+      `${group}.${key} 超上限必须在读取路径可见拒绝`,
+    );
+    assert.throws(
+      () => normalizeConfig({ [group]: { [key]: 1.5 } }),
+      new RegExp(`${group}\\.${key}`),
+      `${group}.${key} 非整数必须在读取路径可见拒绝`,
+    );
+  }
+  // 合法边界值不误拒：0 与上限本身都通过。
+  assert.doesNotThrow(() => normalizeConfig({ reviewer: { timeoutMs: 0 }, human: { timeoutMs: 2_147_483_647 } }));
 });
 
 test('normalizeRuleProvider 与 parentModelRuleKey：归一空值与去首尾空白组键的单一实现', () => {

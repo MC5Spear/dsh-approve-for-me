@@ -41,7 +41,7 @@ test('dump 留档存在且含页面身份与采集元数据', () => {
   assert.match(dump, /CSS 收窄扫描（scoped 段，只读本包注入的 `style\[data-plugin-css="dsh-approve-for-me"\]`）并入同一脚本/u, 'CSS 收窄扫描并入主取证脚本（scoped 段）');
   assert.match(dump, /style\[data-plugin-css="dsh-approve-for-me"\]/u, '扫描口径应收窄到本包注入样式');
   // 来源可追性：夹具必须交代自己是怎么来的。采集工具链随仓发布（tools/browser-shot.mjs 驱动、
-  // tools/build-dom-dump.mjs 汇编），档里点名；步骤场景脚本属开发期工件、不随仓发布。
+  // tools/build-dom-dump.mjs 汇编），档里点名；采集步骤脚本属开发期工件、不随仓发布。
   assert.match(dump, /采集工具链随仓发布（`tools\/browser-shot\.mjs` 驱动取证、`tools\/build-dom-dump\.mjs` 汇编成档）/u, '夹具须声明采集来源口径');
 });
 
@@ -273,7 +273,7 @@ test('毫秒字段换算读数常驻（生效值＝控件值、样式与分隔�
   // 新结构（design §7.2.1）：外壳 gap＝6px，负边距定值按真页实测同步（-6px）。
   assert.match(dump, /fontSize=`12px`、color=`rgb\(129, 133, 140\)`、marginTop=`-6px`/u, '读数行应为 12px 三级色＋-6px 负边距（贴住官方校验文案行）');
   // 新结构（design §7.2.1）：数字字段进字段外壳后，秒数行的后继是展开说明区（展开时）或下一字段的
-  // .dsafm_field；字段间分隔线统一 .dsafm_field + .dsafm_field，不再有平铺说明行锚点。宿主 CSS 模块哈希
+  // .dsafm_field；字段间分隔线统一 .dsafm_field + .dsafm_field，没有旧式说明行锚点。宿主 CSS 模块哈希
   // 随宿主版本变化（ui-primitives 改版后为 `_field_bjqpo_3`，0.2.0-rc.2 实测未变）；宿主升级后复核本档 DOM。
   assert.match(dump, /后继节点 class=`dsafm_field`/u, '秒数行的后继应为下一字段的外壳（或展开说明区）');
   // 实时行为边界声明在档。

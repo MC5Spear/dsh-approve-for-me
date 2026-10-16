@@ -15,6 +15,7 @@ import test from 'node:test';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { rmTree } from './helpers/rm-tree.mjs';
 
 import {
   EXEMPT,
@@ -132,7 +133,7 @@ test('结构变异：`.gitignore` 少了本机例外那一条，结构判据必�
     const good = checkStructure(root, []);
     assert.equal(good.length, 0, `补上例外行后仍有结构违规：${JSON.stringify(good)}`);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    rmTree(root);
   }
 });
 
@@ -151,7 +152,7 @@ test('结构变异：源码直接写本机侧字面必须报红，配置加载�
     const exempt = checkStructure(root, ['tools/local-config.mjs']);
     assert.equal(exempt.length, 0, `配置加载器被误报：${JSON.stringify(exempt)}`);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    rmTree(root);
   }
 });
 
@@ -162,7 +163,7 @@ test('变异：跟踪文件落进本机侧的路径必须报红', () => {
     const hits = checkStructure(root, [j('.', 'local/docs/facts', '.md')]);
     assert.ok(hits.some((v) => v.label.includes('本机侧')), '跟踪到本机侧的文件没被报出来');
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    rmTree(root);
   }
 });
 
@@ -187,7 +188,7 @@ test('变异：豁免件带着本机指纹还在公开层里时，「发布前�
     assert.deepEqual(auditExempt(root), [], '文件不在树里时待办仍在报');
   } finally {
     EXEMPT.delete(probe);
-    rmSync(root, { recursive: true, force: true });
+    rmTree(root);
   }
 });
 
@@ -211,6 +212,6 @@ test('反例：临时工单归档后不得再被豁免（重新放回公开层�
     assert.ok(hits.length > 0, '归档的临时工单被放回公开层却没报红——豁免撤销失效了');
     assert.equal(auditExempt(root).length, 0, '它已不在豁免清单里，不该出现在「发布前待办」中');
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    rmTree(root);
   }
 });

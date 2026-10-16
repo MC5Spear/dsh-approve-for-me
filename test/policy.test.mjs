@@ -75,7 +75,8 @@ test('screen：超过 allowEscalationTo 直接 deny', () => {
 });
 
 test('screen：denyPatterns 命中直接 deny，未命中进 review', () => {
-  const denied = screen(escalation(), located({ command: 'rm -rf /' }), baseConfig);
+  // 样例用 mkfs：命中出厂规则、不触硬性拦截层（rm -rf 现由硬性拦截先拒，见 hard-block 矩阵）。
+  const denied = screen(escalation(), located({ command: 'mkfs /dev/sda1' }), baseConfig);
   assert.equal(denied.action, 'deny');
   assert.match(denied.why, /deny pattern/);
 
@@ -86,7 +87,7 @@ test('screen：denyPatterns 命中直接 deny，未命中进 review', () => {
 });
 
 test('screen：日常命令不被规则误判', () => {
-  for (const command of ['npm install', 'git status', 'cargo test --all', 'rm -rf ./target/debug', 'rm -f ./tmp.log', 'Get-ChildItem -Recurse .\\src']) {
+  for (const command of ['npm install', 'git status', 'cargo test --all', 'rm ./target/debug/build.log', 'rm -f ./tmp.log', 'Get-ChildItem -Recurse .\\src']) {
     const verdict = screen(escalation(), located({ command }), baseConfig);
     assert.equal(verdict.action, 'review', `期望进入审查：${command}（${verdict.why}）`);
   }
@@ -114,12 +115,13 @@ test('引号/斜杠包裹的危险词仍命中（前锚＝非字母数字边界�
   // 反面参照：锚若只认 (^|[;&|\s])，这三例的包裹字符（'、"、/）都不在锚类里 → 放行进审查；现锚统一命中。
   for (const command of ["bash -c 'mkfs /dev/sda1'", 'cmd /c "format c:"', '/sbin/mkfs /dev/sda1']) {
     const verdict = screen(escalation(), located({ command }), baseConfig);
-    assert.equal(verdict.action, 'deny', `应拒止：${command}（${verdict.why}）`);
+    assert.equal(verdict.action, 'deny', `应拒绝：${command}（${verdict.why}）`);
   }
 });
 
 test('主体全量过检：毒在后位键或嵌套键同样 deny 且 reason 写明键路径', () => {
-  const back = screen(escalation(), located({ command: 'ls', script: 'rm -rf /' }), baseConfig);
+  // 样例用 mkfs：后位键命中出厂规则、不触硬性拦截层（硬性拦截的键路径断言在 hard-block 矩阵）。
+  const back = screen(escalation(), located({ command: 'ls', script: 'mkfs /dev/sda2' }), baseConfig);
   assert.equal(back.action, 'deny');
   assert.match(back.why, /key "script"/);
   assert.match(back.reason, /键 "script"/);
@@ -138,10 +140,10 @@ test('误伤口径钉住：词内命中 deny、更长标识符的真后缀放行
   assert.equal(screen(escalation(), located({ command: 'mymkfs --help' }), baseConfig).action, 'review');
 });
 
-test('回归：既有命中形态仍拒止（锚定只收紧不放松）', () => {
+test('回归：既有命中形态仍拒绝（锚定只收紧不放松）', () => {
   for (const command of ['rm -rf /', 'mkfs.ext4 /dev/sda1', 'shutdown now', 'dd if=/dev/zero of=/dev/sda']) {
     const verdict = screen(escalation(), located({ command }), baseConfig);
-    assert.equal(verdict.action, 'deny', `应继续拒止：${command}（${verdict.why}）`);
+    assert.equal(verdict.action, 'deny', `应继续拒绝：${command}（${verdict.why}）`);
   }
 });
 
@@ -157,7 +159,9 @@ test('未配置实例的生效配置 denyPatterns 为空数组；显式写入出
 });
 
 test('场景回归：提交说明含出厂清单样例文本的 git commit 默认进审查', () => {
-  const command = 'git commit -m "docs: warn about Remove-Item -Recurse -Force on C:\\Users\\ dirs"';
+  // 样例文本用 format c:：随命令走的提交说明命中出厂规则、不触硬性拦截层
+  // （说明里含 Remove-Item -Recurse 一类硬性拦截形态时按硬性拦截拒绝，属新增的偏多拦口径）。
+  const command = 'git commit -m "docs: warn about format c: data loss in guides"';
   // 默认侧走真 normalizeConfig()（未配置实例的生效配置），使「默认改回出厂清单」变异可检出。
   assert.equal(screen(escalation(), located({ command }), normalizeConfig()).action, 'review');
   // 同命令在显式配置清单下仍被规则强制拒绝（原行为——墙仍在，默认不装填）。

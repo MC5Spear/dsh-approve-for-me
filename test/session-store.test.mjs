@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { READ_TTL_MS, createSessionStore } from '../lib/session-store.js';
+import { rmTree } from './helpers/rm-tree.mjs';
 
 /**
  * 建一个测试用临时目录；用例结束自动清理。
@@ -12,7 +13,7 @@ import { READ_TTL_MS, createSessionStore } from '../lib/session-store.js';
  */
 function makeDir(t) {
   const dir = mkdtempSync(join(tmpdir(), 'dsafm-store-'));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  t.after(() => rmTree(dir));
   return dir;
 }
 

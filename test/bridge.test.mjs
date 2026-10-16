@@ -9,7 +9,7 @@ import test from 'node:test';
  * 需要实跑时：`node --import ./tools/_host-hooks.mjs --test test/bridge.test.mjs`。
  *
  * **只吞「宿主包解析不到」这一种失败**：语法错误、模块内部抛错、被依赖的相对文件缺失都必须让本文件红着，
- * 否则会变成「跳过＝通过」的假绿（`npm run check` 另行兜住 `lib/**` 的语法）。
+ * 否则会变成「跳过＝通过」的假绿（`npm run check` 另行接住 `lib/**` 的语法）。
  * @returns {Promise<object | undefined>} 模块；宿主包不可解析时为 `undefined`。
  */
 async function loadBridge() {
@@ -657,7 +657,7 @@ testHost('traceRecords：readFailed=true 透传（design §8.3）；traceRecord 
   assert.deepEqual(degradedInstance.traceRecords('s1'), { records: [], readFailed: true });
 
   const rows = [
-    { reviewId: 's1:c1:review:ap1', kind: 'review', approvalId: 'ap1', callId: 'c1', toolName: 'pwsh', origin: 'main', startedAt: 1000, endedAt: 2500, queueMs: 100, reviewMs: 1000, decision: 'error', model: 'zai/glm-5.3', layer: 'session', attempts: 2, evidence: 'EV', probes: 'read_file:ok', configTag: 'a1b2c3d4e5f6', policyTag: 'zh:missing', reason: '审查未执行：queue-overflow', truncated: false },
+    { reviewId: 's1:c1:review:ap1', kind: 'review', approvalId: 'ap1', callId: 'c1', toolName: 'pwsh', origin: 'main', startedAt: 1000, endedAt: 2500, queueMs: 100, reviewMs: 1000, decision: 'error', model: 'zai/glm-5.3', layer: 'session', attempts: 2, evidence: 'EV', probes: 'read_file:ok', configTag: 'a1b2c3d4e5f6', policyTag: 'zh:missing', capture: 'full', reason: '审查未执行：queue-overflow', truncated: false },
     { reviewId: 's1:c1:settle:ap1', kind: 'settle', approvalId: 'ap1', callId: 'c1', toolName: 'pwsh', origin: 'subagent', preset: 'auto-approve', startedAt: 1000, endedAt: 2900, outcome: 'rejected', source: 'llm', stage: 'queue', degraded: 'queue-overflow', truncated: false },
   ];
   const instance = service({ traceStore: traceStoreOf(rows) });
@@ -674,6 +674,7 @@ testHost('traceRecords：readFailed=true 透传（design §8.3）；traceRecord 
   assert.equal(record.evidence, 'EV');
   assert.equal(record.probes, 'read_file:ok');
   assert.equal(record.configTag, 'a1b2c3d4e5f6');
+  assert.equal(record.capture, 'full', '投影白名单透出记录级 capture 生效标记（design §8.2）');
   assert.equal(record.origin, 'main', 'origin 取审查记录（在场优先）');
   assert.deepEqual(instance.traceRecord('s1', 'missing'), { record: null });
 });
@@ -692,7 +693,7 @@ testHost('traceRecord：旧格式行详情只在场才写补充键——不把 n
   // 在场的字符串照常透出（reason 与 subject 都是列表字段，null 允许）。
   assert.equal(record.subject, 'edit a.ts');
   // 补充字段（详情 optional 键）一个都不该出现为 null：要么在场、要么键不存在。
-  for (const field of ['stage', 'layer', 'attempts', 'preset', 'tools', 'fieldsDefaulted', 'degraded', 'evidence', 'probes', 'configTag', 'policyTag', 'tokens', 'prompt', 'input', 'reasoning', 'output']) {
+  for (const field of ['stage', 'layer', 'attempts', 'preset', 'tools', 'fieldsDefaulted', 'degraded', 'capture', 'evidence', 'probes', 'configTag', 'policyTag', 'tokens', 'prompt', 'input', 'reasoning', 'output']) {
     if (field in record) assert.notEqual(record[field], null, `旧格式详情的 ${field} 在场时不为 null`);
   }
   assert.equal(record.stage, undefined, '旧格式行不带 stage：键必须缺失而非 null');

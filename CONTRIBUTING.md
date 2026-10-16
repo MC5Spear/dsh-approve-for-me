@@ -53,7 +53,7 @@ npm run probe:typert        # 离线校验 ./typert 清单
 | `npm run probe:llm`（`tools/probe-llm-tools.mjs`） | 需要网络和用户提供的 LLM 凭据；无凭据或网络不可达时打印 `RESULT: SKIP — 未验证`，跳过不算通过 |
 | `npm run probe:reviewer`（`tools/probe-reviewer-live.mjs`） | 需要真实 LLM 凭据（从 `$DSH_HOME/.credentials.yaml` 的 `refs.DEEPSEEK_API_KEY` 读，输出不含密钥） |
 
-涉及真实实例的端到端验证请在你**自己的实例**上跑。那类取证工具（`tools/browser-shot.mjs` 浏览器驱动、`tools/probe-rpc.mjs` 实例 RPC 探针、`tools/probe-composer-dom.mjs` 页面结构探针等）**随本仓发布**：接入坐标（实例地址、token 文件、浏览器路径、输出目录）一律经 `tools/local-config.mjs` 给定或显式传参，脚本不含机器事实，可在你自己的实例上排障取证；**运行产物**（截图、DOM 转储、步骤场景）落在本机配置的输出目录，不进提交。
+涉及真实实例的端到端验证请在你**自己的实例**上跑。那类取证工具（`tools/browser-shot.mjs` 浏览器驱动、`tools/probe-rpc.mjs` 实例 RPC 探针、`tools/probe-composer-dom.mjs` 页面结构探针等）**随本仓发布**：接入坐标（实例地址、token 文件、浏览器路径、输出目录）一律经 `tools/local-config.mjs` 给定或显式传参，脚本不含机器事实，可在你自己的实例上排障取证；**运行产物**（截图、DOM 转储、步骤脚本）落在本机配置的输出目录，不进提交。
 
 ## 本仓自身约定（fork 维护者参考）
 

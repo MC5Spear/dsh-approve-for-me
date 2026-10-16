@@ -154,6 +154,7 @@ test('onReview：成功审查后恰好调用一次，判定相关字段与 Verdi
   assert.equal(entry.fieldsDefaulted, '', '无字段缺失时 fieldsDefaulted 为空串');
   assert.match(entry.configTag, /^[0-9a-f]{12}$/, 'configTag 是稳定串摘要的前 12 位十六进制');
   assert.match(entry.policyTag, /^(zh|en):(missing|[0-9a-f]{12})$/, 'policyTag 带语言与策略文件摘要');
+  assert.equal(entry.capture, 'summary', '记录级 capture 生效标记＝请求快照档（未配置即 summary）');
   assert.equal(verdict.queueMs, 4, 'queueMs 随判定返回给 gate 结算');
 });
 
@@ -174,6 +175,57 @@ test('onReview：subject/reason 超出 maxEntryBytes 时首尾保留并置 trunc
   assert.ok(entry.reason.includes('<truncated bytes='), '截断标记在场');
   assert.ok(entry.reason.startsWith('x') && entry.reason.endsWith('x'), '首尾保留');
   assert.ok(Buffer.byteLength(entry.reason, 'utf8') <= 64 + 96, '裁剪后不显著超出预算（标记本身占字节）');
+  assert.equal(entry.capture, 'summary', '截断路径同样携带 capture（缺省档等值）');
+});
+
+test('onReview：模型不可用早退仍携带 capture（full 档不因未进模型流丢失）', async () => {
+  const h = harness([], {
+    cfg: {
+      resolution: { provider: 'p1', model: 'm1', layer: 'unavailable', effort: 'low' },
+      ui: { trace: { capture: 'full' } },
+    },
+  });
+  const verdict = await h.review();
+  assert.equal(verdict.decision, 'error', '模型不可用按故障拒绝');
+  assert.equal(h.entries.length, 1, '早退路径同样落一条审查记录');
+  const entry = h.entries[0];
+  assert.equal(entry.capture, 'full', '早退记录仍携带请求快照的 capture 档');
+  assert.equal(entry.decision, 'error');
+  assert.equal(entry.attempts, 0, '未进入模型流，attempts 记 0');
+});
+
+test('onReview：提示构建抛错仍携带 capture（错误路径记录不缺 capture 标记）', async () => {
+  const entries = [];
+  const reviewer = createReviewer({
+    llm: { stream() { throw new Error('unreachable'); } },
+    blocks: { BlockAssembler: FakeAssembler },
+    messages,
+    tools: { schemas: [], run: async () => ({ text: 'x', isError: false }) },
+    prompt: {
+      buildSystem: () => {
+        throw new Error('prompt boom');
+      },
+      buildUserTexts: () => ({ evidenceText: 'EV', actionText: 'ACTION' }),
+    },
+    audit: () => {},
+    onReview: (entry) => entries.push(entry),
+  });
+  const verdict = await reviewer.review(
+    { toolName: 'pwsh', reason: 'escalate sandbox: x' },
+    { command: 'npm i' },
+    { fields: {}, evidence: 'E' },
+    {
+      reviewer: { maxTokens: 0, temperature: 0, maxToolSteps: 4, timeoutMs: 1000 },
+      audit: {},
+      resolution: { provider: 'p1', model: 'm1', layer: 'user', effort: 'low' },
+      ui: { trace: { capture: 'full' } },
+    },
+    { id: 'r1', signal: new AbortController().signal },
+  );
+  assert.equal(verdict.decision, 'error', '提示构建抛错收敛为故障拒绝（review 永不抛出）');
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].capture, 'full', '错误路径记录仍携带请求快照的 capture 档');
+  assert.equal(entries[0].decision, 'error');
 });
 
 test('onReview：redactText 先于裁剪套用（脱敏后不再出现敏感串）', async () => {
@@ -224,6 +276,7 @@ test('onReview：capture=off 时不收集 prompt/input/reasoning/output 全文�
   // 摘要字段与判定不受采集档影响。
   assert.equal(entry.decision, 'deny');
   assert.equal(entry.model, 'p1/m1');
+  assert.equal(entry.capture, 'off', 'off 档等值携带 capture 标记（三档枚举齐全）');
 });
 
 test('onReview：capture=full 时收集提示词、送审命令、思维链（跨轮累加）与最终正文', async () => {
@@ -332,7 +385,7 @@ test('index 接线：record 收到 sessionId/callId/toolName，配置签名变�
     llm: {
       listProviders: () => [{ id: 'deepseek-official' }],
       resolveModelInfo: async () => ({ reasoning: { efforts: [{ id: 'low' }] } }),
-      // 同步抛错即可：reviewer 内部兜成 decision=error，finish 仍会落一条记录，不需要真流。
+      // 同步抛错即可：reviewer 内部收束为 decision=error，finish 仍会落一条记录，不需要真流。
       stream: () => {
         throw new Error('stream exploded');
       },
@@ -409,7 +462,7 @@ test('index 接线：record 收到 sessionId/callId/toolName，配置签名变�
   }
 });
 
-// ── ISS-20／ISS-28 真链：上下文采集与命令回查降级贯通审查装配（T3–T7／L1–L4） ────────
+// ── 真链：上下文采集与命令回查降级贯通审查装配（T3–T7／L1–L4） ────────
 
 /**
  * 跑一次完整审批并捕获送审证据段与落盘审查记录（真 gate→screen→reviewer→record 链）。
@@ -457,7 +510,7 @@ async function contextChain(options = {}) {
         return () => {};
       },
       // 宿主侧服务读取器（index 经 ctx.get 取）：预设判定先读服务、不依赖会话事件折叠——
-      // snapshotEvents 失效场景仍能接管到审查（foldPresetEvent 只作回退）。
+      // snapshotEvents 不可用（抛错或接口缺失）时仍能接管到审查（foldPresetEvent 只作回退）。
       get: (key) =>
         key === 'permissionPresets'
           ? { current: () => 'auto-approve' }
@@ -467,7 +520,7 @@ async function contextChain(options = {}) {
       llm: {
         listProviders: () => [{ id: 'deepseek-official' }],
         resolveModelInfo: async () => ({ reasoning: { efforts: [{ id: 'low' }] } }),
-        // 捕获送审证据段（首条消息文本）后抛错：reviewer 兜成 error 判定，记录照落。
+        // 捕获送审证据段（首条消息文本）后抛错：reviewer 收束为 error 判定，记录照落。
         stream: (streamOptions) => {
           evidenceTexts.push(streamOptions?.messages?.[0]?.content?.[0]?.text ?? '');
           throw new Error('stream exploded');
@@ -605,7 +658,7 @@ test('L3 真链：header.cwd 缺失 → degraded 含 cwd（无 command，回查�
   }
   assert.ok(result.reviewRow.degraded.includes('cwd'), '目录缺失：记录 degraded 含 cwd');
   assert.ok(!result.reviewRow.degraded.includes('command'), '回查成功：不含 command 标记');
-  assert.ok(result.reviewRow.subject, 'subject 照常（按工具名与理由兜底）');
+  assert.ok(result.reviewRow.subject, 'subject 照常（按工具名与理由回退）');
 });
 
 test('L4 真链反例：正常回查（命令与目录齐备）→ degraded 不含 cwd/command', async (t) => {

@@ -27,7 +27,7 @@ if (!cssScope) throw new Error('CSS 收窄数据缺失（DUMP-A 无 scoped 段�
 const { text, controls: inputs, dsafmClasses, seconds } = dumpA.value;
 const lines = [];
 lines.push('# 设置表单 DOM 证据档（结构判据＋毫秒字段秒数读数；机器可核留档）', '');
-lines.push('- 采集：' + new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10) + '，真实部署实例（loopback）。采集工具链随仓发布（`tools/browser-shot.mjs` 驱动取证、`tools/build-dom-dump.mjs` 汇编成档），本次采集的步骤场景脚本属开发期工件、不随仓发布。主取证步骤含暂存往返（暂存不保存→重开读旧值→保存 unset→复原）；换算读数（seconds 段）与 CSS 收窄扫描（scoped 段，只读本包注入的 `style[data-plugin-css="dsh-approve-for-me"]`）并入同一脚本。');
+lines.push('- 采集：' + new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10) + '，真实部署实例（loopback）。采集工具链随仓发布（`tools/browser-shot.mjs` 驱动取证、`tools/build-dom-dump.mjs` 汇编成档），本次采集的采集步骤脚本属开发期工件、不随仓发布。主取证步骤含暂存往返（暂存不保存→重开读旧值→保存 unset→复原）；换算读数（seconds 段）与 CSS 收窄扫描（scoped 段，只读本包注入的 `style[data-plugin-css="dsh-approve-for-me"]`）并入同一脚本。');
 lines.push('- 入口路径：侧栏「插件」→ `dsh-approve-for-me` → 本包详情页；页面身份 `[data-plugin-detail="dsh-approve-for-me"]`。');
 lines.push('- 常驻断言：`test/settings-dom-dump.test.mjs` 读本文件逐项核对（变异验证：篡改本文件对应断言变红）。', '');
 lines.push('## 1. 详情页 DOM 文本（innerText，逐字；零命中「重置全部覆盖」「当前生效值」「跟随模型默认」）', '', '```text');
@@ -60,7 +60,7 @@ inputs.forEach((c, i) => {
 });
 lines.push('', '接管预设为多选 picker（button + aria-expanded），不计入本表。', '');
 lines.push('## 8. dsafm 类清单（容器内去重；退役类零残留）', '', [`dsafm_form`, ...dsafmClasses.filter((name) => name !== 'dsafm_form')].join(' / '), '');
-lines.push('退役类零残留：无 dsafm_row、dsafm_label、dsafm_section、dsafm_divider、dsafm_actions、dsafm_help、dsafm_map_block、dsafm_f_help（数字字段进字段外壳后平铺说明行退役）。`dsafm_chevron` 在场属下拉 picker 箭头；`dsafm_helpbtn_text` 为说明按钮的可见文字 span；`dsafm_numhost` 为数字字段承载官方输入组件的外壳容器（design §7.2.1）。', '');
+lines.push('退役类零残留：无 dsafm_row、dsafm_label、dsafm_section、dsafm_divider、dsafm_actions、dsafm_help、dsafm_map_block、dsafm_f_help（数字字段进字段外壳后旧式说明行退役）。`dsafm_chevron` 在场属下拉 picker 箭头；`dsafm_helpbtn_text` 为说明按钮的可见文字 span；`dsafm_numhost` 为数字字段承载官方输入组件的外壳容器（design §7.2.1）。', '');
 lines.push('## 9. 失败登录计数', '');
 lines.push(`- 采集前 \`BadPasswordAttempts=${arg('--f51-before', '未读')}\`，采集后 \`=${arg('--f51-after', '未读')}\`（Get-LocalUser 返回 null，如实留档未读；无头 Edge 启动次数以 shots-manifest 记录表为准；窗口阈值 10/10min，纪律 ≤5 次/10min）。`, '');
 lines.push('## 10. 毫秒字段换算读数（.dsafm_f_sec，干净页＝无暂存）', '');

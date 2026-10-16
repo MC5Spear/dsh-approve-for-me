@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { AUDIT_VERSION } from '../lib/audit.js';
+import { rmTree } from './helpers/rm-tree.mjs';
 
 /**
  * 宿主接线冒烟测试。
@@ -10,7 +11,7 @@ import { AUDIT_VERSION } from '../lib/audit.js';
  *   node --import ./tools/_host-hooks.mjs --test test/index.test.mjs
  *
  * **只吞「宿主包解析不到」这一种失败**：语法错误、模块内部抛错、被依赖的相对文件缺失都必须让本文件红着，
- * 否则会变成「跳过＝通过」的假绿（`npm run check` 另行兜住 `lib/**` 的语法）。
+ * 否则会变成「跳过＝通过」的假绿（`npm run check` 另行接住 `lib/**` 的语法）。
  * @returns {Promise<object | undefined>} 模块；宿主包不可解析时为 `undefined`。
  */
 async function loadHost() {
@@ -43,7 +44,7 @@ function makeCtx(entry = {}, services = {}) {
       return () => {};
     },
     get: (name) => services[name],
-    // 0.1.7：实现不再触碰设置服务（行 id 即命名空间，读写全在 profile patch 通道）。
+    // 实现不触碰设置服务（行 id 即命名空间，读写全在 profile patch 通道）。
     // 陷阱 Proxy：任何属性访问即失败——「实现还在调用 ctx.settings」会让测试变红而不是静默通过。
     settings: new Proxy({}, {
       get() {
@@ -90,7 +91,7 @@ test('apply 注册 prepend 应答者并写一行启动审计', async (t) => {
     t.skip('宿主包不可解析（离线环境）');
     return;
   }
-  // inject 声明（0.1.7）：不再依赖设置服务；漏一个都是加载期直接失败（纪律 3）。
+  // inject 声明：设置服务不在依赖内；漏一个都是加载期直接失败（纪律 3）。
   assert.deepEqual(host.inject, ['approval', 'llm', 'sessions']);
   const written = [];
   const original = process.stderr.write;
@@ -208,7 +209,7 @@ test('接线：rules 模式挂 session/created 监听且装载补扫翻可覆盖
   assert.equal(wiringOff.appendCalls.length, 0, 'off 模式不该发生任何翻策略');
 });
 
-test('接线：分叉会话按主会话对待——补扫与 session/created 都不翻策略（ISS-31）', async (t) => {
+test('接线：分叉会话按主会话对待——补扫与 session/created 都不翻策略', async (t) => {
   const host = await loadHost();
   if (host === undefined) {
     t.skip('宿主包不可解析（离线环境）');
@@ -497,7 +498,7 @@ async function wiredEnv(options = {}) {
     sessions: { list: () => [] },
   });
   env.injected = [];
-  // 模型目录延迟测试缝（ISS-17 真接线反例）：resolveModelInfo 延迟把等待注入装配阶段，
+  // 模型目录延迟测试缝（真接线反例）：resolveModelInfo 延迟把等待注入装配阶段，
   // 人工 request 起算的预算从请求进入就开始消耗。
   if (options.resolveDelayMs !== undefined) {
     const originalResolve = env.ctx.llm.resolveModelInfo.bind(env.ctx.llm);
@@ -549,7 +550,7 @@ async function wiredEnv(options = {}) {
 }
 
 test('真接线：有机 error ×3 打开冷却，第 4 个请求零流调用并注入通道故障＋breaker-open', async (t) => {
-  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { mkdtempSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const previousHome = process.env.DSH_HOME;
@@ -587,12 +588,12 @@ test('真接线：有机 error ×3 打开冷却，第 4 个请求零流调用并
     process.stderr.write = original;
     if (previousHome === undefined) delete process.env.DSH_HOME;
     else process.env.DSH_HOME = previousHome;
-    rmSync(home, { recursive: true, force: true });
+    rmTree(home);
   }
 });
 
-test('真接线：分叉会话人工通道在场——fallback=ask 审查失败后转人工（ISS-31）', async (t) => {
-  const { mkdtempSync, rmSync } = await import('node:fs');
+test('真接线：分叉会话人工通道在场——fallback=ask 审查失败后转人工', async (t) => {
+  const { mkdtempSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const previousHome = process.env.DSH_HOME;
@@ -625,7 +626,7 @@ test('真接线：分叉会话人工通道在场——fallback=ask 审查失败�
         ...base,
         agent: { ...base.agent, session: { ...base.agent.session, header: forkHeader } },
       };
-      // 审计断言逐形态独立成立：先清掉上一形态（装配行）的累积输出。
+      // 审计断言逐形态独立成立：先清掉上一形态（装配行）的累积写出。
       written.length = 0;
       // 人工替身：记录调用，延迟 30ms 按「用户点了拒绝」结算——等审查流先收束，
       // 走「确实交人工」的 handoff 路径（立即结算会走抢答路径，同样不写 handoff 行）。
@@ -644,12 +645,12 @@ test('真接线：分叉会话人工通道在场——fallback=ask 审查失败�
     process.stderr.write = original;
     if (previousHome === undefined) delete process.env.DSH_HOME;
     else process.env.DSH_HOME = previousHome;
-    rmSync(home, { recursive: true, force: true });
+    rmTree(home);
   }
 });
 
 test('真接线 I1：resolver 模型目录延迟 100ms × 人工预算 20ms（request 起算、关卡）→ 按人工超时拒绝', async (t) => {
-  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { mkdtempSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const previousHome = process.env.DSH_HOME;
@@ -689,12 +690,12 @@ test('真接线 I1：resolver 模型目录延迟 100ms × 人工预算 20ms（re
     process.stderr.write = original;
     if (previousHome === undefined) delete process.env.DSH_HOME;
     else process.env.DSH_HOME = previousHome;
-    rmSync(home, { recursive: true, force: true });
+    rmTree(home);
   }
 });
 
 test('真接线：请求取消引发的中止 ×3 带 superseded 不计数，第 4 个请求照常完整审查', async (t) => {
-  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { mkdtempSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const previousHome = process.env.DSH_HOME;
@@ -734,12 +735,12 @@ test('真接线：请求取消引发的中止 ×3 带 superseded 不计数，第
     process.stderr.write = original;
     if (previousHome === undefined) delete process.env.DSH_HOME;
     else process.env.DSH_HOME = previousHome;
-    rmSync(home, { recursive: true, force: true });
+    rmTree(home);
   }
 });
 
 test('真接线：同 (sessionId, callId) 双投递各自执行完整审查，完成后再次到达不复用结果（design §5.1）', async (t) => {
-  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { mkdtempSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const previousHome = process.env.DSH_HOME;
@@ -780,12 +781,12 @@ test('真接线：同 (sessionId, callId) 双投递各自执行完整审查，�
     process.stderr.write = original;
     if (previousHome === undefined) delete process.env.DSH_HOME;
     else process.env.DSH_HOME = previousHome;
-    rmSync(home, { recursive: true, force: true });
+    rmTree(home);
   }
 });
 
 test('真接线：装载→停用/卸载全程不解析、不改写用户 YAML——副本逐字节不变，无备用清理（design §9.2）', async (t) => {
-  const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = await import('node:fs');
+  const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const host = await loadHost();
@@ -849,14 +850,14 @@ test('真接线：装载→停用/卸载全程不解析、不改写用户 YAML�
     process.stderr.write = original;
     if (previousHome === undefined) delete process.env.DSH_HOME;
     else process.env.DSH_HOME = previousHome;
-    rmSync(home, { recursive: true, force: true });
+    rmTree(home);
   }
 });
 
 // ── 配置不可读的逃逸出口与同一对象再派发（真接线） ──────────────────────────
 
 test('§4.1 配置不可读时逃逸出口自含：不外抛、恰一条结算记录、审计行照写、通知走通道故障模板（en 回退）', async (t) => {
-  const { mkdtempSync, readFileSync, readdirSync, rmSync } = await import('node:fs');
+  const { mkdtempSync, readFileSync, readdirSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const host = await loadHost();
@@ -903,12 +904,12 @@ test('§4.1 配置不可读时逃逸出口自含：不外抛、恰一条结算�
     process.stderr.write = original;
     if (previousHome === undefined) delete process.env.DSH_HOME;
     else process.env.DSH_HOME = previousHome;
-    rmSync(home, { recursive: true, force: true });
+    rmTree(home);
   }
 });
 
 test('§4.1 在飞审查期间配置变不可读：审查记录仍落盘（redactText 回退默认清单，不整条丢失）', async (t) => {
-  const { mkdtempSync, readFileSync, readdirSync, rmSync } = await import('node:fs');
+  const { mkdtempSync, readFileSync, readdirSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const host = await loadHost();
@@ -947,12 +948,12 @@ test('§4.1 在飞审查期间配置变不可读：审查记录仍落盘（redac
   } finally {
     if (previousHome === undefined) delete process.env.DSH_HOME;
     else process.env.DSH_HOME = previousHome;
-    rmSync(home, { recursive: true, force: true });
+    rmTree(home);
   }
 });
 
 test('§4.2 同一性守卫（真接线）：在飞期间信号被第三方改写 → 收尾不覆盖新值', async (t) => {
-  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { mkdtempSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const host = await loadHost();
@@ -985,12 +986,12 @@ test('§4.2 同一性守卫（真接线）：在飞期间信号被第三方改�
   } finally {
     if (previousHome === undefined) delete process.env.DSH_HOME;
     else process.env.DSH_HOME = previousHome;
-    rmSync(home, { recursive: true, force: true });
+    rmTree(home);
   }
 });
 
 test('§4.1 逃逸出口的结算记录（getter 触发逃逸）：结算记录照常落盘，会话按缺省会话 - 归档', async (t) => {
-  const { mkdtempSync, readFileSync, readdirSync, rmSync } = await import('node:fs');
+  const { mkdtempSync, readFileSync, readdirSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const host = await loadHost();
@@ -1025,12 +1026,12 @@ test('§4.1 逃逸出口的结算记录（getter 触发逃逸）：结算记录�
   } finally {
     if (previousHome === undefined) delete process.env.DSH_HOME;
     else process.env.DSH_HOME = previousHome;
-    rmSync(home, { recursive: true, force: true });
+    rmTree(home);
   }
 });
 
 test('§5.1/§4.2 同一请求对象再派发：收尾恢复原始信号，再次到达按新请求处理（完整审查）', async (t) => {
-  const { mkdtempSync, readFileSync, readdirSync, rmSync } = await import('node:fs');
+  const { mkdtempSync, readFileSync, readdirSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const host = await loadHost();
@@ -1074,6 +1075,6 @@ test('§5.1/§4.2 同一请求对象再派发：收尾恢复原始信号，再�
   } finally {
     if (previousHome === undefined) delete process.env.DSH_HOME;
     else process.env.DSH_HOME = previousHome;
-    rmSync(home, { recursive: true, force: true });
+    rmTree(home);
   }
 });

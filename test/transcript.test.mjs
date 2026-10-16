@@ -90,7 +90,7 @@ test('回查双事件名兼容：tool/call 与 code-dispatch/ptc-dispatch 都命
   assert.equal(locate(callOf('tool/ptc-dispatch-start', 'subCallId', { command: 'ptc' })).command, 'ptc');
 });
 
-// ── ISS-20：采集层四类状态可分辨（design §3.1／§3.2） ──────────────────────
+// ── 采集层四类状态可分辨（design §3.1／§3.2） ──────────────────────
 
 test('T1 读取失败三形态（抛错／接口缺失／返回非数组）→ 恰为 transcript-read-failed、text 空、entries 0、truncated false', () => {
   // 形态一：snapshotEvents 抛错。

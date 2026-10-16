@@ -118,7 +118,7 @@ test('getState 三处同步：类型声明与成员描述都含 modelIssues，�
   assert.match(member.summary, /diagnostics/u);
 });
 
-// ── traceRecord 详情 capture 字段（design §8.2 词汇表／ISS-19 三处同步） ────────
+// ── traceRecord 详情 capture 字段（design §8.2 词汇表，三处同步） ────────
 
 /** 从清单取 traceRecord 的 invocation 与服务模型声明。 */
 function getTraceRecordParts() {

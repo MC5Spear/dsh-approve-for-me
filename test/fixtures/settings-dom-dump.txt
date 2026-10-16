@@ -1,6 +1,6 @@
 # 设置表单 DOM 证据档（结构判据＋毫秒字段秒数读数；机器可核留档）
 
-- 采集：2026-10-16，真实部署实例（loopback）。采集工具链随仓发布（`tools/browser-shot.mjs` 驱动取证、`tools/build-dom-dump.mjs` 汇编成档），本次采集的步骤场景脚本属开发期工件、不随仓发布。主取证步骤含暂存往返（暂存不保存→重开读旧值→保存 unset→复原）；换算读数（seconds 段）与 CSS 收窄扫描（scoped 段，只读本包注入的 `style[data-plugin-css="dsh-approve-for-me"]`）并入同一脚本。
+- 采集：2026-10-16，真实部署实例（loopback）。采集工具链随仓发布（`tools/browser-shot.mjs` 驱动取证、`tools/build-dom-dump.mjs` 汇编成档），本次采集的采集步骤脚本属开发期工件、不随仓发布。主取证步骤含暂存往返（暂存不保存→重开读旧值→保存 unset→复原）；换算读数（seconds 段）与 CSS 收窄扫描（scoped 段，只读本包注入的 `style[data-plugin-css="dsh-approve-for-me"]`）并入同一脚本。
 - 入口路径：侧栏「插件」→ `dsh-approve-for-me` → 本包详情页；页面身份 `[data-plugin-detail="dsh-approve-for-me"]`。
 - 常驻断言：`test/settings-dom-dump.test.mjs` 读本文件逐项核对（变异验证：篡改本文件对应断言变红）。
 
@@ -213,7 +213,7 @@ approve-for-me
 
 ## 6. 交付 CSS 串失效令牌零命中（收窄到本包 style 元素）
 
-本包注入样式 10054 字符（99 条规则）：`--dsw-alias-state-warning-primary`×0、`--dsw-alias-label-error`×0、`--dsw-alias-bg-layer-4`×0（页面级命中来自宿主/其它包样式，不属本包交付串）。
+本包注入样式 10419 字符（101 条规则）：`--dsw-alias-state-warning-primary`×0、`--dsw-alias-label-error`×0、`--dsw-alias-bg-layer-4`×0（页面级命中来自宿主/其它包样式，不属本包交付串）。
 关键规则原文：`.dsafm_form{display:flex;flex-direction:column;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary)}`；`.dsafm_save{appearance:none;border:1px solid transparent;border-radius:8px;padding:5px 14px;font-family:inherit;font-size:13px;line-height:1.5;cursor:pointer;background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3)}`；`.dsafm_helpbtn{display:inline-flex;align-items:center;gap:4px;justify-content:center;flex:none;min-width:24px;min-height:24px;padding:0 8px;border:0;border-radius:6px;background:none;color:var(--dsw-alias-label-secondary);cursor:pointer;font-family:inherit;font-size:12px;line-height:1.5}`；`.dsafm_input{flex:1;min-width:0;width:100%;height:34px;padding:0 12px;border:.5px solid var(--dsw-alias-border-l4);border-radius:8px;background:var(--dsw-alias-bg-layer-3);font-family:inherit;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-primary)}`。
 数字字段承载规则（design §7.2.1）：`.dsafm_numhost > div{padding:0}` 与 `.dsafm_numhost > div > div:first-child{display:none}`；退役规则（旧分隔线选择器组与 `.dsafm_f_help`）零残留=`true`；字段间分隔线统一 `.dsafm_field + .dsafm_field` 在场=`.dsafm_field + .dsafm_field{border-top:.5px solid var(--dsw-alias-border-l2)}`。
 
@@ -247,7 +247,7 @@ approve-for-me
 
 dsafm_form / dsafm_area / dsafm_badges / dsafm_button / dsafm_chevron / dsafm_ctl / dsafm_effort / dsafm_f_head / dsafm_f_hint / dsafm_f_label / dsafm_f_sec / dsafm_field / dsafm_footer / dsafm_helpbtn / dsafm_helpbtn_text / dsafm_input / dsafm_labelgroup / dsafm_map / dsafm_map_add / dsafm_map_head / dsafm_model / dsafm_numhost / dsafm_picker / dsafm_picker_meta / dsafm_picker_text / dsafm_reset / dsafm_save / dsafm_sec_draft / dsafm_sec_resolved / dsafm_stack
 
-退役类零残留：无 dsafm_row、dsafm_label、dsafm_section、dsafm_divider、dsafm_actions、dsafm_help、dsafm_map_block、dsafm_f_help（数字字段进字段外壳后平铺说明行退役）。`dsafm_chevron` 在场属下拉 picker 箭头；`dsafm_helpbtn_text` 为说明按钮的可见文字 span；`dsafm_numhost` 为数字字段承载官方输入组件的外壳容器（design §7.2.1）。
+退役类零残留：无 dsafm_row、dsafm_label、dsafm_section、dsafm_divider、dsafm_actions、dsafm_help、dsafm_map_block、dsafm_f_help（数字字段进字段外壳后旧式说明行退役）。`dsafm_chevron` 在场属下拉 picker 箭头；`dsafm_helpbtn_text` 为说明按钮的可见文字 span；`dsafm_numhost` 为数字字段承载官方输入组件的外壳容器（design §7.2.1）。
 
 ## 9. 失败登录计数
 

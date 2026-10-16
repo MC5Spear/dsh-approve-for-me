@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { createTraceStore, reviewIdOf } from '../lib/trace-store.js';
+import { rmTree } from './helpers/rm-tree.mjs';
 
 /**
  * 建一个测试用临时目录；用例结束自动清理。
@@ -12,7 +13,7 @@ import { createTraceStore, reviewIdOf } from '../lib/trace-store.js';
  */
 function makeDir(t) {
   const dir = mkdtempSync(join(tmpdir(), 'dsafm-trace-'));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  t.after(() => rmTree(dir));
   return dir;
 }
 
@@ -190,6 +191,26 @@ test('capture=off/summary 只落产品字段，full 才落详情', async (t) => 
   assert.equal(full.output, 'output text');
 });
 
+test('capture 标记字段专测：随摘要字段落盘，重放回读在场（design §8.2/§8.5.1）', async (t) => {
+  const dir = makeDir(t);
+  const writer = createTraceStore({ dir, capture: 'full' });
+  await writer.record(makeEntry({ approvalId: 'a1', capture: 'full' }));
+  await writer.flush();
+
+  // 落盘形态：标记随摘要字段词汇表进 JSONL 行（不属详情字段，不随档位裁剪消失）。
+  const [line] = readLines(join(dir, 's1.jsonl'));
+  const raw = JSON.parse(line);
+  assert.equal(raw.capture, 'full', 'capture 标记随行落盘');
+  assert.equal(raw.prompt, 'prompt text', 'full 档详情字段同段落盘');
+
+  // 回读形态：新实例重放窗口后标记仍在场——详情缺段分派的「未开启全文采集」判定依赖它。
+  const reader = createTraceStore({ dir });
+  const rows = reader.list('s1');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].capture, 'full', 'capture 标记经重放回读');
+  assert.equal(rows[0].prompt, 'prompt text');
+});
+
 test('full 档超 maxBytes 截断并置 truncated，多字节字符不切成残字', async (t) => {
   const dir = makeDir(t);
   const store = createTraceStore({ dir, capture: 'full', maxBytes: 16 });
@@ -284,6 +305,22 @@ test('reviews/ 文件数超 maxSessions 删最旧', async (t) => {
   // 留在限内的会话照常可查。
   assert.equal(store.list('a').length, 0);
   assert.equal(store.list('c').length, 1);
+});
+
+test('可见期语义（requirements §7）：旧记录可见期＝最近 50 个有记录的会话，触发逐出的新会话不受影响', async (t) => {
+  const dir = makeDir(t);
+  const store = createTraceStore({ dir }); // 默认 maxSessions＝50（requirements §5.3）
+  for (let i = 0; i < 50; i += 1) {
+    await store.record(makeEntry({ sessionId: `s${i}`, approvalId: `a${i}` }));
+    await store.flush();
+  }
+  // 第 51 个有记录的会话触发逐出：最旧的 s0 出了可见期，其余 50 个会话照常可见。
+  await store.record(makeEntry({ sessionId: 's50', approvalId: 'a50' }));
+  await store.flush();
+  assert.equal(store.list('s0').length, 0, '被逐出会话的记录不再可见');
+  assert.equal(store.list('s1').length, 1, '可见期内最旧会话仍可查（可见期＝最近 50 个有记录的会话）');
+  assert.equal(store.list('s50').length, 1, '触发逐出的新会话记录在场（不得误删刚创建的触发文件）');
+  assert.equal(readdirSync(dir).length, 50, '磁盘文件数保持在上限');
 });
 
 test('写失败：不抛错、返回 false、记录留在内存、审计一行 file-store-failed', async (t) => {

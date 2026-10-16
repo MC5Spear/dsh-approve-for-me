@@ -5,7 +5,7 @@
  */
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { AGENT_LANGS, AGENT_TEXT_KEYS, agentText, agentT, OUTPUT_CONTRACT, UNTRUSTED_NOTICE, REJECTION_INSTRUCTIONS_EN } from '../lib/agent-texts.js';
+import { AGENT_LANGS, AGENT_TEXT_KEYS, agentText, agentT, OUTPUT_CONTRACT, UNTRUSTED_NOTICE, REJECTION_INSTRUCTIONS_EN, REJECTION_INSTRUCTIONS_ZH } from '../lib/agent-texts.js';
 import { errorText } from '../lib/gate.js';
 import { buildSystem, buildUserTexts, tenantPolicy, systemPromptTemplate, toolBudgetExhausted, SYSTEM_PROMPT_TEMPLATE, TOOL_BUDGET_EXHAUSTED } from '../lib/prompt.js';
 
@@ -87,12 +87,17 @@ test('buildSystem：拼接模板+策略+契约，两语言各自成篇', () => {
   assert.notEqual(en, zh);
 });
 
-test('拒绝文本：en 末句＝codex REJECTION_INSTRUCTIONS 原文；zh 末句与其语义对齐', () => {
+test('拒绝文本：en 末句＝codex REJECTION_INSTRUCTIONS 原文；zh 末句三段与其逐句等价', () => {
   const enReject = agentT('en', 'gate.reject.body');
   assert.ok(enReject.endsWith(REJECTION_INSTRUCTIONS_EN), 'en 拒绝末句必须是 codex 原文');
   assert.match(REJECTION_INSTRUCTIONS_EN, /must not attempt to achieve the same outcome via workaround/u);
   const zhReject = agentT('zh', 'gate.reject.body');
   assert.match(zhReject, /不要用等价手段绕过该拒绝/u);
+  // zh 末句三段与 en 三句一一对应：禁止绕过／更安全方案或明确批准／否则停止并请求输入（requirements §4.3）。
+  const segments = REJECTION_INSTRUCTIONS_ZH.slice(0, -1).split('；');
+  assert.equal(segments.length, 3, 'zh 拒绝末句必须三段，缺段即安全指令弱于 en 档');
+  assert.match(REJECTION_INSTRUCTIONS_ZH, /否则停止并请求用户输入。$/u, '第三段＝安全停止指令（en「Otherwise, stop and request user input.」）');
+  assert.ok(zhReject.endsWith(REJECTION_INSTRUCTIONS_ZH), 'zh 拒绝正文以末句定稿常量收尾');
 });
 
 test('超时文案（两语言）都不含「绕过拒绝」末句（requirements §4.3）', () => {

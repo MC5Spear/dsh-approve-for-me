@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { agentLangOf, allowText, errorText, guardNext, onApprovalRequest, rejectText, REVIEW_SUPERSEDED, REVIEW_TIMEOUT_ABORT_MESSAGE, timeoutText } from '../lib/gate.js';
 import { createScheduler } from '../lib/scheduler.js';
-import { DEFAULT_DENY_PATTERNS } from '../lib/policy.js';
+import { DEFAULT_DENY_PATTERNS, screen } from '../lib/policy.js';
 
 /** 默认配置：审查超时 1 秒、人工通道关闭、注入范围 `all`。 */
 function baseConfig(overrides = {}) {
@@ -34,9 +34,9 @@ function makeRt(cfg, options = {}) {
     cfg: () => cfg,
     async configFor() {
       // 装配延迟测试缝（与 reviewDelayMs 同款）：把等待注入装配阶段——人工 request 起算的预算从
-      // 请求进入应答者就开始消耗，configFor 的耗时必须吃掉该预算（ISS-17 反例场景）。
+      // 请求进入应答者就开始消耗，configFor 的耗时必须吃掉该预算（反例：装配耗时挤占人工预算）。
       if (options.configForDelayMs !== undefined) await delay(options.configForDelayMs);
-      // 装配挂死测试缝（ISS-29）：永不 resolve，装配备用计时器是唯一出口。
+      // 装配挂死测试缝：永不 resolve，装配备用计时器是唯一出口。
       if (options.configForNever === true) await new Promise(() => {});
       if (options.configThrows === true) throw new Error('cfg boom');
       return cfg;
@@ -44,7 +44,7 @@ function makeRt(cfg, options = {}) {
     async locate() {
       return options.located ?? { command: 'npm i', cwd: 'C:/work', degraded: [] };
     },
-    // §5.3 计数缝（ISS-29 A1）：装配期/零值立即超时的计数调用在此计数（生产接线为 scheduler.record）。
+    // §5.3 计数缝：装配期/零值立即超时的计数调用在此计数（生产接线为 scheduler.record）。
     countTimeout() {
       state.countTimeouts += 1;
     },
@@ -90,7 +90,7 @@ function makeRt(cfg, options = {}) {
         settle(value);
       }, ms);
       const entry = { ms, label, promise, cleared: false };
-      // 手动触发缝（ISS-29）：装配计时器取先验时限（缺省 90 s），测试里手动提前到点。
+      // 手动触发缝：装配计时器取先验时限（缺省 90 s），测试里手动提前到点。
       entry.fire = () => {
         let value;
         try {
@@ -646,7 +646,7 @@ test('handoff 起算＋人工零时限＋关弹卡时不弹马上消失的卡片
   assert.equal(settle.humanWaitMs, undefined, '未交人工：humanWaitMs 缺失');
 });
 
-// ── ISS-17：人工 request 起算的预算覆盖装配前置等待（G1–G10） ────────────────────
+// ── 人工 request 起算的预算覆盖装配前置等待（G1–G10） ────────────────────
 
 test('G1 request 起算：configFor 延迟 100ms 耗尽 20ms 人工预算 → 不调 next，按人工超时拒绝（关卡）', async () => {
   const { rt, state, next } = makeRt(
@@ -820,9 +820,9 @@ test('G9 预算耗尽立即结算后，迟到的 allow 不改判、不重复通�
   assert.equal(state.pending.filter((entry) => entry.op === 'clear').length, 1, 'pending 清理恰一次');
 });
 
-// ── ISS-29：装配并入审查时限 ──────────────────────────────────────────────
+// ── 装配并入审查时限 ──────────────────────────────────────────────
 
-test('ISS-29 装配挂死：装配计时器按先验真实时限到点 → rejected/timeout，环节记装配，与真实超时同路计数', async () => {
+test('装配挂死：装配计时器按先验真实时限到点 → rejected/timeout，环节记装配，与真实超时同路计数', async () => {
   const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 30000 } }), {
     configForNever: true,
     verdict: { decision: 'allow', reason: 'never reached', toolCalls: 0, fields: {} },
@@ -846,7 +846,7 @@ test('ISS-29 装配挂死：装配计时器按先验真实时限到点 → rejec
   assert.equal(state.settles[0].outcome, 'rejected');
 });
 
-test('ISS-29 装配慢于真实时限：装配计时器按回溯起点到点拒绝（不开始尝试，环节记装配，计数）', async () => {
+test('装配慢于真实时限：装配计时器按回溯起点到点拒绝（不开始尝试，环节记装配，计数）', async () => {
   const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 30 } }), {
     configForDelayMs: 60,
     verdict: { decision: 'allow', reason: 'never reached', toolCalls: 0, fields: {} },
@@ -859,7 +859,7 @@ test('ISS-29 装配慢于真实时限：装配计时器按回溯起点到点拒�
   assert.equal(state.settles[0].stage, 'assembly');
 });
 
-test('ISS-29 装配慢但有限不误杀：消耗部分预算后审查照常竞速放行', async () => {
+test('装配慢但有限不误杀：消耗部分预算后审查照常竞速放行', async () => {
   const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 100 } }), {
     configForDelayMs: 40,
     verdict: { decision: 'allow', reason: 'ok', toolCalls: 0, fields: { risk: 'low', auth: 'high', tools: 0, degraded: 'none' } },
@@ -874,7 +874,7 @@ test('ISS-29 装配慢但有限不误杀：消耗部分预算后审查照常竞�
   assert.ok(reviewTimer && reviewTimer.ms <= 100 && reviewTimer.ms >= 1, '审查计时器用剩余预算');
 });
 
-test('ISS-29 装配期间取消：不弹卡、不审查，按 cancelled/signal 结算', async () => {  const controller = new AbortController();
+test('装配期间取消：不弹卡、不审查，按 cancelled/signal 结算', async () => {  const controller = new AbortController();
   const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 30000 } }), {
     configForDelayMs: 5000,
     reviewDelayMs: 5000,
@@ -891,7 +891,7 @@ test('ISS-29 装配期间取消：不弹卡、不审查，按 cancelled/signal �
   assert.ok(state.timers.every((entry) => entry.cleared === true), '计时器全清理');
 });
 
-test('ISS-29 装配竞速中止回调抛错：保持取消语义，不按装配超时、不计数（requirements §4.2）', async () => {
+test('装配竞速中止回调抛错：保持取消语义，不按装配超时、不计数（requirements §4.2）', async () => {
   const controller = new AbortController();
   const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 30000 } }), {
     configForDelayMs: 5000,
@@ -1239,7 +1239,7 @@ test('deny 判定仍用拒绝模板（末句逐字回归）', async () => {
   assert.match(state.injections[0], /本次升权请求被拒绝/u);
   assert.match(state.injections[0], /风险：high；授权证据：low/u);
   assert.equal(
-    state.injections[0].endsWith('不要用等价手段绕过该拒绝；改用更安全的替代方案，或在告知风险后请用户明确批准。'),
+    state.injections[0].endsWith('不要用等价手段绕过该拒绝；改用更安全的替代方案，或在告知风险后请用户明确批准；否则停止并请求用户输入。'),
     true,
     'deny 末句逐字不变',
   );
@@ -1398,6 +1398,26 @@ test('结算记录：规则直拒 → rejected/rule，subject/escalation 可查'
   assert.equal(settle.escalation, 'danger-full-access');
   assert.match(settle.reason, /命中拒绝模式/);
   assert.match(settle.subject, /npm i/);
+});
+
+test('结算记录：硬性危险拦截 → rejected/hard，审计行 source=hard，不调 LLM 不调 next（真实 screen 接线）', async () => {
+  // pre 取真实 screen() 输出（无害替身文本；判定是纯函数，不执行命令）——经 gate 全链映射到
+  // 结算 source=hard 与审计行 source=hard（design §12.1：与规则直拒同语义、来源可区分）。
+  const located = { command: 'Remove-Item -Recurse -Force C:\\probe\\harmless', cwd: 'C:/work', degraded: [], arguments: { command: 'Remove-Item -Recurse -Force C:\\probe\\harmless' } };
+  const pre = screen(request(), located, { mode: 'rules', tools: [], allowEscalationTo: 'danger-full-access', denyPatterns: [], unknownSubject: 'reject' });
+  assert.equal(pre.action, 'deny', '前置：真实 screen 应命中硬性危险拦截');
+  assert.equal(pre.fields.source, 'hard');
+  const { rt, state, next } = makeRt(baseConfig(), { pre, preset: 'auto-approve' });
+  const outcome = await onApprovalRequest(request(), next, rt);
+  assert.equal(outcome, 'rejected');
+  assert.equal(state.settles.length, 1);
+  assertSettleShape(state.settles[0], { outcome: 'rejected', source: 'hard' });
+  assert.match(state.settles[0].reason, /命中硬性危险拦截（hard-h1-powershell）/u);
+  const auditRow = state.audits.find((row) => row.phase === 'screen');
+  assert.equal(auditRow?.source, 'hard', '审计 screen 行 source 应为 hard（fields 覆盖）');
+  assert.match(auditRow?.reason, /hard-h1-powershell/u);
+  assert.equal(state.reviewSignals.length, 0, '硬性危险拦截不经 LLM：审查零调用（未经 LLM 直接拒绝）');
+  assert.equal(state.nextCalls, 0, '不调用 next()：宿主审批通道不参与');
 });
 
 test('结算记录：审查超时 → rejected/timeout，stage=review', async () => {

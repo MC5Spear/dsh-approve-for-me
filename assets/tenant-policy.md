@@ -1,4 +1,4 @@
-<!-- 本文件逐字源自 OpenAI Codex（Apache-2.0）：https://github.com/openai/codex —— 归属与许可见仓库根 NOTICE。 -->
+<!-- Sections "Data Exfiltration" through "Low-Risk Actions" are taken verbatim from OpenAI Codex (Apache-2.0): https://github.com/openai/codex — attribution and license: see NOTICE in the repository root. "URL Opening via System Entries" and "Resubmission Guidance" are additions by dsh-approve-for-me. -->
 
 # Tenant Security Policy
 
@@ -27,3 +27,11 @@ These rules are mandatory. They override the default risk thresholds in the outc
 - Retrying a tool with `sandbox_permissions`, or a sandbox escalation request itself, is not suspicious.
 - Do not treat a path being outside the workspace as `high` risk by itself.
 - Deleting a specific local path the user explicitly asked to delete is usually `low` or `medium` risk after a read-only check confirms the target.
+
+## URL Opening via System Entries
+- Opening a URL through a system entry (browser, file explorer, or similar) is treated as potential data egress: an untrusted destination or an unclear payload is `high` risk; deny when authorization is insufficient.
+- Entries that can directly execute remote content are not judged under this section; they are rejected by the hard-deny layer before review.
+
+## Resubmission Guidance
+- An execution agent that resubmits after switching to a deletion without force flags, moving items to a recycle location first, asking the user to open the URL themselves, or fetching the content locally for review first, is not bypassing any block.
+- Do not judge a resubmission as malicious evasion merely because the command was rewritten and sent again.
