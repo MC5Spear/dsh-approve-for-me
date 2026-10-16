@@ -22,7 +22,7 @@ try {
 const lines = readSessionLog(file).split('\n').filter((line) => line.trim().length > 0);
 console.log(`=== ${file}`);
 const header = JSON.parse(lines[0]);
-console.log(`header.id=${header.id} parentSession=${header.parentSession ?? '-'} delegationDepth=${header.delegationDepth ?? '-'}`);
+console.log(`header.id=${header.id} parentSession=${header.parentSession ?? '-'} delegationDepth=${header.delegationDepth ?? '-'} isSeeded=${header.isSeeded ?? '-'} origin=${header.origin ?? '-'}`);
 const events = lines.slice(1).map((line) => JSON.parse(line));
 for (const event of events) {
   const t = event.type;

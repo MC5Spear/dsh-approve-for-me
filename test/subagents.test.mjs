@@ -11,7 +11,7 @@ import {
 } from '../lib/subagents.js';
 
 /**
- * 构造假会话：header（parentSession）、事件流（permission/preset、approval/policy）、append 记录。
+ * 构造假会话：header（身份字段 parentSession/isSeeded/delegationDepth/origin）、事件流（permission/preset、approval/policy）、append 记录。
  * @param {object} [options] - 选项。
  * @returns {object} 假 session。
  */
@@ -43,13 +43,16 @@ function fakeSession(options = {}) {
   };
 }
 
-/** 三级链：root（无父）← mid ← child。 */
+/** 三级链：root（无父）← mid ← child；mid/child 用委派子会话的真实身份形态（design §2.2）。 */
 function chain(options = {}) {
   const root = fakeSession({ id: 'root', presets: options.rootPresets ?? ['auto-approve'] });
-  const mid = fakeSession({ id: 'mid', header: { parentSession: 'root' } });
+  const mid = fakeSession({
+    id: 'mid',
+    header: { parentSession: 'root', isSeeded: false, delegationDepth: 1, origin: 'subagent' },
+  });
   const child = fakeSession({
     id: 'child',
-    header: { parentSession: 'mid' },
+    header: { parentSession: 'mid', isSeeded: false, delegationDepth: 2, origin: 'subagent' },
     policies: options.childPolicies ?? [undefined],
     appendThrows: options.appendThrows,
   });
@@ -77,9 +80,35 @@ function harness(options = {}) {
 
 const ask = (session) => ({ agent: { session } });
 
-test('isDelegated：header.parentSession 存在即真', () => {
-  assert.equal(isDelegated(fakeSession({ header: { parentSession: 'root' } })), true);
-  assert.equal(isDelegated(fakeSession({ header: {} })), false);
+test('isDelegated：按身份识别（design §2.2）——委派子会话恒 depth≥1，分叉会话为假', () => {
+  // 非 seed 委派（depth 1）与 seed 式委派（isSeeded 真＋depth 2）都是委派子会话。
+  assert.equal(
+    isDelegated(fakeSession({ header: { parentSession: 'root', isSeeded: false, delegationDepth: 1, origin: 'subagent' } })),
+    true,
+  );
+  assert.equal(
+    isDelegated(fakeSession({ header: { parentSession: 'root', isSeeded: true, delegationDepth: 2, origin: 'subagent' } })),
+    true,
+    'seed 式委派 depth≥1，不得因 isSeeded 误判成分叉',
+  );
+  // 分叉会话：isSeeded 真且 depth 为 0（持久化回读）或缺席（内存新建主用例）。
+  assert.equal(
+    isDelegated(fakeSession({ header: { parentSession: 'root', isSeeded: true, delegationDepth: 0 } })),
+    false,
+  );
+  assert.equal(
+    isDelegated(fakeSession({ header: { parentSession: 'root', isSeeded: true } })),
+    false,
+    '内存新建分叉会话 delegationDepth 缺席',
+  );
+  // 非数值 depth 按缺席处理；残余组合按主会话对待。
+  assert.equal(
+    isDelegated(fakeSession({ header: { parentSession: 'root', isSeeded: true, delegationDepth: '1' } })),
+    false,
+  );
+  assert.equal(isDelegated(fakeSession({ header: { parentSession: 'root' } })), false);
+  // 主会话与缺形。
+  assert.equal(isDelegated(fakeSession({ header: { isSeeded: false, delegationDepth: 0 } })), false);
   assert.equal(isDelegated(fakeSession()), false);
   assert.equal(isDelegated(undefined), false);
 });
@@ -88,10 +117,14 @@ test('subagents written 容量：超 1000 会话后最旧淘汰（skip 行，des
   const { coverage, audits } = harness({ list: [] });
   // 1001 个互不相干的委派子会话：根不可达 → 各写一行 skip（键 sub|id|-）。
   for (let index = 0; index < 1001; index += 1) {
-    coverage.modeOf(ask(fakeSession({ id: `s${index}`, header: { parentSession: 'ghost' } })));
+    coverage.modeOf(
+      ask(fakeSession({ id: `s${index}`, header: { parentSession: 'ghost', isSeeded: false, delegationDepth: 1, origin: 'subagent' } })),
+    );
   }
   assert.equal(audits.length, 1001, '每个新会话各写一行 skip');
-  coverage.modeOf(ask(fakeSession({ id: 's0', header: { parentSession: 'ghost' } })));
+  coverage.modeOf(
+    ask(fakeSession({ id: 's0', header: { parentSession: 'ghost', isSeeded: false, delegationDepth: 1, origin: 'subagent' } })),
+  );
   assert.equal(audits.length, 1002, 's0 已被淘汰，再来＝新一行（变异：去掉容量淘汰 → 仍 1001）');
 });
 
@@ -144,7 +177,11 @@ test('onSessionCreated：根预设不在名单 → 零追加 + skip 审计', () 
 });
 
 test('onSessionCreated：根不可达（父不在表）→ 零追加 + skip 审计', () => {
-  const orphan = fakeSession({ id: 'orphan', header: { parentSession: 'gone' }, policies: [undefined] });
+  const orphan = fakeSession({
+    id: 'orphan',
+    header: { parentSession: 'gone', isSeeded: false, delegationDepth: 1, origin: 'subagent' },
+    policies: [undefined],
+  });
   const { coverage, audits } = harness({ list: [orphan] });
   coverage.onSessionCreated(orphan);
   assert.equal(orphan.appended.length, 0);
@@ -179,16 +216,22 @@ test('onSessionCreated：非委派会话（主会话）→ 不追加、无审计
   assert.equal(audits.length, 0);
 });
 
-test('sweep：对活表里的可覆盖委派会话补翻；主会话与已 ask 会话不动', () => {
+test('sweep：对活表里的可覆盖委派会话补翻；主会话、分叉会话与已 ask 会话不动', () => {
   const { child, mid, root, list } = chain({ childPolicies: [undefined] });
-  const alreadyAsk = fakeSession({ id: 'asked', header: { parentSession: 'root' }, policies: [{ policy: 'ask' }] });
-  const full = [root, mid, child, alreadyAsk];
+  const alreadyAsk = fakeSession({
+    id: 'asked',
+    header: { parentSession: 'root', isSeeded: false, delegationDepth: 1, origin: 'subagent' },
+    policies: [{ policy: 'ask' }],
+  });
+  const fork = fakeSession({ id: 'forked', header: { parentSession: 'root', isSeeded: true }, policies: [undefined] });
+  const full = [root, mid, child, alreadyAsk, fork];
   const { coverage } = harness({ list: full });
   coverage.sweep();
   assert.equal(child.appended.length, 1);
   assert.equal(alreadyAsk.appended.length, 0);
   assert.equal(root.appended.length, 0);
   assert.equal(mid.appended.length, 0);
+  assert.equal(fork.appended.length, 0, '分叉会话（isSeeded 真、depth 缺席）不被补翻');
 });
 
 test('modeOf：委派 + 根命中 → auto，审计 preset=subagent 每会话一行', () => {
@@ -214,6 +257,40 @@ test('modeOf：非委派会话 → undefined（落回预设分支）', () => {
   const { coverage } = harness({ list: [root] });
   assert.equal(coverage.modeOf(ask(root)), undefined);
   assert.equal(coverage.modeOf({}), undefined);
+});
+
+test('分叉会话（design §2.2 按主会话对待）：modeOf → undefined、不写子代理审计', () => {
+  // 根会话在表且预设命中。若退回仅按 parentSession 判委派，分叉会被误接管，本组断言须红。
+  const root = fakeSession({ id: 'root', presets: ['auto-approve'] });
+  const list = [root];
+  const { coverage, audits } = harness({ list, presetsById: { root: 'auto-approve' } });
+  const liveForm = ask(fakeSession({ id: 'fork-live', header: { parentSession: 'root', isSeeded: true }, policies: [undefined] }));
+  const reloadedForm = ask(
+    fakeSession({ id: 'fork-disk', header: { parentSession: 'root', isSeeded: true, delegationDepth: 0 }, policies: [undefined] }),
+  );
+  assert.equal(coverage.modeOf(liveForm), undefined, '内存新建分叉（depth 缺席）＝主会话形态');
+  assert.equal(coverage.modeOf(reloadedForm), undefined, '持久化回读分叉（depth 0）＝主会话形态');
+  assert.equal(audits.length, 0, '分叉会话不得产生子代理 skip/review 审计行');
+});
+
+test('分叉会话：onSessionCreated → 不追加审批策略、无审计（人工通道由主会话分支保留）', () => {
+  const root = fakeSession({ id: 'root', presets: ['auto-approve'] });
+  const fork = fakeSession({
+    id: 'forked',
+    header: { parentSession: 'root', isSeeded: true },
+    policies: [undefined],
+  });
+  const { coverage, audits } = harness({ list: [root, fork], presetsById: { root: 'auto-approve' } });
+  coverage.onSessionCreated(fork);
+  assert.equal(fork.appended.length, 0, '分叉会话保持宿主默认审批策略，不翻 ask');
+  assert.equal(audits.length, 0);
+});
+
+test('分叉会话：presetOf → undefined（按主会话分支取名，不沿根链）', () => {
+  const root = fakeSession({ id: 'root', presets: ['auto-approve'] });
+  const fork = fakeSession({ id: 'forked', header: { parentSession: 'root', isSeeded: true }, policies: [undefined] });
+  const { coverage } = harness({ list: [root, fork], presetsById: { root: 'auto-approve' } });
+  assert.equal(coverage.presetOf(ask(fork)), undefined);
 });
 
 test('createMode：coverage 先于预设分支；非委派不受影响', () => {

@@ -71,7 +71,7 @@ function subagentServices(options = {}) {
   const appendCalls = [];
   const child = {
     id: 'child-1',
-    header: { parentSession: 'root-1' },
+    header: { parentSession: 'root-1', isSeeded: false, delegationDepth: 1, origin: 'subagent' },
     snapshotEvents: () => [{ type: 'approval/policy', data: { policy: 'never', source: 'delegation' } }],
     append: options.appendThrows === true
       ? () => { throw new Error('append denied'); }
@@ -206,6 +206,38 @@ test('接线：rules 模式挂 session/created 监听且装载补扫翻可覆盖
   host.apply(envOff.ctx, { mode: 'off' });
   assert.equal(envOff.listeners.some((entry) => entry.event === 'session/created'), false);
   assert.equal(wiringOff.appendCalls.length, 0, 'off 模式不该发生任何翻策略');
+});
+
+test('接线：分叉会话按主会话对待——补扫与 session/created 都不翻策略（ISS-31）', async (t) => {
+  const host = await loadHost();
+  if (host === undefined) {
+    t.skip('宿主包不可解析（离线环境）');
+    return;
+  }
+  const appendCalls = [];
+  const fork = {
+    id: 'fork-1',
+    // 宿主 session/fork 的内存新建形态：只带 parentSession 与 isSeeded，无 delegationDepth。
+    header: { parentSession: 'root-1', isSeeded: true },
+    snapshotEvents: () => [{ type: 'approval/policy', data: { policy: 'never', source: 'delegation' } }],
+    append: (type, data) => { appendCalls.push({ type, data }); },
+  };
+  const services = {
+    sessions: {
+      list: () => [
+        { id: 'root-1', header: {}, snapshotEvents: () => [{ type: 'permission/preset', data: { preset: 'auto-approve' } }] },
+        fork,
+      ],
+    },
+    permissionPresets: { current: (session) => (session.id === 'root-1' ? 'auto-approve' : undefined) },
+  };
+  const env = makeCtx({ mode: 'rules' }, services);
+  host.apply(env.ctx, { mode: 'rules' });
+  // 装载补扫：根会话在表且预设命中，但分叉不是委派子会话，不得翻策略。
+  assert.equal(appendCalls.length, 0, '分叉会话被补扫翻策略（误当委派子会话）');
+  const created = env.listeners.find((entry) => entry.event === 'session/created');
+  assert.doesNotThrow(() => created.handler(fork));
+  assert.equal(appendCalls.length, 0, 'session/created 对分叉会话不得追加审批策略');
 });
 
 test('接线：监听器回退吞掉 append 异常，不外抛（双保险的外层）', async (t) => {
@@ -551,6 +583,63 @@ test('真接线：有机 error ×3 打开冷却，第 4 个请求零流调用并
     assert.match(written.join(''), /审查未执行：breaker-open（冷却中，拒绝密集或故障密集）/u);
     const attemptLines = written.join('').match(/phase=review [^\n]*reason="attempt 2\/2: provider 500"/g) ?? [];
     assert.equal(attemptLines.length, 3, '三次有机失败各留一条 attempt 2/2 的 review 审计');
+  } finally {
+    process.stderr.write = original;
+    if (previousHome === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = previousHome;
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('真接线：分叉会话人工通道在场——fallback=ask 审查失败后转人工（ISS-31）', async (t) => {
+  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const previousHome = process.env.DSH_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'afm-fork-'));
+  process.env.DSH_HOME = home;
+  const written = [];
+  const original = process.stderr.write;
+  process.stderr.write = (chunk) => {
+    written.push(String(chunk));
+    return true;
+  };
+  try {
+    // 两种分叉形态各一套装配：内存新建（delegationDepth 缺席，主用例）与持久化回读（depth 0）。
+    for (const forkHeader of [
+      { cwd: '<仓库目录>', parentSession: 's-root', isSeeded: true },
+      { cwd: '<仓库目录>', parentSession: 's-root', isSeeded: true, delegationDepth: 0 },
+    ]) {
+      const wired = await wiredEnv({
+        config: {
+          fallback: 'ask',
+          human: { timeoutMs: 60000, timeoutFrom: 'handoff' },
+        },
+      });
+      if (wired === undefined) {
+        t.skip('宿主包不可解析（离线环境）');
+        return;
+      }
+      const base = wired.makeRequest('cf1');
+      const request = {
+        ...base,
+        agent: { ...base.agent, session: { ...base.agent.session, header: forkHeader } },
+      };
+      // 审计断言逐形态独立成立：先清掉上一形态（装配行）的累积输出。
+      written.length = 0;
+      // 人工替身：记录调用，延迟 30ms 按「用户点了拒绝」结算——等审查流先收束，
+      // 走「确实交人工」的 handoff 路径（立即结算会走抢答路径，同样不写 handoff 行）。
+      // 若退回仅按 parentSession 判委派，分叉会被误判无头、next() 不会被调用——本断言须红。
+      let nextCalls = 0;
+      const outcome = await wired.answerer(request, () => {
+        nextCalls += 1;
+        return new Promise((resolve) => setTimeout(() => resolve('rejected'), 30));
+      });
+      assert.equal(nextCalls, 1, `分叉会话须恰好消费一次人工通道（I1）：${JSON.stringify(forkHeader)}`);
+      assert.equal(outcome, 'rejected');
+      assert.match(written.join(''), /phase=handoff/u, '交人工须留 handoff 审计行');
+      assert.match(written.join(''), /phase=decide[^\n]*source=human[^\n]*decision=rejected/u, '人工拒绝按 source=human 结算');
+    }
   } finally {
     process.stderr.write = original;
     if (previousHome === undefined) delete process.env.DSH_HOME;

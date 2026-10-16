@@ -59,9 +59,22 @@
 
 ### 2.2 子代理覆盖
 
-以会话头的 `parentSession` 识别委派，沿链找到根会话。只有根预设命中且子代理覆盖开启时追加 `approval/policy {policy:'ask'}`；不调用整预设设置，以免改写委派沙箱。
+委派子代理按会话身份识别，不以 `parentSession` 单独判定。兼容基准的唯一权威是需求 1.3（0.2.0-rc.2）。部署在用版本另有 0.1.7：两侧的会话头字段组合经会话头构造源码与会话库实测核验，完全同构，宿主升级后重验。现存形态：
 
-创建监听器在 `session/created` 中同步追加策略，在子代理首步执行前完成；事件只写宿主接受的 `policy` 字段，不增加自定义 `source`。装载补扫处理已经存在的会话。监听器内部捕获错误并审计，不让异常回滚宿主会话挂载。停止覆盖不追加撤销事件；子代理未获覆盖继续遵守宿主策略。发起者被识别为无人工通道，状态机不调用下一个人工应答者、不登记人工卡片状态。
+- 主会话：无 `parentSession`，`isSeeded=false`，`delegationDepth` 为 0（或缺席）；
+- 用户分叉（宿主 `session/fork`）：`parentSession` 有、`isSeeded=true`、`delegationDepth` 为 0（或缺席），无 `origin` 字段；
+- 非 seed 委派：`parentSession` 有、`isSeeded=false`、`delegationDepth` 不小于 1，`origin='subagent'`；
+- seed 式委派：`parentSession` 有、`isSeeded=true`、`delegationDepth` 不小于 1，`origin='subagent'`。宿主 dsh-subagent 的 `childSessionMeta` 以 seed 是否传入决定 `isSeeded`；`origin='subagent'` 恒设，与 `isSeeded` 无关。委派工具的 fork 后端（dsh-subagent-fork-in-process）经同一 `childSessionMeta` 构造，恒 `origin='subagent'`、`delegationDepth` 不小于 1，属委派子代理，不因构造方式判成分叉。
+
+识别规则：会话头带 `parentSession` 且 `delegationDepth` 不小于 1 的会话是委派子代理，含 seed 式委派。`delegationDepth` 不小于 1 的会话恒带 `parentSession`（见现存形态），本条件与需求按 `delegationDepth` 单独定义的外延相同。带 `parentSession` 且 `isSeeded` 为真、`delegationDepth` 为 0（或缺席）的会话是分叉会话，不是委派子代理。分叉判定用「`isSeeded` 为真且 `delegationDepth` 为 0（或缺席）」的联合条件，不能按「或」放宽——seed 式委派同样 `isSeeded` 为真，单看该字段会把子代理误判成分叉。`delegationDepth` 按数值判定，非数值按缺席处理。
+
+seed 边界标记（`session/end-seed`）就地追加事件、不改会话头；续传沿用原会话头，两者不产生上述之外的形态。其余带 `parentSession` 的组合不在现存形态内，按主会话对待：不追加策略、不关人工备用通道。
+
+分叉会话按主会话对待：创建监听器不追加审批策略；`modeOf` 返回 `undefined`，走本会话权限预设分支（含未知预设处置）；无头判定为假，人工备用通道保留，`fallback=ask` 照常转人工应答；审批记录按主会话记 `origin='main'`，`preset` 按主会话分支取名，不沿根链（见 8.2）。
+
+委派子代理沿 `parentSession` 上溯委派链找根会话；链断（父会话不在活会话表）或根会话不可判定时不覆盖。只有根预设命中且子代理覆盖开启时追加 `approval/policy {policy:'ask'}`，子会话现行策略已是 `ask` 时不重复追加；不调用整预设设置，以免改写委派沙箱。
+
+创建监听器在 `session/created` 中同步追加策略，在子代理首步执行前完成；事件只写宿主接受的 `policy` 字段，不增加自定义 `source`。装载补扫处理已经存在的会话。监听器内部捕获错误并审计，不让异常回滚宿主会话挂载。停止覆盖不追加撤销事件；子代理未获覆盖继续遵守宿主策略。识别、上溯与判定由 `lib/subagents.js` 承载（`isDelegated`、`rootOf`、`modeOf`、`presetOf`），无头判定复用同一识别（`lib/index.js` 的 `isHeadless`）。委派子代理被识别为无人工通道：状态机不调用下一个人工应答者、不登记人工卡片状态，`fallback=ask` 也按拒绝结算。
 
 ## 3. 审查输入、只读工具、策略与输出解析
 
@@ -190,7 +203,7 @@ DSH 敏感范围按实际 home 根判断，环境变量优先、缺省 `~/.dsh`�
 任一时限或内部异常 → 对应拒绝／取消语义并释放资源
 ```
 
-`next()` 至多调用一次。`ui.humanCardDuringReview` 开启时调用它启动人工等待；关闭时只在确实交人工时调用。无人工子代理不调用它。规则直接拒绝也不交人工。内部异常不转入 `fallback='ask'` 的人工通道，统一拒绝并记录。逃逸出口（即 8.4 的应答者逃逸）自身不得再抛。逃逸出口上生效配置读取一律防抛；应答者入口与状态机各自的最外层捕获生效配置读取的抛错时，按未取得配置处理，回退需求 5.3 的默认值——`language.agent` 为 `en`，脱敏用随包默认清单（静态，不读生效配置），注入上限 2048，注入开关 `all`。通知按通道故障处理，不是安全判定。写结算记录与审计行时自身的配置读取同样防抛：`preset` 取不到时该字段明确缺失，记录存储按需求 5.3 的默认采集档、窗口与预算继续落盘，审计默认开启并按默认行预算与脱敏清单继续写。任何生效配置异常都按拒绝结算、返回宿主并留痕，不外抛。
+`next()` 至多调用一次。`ui.humanCardDuringReview` 开启时调用它启动人工等待；关闭时只在确实交人工时调用。无人工通道的委派子代理不调用它。规则直接拒绝也不交人工。内部异常不转入 `fallback='ask'` 的人工通道，统一拒绝并记录。逃逸出口（即 8.4 的应答者逃逸）自身不得再抛。逃逸出口上生效配置读取一律防抛；应答者入口与状态机各自的最外层捕获生效配置读取的抛错时，按未取得配置处理，回退需求 5.3 的默认值——`language.agent` 为 `en`，脱敏用随包默认清单（静态，不读生效配置），注入上限 2048，注入开关 `all`。通知按通道故障处理，不是安全判定。写结算记录与审计行时自身的配置读取同样防抛：`preset` 取不到时该字段明确缺失，记录存储按需求 5.3 的默认采集档、窗口与预算继续落盘，审计默认开启并按默认行预算与脱敏清单继续写。任何生效配置异常都按拒绝结算、返回宿主并留痕，不外抛。
 
 ### 4.2 撤回机制
 
@@ -485,7 +498,7 @@ aria 语义：`aria-expanded` 表开合；`aria-controls` 关联展开区域 `he
 | `help.human.timeoutFrom` | 人工作答计时的起点：从审批请求起算＝交人工只使用剩余时间；从交人工起算＝交人工时重新开始计时。 | Where the human timer starts: from the approval request (the handoff only gets the remainder), or from the handoff itself. |
 | `help.allowEscalationTo` | 可自动批准的最高权限，只限制可送审或允许的升权范围；范围内仍须通过规则检查与模型审查，不等于自动批准全部操作。完全访问（默认）＝最宽；工作区内修改＝超出工作区写入的升权不放行。 | The widest permission auto-approval may grant. It bounds what may be reviewed or allowed; everything in range still passes the rule checks and the review — it is not a blanket approval. Full access (default) is widest; workspace write rejects wider escalations. |
 | `help.unknownSubject` | 无法辨认本次实际操作（如回查不到命令或参数）时的处置。直接拒绝＝不调用模型、立即拒绝；带缺失说明继续审查＝携带已取得的参数与上下文继续审查，缺失明确标记，不把缺失当作安全。 | When the actual action cannot be identified (say, no command or arguments could be recovered): reject refuses at once without the model; keep reviewing submits what was recovered with explicit missing-action marks — missing never counts as safe. |
-| `help.fallback` | 自动审查未允许（拒绝、超时或故障）时的处置。直接拒绝＝按拒绝结算；通知按「给执行助手的审批通知」的设置发送，选择「不发送」时不发任何通知。交给人工决定＝显示人工审批卡片等待你作答，人工作答等待上限到点按拒绝结算。子代理没有人工通道：未允许一律拒绝。 | What happens when the review does not approve (deny, timeout or failure): reject settles as a rejection; notices follow the "Approval notices to the agent" setting — send none sends nothing. Ask shows the human card until you answer or the human limit rejects. Subagents have no human channel — not allowed always means rejected. |
+| `help.fallback` | 自动审查未允许（拒绝、超时或故障）时的处置。直接拒绝＝按拒绝结算；通知按「给执行助手的审批通知」的设置发送，选择「不发送」时不发任何通知。交给人工决定＝显示人工审批卡片等待你作答，人工作答等待上限到点按拒绝结算。委派子代理没有人工通道：未允许一律拒绝；分叉会话按主会话对待，人工通道在场。 | What happens when the review does not approve (deny, timeout or failure): reject settles as a rejection; notices follow the "Approval notices to the agent" setting — send none sends nothing. Ask shows the human card until you answer or the human limit rejects. Delegated subagents have no human channel — not allowed always means rejected; forked sessions are treated as main sessions and keep the human channel. |
 | `help.ui.humanCardDuringReview` | 开启时，自动审查进行中即显示人工审批卡片：你可以在审批未完成时抢先作答，人工结果优先；已完成的结果不能由迟到点击推翻。关闭时，仅在确实交给人工后显示卡片。 | On: the human card shows while the review runs — you may answer first and the human answer wins; a settled result cannot be overturned by a late click. Off: the card appears only once the request is truly handed over. |
 | `help.ui.inject` | 发给执行助手（发起工具操作的 Agent）的审批通知范围：允许、拒绝、超时和故障＝四类都发送；仅拒绝、超时和故障＝允许不发送；选择「不发送」＝一条都不发送。审查记录视图的显示不受本开关影响。 | Which approval notices reach the acting agent: allow, deny, timeout and failures sends all four; deny, timeout and failures skips allow notices; send none sends no notices. The review-log view is unaffected by this switch. |
 | `help.ui.injectMaxBytes` | 发给执行助手的单条通知的字节上限，超出截断并附截断标记；0 不裁剪。限制对象只是通知，审查记录按会话独立保留，与该上限无关。 | Byte cap for one notice to the agent; longer text is trimmed with a marker, 0 does not trim. Only notices are capped — review records are kept per session and ignore this limit. |
@@ -575,9 +588,9 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
 | `reviewId` | 存储行主键，由会话、callId、`kind` 与审批实例 id 组成（见 8.3） |
 | `approvalId` | 审批实例 id，同一审批两类记录的共同关联键，也是客户端列表行的合并键（见 8.3） |
 | `callId` / `toolName` | 工具调用标识与工具名 |
-| `origin` | 审批发起方归属：`main` 主会话，`subagent` 被覆盖的委派子代理 |
+| `origin` | 审批发起方归属：`main` 主会话（分叉会话按主会话记 `main`，见 2.2），`subagent` 委派子代理 |
 | `escalation` | 本次请求的升权目标权限档（如 `workspace-write`、`danger-full-access`），未知目标照实记录 |
-| `preset` | 本次触发接管命中的权限预设名；子代理按根会话的命中名，规则直拒路径同源可得 |
+| `preset` | 本次触发接管命中的权限预设名；委派子代理按根会话的命中名，分叉会话按主会话分支取名、不用根链（见 2.2），规则直拒路径同源可得 |
 | `startedAt` / `endedAt` | 本类记录的起止时刻 |
 | `queueMs` / `reviewMs` / `humanWaitMs` | 分段耗时，互斥分解一次审批等待（见 8.5） |
 | `decision` | 审查判定：`allow`、`deny`、`error`；只描述模型侧结论 |
@@ -639,7 +652,7 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
 
 旧记录没有最终结果（`outcome` 缺失）时，列表行主位显示已记录的模型结论（「模型结论：…」），不冒充最终批准，并在行内附「未记录最终审批结果」说明；详情同样说明结果缺失。详情缺段的原因按 8.5.1 的五类可确认说明与统一缺省文案呈现，不归因于摘要采集。列表条数行下方常驻一行保留范围说明（`view.retention`，文案定稿见 8.5.1）：记录跟随产生它的会话；每会话回读最近一个窗口，磁盘按会话文件上限保留，超限删除最旧；减少采集不删除已有记录。该说明只陈述保留行为，不因列表为空或读取降级消失。
 
-分段耗时互斥分解一次审批等待：`queueMs` 在调度器测量（见 5.1）；`reviewMs` 在审查任务内测量，含装配与内部尝试、不含排队等待（排队由 `queueMs` 承载），中止时计至中止；`humanWaitMs` 从确实交人工（审查收束、卡片因等待人工而持有）起，到人工作答、人工超时、通道关闭或取消结算。未交人工的路径该段缺失——无头会话；`fallback=reject` 时审查收束即结算、不进入人工等待（`ui.humanCardDuringReview` 不改变该缺失）；`timeoutFrom=request` 的人工预算在交人工前耗尽（装配前置等待或审查期间，卡片开关两态同此）、未及交人工即结算；以及审查期间人工抢答。并行期的等待已由 `reviewMs` 承载，不重复计入。审批总耗时只累加在场的分段，缺失段显示 `—`，不按 0 计；每段至多计入一次。
+分段耗时互斥分解一次审批等待：`queueMs` 在调度器测量（见 5.1）；`reviewMs` 在审查任务内测量，含装配与内部尝试、不含排队等待（排队由 `queueMs` 承载），中止时计至中止；`humanWaitMs` 从确实交人工（审查收束、卡片因等待人工而持有）起，到人工作答、人工超时、通道关闭或取消结算。未交人工的路径该段缺失——无头会话（委派子代理，识别见 2.2）；`fallback=reject` 时审查收束即结算、不进入人工等待（`ui.humanCardDuringReview` 不改变该缺失）；`timeoutFrom=request` 的人工预算在交人工前耗尽（装配前置等待或审查期间，卡片开关两态同此）、未及交人工即结算；以及审查期间人工抢答。并行期的等待已由 `reviewMs` 承载，不重复计入。审批总耗时只累加在场的分段，缺失段显示 `—`，不按 0 计；每段至多计入一次。
 
 工具总耗时来自宿主工具记录，按调用关联；等式「工具总计 = 执行 + 审批」的审批一侧使用同一分段求和口径，净执行为非负的差值。关联失败只显示已知审批值，不能用零或猜测冒充测量。
 
@@ -757,7 +770,7 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
 
 | 主题 | 验证方式 |
 | --- | --- |
-| 接管与子代理 | 主／子会话、根链、未知预设、跳过、不改沙箱、创建监听失败及无人工通道矩阵 |
+| 接管与子代理 | 主／子会话、根链、未知预设、跳过、不改沙箱、创建监听失败及无人工通道矩阵；分叉会话（`isSeeded` 真＋`delegationDepth` 为 0／缺席）不判子代理、不追加策略、落本会话预设分支且人工备用在场——该键缺席为内存新建的主用例，持久化回读为 0 作补充，两种形态都测；seed 式委派（`isSeeded` 真＋`delegationDepth` 不小于 1）仍判子代理；被覆盖子代理的审批通知直接送达发起操作的子代理 |
 | 动作与授权 | 直接和双派发事件、非命令工具、零上下文、缺目录、真实参数／特殊自有键／共享无环对象／循环和深度边界；恶意指令只在证据段；无命令类键而其他键含危险字符串、命中显式规则时按规则直拒、理由带键路径，`unknownSubject` 两种取值交叉下规则扫描都执行 |
 | 敏感与资源 | 真文件、凭据名、DSH 根及链接别名、超大文件和候选、病态模式与事件循环响应；失败／超时不直接改判断 |
 | 输出 | 完整 JSON、最小 allow、散文恢复、字段补全、畸形、空、截断即使局部合法仍拒；原始与内部字段来源 |
@@ -779,7 +792,7 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
 ### 10.3 真实宿主与界面
 
 - 验证 allow 后实际工具执行、安全拒绝、人工时限、装配／审查／排队超时、取消和持续故障恢复。
-- 验证无浏览器时默认审批仍可完成，不因为人工卡片下游等待无限挂起；无头子代理全程不交人工。
+- 验证无浏览器时默认审批仍可完成，不因为人工卡片下游等待无限挂起；无头委派子代理全程不交人工，分叉会话按主会话照常转人工。
 - 设置页面在 `[data-plugin-detail="dsh-approve-for-me"]` 的配置区真实可见；修改保存与重开回读一致，新请求使用新值。删表单注册或改槽键时，页面验收必须失败。
 - 时限零值语义在草稿、保存读回和卡片中正确：审查零立即超时并指出到点环节，人工零立即拒绝、不出现等待瞬态。
 - 控件显隐用真实权限切换和宿主状态对照，不卡固定轮询周期；审批卡状态与同帧截图核对。
@@ -800,6 +813,7 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
 本章是当前实施与验证差距的唯一工作清单。完成后删除对应项，不保存修正历史。仍待办理：
 
 - 真实宿主核验余量（10.3 清单，宿主环境阻塞）：allow 后实际工具执行、卡片状态与同帧截图等待真机审批流——服务实例（session 0，沙箱后端不可用：`CreateRestrictedToken prerequisite failed: no logon SID`）升权在到达审批通道前失败，待交互式会话宿主环境后补验；反向双标注与旧格式行的真页面样本未取得，由单元测试与真页面机制验证覆盖。
+- 分叉会话真机核验余量（10.3）：fork 样本在真机实例按主会话接管、审批记录 `origin='main'` 的取证——装载新代码需服务重启授权，本轮未获授权；由单元测试、接线与真接线用例（10.2 矩阵）覆盖行为。
 - 分置提示真页巡检余量（10.3）：会话指定不可用与 followParent 行互斥的真页形态——测试实例模型目录内引用全部可用，该状态环境不可达，由单元测试（设置页与 composer 分置提示、互斥至多一条）覆盖。
 - 发布链核验未执行（9.3）：发布产物读取的完整版本、完整 Git 标签隔离安装、宿主管理界面展示、Release 标题。标签与 Release 在发布流程执行时创建，不移动已有发布标签。
 
