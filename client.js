@@ -614,10 +614,12 @@ window.__ModuleLoader__.load({
 			".dsafm_reset{border:none;background:none;padding:0;font:inherit;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-secondary);cursor:pointer}",
 			".dsafm_reset:hover:not(:disabled){color:var(--dsw-alias-label-primary)}",
 			".dsafm_reset:disabled{cursor:default}",
-			".dsafm_f_hint{margin:0;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary);overflow-wrap:anywhere}",
+			// 正文类小字一律 secondary 色阶：tertiary 在浅色主题实测对比度 3.71:1（< AA 4.5），
+			// 命中元素族含字段提示、秒数读数、审批卡倒计时副文本与命令文本。
+			".dsafm_f_hint{margin:0;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-secondary);overflow-wrap:anywhere}",
 			// 毫秒字段的秒数读数行——自绘在官方组件之外（官方 hint 在字段非法时被非法文案顶掉）。
 			// 负 margin 抵 numhost 与读数行之间的外壳 gap（6px），使读数行紧贴官方校验文案行（视觉归属该字段）。
-			".dsafm_f_sec{margin:-6px 0 0;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary);overflow-wrap:anywhere}",
+			".dsafm_f_sec{margin:-6px 0 0;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-secondary);overflow-wrap:anywhere}",
 			// 数字字段承载规则（design §7.2.1）之一：官方根容器内边距归零——官方 .field 自带 padding:12px 0
 			//（与插件外壳同规格），嵌进外壳后不归零会使「标签行→输入框」间距 18px 且每字段加高约 24px；
 			// 归零后官方根内部 gap:6px 保留，纵向间距回到外壳节奏。
@@ -632,7 +634,7 @@ window.__ModuleLoader__.load({
 			".dsafm_input:focus-visible{outline:none;border-color:var(--dsw-alias-brand-primary)}",
 			".dsafm_input[aria-invalid='true']{border-color:var(--dsw-alias-state-error-primary)}",
 			".dsafm_input:disabled{color:var(--dsw-alias-label-tertiary);cursor:default}",
-			".dsafm_area{min-height:64px;height:auto;padding:8px 12px;white-space:pre;overflow:auto}",
+			".dsafm_area{min-height:64px;height:auto;padding:8px 12px;white-space:pre;overflow:auto;box-sizing:border-box}",
 			// 底部：唯一「保存」（实心，不可保存置灰）；失败文案用现行错误别名（官方 .failed 笔误不照抄）。
 			".dsafm_footer{display:flex;align-items:center;gap:8px;padding-top:16px}",
 			".dsafm_failed{flex:1;min-width:0;margin:0;font-size:12px;line-height:1.5;color:var(--dsw-alias-state-error-primary)}",
@@ -692,10 +694,10 @@ window.__ModuleLoader__.load({
 			".dsafm_warn{color:var(--dsw-alias-state-warn-primary)}",
 			".dsafm_carddetail{display:flex;flex-direction:column;gap:4px;font-family:var(--dsh-font-family-base,inherit)}",
 			".dsafm_state{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);font-weight:500}",
-			".dsafm_state_time{font-weight:400;color:var(--dsw-alias-label-tertiary)}",
+			".dsafm_state_time{font-weight:400;color:var(--dsw-alias-label-secondary)}",
 			".dsafm_state_warn{color:var(--dsw-alias-state-warn-primary)}",
 			".dsafm_state_deny{color:var(--dsw-alias-state-error-primary)}",
-			".dsafm_cmd{font-family:var(--ds-font-family-code);word-break:break-all;font-size:13px;line-height:20px;color:var(--dsw-alias-label-tertiary)}",
+			".dsafm_cmd{font-family:var(--ds-font-family-code);word-break:break-all;font-size:13px;line-height:20px;color:var(--dsw-alias-label-secondary)}",
 			".dsafm_review{display:flex;flex-direction:column;gap:8px;padding:12px 16px;min-width:0;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary)}",
 			".dsafm_review_bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}",
 			".dsafm_review_count{flex:1;min-width:0;color:var(--dsw-alias-label-tertiary);font-size:12px}",
