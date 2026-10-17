@@ -22,7 +22,7 @@ const screened = (args, cfgOverrides = {}) =>
 
 test('H1-PowerShell：本名与六别名 × 单标志与组合全部命中', () => {
   const verbs = ['Remove-Item', 'rm', 'ri', 'del', 'erase', 'rd', 'rmdir'];
-  const flagSets = ['-Recurse', '-Force', '-r', '-fo', '-Recurse -Force'];
+  const flagSets = ['-Recurse', '-r', '-Recurse -Force'];
   for (const verb of verbs) {
     for (const flags of flagSets) {
       const hit = hardCmd(`${verb} ${flags} C:\\probe\\sample`);
@@ -32,19 +32,29 @@ test('H1-PowerShell：本名与六别名 × 单标志与组合全部命中', () 
   }
 });
 
+test('H1-PowerShell：仅 -Force 不命中 H1（枚举边界收窄），按目标字面性分流', () => {
+  // 需求 §10 H1 定稿：PS 动词仅带 -Recurse 命中 H1；仅 -Force 的字面目标交审查层，
+  // 非字面目标由 H2 仅强制形态拦截。
+  assert.equal(hardCmd('Remove-Item -Force C:\\probe\\sample'), undefined);
+  assert.equal(hardCmd('Remove-Item -Force $env:TMP\\probe').code, 'hard-h2-target');
+  assert.equal(hardCmd('Remove-Item -Force $home').code, 'hard-h2-target');
+});
+
 test('H1-PowerShell：-f 歧义绑定失败，不单凭其命中', () => {
   assert.equal(hardCmd('Remove-Item -f C:\\probe\\sample'), undefined);
-  assert.equal(hardCmd('rm -f file.txt'), undefined, 'rm -f 有意不命中（常见清理操作）');
+  assert.equal(hardCmd('rm -f file.txt'), undefined, 'rm -f 字面目标有意不命中（常见清理操作）');
+  assert.equal(hardCmd('rm -f $dir/file.tmp').code, 'hard-h2-target', 'rm -f 非字面目标按 H2 仅强制形态');
 });
 
 test('H1-PowerShell：大小写不敏感与无歧义缩写', () => {
   assert.equal(hardCmd('remove-item -RECURSE .\\sample').code, 'hard-h1-powershell');
   assert.equal(hardCmd('RM -Rec x').code, 'hard-h1-powershell');
-  assert.equal(hardCmd('del -forc x').code, 'hard-h1-powershell');
-  // 实测可绑定成功的更长无歧义前缀（-zzz 一类无法绑定的串不算）。
+  // 实测可绑定成功的更长无歧义前缀（-zzz 一类无法绑定的串不算）。Recurse 族命中 H1。
   assert.equal(hardCmd('Remove-Item -recu .\\sample').code, 'hard-h1-powershell');
   assert.equal(hardCmd('Remove-Item -recurs .\\sample').code, 'hard-h1-powershell');
-  assert.equal(hardCmd('Remove-Item -for .\\sample').code, 'hard-h1-powershell');
+  // Force 族前缀仅构成 H2 仅强制形态的字面性分流依据，字面目标不命中 H1。
+  assert.equal(hardCmd('Remove-Item -for .\\sample'), undefined);
+  assert.equal(hardCmd('Remove-Item -for $env:TMP\\x').code, 'hard-h2-target');
 });
 
 test('H1-PowerShell：管道与语句中段的动词同判（误差只偏多拦）', () => {
@@ -71,13 +81,17 @@ test('H1-POSIX：仅递归不带强制不落 H1（按 PS 缩写族或 H2 处置�
   assert.equal(hardCmd('rm -r ./sample').code, 'hard-h1-powershell');
 });
 
-test('H1-PowerShell：开关绑定写法按绑定真值计（-Force:$true）', () => {
+test('H1-PowerShell：开关绑定写法按绑定真值计（-Recurse:$true）', () => {
   assert.equal(hardCmd('Remove-Item -Recurse:$true C:\\probe').code, 'hard-h1-powershell');
-  assert.equal(hardCmd('ri -Force:$True $home').code, 'hard-h1-powershell');
+  assert.equal(hardCmd('ri -Recurse:$True $home').code, 'hard-h1-powershell', '绑定真值的 -Recurse 非字面目标仍属 H1（不看目标）');
   assert.equal(hardCmd('rm -Recurse:1 ./sample').code, 'hard-h1-powershell');
   assert.equal(hardCmd('Remove-Item -Recurse:$true -Force:$true C:\\probe').code, 'hard-h1-powershell');
+  // 仅 -Force 的绑定真值进 H2 仅强制族：非字面命中、字面不命中。
+  assert.equal(hardCmd('ri -Force:$True $home').code, 'hard-h2-target');
+  assert.equal(hardCmd('ri -Force:$True C:\\probe\\sample'), undefined);
   // 假值绑定不构成旗标命中。
   assert.equal(hardCmd('Remove-Item -Recurse:$false C:\\probe'), undefined);
+  assert.equal(hardCmd('Remove-Item -Force:$false $home'), undefined);
 });
 
 test('H1-CMD：del/erase 带 /f、rd/rmdir 带 /s 与 /q（含合并簇与斜杠分隔写法）', () => {
@@ -117,9 +131,21 @@ test('H2：del/erase 仅 /s 归仅递归族，目标非字面命中', () => {
   assert.equal(hardCmd('erase /s $env:TMP\\probe').code, 'hard-h2-target');
 });
 
-test('H2：仅强制形态不属任何硬性拦截（对需求的有意窄化）', () => {
-  assert.equal(hardCmd('rm -f $dir/file.tmp'), undefined);
-  assert.equal(hardCmd('rd /q %TEMP%\\probe'), undefined);
+test('H2：仅强制形态族——目标非字面命中，字面目标交审查层', () => {
+  // 需求 §10 H2 定稿：形态口径宽于 H1 枚举，仅强制形态（PS -Force、rm -f、del /f 之外的 CMD 强制位、rd /q）
+  // 目标无法从字面确定即命中；字面目标不属任何硬性拦截。
+  assert.equal(hardCmd('rm -f $dir/file.tmp').code, 'hard-h2-target');
+  assert.equal(hardCmd('rm --force $dir').code, 'hard-h2-target');
+  assert.equal(hardCmd('rd /q %TEMP%\\probe').code, 'hard-h2-target');
+  assert.equal(hardCmd('rd /q $env:TEMP\\probe').code, 'hard-h2-target');
+  assert.equal(hardCmd('rmdir /q %TEMP%\\probe').code, 'hard-h2-target');
+  // 字面目标不命中（del/erase /f 例外：属 H1-CMD 枚举，始终硬性拦截）。
+  assert.equal(hardCmd('rd /q C:\\probe\\literal'), undefined);
+  assert.equal(hardCmd('rm --force ./file.tmp'), undefined);
+  assert.equal(hardCmd('Remove-Item -Force C:\\probe\\literal'), undefined);
+  // 无操作数＝目标无从证明字面（宁可误拦）。
+  assert.equal(hardCmd('rd /q').code, 'hard-h2-target');
+  assert.equal(hardCmd('rm --force').code, 'hard-h2-target');
 });
 
 test('H2：事故形态重放——脚本内先赋值再引用的强制递归删除', () => {
@@ -157,6 +183,26 @@ test('H3：Start-Process 与 explorer 不做硬性拦截（走 3.3 第 6 条审�
   // screen 级：不触发硬性拦截的同时仍进审查层（3.3 第 6 条触网打开指引），不是放行。
   assert.equal(screened({ command: 'Start-Process https://probe.example' }).action, 'review');
   assert.equal(screened({ command: 'explorer https://probe.example' }).action, 'review');
+});
+
+test('命令文本内的引号段按整体过检（不做内容级豁免）', () => {
+  // 需求 §10 H1 定稿尾句：写在命令文本内部的内容（如 git commit -m 的引号内说明）不做内容级
+  // 识别与豁免，按命令文本整体过检；误命中按 §3.3 改写重送条款消化。
+  assert.equal(hardCmd('git commit -m "Remove-Item -Recurse -Force C:\\probe\\a"').code, 'hard-h1-powershell');
+  assert.equal(hardCmd('git commit -am "rd /s /q %TEMP%\\probe"').code, 'hard-h1-cmd');
+  assert.equal(hardCmd('echo "rm -rf /probe/sample"').code, 'hard-h1-posix', '引号段属命令文本，偏多拦口径');
+  assert.equal(hardCmd("& 'Remove-Item' -Force $home").code, 'hard-h2-target', '调用算子引号形态同样过检');
+  // 旗标侧同样剥引号：shell 先行去引号后 `rm "-rf"` 等价 `rm -rf`，不剥会留下绕过 H1 的降级缝。
+  assert.equal(hardCmd('rm "-rf" /probe/sample').code, 'hard-h1-posix');
+  assert.equal(hardCmd("rm '-r' '-f' /probe/sample").code, 'hard-h1-posix');
+  assert.equal(hardCmd('rm "-r" "-f" /probe/sample').code, 'hard-h1-posix');
+  assert.equal(hardCmd('bash -c \'rm "-rf" /probe/sample\'')?.code, 'hard-h1-posix', '包装剥层后内层旗标同样剥引号');
+  // 随之的偏多拦（既定口径，§3.3 改写重送消化）：样例串含枚举形态的搜索/回显类命令同样命中。
+  assert.equal(hardCmd('grep -n "rm -rf /probe" notes.md')?.code, 'hard-h1-posix');
+  // 反例保持：独立字段（与命令分列的说明键）含相同字样仍不命中；良性引号参数不误拦。
+  assert.equal(hard({ command: 'git commit', description: 'Remove-Item -Recurse -Force 样本说明' }), undefined);
+  assert.equal(hardCmd('git commit -m "docs: update changelog"'), undefined);
+  assert.equal(hardCmd('npm run "build:clean"'), undefined);
 });
 
 test('匹配对象：随行文字不命中（三键白名单，字符串与数组值同判）', () => {

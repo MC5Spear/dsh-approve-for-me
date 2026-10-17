@@ -79,6 +79,8 @@ test('screen：denyPatterns 命中直接 deny，未命中进 review', () => {
   const denied = screen(escalation(), located({ command: 'mkfs /dev/sda1' }), baseConfig);
   assert.equal(denied.action, 'deny');
   assert.match(denied.why, /deny pattern/);
+  // 规则直拒带 source=rule：与硬性拦截的 source=hard 同走「规则命中的直接拒绝」通知通道（需求 §4.3）。
+  assert.equal(denied.fields.source, 'rule');
 
   const reviewed = screen(escalation(), located({ command: 'npm install' }), baseConfig);
   assert.equal(reviewed.action, 'review');

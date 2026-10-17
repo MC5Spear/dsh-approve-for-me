@@ -1246,6 +1246,35 @@ test('deny 判定仍用拒绝模板（末句逐字回归）', async () => {
   assert.doesNotMatch(state.injections[0], /通道故障/u, 'deny 不冒充通道故障');
 });
 
+test('规则命中的直接拒绝走专用模板（含重送路径、无禁止绕过尾句）', async () => {
+  // 需求 §4.3 通知分型：denyPatterns 规则直拒（source=rule）说明命中形态并告知合规重送路径，
+  // 不带 REJECTION_INSTRUCTIONS 尾句——尾句只用于安全拒绝类。
+  const { rt, state, next } = makeRt(baseConfig(), {
+    pre: { action: 'deny', why: 'pattern', reason: '命令命中规则强制拒绝清单：键 "command" 命中模式 mkfs', fields: { mode: 'danger-full-access', tool: 'pwsh', source: 'rule' } },
+  });
+  await onApprovalRequest(request(), next, rt);
+  const injected = state.injections[0];
+  assert.match(injected, /被规则直接拒绝（未经模型审查/u);
+  assert.match(injected, /命中规则：命令命中规则强制拒绝清单/u);
+  assert.match(injected, /合规重送路径/u);
+  assert.match(injected, /不算规避审查/u);
+  assert.match(injected, /换等价写法达到同一危险结果的，仍按试图绕过审查处理/u, '边界句在场：等价写法仍按绕过处理');
+  assert.doesNotMatch(injected, /不要用等价手段绕过该拒绝/u, '规则命中不使用禁止绕过尾句');
+  assert.doesNotMatch(injected, /风险：/u, '规则命中无风险分级语义（未经模型审查）');
+  assert.equal(state.settles[0].source, 'rule');
+});
+
+test('升权超上限直拒仍走安全拒绝模板（禁止绕过尾句在场）', async () => {
+  // 无 source 的直拒（升权超上限、无证据直拒）不属「规则命中」，保留安全拒绝模板与末句。
+  const { rt, state, next } = makeRt(baseConfig(), {
+    pre: { action: 'deny', why: 'ceiling', reason: '升权目标 universe 超过自动放行上限 danger-full-access', fields: { mode: 'universe', tool: 'pwsh' } },
+  });
+  await onApprovalRequest(request(), next, rt);
+  assert.match(state.injections[0], /本次升权请求被拒绝/u);
+  assert.match(state.injections[0], /不要用等价手段绕过该拒绝/u, '升权超上限属安全拒绝类，尾句保留');
+  assert.doesNotMatch(state.injections[0], /合规重送路径/u);
+});
+
 test('超时文案回归：timedOut 判定不受三文案分选影响', async () => {
   const { rt, state, next } = makeRt(baseConfig(), {
     verdict: { decision: 'error', reason: 'review timeout', toolCalls: 0, timedOut: true, fields: {} },
@@ -1418,6 +1447,12 @@ test('结算记录：硬性危险拦截 → rejected/hard，审计行 source=har
   assert.match(auditRow?.reason, /hard-h1-powershell/u);
   assert.equal(state.reviewSignals.length, 0, '硬性危险拦截不经 LLM：审查零调用（未经 LLM 直接拒绝）');
   assert.equal(state.nextCalls, 0, '不调用 next()：宿主审批通道不参与');
+  // 通知分型（需求 §4.3）：硬性拦截命中走「规则命中的直接拒绝」模板——重送路径在场、禁止绕过尾句缺席。
+  const injectedHard = state.injections[0];
+  assert.match(injectedHard, /被规则直接拒绝（未经模型审查/u);
+  assert.match(injectedHard, /命中规则：命中硬性危险拦截（hard-h1-powershell）/u);
+  assert.match(injectedHard, /合规重送路径/u);
+  assert.doesNotMatch(injectedHard, /不要用等价手段绕过该拒绝/u, '硬性拦截不使用禁止绕过尾句');
 });
 
 test('结算记录：审查超时 → rejected/timeout，stage=review', async () => {

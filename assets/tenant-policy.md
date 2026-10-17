@@ -33,5 +33,6 @@ These rules are mandatory. They override the default risk thresholds in the outc
 - Entries that can directly execute remote content are not judged under this section; they are rejected by the hard-deny layer before review.
 
 ## Resubmission Guidance
-- An execution agent that resubmits after switching to a deletion without force flags, moving items to a recycle location first, asking the user to open the URL themselves, or fetching the content locally for review first, is not bypassing any block.
-- Do not judge a resubmission as malicious evasion merely because the command was rewritten and sent again.
+- A resubmission is not bypassing any block when the execution agent only removes the matched wording, or switches to a materially safer form (a deletion without force flags, moving items to a recycle location first, asking the user to open the URL themselves, or fetching the content locally for review first), keeping the action's purpose and authorization basis unchanged.
+- Do not raise the risk level or judge malicious evasion merely because the command was rejected before and resubmitted after rewriting; judge the rewritten action independently on its own risk and authorization.
+- This does not apply when an equivalent wording without a real rewrite reaches the same dangerous outcome: treat that as an attempt to circumvent review.
