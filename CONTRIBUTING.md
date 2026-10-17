@@ -76,7 +76,7 @@ npm run check:public-surface     # 结构 / 本机指纹 / 内部引用，三类
 - 不随意新增运行时依赖；当前声明含 `zod`、`yaml`、`@deepseek-ai/schemastery`、`@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-typert-protocol`（peer：`@deepseek-ai/cordis`）。实现调整后按实际用途核对依赖，不因某个包存在就保留不需要的功能。
 - 不修改宿主源码、不打源码补丁。当前产品合同不提供插件侧用户 YAML 解析或自动清理；卸载残留风险须如实说明，不能降低用户配置保全要求。
 - `client.js` 是宿主加载器用的工厂式 CJS（`window.__ModuleLoader__.load({ id, factory })`，`factory(require)`，`require('react')` 由加载器提供），**没有 JSX、没有构建步骤**；改它时保持这个形态。
-- 新增配置字段：在 `lib/config.js` 的 `Config` 里声明，需要热改就加 `.volatile()`（`@deepseek-ai/schemastery` ≥ 3.18.4），界面文案进 `lib/agent-texts.js` 的中英字典（缺键即抛错，不静默回退），并在 `test/config.test.mjs` / `test/agent-texts.test.mjs` 补用例。
+- 新增配置字段：在 `lib/config.js` 的 `Config` 里声明，需要热改就加 `.volatile()`（`@deepseek-ai/schemastery` ≥ 3.18.4），并在 `test/config.test.mjs` 补解析用例。界面文案分两处维护：设置卡、composer 等客户端界面文案进 `client.js` 内的中英字典（`test/client.test.mjs` 守字典齐备与双语同步）；面向模型的文案见下一条的 `lib/agent-texts.js`（缺键即抛错，不静默回退，`test/agent-texts.test.mjs` 补用例）。
 - 面向模型的文案（系统提示、注入文本）改动请**逐字节**核对是否影响既有判据：本仓有冻结断言守着不可变块。
 - 中文文档与注释保持本仓既有术语；改行为时同步更新 README 里对应的用户可见说明。
 - 代码注释的编号与章节引用以 docs 的现行 § 章节号为准。维护代码时使用稳定主题定位，不能据旧注释恢复已取消的机制，也不新增按修复批次编号的引用。

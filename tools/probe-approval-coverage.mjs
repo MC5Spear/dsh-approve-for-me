@@ -1,6 +1,6 @@
 /**
  * 一次性取证脚本：全量扫描 `~/.dsh/sessions`（两种会话文件布局都要认），
- * 把「有 approval/asked 的会话」与「插件 reviews 目录里的行数」对齐，
+ * 把「有 approval/asked 的会话」与「插件 reviews 目录里的行数」逐项核对，
  * 并按审批时间分类，判断空记录是「历史盲区」还是「记录没落上」。
  *
  * 用法：node tools/probe-approval-coverage.mjs

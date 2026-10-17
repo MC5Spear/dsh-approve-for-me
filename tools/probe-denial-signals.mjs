@@ -14,7 +14,7 @@ import { homedir } from 'node:os';
 import { readSessionLog } from './session-log.mjs';
 
 const root = join(homedir(), '.dsh', 'sessions');
-/** 已知带提权参数的工具（静态判定，来自 tools/schemas 的实测名单）。 */
+/** 已知带提权参数的工具（静态判定，名单由本文件维护）。 */
 const ESCALATION_CAPABLE = new Set(['pwsh', 'bash', 'write', 'read', 'edit', 'glob', 'grep', 'str_replace_editor']);
 const SIGS = {
   isError: (content) => content?.isError === true,

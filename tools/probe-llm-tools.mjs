@@ -1,6 +1,7 @@
 /**
- * 离线协议探针：直连 DeepSeek 的 OpenAI 兼容接口，验证「assistant 的 tool_calls + role:'tool' 工具结果回喂」
- * 这一往返格式能被接受（两轮）。它只验证协议格式，不启动 dsh、不读写宿主状态。
+ * 在线协议探针：直连 DeepSeek 的 OpenAI 兼容接口，验证「assistant 的 tool_calls + role:'tool' 工具结果回喂」
+ * 这一往返格式能被接受（两轮）。会连网、发起真实模型调用（可能计费）；不启动 dsh、不读写宿主状态。
+ * 运行前确认：读取的是本机 `$DSH_HOME/.credentials.yaml` 的密钥，调用计入对应账号账单。
  *
  * 用法：
  *   node tools/probe-llm-tools.mjs

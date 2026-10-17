@@ -1,7 +1,7 @@
 /**
  * 从 browser-shot 的 --result JSON 生成设置表单 DOM 证据档。
  * 用法：node tools/build-dom-dump.mjs <result.json> <css-scope.json|-> <out.txt> --f51-before N --f51-after N
- * 档案格式与 test/settings-dom-dump.test.mjs 的断言逐项对齐（requirements §6.1 结构判据＋暂存语义＋换算读数）。
+ * 档案格式与 test/settings-dom-dump.test.mjs 的断言逐项对应（requirements §6.1 结构判据＋暂存语义＋换算读数）。
  * CSS 收窄扫描在主取证内（DUMP-A 的 scoped 段）；第二参数传 - 表示无独立 CSS 结果文件。
  */
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -71,7 +71,7 @@ if (!Array.isArray(seconds) || seconds.length === 0) {
 	for (const s of seconds) {
 		lines.push(`- \`${s.id}\`：\`${s.text}\`（生效＝\`${s.resolvedText}\`、草稿＝\`${s.draftText}\`、draftInvalid=${String(s.draftInvalid)}）；行样式 fontSize=\`${s.fontSize}\`、color=\`${s.color}\`、marginTop=\`${s.marginTop}\`；后继节点 class=\`${s.nextSiblingClass}\`（design §7.2.1 新结构：秒数行的后继是展开说明区（展开时）或下一字段的 \`.dsafm_field\`；字段间分隔线统一 \`.dsafm_field + .dsafm_field\`）。`);
 	}
-	lines.push('', '生效值读数与控件值一致（§7 控件表同 id 行）；初始草稿＝生效值文本。实时行为（键入即换算、占位、非法、保存重开、en 档单位）的验证不在本档范围，由开发期工件承载、不随仓发布。', '');
+	lines.push('', '生效值读数与控件值一致（本档 §7 控件表同 id 行）；初始草稿＝生效值文本。实时行为（键入即换算、占位、非法、保存重开、en 档单位）的验证不在本档范围，由开发期工件承载、不随仓发布。', '');
 }
 writeFileSync(outPath, lines.join('\n') + '\n', 'utf8');
 console.log(`WROTE ${outPath} (controls=${inputs.length}, helpButtons=${dumpA.value.helpButtons.length}, cssLength=${cssScope.cssLength}, secLines=${Array.isArray(seconds) ? seconds.length : 0})`);

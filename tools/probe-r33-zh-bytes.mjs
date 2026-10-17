@@ -19,7 +19,7 @@ import { outputDir } from './local-config.mjs';
 const file = process.argv[2];
 const auditBytes = Number(process.argv[3] ?? '0');
 // 报告落点：显式传参 > 配置的 outputDir > 当前目录。
-const out = process.argv[4] ?? join((await outputDir()) ?? '.', 'r33-zh-bytes.txt');
+const out = process.argv[4] ?? join((await outputDir()) ?? '.', 'zh-bytes-dump.txt');
 if (file === undefined) {
   console.error('用法：node tools/probe-r33-zh-bytes.mjs <session.v4.jsonl.zstd> <injectBytes> [out]');
   process.exit(2);

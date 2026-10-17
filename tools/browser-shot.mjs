@@ -9,7 +9,7 @@
  *   node tools/browser-shot.mjs --dump                     # 只导出现有页面的文本与可点击元素
  *   node tools/browser-shot.mjs ... --script steps.json        # 按脚本执行点击与截图
  *
- * 步骤脚本是一组动作（与下方分派实现逐一对齐；**`click` 传纯字符串**——
+ * 步骤脚本是一组动作（与下方分派实现逐项对应；**`click` 传纯字符串**——
  * 它被原样交给 `clickText(text)` 做文本比较，写成 `{"click":{"text":"…"}}` 对象形式
  * 会永远匹配失败返回 not found）：
  * `{"click":"插件"}`（按可见文本精确匹配，取最近的 button/a/li/[role] 祖先点击）、
