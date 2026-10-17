@@ -75,7 +75,7 @@ test('H1-POSIX：rm 同时带递归与强制（聚合、拆分、长选项）', 
   }
 });
 
-test('H1-POSIX：仅递归不带强制不落 H1（按 PS 缩写族或 H2 处置）', () => {
+test('仅递归不带强制不落 POSIX 分支（rm -r 按 PowerShell 缩写族命中）', () => {
   // rm -r 是 PowerShell 别名＋-Recurse 无歧义缩写（design §12.1 判定序裁定：PS 缩写族先于 H2 判）：
   // 按 H1-PowerShell 命中；rm --recursive 才走 H2 仅递归族。
   assert.equal(hardCmd('rm -r ./sample').code, 'hard-h1-powershell');
@@ -86,8 +86,19 @@ test('H1-PowerShell：开关绑定写法按绑定真值计（-Recurse:$true）',
   assert.equal(hardCmd('ri -Recurse:$True $home').code, 'hard-h1-powershell', '绑定真值的 -Recurse 非字面目标仍属 H1（不看目标）');
   assert.equal(hardCmd('rm -Recurse:1 ./sample').code, 'hard-h1-powershell');
   assert.equal(hardCmd('Remove-Item -Recurse:$true -Force:$true C:\\probe').code, 'hard-h1-powershell');
+  // 非零数值按 PowerShell 布尔绑定的实际结果计（`:2` 绑定为真）；零值绑定为假不构成旗标。
+  assert.equal(hardCmd('Remove-Item -Recurse:2 C:\\probe').code, 'hard-h1-powershell', '非零数值绑定为真');
+  assert.equal(hardCmd('Remove-Item -Recurse:0 C:\\probe'), undefined, '数值零绑定为假');
+  assert.equal(hardCmd('Remove-Item -Recurse:1.5 C:\\probe').code, 'hard-h1-powershell', '非零小数绑定为真');
+  // 绑定报错的串不算开关（经 Get-ChildItem -Force 实测裁定：cmdlet 开关只收布尔字面量与无符号
+  // 数值，裸 true/yes/-1/abc 一律报错、命令不执行），token 回落审查层。
+  assert.equal(hardCmd('Remove-Item -Recurse:abc C:\\probe'), undefined);
+  assert.equal(hardCmd('Remove-Item -Recurse:true C:\\probe'), undefined, '裸 true 是字符串，绑定报错');
+  assert.equal(hardCmd('Remove-Item -Recurse:-1 C:\\probe'), undefined, '带符号数值按字符串读，绑定报错');
+  assert.equal(hardCmd('Remove-Item -Recurse:$TRUE C:\\probe').code, 'hard-h1-powershell', '布尔字面量任意大小写绑定为真');
   // 仅 -Force 的绑定真值进 H2 仅强制族：非字面命中、字面不命中。
   assert.equal(hardCmd('ri -Force:$True $home').code, 'hard-h2-target');
+  assert.equal(hardCmd('ri -Force:2 $home').code, 'hard-h2-target', '非零数值绑定真值同入仅强制族');
   assert.equal(hardCmd('ri -Force:$True C:\\probe\\sample'), undefined);
   // 假值绑定不构成旗标命中。
   assert.equal(hardCmd('Remove-Item -Recurse:$false C:\\probe'), undefined);
@@ -331,4 +342,76 @@ test('screen 接线：硬性拦截未命中时规则层照常（两层独立）'
   assert.match(result.why, /deny pattern/);
   const pass = screened({ command: 'npm install' });
   assert.equal(pass.action, 'review');
+});
+
+// ── 簇规则、参数边界扫描与引号感知拆句（design §12.1 定稿） ──────────────────────
+
+test('rm 较长短标志簇按 POSIX 小写短旗标集读，簇内全属集才命中 H1', () => {
+  // 簇规则 `^-[a-z]+$` 且每个字母 ∈ {r,f,i,d,v,p}：-rfvv/-frvvv/-irfdvp 都是递归＋强制的簇。
+  assert.equal(hardCmd('rm -rfvv ./fixture').code, 'hard-h1-posix');
+  assert.equal(hardCmd('rm -frvvv ./fixture').code, 'hard-h1-posix');
+  assert.equal(hardCmd('rm -irfdvp ./fixture').code, 'hard-h1-posix');
+  assert.equal(hardCmd('rm -Rf /').code, 'hard-h1-posix');
+  assert.equal(hardCmd('rm -rf ./fixture').code, 'hard-h1-posix');
+  // 集外字母（-force 含 o/u/c/e）不按簇读：字面目标交审查层，非字面目标按 H2。
+  assert.equal(hardCmd('rm -force ./x'), undefined);
+  assert.equal(hardCmd('rm -f ./x'), undefined);
+  assert.equal(hardCmd('rm -f $dir').code, 'hard-h2-target');
+});
+
+test('参数边界扫描——目标/开关/取值/未识别四类参数各自归位', () => {
+  // 公共参数值（-ErrorAction Continue 的 Continue）是取值参数的值，不再当目标候选；
+  // 目标参数（-LiteralPath/-Path）的绑定值与后随位置参按目标计。
+  assert.equal(hardCmd('Remove-Item -Force -LiteralPath:$home -ErrorAction Continue').code, 'hard-h2-target');
+  assert.equal(hardCmd('Remove-Item -Force -Path:$home').code, 'hard-h2-target');
+  assert.equal(hardCmd('Remove-Item -Force -LiteralPath $home').code, 'hard-h2-target');
+  assert.equal(hardCmd('Remove-Item -ErrorAction Continue -Force -Path $env:TMP').code, 'hard-h2-target');
+  // 开关族后的取值参数值被跳过：无目标候选 → 按无字面目标命中 H2。
+  assert.equal(hardCmd('Remove-Item -Force -ErrorAction Continue').code, 'hard-h2-target');
+  // 未识别参数的绑定值保守按目标候选处理（宁可偏多拦）。
+  assert.equal(hardCmd('Remove-Item -Force -Foo:$home').code, 'hard-h2-target');
+  // 目标参数给字面路径则不命中（H1/H2 都按目标字面性分流）。
+  assert.equal(hardCmd('Remove-Item -Force -LiteralPath:C:\\x'), undefined);
+  assert.equal(hardCmd('Remove-Item -Force -LiteralPath C:\\x'), undefined);
+  assert.equal(hardCmd('ri -Force:$True C:\\x'), undefined);
+  assert.equal(hardCmd('Remove-Item -f C:\\x'), undefined);
+  // 取值参数（-Filter）的值跳过、后随位置参才是目标；字面目标不命中。
+  assert.equal(hardCmd('Remove-Item -Force -Filter $pat ./x'), undefined);
+  assert.equal(hardCmd('Remove-Item -Force $home').code, 'hard-h2-target');
+  assert.equal(hardCmd('rm --recursive $dir').code, 'hard-h2-target');
+  assert.equal(hardCmd('rd /q %TEMP%').code, 'hard-h2-target');
+  assert.equal(hardCmd('rd /q C:\\tmp'), undefined);
+});
+
+test('引号感知拆句——引号内的分隔符不拆、真分隔符照拆、未闭合到末尾', () => {
+  // 单/双引号内的 `;` 是路径字面，不在该处拆句；引号段整体过检。
+  assert.equal(hardCmd("Remove-Item 'C:\\harmless;example' -Recurse").code, 'hard-h1-powershell');
+  assert.equal(hardCmd('Remove-Item "C:\\a;b" -Recurse').code, 'hard-h1-powershell');
+  assert.equal(hardCmd("bash -c \"Remove-Item 'a;b' -Recurse\"").code, 'hard-h1-powershell');
+  // 引号内的换行同样是路径字面：语句不被拆散，动词与标志同句命中。
+  assert.equal(hardCmd('Remove-Item "C:\\a\nb" -Recurse').code, 'hard-h1-powershell');
+  // 转义写法不解释（每个引号字符都切换引号态，design §12.1）：PowerShell 的成对单引号转义
+  // 被读作开合——引号态提前切换使边界偏早，误差方向偏多拦（拆出的片段各自整体过检）。
+  assert.equal(hardCmd("Remove-Item 'C:\\it''s dir' -Recurse").code, 'hard-h1-powershell');
+  // 未闭合引号：余下全文按一段处理（误差只偏多拦）。
+  assert.equal(hardCmd("rm -rf 'abc").code, 'hard-h1-posix');
+  // 引号外的真分隔符仍拆句逐条判定。
+  assert.equal(hardCmd("$home = 'C:\\t'; Remove-Item -Recurse -Force $home").code, 'hard-h1-powershell');
+  assert.equal(hardCmd('Remove-Item -Recurse -Force ./x').code, 'hard-h1-powershell');
+  assert.equal(hardCmd('rm -r ./x').code, 'hard-h1-powershell');
+  // 无害文本不受引号拆句影响。
+  assert.equal(hardCmd("Write-Output 'a;b'"), undefined);
+});
+
+test('簇/参数扫描/引号拆句的控制形态：既有偏多拦口径与 CMD 族回归保持', () => {
+  assert.equal(hardCmd('git commit -m "Remove-Item -Recurse x"').code, 'hard-h1-powershell');
+  assert.equal(hardCmd('grep -n "rm -rf /"').code, 'hard-h1-posix');
+  assert.equal(hardCmd('echo "rm -rf /"').code, 'hard-h1-posix');
+  assert.equal(hardCmd('rm "-rf" /probe').code, 'hard-h1-posix');
+  assert.equal(hardCmd('del /f C:\\x\\y').code, 'hard-h1-cmd');
+  assert.equal(hardCmd('rd /s /q C:\\x').code, 'hard-h1-cmd');
+  assert.equal(hardCmd('rd /sq C:\\x').code, 'hard-h1-cmd');
+  assert.equal(hardCmd('rd /s C:\\x'), undefined);
+  assert.equal(hardCmd('rd /s $dir').code, 'hard-h2-target');
+  assert.equal(hardCmd('del /s C:\\lit'), undefined);
 });

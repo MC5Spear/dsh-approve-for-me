@@ -136,11 +136,11 @@ test('冷却：连续拒绝达到阈值后打开，冷却期结束后恢复', as
   assert.deepEqual(allowed, { ok: true, value: 'x' });
 });
 
-test('allow 清零连续计数；error 与 deny 同权计数（design §5.3）', () => {
+test('allow 清零连续计数；error 与 deny 同权计数（requirements §4.4）', () => {
   const scheduler = createScheduler({ breaker: { consecutiveDenials: 2, windowSize: 10, windowDenials: 5 } });
   scheduler.record('deny');
   scheduler.record('allow');
-  // error 计入 consecutive 与 window（design §5.3：失败与拒绝同权计数）。
+  // error 计入 consecutive 与 window（requirements §4.4：失败与拒绝同权计数）。
   scheduler.record('error');
   assert.equal(scheduler.state().consecutive, 1);
   assert.equal(scheduler.state().breakerOpen, false);
@@ -222,7 +222,7 @@ test('无 callId 的并发请求各自执行；大批量顺序执行后状态干
   assert.deepEqual(again, { ok: true, value: 'again' }, '重发同键重新执行，不复用任何缓存');
 });
 
-// ── 排队与冷却零值的现行边界（requirements §4.4；验证留档，不改语义） ────────
+// ── 排队与冷却零值的现行边界（design §5.1；验证留档，不改语义） ────────
 
 test('queueMax=0 → 满载时不排队，直接按 queue-overflow 拒绝', async () => {
   const scheduler = createScheduler({ max: 1, queueMax: 0, queueTimeoutMs: 1000 });
@@ -304,4 +304,104 @@ test('queue-overflow 不是审查结论：计数不变', () => {
   scheduler.record('breaker-open');
   assert.equal(scheduler.state().consecutive, 0);
   assert.equal(scheduler.state().breakerOpen, false);
+});
+
+// ── 取消贯通与失败包络（design §5.1） ──────────────────────────────────────
+
+test('排队中的请求被中止：移出队列、任务不执行、返回 queue-aborted', async () => {
+  const scheduler = createScheduler({ max: 1, queueMax: 4, queueTimeoutMs: 5000 });
+  const hold = deferred();
+  const started = [];
+  const running = scheduler.run({ sessionId: 'a', callId: '1' }, () => hold.promise);
+  const controller = new AbortController();
+  const queued = scheduler.run({ sessionId: 'b', callId: '2' }, async () => {
+    started.push('b');
+    return 'b';
+  }, { signal: controller.signal });
+  await tick();
+  assert.equal(scheduler.state().queued, 1, '中止前在队列中');
+  controller.abort('user cancelled');
+  const aborted = await queued;
+  assert.deepEqual(aborted, { ok: false, reason: 'queue-aborted', aborted: true });
+  assert.equal(scheduler.state().queued, 0, '中止即移出队列');
+  hold.resolve('a');
+  await running;
+  assert.deepEqual(started, [], '被中止的排队请求不执行任务');
+});
+
+test('入队时信号已中止：不占队列名额，直接 queue-aborted', async () => {
+  const scheduler = createScheduler({ max: 1, queueMax: 1, queueTimeoutMs: 1000 });
+  const hold = deferred();
+  const running = scheduler.run({ sessionId: 'a', callId: '1' }, () => hold.promise);
+  await tick();
+  const controller = new AbortController();
+  controller.abort('cancelled');
+  // 队列已满（queueMax=1 且本请求若入队会占最后名额）——已中止的请求根本不占名额。
+  const first = await scheduler.run({ sessionId: 'b', callId: '2' }, async () => 'b', { signal: controller.signal });
+  assert.deepEqual(first, { ok: false, reason: 'queue-aborted', aborted: true });
+  const stillQueued = scheduler.run({ sessionId: 'c', callId: '3' }, async () => 'c');
+  await tick();
+  assert.equal(scheduler.state().queued, 1, '未中止请求仍可入队（名额未被占用）');
+  hold.resolve('a');
+  await running;
+  assert.deepEqual(await stillQueued, { ok: true, value: 'c' });
+});
+
+test('队首等待者中止：即时移出且后续等待者照常接力', async () => {
+  const scheduler = createScheduler({ max: 1, queueMax: 4, queueTimeoutMs: 5000 });
+  const hold = deferred();
+  const running = scheduler.run({ sessionId: 'a', callId: '1' }, () => hold.promise);
+  const controllerA = new AbortController();
+  const started = [];
+  const queuedA = scheduler.run({ sessionId: 'b', callId: '2' }, async () => {
+    started.push('a2');
+    return 'a2';
+  }, { signal: controllerA.signal });
+  const queuedB = scheduler.run({ sessionId: 'c', callId: '3' }, async () => {
+    started.push('b2');
+    return 'b2';
+  });
+  await tick();
+  // 队首等待者中止：即时移出、清等待计时器，不占用后续唤醒机会。
+  controllerA.abort('cancelled');
+  assert.deepEqual(await queuedA, { ok: false, reason: 'queue-aborted', aborted: true });
+  assert.equal(scheduler.state().queued, 1, '队首移出后只剩后续等待者');
+  hold.resolve('a');
+  await running;
+  assert.deepEqual(await queuedB, { ok: true, value: 'b2' }, '后续等待者照常接力');
+  assert.deepEqual(started, ['b2']);
+});
+
+test('取得许可后任务启动前复核：已中止不执行任务、执行位即时释放', async () => {
+  const scheduler = createScheduler({ max: 1, queueMax: 4, queueTimeoutMs: 5000 });
+  const controller = new AbortController();
+  const hold = deferred();
+  const running = scheduler.run({ sessionId: 'a', callId: '1' }, () => hold.promise);
+  const started = [];
+  const queued = scheduler.run({ sessionId: 'b', callId: '2' }, async () => {
+    started.push('b');
+    return 'b';
+  }, { signal: controller.signal });
+  await tick();
+  // 同一同步段内释放许可并中止：无论中止先于唤醒（排队中止路径）还是落在许可交接后
+  // （启动前复核路径），契约一致——任务不启动、不占执行位。
+  hold.resolve('a');
+  controller.abort('cancelled');
+  await running;
+  assert.deepEqual(await queued, { ok: false, reason: 'queue-aborted', aborted: true });
+  assert.deepEqual(started, []);
+  const followUp = await scheduler.run({ sessionId: 'c', callId: '3' }, async () => 'c');
+  assert.deepEqual(followUp, { ok: true, value: 'c' }, '执行位已释放');
+});
+
+test('排队超时失败包络携带实例实际等待上限 timeoutMs（不在结算时现读配置）', async () => {
+  const scheduler = createScheduler({ max: 1, queueMax: 4, queueTimeoutMs: 25 });
+  const hold = deferred();
+  const running = scheduler.run({ sessionId: 'a', callId: '1' }, () => hold.promise);
+  const timedOut = await scheduler.run({ sessionId: 'b', callId: '2' }, async () => 'b');
+  assert.equal(timedOut.reason, 'queue-timeout');
+  assert.equal(timedOut.timeoutMs, 25, '包络携带本实例的排队等待上限');
+  assert.ok(Number.isFinite(timedOut.queueMs));
+  hold.resolve('a');
+  await running;
 });

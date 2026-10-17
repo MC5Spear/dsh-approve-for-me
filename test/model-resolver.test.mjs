@@ -754,7 +754,7 @@ test('空全局默认条目两态 effectiveModel：无会话父模型时取空�
   assert.equal(issues[0].effectiveModel, '', '无会话求值无值可填，取空串');
 });
 
-test('空默认条目映射命中：effectiveLayer=parent-map、填目标引用（design §7.2.0／requirements §5.1、§6.1 修订）', async () => {
+test('空默认条目映射命中：effectiveLayer=parent-map、填目标引用（design §7.2.0／requirements §5.1、§6.1）', async () => {
   // 零值语义生效但解析被有效映射截住：条目仍按 scope=global＋configured 空串识别，
   // effectiveLayer／effectiveModel 取真实解析（parent-map＋目标引用），客户端走 globalUnsetShadowed 键。
   const issues = await collectModelIssues({
@@ -829,7 +829,7 @@ test('byParentModel 对象值 {model,effort} 端到端——映射层带档位�
 });
 
 test('空默认条目直退终点取真实解析：父模型引用校验失败记 unavailable＋空串', async () => {
-  // 空默认条目按求值上下文取真实解析（design §7.2.0／requirements §5.1、§6.1 修订）：无有效会话选择且无有效映射
+  // 空默认条目按求值上下文取真实解析（design §7.2.0／requirements §5.1、§6.1）：无有效会话选择且无有效映射
   // 截住时落到直退终点——父模型引用校验失败（不可用）即 unavailable＋空串，不声称当前跟随。
   const issues = await collectModelIssues({
     llm: issuesLlm(),

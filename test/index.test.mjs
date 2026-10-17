@@ -48,7 +48,7 @@ function makeCtx(entry = {}, services = {}) {
     // 陷阱 Proxy：任何属性访问即失败——「实现还在调用 ctx.settings」会让测试变红而不是静默通过。
     settings: new Proxy({}, {
       get() {
-        throw new Error('0.1.7 起实现不得访问 ctx.settings（设置读写走宿主行 Config + volatile 引用）');
+        throw new Error('实现不得访问 ctx.settings（设置读写走宿主行 Config + volatile 引用）');
       },
     }),
     llm: {
@@ -91,7 +91,7 @@ test('apply 注册 prepend 应答者并写一行启动审计', async (t) => {
     t.skip('宿主包不可解析（离线环境）');
     return;
   }
-  // inject 声明：设置服务不在依赖内；漏一个都是加载期直接失败（纪律 3）。
+  // inject 声明：设置服务不在依赖内；漏一个都是加载期直接失败（见 CONTRIBUTING 改动纪律）。
   assert.deepEqual(host.inject, ['approval', 'llm', 'sessions']);
   const written = [];
   const original = process.stderr.write;

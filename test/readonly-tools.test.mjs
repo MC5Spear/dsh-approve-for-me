@@ -248,7 +248,7 @@ test('自定义 NTFS 流名不能绕过拒止', async () => {
   assert.equal(grepped.denied, true);
 });
 
-test('setLang 两档驱动结果模板语言（design §3.4：工具失败回喂整句随语言切换）', async () => {
+test('setLang 两档驱动结果模板语言（requirements §5.4：工具失败回喂整句随语言切换）', async () => {
   const root = await fixture();
   const tools = createReadonlyTools({ rootDir: root });
   // 用文件路径列目录 → readdir 抛 ENOTDIR → run 的 catch 回喂 tool.failed（唯一产生该模板的路径）。
@@ -320,7 +320,7 @@ test('候选文件数截断：超过 200 个候选时说明截断为前 200', as
   assert.doesNotMatch(result.text, /f2\d\d\.txt/);
 });
 
-// ── DSH 数据根围栏（design §3.4／§8.3） ────────────────────────────────────
+// ── DSH 敏感范围（design §3.4／§8.3） ────────────────────────────────────
 
 test('sessions/reviews/current-url.txt 全部拒止，拒止类别随行写出', async () => {
   const root = await fixture();
@@ -338,9 +338,9 @@ test('sessions/reviews/current-url.txt 全部拒止，拒止类别随行写出',
     assert.match(read.text, /DSH 数据目录/);
   }
   const grepped = await tools.run('grep', { pattern: 'transcript', path: join(home, 'sessions') });
-  assert.equal(grepped.denied, true, 'grep 基点在围栏内应拒止');
+  assert.equal(grepped.denied, true, 'grep 基点在敏感范围内应拒止');
   const globbed = await tools.run('glob', { pattern: '**/*', cwd: home });
-  assert.equal(globbed.denied, true, 'glob 基点在围栏内应拒止');
+  assert.equal(globbed.denied, true, 'glob 基点在敏感范围内应拒止');
 });
 
 test('对照：注入根独立生效、工作区同名目录不误伤', async () => {
@@ -353,7 +353,7 @@ test('对照：注入根独立生效、工作区同名目录不误伤', async ()
   const read = await tools.run('read_file', { path: 'sessions/note.txt' });
   assert.equal(read.denied, false);
   assert.match(read.text, /workspace-session/);
-  // 注入根里的路径即使文件不存在也拒止（围栏按路径判定，不要求文件在场）。
+  // 注入根里的路径即使文件不存在也拒止（敏感范围按路径判定，不要求文件在场）。
   const inEnv = await tools.run('read_file', { path: join(home, 'current-url.txt') });
   assert.equal(inEnv.denied, true);
 });
@@ -445,4 +445,121 @@ test('junction 真建：遍历不进入符号链接目录（建链失败显式�
   assert.doesNotMatch(grepped.text, /linkdir/u, 'grep 命中不得以链接目录为路径');
   // 对照：真实目录内的文件照常可查。
   assert.match((await tools.run('grep', { pattern: 'junction-target', path: join(root, 'real') })).text, /junction-target/);
+});
+
+// ── 正则安全判据与工作者线程执行（design §3.4） ──────────────────────────────
+
+test('assertSafePattern 判据④：相邻量词原子连跑 4 拦 3 过，组边界与选择透明、字面量中断', () => {
+  // 拦：可变跨度紧邻堆叠（`a*a*a*a*b` 一类病态回溯形态）。
+  assert.equal(assertSafePattern('a*a*a*a*b'), 'adjacent quantified atoms');
+  assert.equal(assertSafePattern('a*b*c*d*e'), 'adjacent quantified atoms');
+  assert.equal(assertSafePattern('.*.*.*.*'), 'adjacent quantified atoms');
+  assert.equal(assertSafePattern('[abc]*[def]*[ghi]*[jkl]*'), 'adjacent quantified atoms');
+  assert.equal(assertSafePattern('a{2,3}b{2,3}c{2,3}d{2,3}'), 'adjacent quantified atoms');
+  // 组边界透明：`a*(?:b*c*d*)e*` 与 `a*b*c*d*e` 同形归一。
+  assert.equal(assertSafePattern('a*(?:b*c*d*)e*'), 'adjacent quantified atoms');
+  assert.equal(assertSafePattern('(?:a*b*c*)d*'), 'adjacent quantified atoms');
+  // 量化组的量化性＝组内末原子带量词：`(a)*(b)*(c)*(d)*` 与裸写 `a*a*a*a*` 同级回溯，同拦。
+  assert.equal(assertSafePattern('(a)*(b)*(c)*(d)*'), 'adjacent quantified atoms');
+  assert.equal(assertSafePattern('(?:ab)+(?:cd)+(?:ef)+(?:gh)+'), 'adjacent quantified atoms');
+  assert.equal(assertSafePattern('a*(?:b)*(?:c)*d*'), 'adjacent quantified atoms', '组量化跨组传导恢复连跑');
+  assert.equal(assertSafePattern('(a)*(?:x*)(?:y*)(?:z*)'), 'adjacent quantified atoms', '混合形态与全组形态机械一致');
+  assert.equal(assertSafePattern('x*((a))*(b)*(c)*'), 'adjacent quantified atoms', '嵌套量化组的恢复由外层组闭承接');
+  // 嵌套组续算按深度入栈：内组首原子不得覆写外层已捕获的组前连跑——同语言异判定消除。
+  assert.equal(assertSafePattern('a*b*c*(?:(?:d)e)*'), 'adjacent quantified atoms');
+  assert.equal(assertSafePattern('a*b*c*(?:d(?:e))*'), 'adjacent quantified atoms', '内组在后的同语言形态同拦');
+  assert.equal(assertSafePattern('a*b*c*((d)y(e))*'), 'adjacent quantified atoms');
+  assert.equal(assertSafePattern('a*a*a*((a)(a))*'), 'adjacent quantified atoms', '可利用形：与 a*a*a*(?:aa)* 同级回溯');
+  // 多字符转义按整原子消费：`\x41*`×4 与 `A*`×4 同级，不得拆成幻影原子逐次清零连跑。
+  assert.equal(assertSafePattern('\\x41*\\x42*\\x43*\\x44*'), 'adjacent quantified atoms');
+  assert.equal(assertSafePattern('\\u0041*\\u0042*\\u0043*\\u0044*'), 'adjacent quantified atoms');
+  assert.equal(assertSafePattern('\\p{L}*\\p{L}*\\p{L}*\\p{L}*'), 'adjacent quantified atoms');
+  assert.equal(assertSafePattern('\\d*\\x41*\\s*\\x42*'), 'adjacent quantified atoms', '转义混排同拦');
+  assert.equal(assertSafePattern('[\\x41]*[\\x42]*[\\x43]*[\\x44]*'), 'adjacent quantified atoms', '类内转义对照');
+  assert.equal(assertSafePattern('\\x41*\\x42*'), undefined, '两连不过限');
+  // `\B` 是宽容零宽（全部内部位置成立、歧义保留），不中断连跑；`\b` 约束切分点仍中断。
+  assert.equal(assertSafePattern('a*a*a*\\Ba*'), 'adjacent quantified atoms');
+  assert.equal(assertSafePattern('a*a*a*\\ba*'), undefined);
+  // 过：三连跑以内，或字面量中断。
+  assert.equal(assertSafePattern('a*a*a*b'), undefined);
+  assert.equal(assertSafePattern('a*b*c*d'), undefined);
+  assert.equal(assertSafePattern('a*(?:b*c*)'), undefined);
+  assert.equal(assertSafePattern('(ab)*c*'), undefined);
+  assert.equal(assertSafePattern('(a)*(b)*'), undefined, '两个单原子量化组＝两连跑，不过限');
+  assert.equal(assertSafePattern('(a)*(b)*(c)*'), undefined, '三个单原子量化组＝三连跑，不过限哨兵');
+  assert.equal(assertSafePattern('(?:ab)c*'), undefined, '无量化组＝透明，末原子中断维持');
+  assert.equal(assertSafePattern('a*b*c(x)*(y)*'), undefined, '组外无量化原子是真隔断：左右两段各自计数');
+  assert.equal(assertSafePattern('a|b|c'), undefined);
+  // 既有判据保持：嵌套量词、量词复杂组、反向引用（数字与命名形式整类拒止）。
+  assert.equal(assertSafePattern('(a+)+b'), 'quantified complex group');
+  assert.equal(assertSafePattern('(?:x|y)*z'), 'quantified complex group');
+  assert.equal(assertSafePattern('(a)\\1'), 'backreference');
+  assert.equal(assertSafePattern('(?<n>a)\\k<n>'), 'backreference', '命名反向引用同属判据③');
+});
+
+test('病态 glob 匹配式在工作者线程回溯，时限到点强制终止且主事件循环保持响应', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dsafm-patho-'));
+  // 文件名里 `a` 饱和：glob 匹配式 `^a[^/]*a…b$` 的相邻可变跨度产生组合数级回溯。
+  await writeFile(join(root, `${'a'.repeat(80)}b.txt`), 'x');
+  const tools = createReadonlyTools({ rootDir: root });
+  let loopFiredAt = 0;
+  const loopScheduledAt = Date.now();
+  const loopTimer = setTimeout(() => { loopFiredAt = Date.now(); }, 80);
+  const startedAt = Date.now();
+  const result = await tools.run(
+    'glob',
+    { pattern: 'a*a*a*a*a*a*a*a*a*a*a*b' },
+    undefined,
+    { toolTimeoutMs: 300 },
+  );
+  const elapsed = Date.now() - startedAt;
+  clearTimeout(loopTimer);
+  assert.equal(result.isError, true, '病态匹配式必须按失败返回，不得假绿');
+  assert.match(result.text, /超时/u, '失败说明按超时口径');
+  assert.ok(elapsed < 2500, `时限到点即终止，不等回溯自然结束（实得 ${elapsed}ms）`);
+  // 工作者烧 CPU 期间主线程定时器照常按点触发——事件循环未被阻塞。
+  assert.ok(loopFiredAt > 0, '响应性探针定时器已触发');
+  assert.ok(loopFiredAt - (loopScheduledAt + 80) < 200, `主事件循环保持响应（定时器时延 ${loopFiredAt - loopScheduledAt - 80}ms）`);
+});
+
+test('工作者在飞时请求取消 → 按取消口径返回，不等回溯自然结束', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dsafm-cancel-'));
+  await writeFile(join(root, `${'a'.repeat(80)}b.txt`), 'x');
+  const tools = createReadonlyTools({ rootDir: root });
+  const controller = new AbortController();
+  const startedAt = Date.now();
+  const pending = tools.run(
+    'glob',
+    { pattern: 'a*a*a*a*a*a*a*a*a*a*a*b' },
+    controller.signal,
+    { toolTimeoutMs: 5000 },
+  );
+  setTimeout(() => controller.abort('user cancelled'), 120);
+  const result = await pending;
+  const elapsed = Date.now() - startedAt;
+  assert.equal(result.isError, true);
+  assert.match(result.text, /取消/u, '取消口径的失败说明');
+  assert.ok(elapsed < 2000, `取消即终止工作者（实得 ${elapsed}ms）`);
+});
+
+test('grep 的 glob 过滤式在工作者内执行——过滤后命中集与上限说明保持', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dsafm-filter-'));
+  await writeFile(join(root, 'a.ts'), 'hello alpha\n');
+  await writeFile(join(root, 'b.md'), 'hello beta\n');
+  const tools = createReadonlyTools({ rootDir: root });
+  const filtered = await tools.run('grep', { pattern: 'hello', path: root, glob: '*.ts' });
+  assert.equal(filtered.isError, false);
+  assert.match(filtered.text, /a\.ts:1: hello alpha/u);
+  assert.doesNotMatch(filtered.text, /b\.md/u, '过滤式只保留匹配 glob 的候选');
+  const all = await tools.run('grep', { pattern: 'hello', path: root });
+  assert.match(all.text, /b\.md:1: hello beta/u, '不带过滤式时全部候选参与');});
+
+test('grep 超长行整行跳过并计数说明（不截断）', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dsafm-longline-'));
+  await writeFile(join(root, 'x.txt'), `${'x'.repeat(600)}needle\nneedle\n`);
+  const tools = createReadonlyTools({ rootDir: root });
+  const result = await tools.run('grep', { pattern: 'needle', path: join(root, 'x.txt') });
+  assert.equal(result.isError, false);
+  assert.match(result.text, /x\.txt:2: needle/u, '短行照常命中');
+  assert.match(result.text, /跳过 1 个超过 500 字符的超长行，整行跳过、不截断/u, '超长行跳过计数说明在场');
 });

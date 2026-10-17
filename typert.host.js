@@ -320,7 +320,7 @@ export const TYPERT = {
             signature: '@Remote("setSessionModel") setSessionModel(args: { sessionId: string; model: string | null; effort: string }): SetSessionModelResult',
             summary: 'Set or clear the per-session reviewer model and its reasoning effort.',
             jsDoc:
-              '/**\n * Set or clear the per-session reviewer model.\n * @param args - session id, the model reference (null clears) and the effort (empty follows the model default).\n * @returns `{ ok }` or `{ ok: false, error }`.\n */',
+              '/**\n * Set or clear the per-session reviewer model.\n * @param args - session id, the model reference (null clears) and the effort (empty is automatic: use `low` when the model supports it, otherwise send no effort and let the model default decide).\n * @returns `{ ok }` or `{ ok: false, error }`.\n */',
           },
           {
             kind: 'method',

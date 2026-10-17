@@ -80,9 +80,11 @@ function harness(turns, options = {}) {
       const turn = turns[Math.min(index, turns.length - 1)];
       index += 1;
       if (turn.throws !== undefined) {
-        // 流迭代中途抛错的最小替身：首块前即抛（与真实网络错在 for await 处被捕获同路径）。
+        // 流迭代中途抛错的最小替身：首块前即抛（与真实网络错在 for await 处被捕获同路径）；
+        // throws 为函数时先调用（可在抛错前触发中止等副作用），返回值作错误文本。
         return (async function* generate() {
-          throw new Error(turn.throws);
+          const message = typeof turn.throws === 'function' ? turn.throws() : turn.throws;
+          throw new Error(message);
         })();
       }
       return (async function* generate() {
@@ -295,7 +297,7 @@ test('review：无模型可用时不发起请求，返回 error 并记录 degrad
   assert.equal(verdict.fields.degraded, 'all');
 });
 
-test('T10 早退路径不丢采集状态：layer=unavailable 时 evidenceDegraded 并入降级清单与 all', async () => {
+test('早退路径不丢采集状态：layer=unavailable 时 evidenceDegraded 并入降级清单与 all', async () => {
   const h = harness([{ blocks: [text('{}')] }], {
     cfg: { resolution: { layer: 'unavailable', effort: 'none', degraded: 'all' } },
     pre: { fields: { degraded: 'none' }, evidence: '', evidenceDegraded: ['transcript-read-failed'] },
@@ -308,7 +310,7 @@ test('T10 早退路径不丢采集状态：layer=unavailable 时 evidenceDegrade
   assert.equal(reviewLine.degraded, 'transcript-read-failed,all', '审计 review 行同口径');
 });
 
-test('L5 三源合并与去重：evidenceDegraded＋locatedDegraded＋fields.degraded 同给 → 各标记恰一次', async () => {
+test('三源合并与去重：evidenceDegraded＋locatedDegraded＋fields.degraded 同给 → 各标记恰一次', async () => {
   const h = harness([{ blocks: [text('{"outcome":"deny","rationale":"x"}')] }], {
     pre: {
       fields: { degraded: 'command' },
@@ -545,16 +547,15 @@ test('连败至上限：两次尝试后 error，reason 与审计 review 行都�
   assert.equal(h.audits.filter((row) => row.phase === 'review').length, 1);
 });
 
-test('预算权威：signal 已中止（gate 计时器先到/请求取消）不再开始下一次尝试', async () => {
-  const aborted = new AbortController();
-  // 用 gate 计时器的真实 reason 形状（design §4.3 的超时中止标记）。
-  aborted.abort(new Error(REVIEW_TIMEOUT_ABORT_MESSAGE));
+test('预算权威：signal 在首试失败后中止（gate 计时器先到/请求取消）不再开始下一次尝试', async () => {
   // 第二轮次本可成功：预算已耗尽时不许再烧——超时结算由 gate 计时器决定（design §4.3，优先于重试）。
+  // 中止发生在首试流内：用 gate 计时器的真实 reason 形状（design §4.3 的超时中止标记）。
+  const gate = new AbortController();
   const h = harness([
-    { throws: 'first failure' },
+    { throws: () => { gate.abort(new Error(REVIEW_TIMEOUT_ABORT_MESSAGE)); return 'first failure'; } },
     { blocks: [text('{"outcome":"allow","risk_level":"low","user_authorization":"high","rationale":"too late"}')] },
   ]);
-  const verdict = await h.review({ signal: aborted.signal });
+  const verdict = await h.review({ signal: gate.signal });
   assert.equal(h.requests.length, 1, '中止信号下不得开始第二次尝试');
   assert.equal(verdict.decision, 'error');
   assert.equal(verdict.reason, 'first failure', '未发生重试，不带尝试前缀');
@@ -562,6 +563,34 @@ test('预算权威：signal 已中止（gate 计时器先到/请求取消）不�
   const reviewLine = h.audits.find((row) => row.phase === 'review');
   assert.equal(reviewLine.late, 'yes');
   assert.equal(reviewLine.degraded, 'none');
+});
+
+test('取消贯通：进入审查时信号已中止——首次 llm.stream 都不发起（design §5.1）', async () => {
+  // 超时标记的中止按超时口径返回（与流内超时同权，gate 照旧计数）；不发起点表现在 requests=0。
+  const timeout = new AbortController();
+  timeout.abort(new Error(REVIEW_TIMEOUT_ABORT_MESSAGE));
+  const timeoutHarness = harness([{ blocks: [text('{"outcome":"allow"}')] }]);
+  const timeoutVerdict = await timeoutHarness.review({ signal: timeout.signal });
+  assert.equal(timeoutHarness.requests.length, 0, '已中止不发起 llm.stream（含首次尝试）');
+  assert.equal(timeoutVerdict.decision, 'error');
+  assert.equal(timeoutVerdict.reason, 'review timeout');
+  assert.equal(timeoutVerdict.timedOut, true);
+  assert.equal(timeoutVerdict.superseded, undefined, '超时口径的中止计入冷却（design §5.3）');
+  const timeoutLine = timeoutHarness.audits.find((row) => row.phase === 'review');
+  assert.equal(timeoutLine.late, 'yes');
+  assert.equal(timeoutLine.degraded, 'none');
+
+  // 他路先结算的标记中止按被替代形状返回：不计数，只作观测（design §5.3）。
+  const marked = new AbortController();
+  marked.abort(REVIEW_SUPERSEDED);
+  const markedHarness = harness([{ blocks: [text('{"outcome":"allow"}')] }]);
+  const markedVerdict = await markedHarness.review({ signal: marked.signal });
+  assert.equal(markedHarness.requests.length, 0, '已中止不发起 llm.stream');
+  assert.equal(markedVerdict.superseded, true, '他路先结算的中止不是通道故障，index 层据此跳过冷却计数');
+  assert.match(markedVerdict.reason, /aborted（gate 他路先结算，非通道故障）/u);
+  const markedLine = markedHarness.audits.find((row) => row.phase === 'review');
+  assert.equal(markedLine.degraded, 'superseded', '跳过原因必须落审计（review 行 degraded）');
+  assert.equal(markedLine.late, 'yes');
 });
 
 test('不可重试类零重试：max-tokens 截断与 layer=unavailable', async () => {
@@ -615,7 +644,7 @@ test('留痕：失败尝试的 finish 摘要只在 capture=full 档进 trace det
 // ── 计数口径：abort 型 error 的 superseded 分类（design §5.3） ──────────────
 
 test('分类：gate 他路先结算的中止（REVIEW_SUPERSEDED 标记/宿主取消 reason）→ verdict 带 superseded（design §5.3）', async () => {
-  // 场景一：gate 的标记 reason（人工先答/卡片关闭/人工超时竞速获胜/回调抛错路径）。
+  // 场景一：gate 的标记 reason（人工先答/卡片关闭/人工超时竞速获胜/回调抛错路径）在进入审查前已中止。
   const marked = new AbortController();
   marked.abort(REVIEW_SUPERSEDED);
   const markedHarness = harness([
@@ -623,7 +652,7 @@ test('分类：gate 他路先结算的中止（REVIEW_SUPERSEDED 标记/宿主�
     { blocks: [text('{"outcome":"allow","risk_level":"low","user_authorization":"high","rationale":"bait"}')] },
   ]);
   const markedVerdict = await markedHarness.review({ signal: marked.signal });
-  assert.equal(markedHarness.requests.length, 1, '中止不重试');
+  assert.equal(markedHarness.requests.length, 0, '已中止不发起 llm.stream（design §5.1 取消贯通）');
   assert.equal(markedVerdict.decision, 'error');
   assert.equal(markedVerdict.superseded, true, '他路先结算的中止不是通道故障，index 层据此跳过冷却计数');
   assert.match(markedVerdict.reason, /aborted（gate 他路先结算，非通道故障）/u);
@@ -631,16 +660,20 @@ test('分类：gate 他路先结算的中止（REVIEW_SUPERSEDED 标记/宿主�
   assert.equal(markedLine.degraded, 'superseded', '跳过原因必须落审计（review 行 degraded）');
   assert.equal(markedLine.late, 'yes');
 
-  // 场景二：宿主取消——request.signal 先中止（merged signal 带宿主自己的取消 reason，不是超时标记）。
+  // 场景二：宿主取消发生在流内——request.signal 在流迭代中被中止（宿主自己的取消 reason，
+  // 非超时标记），流随即撕裂：走 catch 路径的中止分类（流内中止与启动前中止同一口径）。
   const cancelled = new AbortController();
-  cancelled.abort(new Error('tool cancelled by user'));
-  const cancelledHarness = harness([{ throws: 'stream torn down' }]);
+  const cancelledHarness = harness([
+    { throws: () => { cancelled.abort(new Error('tool cancelled by user')); return 'stream torn down'; } },
+  ]);
   const cancelledVerdict = await cancelledHarness.review({ signal: cancelled.signal });
+  assert.equal(cancelledHarness.requests.length, 1, '中止发生在流内：首次 stream 已发起');
   assert.equal(cancelledVerdict.superseded, true, '宿主取消引发的 abort 型 error 同样不计冷却');
   assert.match(cancelledVerdict.reason, /aborted（gate 他路先结算，非通道故障）：stream torn down/u);
 });
 
 test('分类：审查计时器的中止（reason＝REVIEW_TIMEOUT_ABORT_MESSAGE）→ 无 superseded，照旧计数', async () => {
+  // 进入审查前已中止（启动前复核路径）：不发起流，按超时口径返回。
   const timer = new AbortController();
   timer.abort(new Error(REVIEW_TIMEOUT_ABORT_MESSAGE));
   const h = harness([
@@ -648,10 +681,11 @@ test('分类：审查计时器的中止（reason＝REVIEW_TIMEOUT_ABORT_MESSAGE�
     { blocks: [text('{"outcome":"allow","risk_level":"low","user_authorization":"high","rationale":"bait"}')] },
   ]);
   const verdict = await h.review({ signal: timer.signal });
-  assert.equal(h.requests.length, 1);
+  assert.equal(h.requests.length, 0, '已中止不发起 llm.stream（design §5.1 取消贯通）');
   assert.equal(verdict.decision, 'error');
+  assert.equal(verdict.timedOut, true);
   assert.equal(verdict.superseded, undefined, '慢通道也是不可信通道：超时中止计入冷却（design §5.3）');
-  assert.equal(verdict.reason, 'stream torn down');
+  assert.equal(verdict.reason, 'review timeout');
   const reviewLine = h.audits.find((row) => row.phase === 'review');
   assert.equal(reviewLine.degraded, 'none');
 });

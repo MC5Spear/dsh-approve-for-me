@@ -132,7 +132,7 @@ test('主体全量过检：毒在后位键或嵌套键同样 deny 且 reason 写
   assert.equal(nested.action, 'deny', '嵌套对象里的字符串也要过检');
   assert.match(nested.reason, /env\.PAYLOAD/);
 
-  // 规则层真实产物 reason 也须含「命中模式」（design §8.1）——不只在 gate 侧 stub 与真机实测。
+  // 规则层真实产物 reason 也须含「命中模式」（design §3.5 与 §8.4）——不只在 gate 侧 stub 与真机实测。
   assert.match(back.reason, /命中模式/, '规则层 reason 应含模式命中原语');
   assert.match(nested.reason, /命中模式/, '规则层 reason 应含模式命中原语');
 });
@@ -149,7 +149,7 @@ test('回归：既有命中形态仍拒绝（锚定只收紧不放松）', () =>
   }
 });
 
-// ── denyPatterns 出厂默认清空（requirements §5.3：规则墙降位为用户可选黑名单）──
+// ── denyPatterns 出厂默认清空（requirements §5.3：denyPatterns 规则降位为用户可选黑名单）──
 // baseConfig 显式展开 `[...DEFAULT_DENY_PATTERNS]`＝显式配置部署；上面的既有命中用例
 // 在默认值清空后不受影响，天然构成显式配置行为不变的回归。
 
@@ -166,7 +166,7 @@ test('场景回归：提交说明含出厂清单样例文本的 git commit 默�
   const command = 'git commit -m "docs: warn about format c: data loss in guides"';
   // 默认侧走真 normalizeConfig()（未配置实例的生效配置），使「默认改回出厂清单」变异可检出。
   assert.equal(screen(escalation(), located({ command }), normalizeConfig()).action, 'review');
-  // 同命令在显式配置清单下仍被规则强制拒绝（原行为——墙仍在，默认不装填）。
+  // 同命令在显式配置清单下仍被规则强制拒绝（原行为——denyPatterns 规则仍在，默认不装填）。
   assert.equal(screen(escalation(), located({ command }), baseConfig).action, 'deny');
 });
 

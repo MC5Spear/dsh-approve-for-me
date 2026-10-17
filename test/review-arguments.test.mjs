@@ -105,7 +105,7 @@ test('极小 maxEntryBytes：参数段与有界策略规格公式逐字节一致
   const rendered = JSON.stringify(args);
   const size = Buffer.byteLength(rendered, 'utf8');
   const limit = 256;
-  // 规格公式（design §3.2 有界策略）：N＝ceil((size-limit)/4)；标记整块保留；余量＝max(2, limit-标记字节)；
+  // 规格公式（design §3.2 有界策略，首尾保留比例按 lib/transcript.js 常量）：N＝ceil((size-limit)/4)；标记整块保留；余量＝max(2, limit-标记字节)；
   // 首 60%、尾 40%（尾可为空）；完整标记使总长可能超出预算——不断言不存在的严格上限。
   const marker = `<truncated omitted_approx_tokens="${Math.ceil((size - limit) / 4)}" />`;
   const budget = Math.max(2, limit - marker.length);
@@ -256,14 +256,14 @@ test('出口不泄漏：trace 落盘（capture=full）里的参数文本已遮�
 });
 
 // ---------- 自有键保全与祖先路径循环判定 ----------
-// 同源复现输入的现行判据：自有 `__proto__` 键不得被静默删除、无环共享容器不得误标 `[circular]`。
-// 以下用原失败输入逐字断言送审文本与审批结算。
+// 现行判据：自有 `__proto__` 键不得被静默删除、无环共享容器不得误标 `[circular]`。
+// 以下逐字断言送审文本与审批结算。
 
-test('自有 __proto__ 键完整送审（原失败输入）：参数段逐字等于 JSON 序列化，实际载荷改变审批结算', async () => {
+test('自有 __proto__ 键完整送审：参数段逐字等于 JSON 序列化，实际载荷改变审批结算', async () => {
   // JSON.parse 产生的是自有可枚举 __proto__ 键的正常对象，不是对象字面量的原型语法。
   const raw = '{"file_path":"proto-target.txt","__proto__":{"payload":"TARGET-CRITICAL"},"content":"fixture"}';
   const args = JSON.parse(raw);
-  // 可观测判定替身：只按实际收到的模型输入决定——载荷可见才 deny（修复前载荷被静默删除 → allow）。
+  // 可观测判定替身：只按实际收到的模型输入决定——载荷可见才 deny。
   const verdictFor = (o) => (JSON.stringify(o.messages).includes('TARGET-CRITICAL')
     ? JSON.stringify({ outcome: 'deny', risk_level: 'high', user_authorization: 'low', rationale: 'critical payload visible' })
     : JSON.stringify({ outcome: 'allow', risk_level: 'low', user_authorization: 'high', rationale: 'no payload seen' }));
@@ -272,7 +272,7 @@ test('自有 __proto__ 键完整送审（原失败输入）：参数段逐字等
   const segment = argumentsSegment(w);
   assert.equal(segment, JSON.stringify(args), '参数段与 JSON.stringify 同输入逐字节一致（自有 __proto__ 键在场）');
   assert.ok(segment.includes('"__proto__":{"payload":"TARGET-CRITICAL"}'), '自有 __proto__ 键与其载荷进入模型输入');
-  assert.equal(outcome, 'rejected', '载荷完整送审 → 替身 deny → rejected（修复前此处结算 allowed-once）');
+  assert.equal(outcome, 'rejected', '载荷完整送审 → 替身 deny → rejected');
   assert.equal(Object.getPrototypeOf(args), Object.prototype, '渲染不触碰原始对象的原型');
 });
 
@@ -307,7 +307,7 @@ test('自有键直测：__proto__ 字符串/对象/数组取值与 constructor/p
   assert.equal(renderArguments(ordinary), JSON.stringify(ordinary), 'constructor/prototype 普通自有键不丢');
 });
 
-test('无环共享对象完整送审（原失败输入）：两分支逐字节等于 JSON 序列化，不误标 [circular]', async () => {
+test('无环共享对象完整送审：两分支逐字节等于 JSON 序列化，不误标 [circular]', async () => {
   const shared = { payload: 'SHARED-PAYLOAD' };
   const args = { file_path: 'alias.txt', first: shared, second: shared };
   const w = wired({ config: { context: { maxEntries: 0, maxEntryBytes: 0 } } });
@@ -358,8 +358,8 @@ test('共享分支同样先遮后截：每处引用的秘密都被遮蔽', async
 });
 
 // ---------- 动作段出口遮蔽与详情采集占位 ----------
-// 原失败输入逐字复现：① 动作 JSON 的命令字段带秘密形态直送审查模型（参数段已遮蔽、动作段泄漏）；
-// ② full 档详情采集中参数摘要的无保护 String() 对 null 原型容器再抛错，模型调用整体不发生。
+// 现行判据：① 动作 JSON 的命令字段同样按本请求清单遮蔽（与参数段同口径）；
+// ② 详情采集中参数摘要经安全序列化器，异常参数以占位符呈现，模型调用照常发生。
 
 /** 可观测判定替身：全部送模消息里出现标记值 → deny，否则 allow。 */
 function denyIfVisible(marker) {
@@ -368,7 +368,7 @@ function denyIfVisible(marker) {
     : JSON.stringify({ outcome: 'allow', risk_level: 'low', user_authorization: 'high', rationale: 'marker not seen' }));
 }
 
-test('动作段命令按本请求清单遮蔽：秘密在全部送模请求零出现，五字段结构保持（原失败输入）', async () => {
+test('动作段命令按本请求清单遮蔽：秘密在全部送模请求零出现，五字段结构保持', async () => {
   const args = { command: 'echo password=syntheticCommandSecret', metadata: { operation: 'audit' } };
   const w = wired({
     config: { context: { maxEntries: 0, maxEntryBytes: 0, redactPatterns: [...DEFAULT_REDACT_PATTERNS] } },
@@ -377,14 +377,14 @@ test('动作段命令按本请求清单遮蔽：秘密在全部送模请求零�
   const outcome = await w.request(req('r2-001', 'call-r2-001', args, w.injections, undefined, 'pwsh'), () => new Promise(() => {}));
   // 零出现断言覆盖整个实际请求（system、全部消息与工具 schema），不以单一消息代替。
   const sent = JSON.stringify(w.options);
-  assert.ok(!sent.includes('syntheticCommandSecret'), '动作段与参数段的秘密都不得进入送模请求（原失败：动作 JSON 直送明文）');
+  assert.ok(!sent.includes('syntheticCommandSecret'), '动作段与参数段的秘密都不得进入送模请求');
   const actionText = w.options[0].messages[1].content[0].text;
   for (const field of ['toolName', 'command', 'cwd', 'requestedMode', 'justification']) {
     assert.ok(actionText.includes(`"${field}"`), `动作 JSON 五字段结构保持：${field} 在场`);
   }
   assert.ok(actionText.includes('"command": "echo [redacted]"'), '命令字段按本请求清单遮蔽（命中默认第 3 项）');
   assert.equal(argumentsSegment(w), '{"command":"echo [redacted]","metadata":{"operation":"audit"}}', '独立参数段同样遮蔽（逐字节）');
-  assert.equal(outcome, 'allowed-once', '遮蔽后替身不见秘密 → allow（修复前秘密可见 → deny → rejected）');
+  assert.equal(outcome, 'allowed-once', '遮蔽后替身不见秘密 → allow');
   assert.ok(!JSON.stringify(w.injections).includes('syntheticCommandSecret'), '注入出口不含秘密');
 });
 
@@ -398,9 +398,9 @@ test('普通无秘密命令不受遮蔽影响：原样送审、无多余遮蔽�
   assert.equal(outcome, 'allowed-once', '普通命令结算回归不变');
 });
 
-test('详情采集不中止审查：full/summary/off 下异常参数都实际送审并按占位结算（原失败输入）', async () => {
-  // null 原型容器 + 抛错枚举 getter：安全序列化器接住为 [unserializable]，旧详情路径的无保护
-  // String() 对同一对象抛「Cannot convert object to primitive value」——full 档在模型调用前炸毁。
+test('详情采集不中止审查：full/summary/off 下异常参数都实际送审并按占位结算', async () => {
+  // null 原型容器 + 抛错枚举 getter：安全序列化器接住为 [unserializable]，
+  // 详情摘要同走安全序列化器，模型调用照常发生。
   const makeArgs = () => {
     const args = Object.create(null);
     args.file_path = 'data-with-unreadable-property.json';
@@ -413,7 +413,7 @@ test('详情采集不中止审查：full/summary/off 下异常参数都实际送
       text: denyIfVisible('[unserializable]'),
     });
     const outcome = await w.request(req(`r2-002-${capture}`, `call-r2-002-${capture}`, makeArgs(), w.injections), () => new Promise(() => {}));
-    assert.equal(w.options.length, 1, `capture=${capture}：模型调用实际发生（修复前 full 档在送模前抛错、零调用）`);
+    assert.equal(w.options.length, 1, `capture=${capture}：模型调用实际发生`);
     const sent = JSON.stringify(w.options[0].messages);
     assert.ok(sent.includes('[unserializable]'), `capture=${capture}：参数段以占位符实际送审`);
     assert.ok(!sent.includes('controlled getter exception'), `capture=${capture}：异常消息不外送`);

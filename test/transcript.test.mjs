@@ -92,7 +92,7 @@ test('回查双事件名兼容：tool/call 与 code-dispatch/ptc-dispatch 都命
 
 // ── 采集层四类状态可分辨（design §3.1／§3.2） ──────────────────────
 
-test('T1 读取失败三形态（抛错／接口缺失／返回非数组）→ 恰为 transcript-read-failed、text 空、entries 0、truncated false', () => {
+test('读取失败三形态（抛错／接口缺失／返回非数组）→ 恰为 transcript-read-failed、text 空、entries 0、truncated false', () => {
   // 形态一：snapshotEvents 抛错。
   const thrown = collectEvidence({ snapshotEvents: () => { throw new Error('boom'); } }, {});
   assert.deepEqual(thrown, { text: '', entries: 0, truncated: false, degraded: [TRANSCRIPT_READ_FAILED] });
@@ -105,7 +105,7 @@ test('T1 读取失败三形态（抛错／接口缺失／返回非数组）→ �
   assert.equal(TRANSCRIPT_READ_FAILED, 'transcript-read-failed', '标记值与词汇表一致');
 });
 
-test('T2 总量截断恰记 transcript-truncated，单条截断仍是 entry:<类型> 前缀族', () => {
+test('总量截断恰记 transcript-truncated，单条截断仍是 entry:<类型> 前缀族', () => {
   const long = () => `${'A'.repeat(2000)}TAIL`;
   const result = collectEvidence(sessionWith([userMessage(long()), userMessage(long())]), {
     maxEntries: 5,
@@ -120,7 +120,7 @@ test('T2 总量截断恰记 transcript-truncated，单条截断仍是 entry:<类
   assert.equal(result.degraded.includes(TRANSCRIPT_READ_FAILED), false);
 });
 
-test('L6 locate 三形态的 degraded 值：回查不到＝command、坏参数＝command、仅目录缺失＝cwd', () => {
+test('locate 三形态的 degraded 值：回查不到＝command、坏参数＝command、仅目录缺失＝cwd', () => {
   // 回查不到（无匹配 callId）且目录同时缺失 → cwd 与 command 并存（locate 先记目录缺失再记回查缺失）。
   const both = locate({
     agent: { session: { header: {}, snapshotEvents: () => [{ type: 'tool/call', data: { callId: 'x', arguments: '{"command":"ls"}' } }] } },

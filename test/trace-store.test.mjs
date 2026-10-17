@@ -359,13 +359,13 @@ test('读失败：返回空列表、审计 read-failed 且 degraded 为真；末
   assert.deepEqual(rows.map((row) => row.reviewId), ['s2:c1:1']);
   assert.equal(tornSink.rows.filter((row) => row.degraded === 'torn-line').length, 1);
   assert.equal(store.degraded('s2'), true, '撕裂后窗口可能不完整');
-  // 撕裂行不挡后续写入：追加前先补换行自愈，新记录不粘进残行，重放也不丢；
+  // 撕裂行不挡后续写入：追加前先补分隔（换行），新记录不粘进残行，重放也不丢；
   // 但降级标记只在整文件重写成功后解除。
   assert.equal(await store.record(makeEntry({ sessionId: 's2', approvalId: 'a3' })), true);
   await store.flush();
   assert.equal(store.list('s2').length, 2);
   assert.equal(createTraceStore({ dir }).list('s2').length, 2);
-  assert.equal(store.degraded('s2'), true, '追加自愈不清降级标记');
+  assert.equal(store.degraded('s2'), true, '追加时补分隔不清降级标记');
 });
 
 test('整文件重写成功后解除读取降级（design §8.3）', async (t) => {
@@ -421,7 +421,7 @@ test('参数非法的 record 不落盘也不抛错', async (t) => {
   assert.deepEqual(readdirSync(dir), []);
 });
 
-test('内存侧会话键对齐 maxSessions（design §8.3）：淘汰防「文件已删、内存残留」的重录漂移', async (t) => {
+test('内存侧会话键数与磁盘侧 maxSessions 保持一致（design §8.3）：淘汰防「文件已删、内存残留」的重录漂移', async (t) => {
   const dir = makeDir(t);
   const store = createTraceStore({ dir, maxSessions: 2 });
   for (const key of ['a', 'b', 'c']) {
@@ -461,4 +461,49 @@ test('零预算回退（design §8.2/§8.3）：maxBytes=0 与 maxRecords=0 都�
   assert.ok(window.length > 150 && window.length <= 200, `零窗口回退默认窗口（实得 ${window.length}）`);
   const diskLines = readLines(join(dir2, 's1.jsonl'));
   assert.ok(diskLines.length > 150 && diskLines.length <= 200 * 4, '磁盘行数在默认窗口×4 内');
+});
+
+// ── 记录级采集计划（design §8.2 在飞请求配置快照） ──────────────────────────
+
+test('record(entry, plan)：计划值覆盖构造值、缺省回退、tracePlan 控制字段不落盘', async (t) => {
+  const dir = makeDir(t);
+  const store = createTraceStore({ dir, capture: 'summary', maxBytes: 64 });
+  // plan.capture='full' 覆盖构造档 summary：详情落盘且按 plan.maxBytes 裁剪。
+  await store.record(
+    makeEntry({ sessionId: 's1', approvalId: 'a1', prompt: 'p'.repeat(40), output: 'o'.repeat(40) }),
+    { capture: 'full', maxBytes: 16 },
+  );
+  // plan.capture='summary' 覆盖构造档 full：详情不落盘（构造档 full 不穿透记录级计划）。
+  const fullStore = createTraceStore({ dir, capture: 'full', maxBytes: 64 });
+  await fullStore.record(
+    makeEntry({ sessionId: 's2', approvalId: 'a2', prompt: 'p'.repeat(40), output: 'o'.repeat(40) }),
+    { capture: 'summary' },
+  );
+  // 计划字段非法（不在枚举内/非正数）：逐字段回退构造值。
+  await fullStore.record(
+    makeEntry({ sessionId: 's3', approvalId: 'a3', prompt: 'p'.repeat(40) }),
+    { capture: 'weird', maxBytes: -5 },
+  );
+  // 控制字段混进 entry：白名单外不落盘。
+  await fullStore.record(
+    { ...makeEntry({ sessionId: 's4', approvalId: 'a4' }), tracePlan: { capture: 'full', maxBytes: 1 } },
+  );
+  await store.flush();
+  await fullStore.flush();
+
+  const row1 = createTraceStore({ dir }).approval('s1', 'a1').review;
+  assert.ok(row1.prompt !== undefined, '计划 full 覆盖构造 summary：详情落盘');
+  assert.ok(row1.prompt.length <= 16, `计划 maxBytes=16 覆盖构造 64（实得 ${row1.prompt.length}）`);
+  assert.equal(row1.truncated, true, '按计划预算裁剪置 truncated');
+  assert.equal(row1.tracePlan, undefined, '控制字段不落盘');
+
+  const row2 = createTraceStore({ dir }).approval('s2', 'a2').review;
+  assert.equal(row2.prompt, undefined, '计划 summary 覆盖构造 full：详情不落盘');
+  assert.equal(row2.tracePlan, undefined);
+
+  const row3 = createTraceStore({ dir }).approval('s3', 'a3').review;
+  assert.ok(row3.prompt !== undefined && row3.prompt.length <= 64, '非法计划字段回退构造值（构造 full/64 生效）');
+
+  const row4 = createTraceStore({ dir }).approval('s4', 'a4').review;
+  assert.equal(row4.tracePlan, undefined, 'entry 上的 tracePlan 不落盘（构造档 full 下 prompt 允许在场）');
 });

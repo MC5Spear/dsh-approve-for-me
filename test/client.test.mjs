@@ -159,7 +159,7 @@ function makeCtx(options = {}) {
     getSnapshot: () => snapshot,
     subscribe: () => () => {},
     // 0.1.7 ConfigFormController 语义：宿主拒绝时解为 false 而不抛错。
-    // options.mutateRejects=true 模拟拒绝（快照不变化——recovery 已把宿主状态回读对齐）。
+    // options.mutateRejects=true 模拟拒绝（快照不变化——recovery 已把宿主状态回读一致）。
     mutate: async (ops) => {
       if (options.mutateRejects === true) return false;
       for (const op of ops) {
@@ -738,7 +738,7 @@ test('说明入口（§10.2）：开合不改动草稿、保存计划与常驻�
   assert.equal(findByClass(after, 'dsafm_save').props.disabled, saveBefore, '开合说明不得触碰保存计划');
   assert.equal(env.writes.length, 0, '开合说明不得写库');
   assert.equal(findAllByClass(after, 'dsafm_helpregion').length, 1, '其他字段的展开区保持不动');
-  assert.equal(findAllByClass(after, 'dsafm_sec_warn').length, 0, '开合说明不 resurrect 退役提醒');
+  assert.equal(findAllByClass(after, 'dsafm_sec_warn').length, 0, '开合说明不复活退役提醒');
 });
 
 test('非 loopback（不可写）时卡片显示只读提示', () => {
@@ -2207,7 +2207,7 @@ test('设置项文案：每个 select/bool 字段的选项都有中文标签键�
   const env = makeCtx();
   client.apply(env.ctx);
   const dicts = env.dictionaries[0].dicts;
-  // 与 client.js 的 FIELDS 对齐：字段路径 → 选项集合（bool 是 true/false）。
+  // 与 client.js 的 FIELDS 逐项对应：字段路径 → 选项集合（bool 是 true/false）。
   const expected = {
     'trigger.unknown': ['skip', 'review'],
     'human.timeoutFrom': ['request', 'handoff'],
@@ -3000,7 +3000,7 @@ test('审查视图 §10.2：degraded 含 transcript 反证「未取上下文」�
   assert.match(text, /缺失或异常情况: 会话目录缺失（cwd）、上下文读取失败或截断（transcript）/, '读取失败原因由 degraded 段承载');
 });
 
-test('审查视图 §10.2：degraded 含新标记 transcript-read-failed 反证「未取上下文」，文案按新键（T8）', async () => {
+test('审查视图 §10.2：degraded 含新标记 transcript-read-failed 反证「未取上下文」，文案按新键', async () => {
   resetHooks();
   const client = loadClient();
   // 读取失败与总量截断各自成键：渲染链（store→bridge→视图）按各自键取词，

@@ -2,8 +2,8 @@
  * TYPERT 清单一致性测试。
  *
  * 判据单源：rc.1 契约的检查函数住在 `tools/typert-contract.mjs`，本文件与
- * `tools/check-typert-manifest.mjs` 共用同一份——两处各自维护会在离线检查器一侧漂移
- * （按 rc.6 的 `codec.schema` 字段校验会漂出一批假红，故收敛为单源）。
+ * `tools/check-typert-manifest.mjs` 共用同一份，避免本文件与离线检查器
+ * （按 rc.6 的 `codec.schema` 字段校验）各自维护而漂移。
  * 契约依据：`dsh-typert-loader/lib/index.js:153-212`（注册期校验）与
  * `dsh-typert-registry/lib/index.js:509-518`（`create()` 返回值即 schema，须为 zod v4 实例）。
  */

@@ -462,7 +462,7 @@ test('index 接线：record 收到 sessionId/callId/toolName，配置签名变�
   }
 });
 
-// ── 真链：上下文采集与命令回查降级贯通审查装配（T3–T7／L1–L4） ────────
+// ── 真链：上下文采集与命令回查降级贯通审查装配 ────────
 
 /**
  * 跑一次完整审批并捕获送审证据段与落盘审查记录（真 gate→screen→reviewer→record 链）。
@@ -549,7 +549,7 @@ async function contextChain(options = {}) {
   }
 }
 
-test('T3 真链：snapshotEvents 抛错 → 证据段附读取失败说明行、记录与审计含 transcript-read-failed（zh/en 各一档）', async (t) => {
+test('真链：snapshotEvents 抛错 → 证据段附读取失败说明行、记录与审计含 transcript-read-failed（zh/en 各一档）', async (t) => {
   for (const lang of ['zh', 'en']) {
     const result = await contextChain({ lang, snapshotEvents: () => { throw new Error('snapshot boom'); } });
     if (result === undefined) {
@@ -564,7 +564,7 @@ test('T3 真链：snapshotEvents 抛错 → 证据段附读取失败说明行、
   }
 });
 
-test('T4 真链：snapshotEvents 接口缺失与返回非数组两形态 → 同 T3 断言', async (t) => {
+test('真链：snapshotEvents 接口缺失与返回非数组两形态 → 同读取失败档断言', async (t) => {
   // 形态一：会话没有 snapshotEvents 接口。
   const missing = await contextChain({ noSnapshot: true });
   if (missing === undefined) {
@@ -579,7 +579,7 @@ test('T4 真链：snapshotEvents 接口缺失与返回非数组两形态 → 同
   assert.ok(nonArray.reviewRow.degraded.includes('transcript-read-failed'), '非数组返回：记录 degraded 含标记');
 });
 
-test('T5 真链：maxTranscriptBytes 极小触发总量截断 → 内联截断标记与 transcript-truncated，evidence 在场', async (t) => {
+test('真链：maxTranscriptBytes 极小触发总量截断 → 内联截断标记与 transcript-truncated，evidence 在场', async (t) => {
   const result = await contextChain({ context: { maxTranscriptBytes: 24 } });
   if (result === undefined) {
     t.skip('宿主包不可解析（离线环境）');
@@ -591,7 +591,7 @@ test('T5 真链：maxTranscriptBytes 极小触发总量截断 → 内联截断�
   assert.ok(result.reviewRow.evidence, '总量截断时 evidence 在场（非空）');
 });
 
-test('T6 真链反例：正常事件（有上下文）→ evidence 在场、无采集标记、证据段无说明行', async (t) => {
+test('真链反例：正常事件（有上下文）→ evidence 在场、无采集标记、证据段无说明行', async (t) => {
   const result = await contextChain({});
   if (result === undefined) {
     t.skip('宿主包不可解析（离线环境）');
@@ -603,7 +603,7 @@ test('T6 真链反例：正常事件（有上下文）→ evidence 在场、无�
   assert.ok(result.reviewRow.evidence, 'evidence 在场');
 });
 
-test('T7 真链反例：maxEntries=0（有意零取样）→ evidence 缺失、无采集标记、无说明行', async (t) => {
+test('真链反例：maxEntries=0（有意零取样）→ evidence 缺失、无采集标记、无说明行', async (t) => {
   const result = await contextChain({ context: { maxEntries: 0 } });
   if (result === undefined) {
     t.skip('宿主包不可解析（离线环境）');
@@ -615,7 +615,7 @@ test('T7 真链反例：maxEntries=0（有意零取样）→ evidence 缺失、�
   assert.ok(!result.reviewRow.evidence, 'evidence 缺失（空）');
 });
 
-test('L1 真链：事件流无匹配 callId → degraded 含 command，动作段含 agent.commandMissing 行（zh/en 各一档）', async (t) => {
+test('真链：事件流无匹配 callId → degraded 含 command，动作段含 agent.commandMissing 行（zh/en 各一档）', async (t) => {
   for (const lang of ['zh', 'en']) {
     const result = await contextChain({
       lang,
@@ -635,7 +635,7 @@ test('L1 真链：事件流无匹配 callId → degraded 含 command，动作段
   }
 });
 
-test('L2 真链：tool/call 的 arguments 是坏 JSON → 同 L1 断言（degraded 含 command）', async (t) => {
+test('真链：tool/call 的 arguments 是坏 JSON → 同回查不到调用档断言（degraded 含 command）', async (t) => {
   const result = await contextChain({
     events: [
       { type: 'permission/preset', data: { preset: 'auto-approve' } },
@@ -650,7 +650,7 @@ test('L2 真链：tool/call 的 arguments 是坏 JSON → 同 L1 断言（degrad
   assert.ok(!result.reviewRow.degraded.includes('cwd'), '目录在场：不含 cwd 标记');
 });
 
-test('L3 真链：header.cwd 缺失 → degraded 含 cwd（无 command，回查成功），现行行为钉回归', async (t) => {
+test('真链：header.cwd 缺失 → degraded 含 cwd（无 command，回查成功），现行行为钉回归', async (t) => {
   const result = await contextChain({ sessionHeader: 'none' });
   if (result === undefined) {
     t.skip('宿主包不可解析（离线环境）');
@@ -661,7 +661,7 @@ test('L3 真链：header.cwd 缺失 → degraded 含 cwd（无 command，回查�
   assert.ok(result.reviewRow.subject, 'subject 照常（按工具名与理由回退）');
 });
 
-test('L4 真链反例：正常回查（命令与目录齐备）→ degraded 不含 cwd/command', async (t) => {
+test('真链反例：正常回查（命令与目录齐备）→ degraded 不含 cwd/command', async (t) => {
   const result = await contextChain({});
   if (result === undefined) {
     t.skip('宿主包不可解析（离线环境）');
@@ -670,4 +670,326 @@ test('L4 真链反例：正常回查（命令与目录齐备）→ degraded 不�
   assert.ok(!result.reviewRow.degraded.includes('cwd'), '正常路径不含 cwd');
   assert.ok(!result.reviewRow.degraded.includes('command'), '正常路径不含 command');
   assert.equal(result.reviewRow.subject, 'npm i', 'subject 取回查命令');
+});
+
+// ── 生产装配的取消贯通与在飞请求配置快照（design §5.1/§8.2） ──────────────────
+
+test('真链：在飞审查期间配置热改采集档，记录按请求入口快照落盘（不被后续配置改写）', async (t) => {
+  const host = await loadHost();
+  if (host === undefined) {
+    t.skip('宿主包不可解析（离线环境）');
+    return;
+  }
+  const tmp = await mkdtemp(join(tmpdir(), 'afm-race-'));
+  const previousHome = process.env.DSH_HOME;
+  process.env.DSH_HOME = tmp;
+  const config = { mode: 'rules', reviewer: { model: 'deepseek-official/probe-model' } };
+  const callId = 'call-race';
+  /** 挂起流：等外部放行后才产出正文——制造「请求在飞、配置热改」的窗口。 */
+  let releaseStream;
+  const gateOfStream = new Promise((resolvePromise) => {
+    releaseStream = resolvePromise;
+  });
+  const listeners = [];
+  const session = {
+    id: 'session-race',
+    header: { cwd: tmp },
+    snapshotEvents: () => [
+      { type: 'permission/preset', data: { preset: 'auto-approve' } },
+      { type: 'tool/call', data: { callId, name: 'pwsh', arguments: JSON.stringify({ command: 'npm i' }) } },
+    ],
+  };
+  const ctx = {
+    on: (event, handler, prepend) => {
+      listeners.push({ event, handler, prepend });
+      return () => {};
+    },
+    llm: {
+      listProviders: () => [{ id: 'deepseek-official' }],
+      resolveModelInfo: async () => ({ reasoning: { efforts: [{ id: 'low' }] } }),
+      stream: async function* generate() {
+        await gateOfStream;
+        yield { type: 'text-delta', index: 0, text: '{"outcome":"allow","risk_level":"low","user_authorization":"high","rationale":"probe ok"}' };
+        yield { type: 'finish', reason: { kind: 'stop' } };
+      },
+    },
+  };
+  try {
+    host.apply(ctx, config);
+    const answerer = listeners.find((entry) => entry.event === 'approval/request').handler;
+    const request = {
+      agent: { session, inject: () => {} },
+      callId,
+      toolName: 'pwsh',
+      reason: 'escalate sandbox to danger-full-access: run npm i',
+    };
+    const settled = answerer(request, () => new Promise(() => {}));
+    // 在飞期间热改采集档 summary→full：本请求的记录必须仍按入口快照（summary）落。
+    config.ui = { trace: { capture: 'full' } };
+    releaseStream();
+    assert.equal(await settled, 'allowed-once');
+    const file = join(tmp, 'approve-for-me', 'reviews', 'race.jsonl');
+    const lines = await waitForLines(file, 2);
+    const reviewRow = lines.find((row) => row.kind === 'review');
+    assert.equal(reviewRow.capture, 'summary', '采集档按请求入口快照：在飞热改 full 不穿透');
+    assert.equal(reviewRow.prompt, undefined, '快照 summary：详情全文不落');
+    assert.equal(reviewRow.tracePlan, undefined, '控制字段不落盘');
+  } finally {
+    if (previousHome === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = previousHome;
+  }
+});
+
+test('真链：排队中的请求被取消——不执行审查、不写 error 审计行、按 cancelled 结算', async (t) => {
+  const host = await loadHost();
+  if (host === undefined) {
+    t.skip('宿主包不可解析（离线环境）');
+    return;
+  }
+  const tmp = await mkdtemp(join(tmpdir(), 'afm-qcancel-'));
+  const previousHome = process.env.DSH_HOME;
+  process.env.DSH_HOME = tmp;
+  const config = {
+    mode: 'rules',
+    reviewer: { model: 'deepseek-official/probe-model' },
+    concurrency: { max: 1, queueMax: 4, queueTimeoutMs: 60000 },
+  };
+  const listeners = [];
+  let streamCalls = 0;
+  let releaseStream;
+  const gateOfStream = new Promise((resolvePromise) => {
+    releaseStream = resolvePromise;
+  });
+  const makeSession = (sid, callId) => ({
+    id: sid,
+    header: { cwd: tmp },
+    snapshotEvents: () => [
+      { type: 'permission/preset', data: { preset: 'auto-approve' } },
+      { type: 'tool/call', data: { callId, name: 'pwsh', arguments: JSON.stringify({ command: 'npm i' }) } },
+    ],
+  });
+  const ctx = {
+    on: (event, handler, prepend) => {
+      listeners.push({ event, handler, prepend });
+      return () => {};
+    },
+    llm: {
+      listProviders: () => [{ id: 'deepseek-official' }],
+      resolveModelInfo: async () => ({ reasoning: { efforts: [{ id: 'low' }] } }),
+      stream: async function* generate() {
+        streamCalls += 1;
+        await gateOfStream;
+        throw new Error('stream exploded');
+      },
+    },
+  };
+  try {
+    host.apply(ctx, config);
+    const answerer = listeners.find((entry) => entry.event === 'approval/request').handler;
+    // 请求 1：占住唯一执行位（流挂起）。请求 2：同会话串行 → 排队，随后被取消。
+    const first = answerer({
+      agent: { session: makeSession('session-qcancel', 'call-q1'), inject: () => {} },
+      callId: 'call-q1',
+      toolName: 'pwsh',
+      reason: 'escalate sandbox to danger-full-access: run npm i',
+    }, () => new Promise(() => {}));
+    const controller = new AbortController();
+    const second = answerer({
+      agent: { session: makeSession('session-qcancel', 'call-q2'), inject: () => {} },
+      callId: 'call-q2',
+      toolName: 'pwsh',
+      reason: 'escalate sandbox to danger-full-access: run npm i',
+      signal: controller.signal,
+    }, () => new Promise(() => {}));
+    // 等第二个请求真正进入队列（gate 装配为异步）。
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    controller.abort('user cancelled');
+    assert.equal(await second, 'cancelled', '取消的请求按 cancelled 结算');
+    releaseStream();
+    assert.equal(await first, 'rejected');
+    // streamCalls=2 都是占位请求的整建重试（可重试错误两尝试）；被取消的排队请求若误发起流，
+    // 会多出一次调用并落一条 call-q2 的审查记录——由下面的记录断言钉住。
+    assert.equal(streamCalls, 2, '取消的排队请求不追加 llm.stream（2＝占位请求的两尝试）');
+    const file = join(tmp, 'approve-for-me', 'reviews', 'qcancel.jsonl');
+    const lines = await waitForLines(file, 3);
+    const reviewRows = lines.filter((row) => row.kind === 'review');
+    const settleRows = lines.filter((row) => row.kind === 'settle');
+    assert.equal(reviewRows.length, 1, '只有占位请求产出审查记录；被取消的排队请求不产 error 记录');
+    assert.equal(reviewRows[0].callId, 'call-q1');
+    const cancelledSettle = settleRows.find((row) => row.callId === 'call-q2');
+    assert.ok(cancelledSettle, '取消请求的结算记录在场');
+    assert.equal(cancelledSettle.outcome, 'cancelled');
+    assert.equal(cancelledSettle.source, 'signal');
+  } finally {
+    if (previousHome === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = previousHome;
+  }
+});
+
+test('真链：审查计时在排队期间到点——按超时结算且冷却计数不因任务未启动而丢失', async (t) => {
+  const host = await loadHost();
+  if (host === undefined) {
+    t.skip('宿主包不可解析（离线环境）');
+    return;
+  }
+  const tmp = await mkdtemp(join(tmpdir(), 'afm-qtimer-'));
+  const previousHome = process.env.DSH_HOME;
+  process.env.DSH_HOME = tmp;
+  // 排队等待上限远大于审查时限：让排队中的请求先被审查计时器击中（任务未启动）。
+  const config = {
+    mode: 'rules',
+    reviewer: { model: 'deepseek-official/probe-model', timeoutMs: 120 },
+    concurrency: { max: 1, queueMax: 4, queueTimeoutMs: 60000 },
+    breaker: { consecutiveDenials: 1, windowSize: 10, windowDenials: 5, cooldownMs: 60000 },
+  };
+  const listeners = [];
+  let streamCalls = 0;
+  let releaseStream;
+  const gateOfStream = new Promise((resolvePromise) => {
+    releaseStream = resolvePromise;
+  });
+  const makeSession = (sid, callId) => ({
+    id: sid,
+    header: { cwd: tmp },
+    snapshotEvents: () => [
+      { type: 'permission/preset', data: { preset: 'auto-approve' } },
+      { type: 'tool/call', data: { callId, name: 'pwsh', arguments: JSON.stringify({ command: 'npm i' }) } },
+    ],
+  });
+  const ctx = {
+    on: (event, handler, prepend) => {
+      listeners.push({ event, handler, prepend });
+      return () => {};
+    },
+    llm: {
+      listProviders: () => [{ id: 'deepseek-official' }],
+      resolveModelInfo: async () => ({ reasoning: { efforts: [{ id: 'low' }] } }),
+      stream: async function* generate() {
+        streamCalls += 1;
+        await gateOfStream;
+        yield { type: 'text-delta', index: 0, text: '{"outcome":"allow","risk_level":"low","user_authorization":"high","rationale":"ok"}' };
+        yield { type: 'finish', reason: { kind: 'stop' } };
+      },
+    },
+  };
+  try {
+    host.apply(ctx, config);
+    const answerer = listeners.find((entry) => entry.event === 'approval/request').handler;
+    // 请求 1 占住唯一执行位（流挂起）；请求 2 同会话排队，审查时限 120ms 在排队期间到点。
+    const first = answerer({
+      agent: { session: makeSession('session-qtimer', 'call-t1'), inject: () => {} },
+      callId: 'call-t1',
+      toolName: 'pwsh',
+      reason: 'escalate sandbox to danger-full-access: run npm i',
+    }, () => new Promise(() => {}));
+    const second = answerer({
+      agent: { session: makeSession('session-qtimer', 'call-t2'), inject: () => {} },
+      callId: 'call-t2',
+      toolName: 'pwsh',
+      reason: 'escalate sandbox to danger-full-access: run npm i',
+    }, () => new Promise(() => {}));
+    assert.equal(await second, 'rejected', '排队中被审查计时击中：按超时拒绝结算');
+    // 未启动任务的超时计数已发生（consecutiveDenials=1）→ 冷却打开：第三个请求未执行审查即被拦。
+    const third = await answerer({
+      agent: { session: makeSession('session-qtimer', 'call-t3'), inject: () => {} },
+      callId: 'call-t3',
+      toolName: 'pwsh',
+      reason: 'escalate sandbox to danger-full-access: run npm i',
+    }, () => new Promise(() => {}));
+    assert.equal(third, 'rejected', '冷却打开后的请求按拒绝结算');
+    releaseStream();
+    // 占位请求与排队请求共用同一审查时限：releaseStream 时占位请求自身的计时器多半已到点。
+    // 竞速双结局都合法（timer 赢→rejected/timeout、流先赢→allowed-once，迟到结论 late 丢弃），
+    // 本测试只钉排队计数链（second/third 断言），不锁占位请求的具体结局。
+    const firstOutcome = await first;
+    assert.ok(firstOutcome === 'allowed-once' || firstOutcome === 'rejected', `占位请求结局合法（实得 ${firstOutcome}）`);
+    assert.equal(streamCalls, 1, '排队请求与冷却拦截请求都不发起模型流（1＝占位请求）');
+    const file = join(tmp, 'approve-for-me', 'reviews', 'qtimer.jsonl');
+    const lines = await waitForLines(file, 3);
+    const settles = lines.filter((row) => row.kind === 'settle');
+    const firstSettle = settles.find((row) => row.callId === 'call-t1');
+    if (firstOutcome === 'rejected') {
+      assert.equal(firstSettle.source, 'timeout', '占位请求按超时结算时：来源为 timeout');
+      assert.equal(firstSettle.stage, 'review', '环节记审查');
+    } else {
+      assert.equal(firstSettle.outcome, 'allowed-once');
+    }
+    const secondSettle = settles.find((row) => row.callId === 'call-t2');
+    assert.ok(secondSettle, '排队超时请求的结算记录在场');
+    assert.equal(secondSettle.outcome, 'rejected');
+    assert.equal(secondSettle.source, 'timeout', '按超时来源结算');
+    assert.equal(secondSettle.stage, 'review', '环节记审查（审查计时到点，非排队等待上限）');
+    const thirdSettle = settles.find((row) => row.callId === 'call-t3');
+    assert.ok(thirdSettle, '冷却拦截请求的结算记录在场');
+    assert.equal(thirdSettle.source, 'llm', '冷却未执行按通道故障来源结算');
+    assert.match(thirdSettle.reason, /冷却/u, '结算理由写明冷却');
+  } finally {
+    if (previousHome === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = previousHome;
+  }
+});
+
+test('真链：在飞审查期间配置热改采集档 full→summary，记录仍按入口快照保留详情', async (t) => {
+  const host = await loadHost();
+  if (host === undefined) {
+    t.skip('宿主包不可解析（离线环境）');
+    return;
+  }
+  const tmp = await mkdtemp(join(tmpdir(), 'afm-race2-'));
+  const previousHome = process.env.DSH_HOME;
+  process.env.DSH_HOME = tmp;
+  const config = { mode: 'rules', reviewer: { model: 'deepseek-official/probe-model' }, ui: { trace: { capture: 'full' } } };
+  const callId = 'call-race2';
+  let releaseStream;
+  const gateOfStream = new Promise((resolvePromise) => {
+    releaseStream = resolvePromise;
+  });
+  const listeners = [];
+  const session = {
+    id: 'session-race2',
+    header: { cwd: tmp },
+    snapshotEvents: () => [
+      { type: 'permission/preset', data: { preset: 'auto-approve' } },
+      { type: 'tool/call', data: { callId, name: 'pwsh', arguments: JSON.stringify({ command: 'npm i' }) } },
+    ],
+  };
+  const ctx = {
+    on: (event, handler, prepend) => {
+      listeners.push({ event, handler, prepend });
+      return () => {};
+    },
+    llm: {
+      listProviders: () => [{ id: 'deepseek-official' }],
+      resolveModelInfo: async () => ({ reasoning: { efforts: [{ id: 'low' }] } }),
+      stream: async function* generate() {
+        await gateOfStream;
+        yield { type: 'text-delta', index: 0, text: '{"outcome":"allow","risk_level":"low","user_authorization":"high","rationale":"probe ok"}' };
+        yield { type: 'finish', reason: { kind: 'stop' } };
+      },
+    },
+  };
+  try {
+    host.apply(ctx, config);
+    const answerer = listeners.find((entry) => entry.event === 'approval/request').handler;
+    const request = {
+      agent: { session, inject: () => {} },
+      callId,
+      toolName: 'pwsh',
+      reason: 'escalate sandbox to danger-full-access: run npm i',
+    };
+    const settled = answerer(request, () => new Promise(() => {}));
+    // 在飞期间热改采集档 full→summary（原始缺陷方向：降档不得丢掉本请求的详情）。
+    config.ui = { trace: { capture: 'summary' } };
+    releaseStream();
+    assert.equal(await settled, 'allowed-once');
+    const file = join(tmp, 'approve-for-me', 'reviews', 'race2.jsonl');
+    const lines = await waitForLines(file, 2);
+    const reviewRow = lines.find((row) => row.kind === 'review');
+    assert.equal(reviewRow.capture, 'full', '采集档按请求入口快照：在飞热改 summary 不穿透');
+    assert.ok(reviewRow.prompt !== undefined, '快照 full：详情全文照常落盘');
+    assert.equal(reviewRow.tracePlan, undefined, '控制字段不落盘');
+  } finally {
+    if (previousHome === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = previousHome;
+  }
 });

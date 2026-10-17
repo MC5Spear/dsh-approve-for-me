@@ -33,7 +33,8 @@ function collect(relative, ext) {
 }
 
 const roots = ['client.js', 'typert.host.js'];
-const targets = [...new Set(['lib/index.js', ...collect('lib', '.js'), ...roots])].sort();
+// `.mjs` 一并枚举：lib/ 下的 ESM 工作者文件（regex-worker.mjs）也在自检范围。
+const targets = [...new Set(['lib/index.js', ...collect('lib', '.js'), ...collect('lib', '.mjs'), ...roots])].sort();
 
 let failed = 0;
 for (const target of targets) {

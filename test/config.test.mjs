@@ -7,7 +7,7 @@ import { Config, normalizeConfig, normalizeRuleProvider, parentModelRuleKey } fr
 
 // ── 数值边界（requirements §4.2／§5.2：毫秒上界与 temperature 有限性） ──────
 
-/** 五个进 setTimeout 域的毫秒字段（design §6.1）：上界必须是 2^31-1。 */
+/** 五个进 setTimeout 域的毫秒字段（requirements §4.2）：上界必须是 2^31-1。 */
 const MS_FIELDS = [
   ['reviewer', 'timeoutMs'],
   ['reviewer', 'toolTimeoutMs'],

@@ -4,8 +4,9 @@
  * 判据单源：invocation/codec 契约住在 `tools/typert-contract.mjs`，与
  * `test/typert-manifest.test.mjs` 共用同一份——两处各自维护会在本文件一侧漂移。
  *
- * 用法：node --import ./tools/_host-resolve.mjs tools/check-typert-manifest.mjs
- * 通过打印 `PASS`；任一项失败打印缺陷并退出 1。
+ * 用法：node --import ./tools/_host-hooks.mjs tools/check-typert-manifest.mjs
+ * 通过打印 `PASS`；任一项失败打印缺陷并退出 1。这是本仓环境下的静态对照，
+ * 不等于已证实其他安装环境的加载结果。
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
