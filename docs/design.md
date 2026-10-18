@@ -251,7 +251,7 @@ DSH 敏感范围按实际 home 根判断，环境变量优先、缺省 `~/.dsh`�
 
 `REVIEW_MAX_ATTEMPTS=2` 对应需求允许的总尝试次数。用单一错误分类处理流抛错、供应商错误（包括可间歇恢复的 `INVALID_REQUEST` 与 `EMPTY_RESPONSE`）及空响应；截断、模型解析失败和装配错误不重试。
 
-每次从相同系统和动作输入建立完整消息序列，信号中止后不开始下一次尝试。工具轮次观测跨尝试累计，尝试进度进入最终理由与审计；一次审批只形成一份审查记录，记录内包含尝试摘要，不生成多份审批结果。审查时限为零立即超时，不开始尝试；时限为正时装配与全部尝试共用同一份预算，模型挂起由该计时器到点中止。
+每次从相同系统和动作输入建立完整消息序列，信号中止后不开始下一次尝试。工具轮次观测跨尝试累计，尝试进度进入最终理由与审计：进度以 `attempt N/M: ` 前缀写在理由正文之前（`N` 为本次尝试序号、`M` 为尝试上限），供核对重试消耗；界面文案剥离该前缀（7.4.1），记录与审计保留原文。一次审批只形成一份审查记录，记录内包含尝试摘要，不生成多份审批结果。审查时限为零立即超时，不开始尝试；时限为正时装配与全部尝试共用同一份预算，模型挂起由该计时器到点中止。
 
 ### 5.3 冷却计数
 
@@ -529,7 +529,7 @@ aria 语义：`aria-expanded` 表开合；`aria-controls` 关联展开区域 `he
 
 ### 7.3 会话级下拉与更新
 
-菜单包含跟随全局、模型和推理强度，触发器显示实际模型与推理强度；没有会话 id 或 RPC 不可用时优雅降级。权限变化使用宿主 `permissions` 投影作刷新信号，重取 `getState`；保留十秒备用刷新，需求不规定该间隔。
+菜单包含跟随全局、模型和推理强度，触发器显示实际模型与推理强度（两段结构与省略策略见 7.3.2）；没有会话 id 或 RPC 不可用时优雅降级。权限变化使用宿主 `permissions` 投影作刷新信号，重取 `getState`；保留十秒备用刷新，需求不规定该间隔。
 
 显隐只看宿主 `active`；会话未激活时仍可按会话 id 写入并在激活后使用。错误徽标直接可见，不仅依赖鼠标悬停。模型及预设原始数据不翻译，需要核对的 id 附于文案。本会话选择的审查模型不可用时，控件附近按 7.2.0 的分置醒目提示显示原因与实际回退结果（`warn.modelIssue.session`）。全局默认为空且会话未单独选择审查模型时，控件附近按 7.2.0 的空全局默认提示显示：解析实际落到零值语义时用 `warn.modelIssue.followParent` 声称当前跟随；被有效映射截住或父模型引用不可用时用 `warn.modelIssue.globalUnsetShadowed`，实际生效按真实解析呈现，不声称当前跟随。该条目与会话选择不可用条目条件互斥，控件附近至多一条。
 
@@ -538,16 +538,91 @@ aria 语义：`aria-expanded` 表开合；`aria-controls` 关联展开区域 `he
 | 字典键 | 中文 | 英文 |
 | --- | --- | --- |
 | `composer.label` | 审查模型 | Reviewer model |
+| `composer.section.model` | 模型 | Model |
 | `composer.section.effort` | 推理强度 | Effort |
 | `composer.title` | 本会话的审查模型；独立于执行助手调用，点开可只给这个会话指定 | This session's reviewer model — called independently of the agent; pick one to override it for this session only |
 | `effort.default` | 自动选择 | Automatic |
 | `composer.followGlobal` | 跟随全局（清除本会话选择） | Follow global (clear this session) |
+| `composer.followGlobalShort` | 跟随全局 | Follow global |
+| `composer.pendingSession` | 会话尚未开始；现在设置的值会在会话开始后生效 | This session has not started yet; the value applies once it does |
+| `composer.failed` | 切换失败 | Switch failed |
+| `composer.empty` | 没有可选模型 | No selectable model |
+
+上表覆盖会话控件消费的全部字典键：触发器两段的可见文案、无障碍名与说明句（`composer.title`／`composer.pendingSession`／`composer.failed`）以及菜单的小节标题、空态与跟随全局项，取值均以本表为唯一位置。
 
 推理强度未指定时显示「自动选择」，含义按 requirements §6.4 的 effort 行，与 7.2.2 `help.reviewer.model` 的说明一致（模型支持 `low` 就使用 `low`，否则不指定、由模型默认值决定），不在此重复全文。触发器提示语说明审查调用独立于执行助手（requirements §5.1 的区分），模型引用与推理强度的枚举值保持原样。
 
+#### 7.3.2 触发器结构与省略策略（requirements §5.4、§6.2、§6.4）
+
+触发器是 `conversation.input.left` 挂点上的按钮，即需求 §6.2 的会话审查模型控件。它分两段显示当前选择：模型段与档位段。当前选择的两段中只省略模型段，档位段不参与省略；完整选择同时进入无障碍名。这两条在 1280 与 375 两种视口下都成立。
+
+DOM 结构：
+
+```text
+<button class="dsafm_seat" type="button" aria-haspopup="menu" aria-expanded="<布尔>"
+        title="<现行说明句>" aria-label="<完整当前选择>；<现行说明句>">
+  <span class="dsafm_seat_model">审查模型：{模型引用}</span>
+  <span class="dsafm_seat_effort"> · {档位文案}</span>
+  …待生效提示段、失败徽标…
+  <ChevronDownIcon class="dsafm_chevron" />
+</button>
+```
+
+两段文本直接相连的结果必须与单段写法逐字相同：`审查模型：{模型引用} · {档位文案}`。分隔符「·」在档位段内，前后各一个半角空格；档位段文本带前导空格供文本断言，视觉间隔由 `gap` 的 4px 提供——该空格是否参与排版取决于实现的白空处理，不作为间距断言依据，也不得据此调整 `gap`；断言以文本为准，不比对像素间距。档位段的文本按字符串拼接传入（`" · " + 档位文案`），不写成 JSX 文本节点，避免行首空白被裁掉。
+
+文案组成：
+
+- 模型段＝`composer.label`（审查模型）＋全角冒号＋模型引用原文。模型引用是 `provider/model` 原始 id，不翻译、不改写取值（requirements §5.4）；显示宽度按本节样式与显示契约省略，DOM 内始终保留完整原值。
+- 档位段＝一个半角空格＋间隔号「·」＋一个半角空格＋档位文案。档位取当前生效档位的原值；未指定档位时用 `effort.default`（「自动选择」，requirements §6.4 的 effort 行）。宿主状态未提供档位时不显示档位段，不补造取值。
+- 没有生效模型时只显示 `composer.followGlobalShort`（跟随全局），不显示档位段——此时没有可显示的档位。该文本由模型段承载。
+- 冒号、分隔符与档位原值的写法沿用现行文案；英文界面的标点统一属独立事项，登记见 §11，不在本条内改。
+
+文案键全部取自 7.3.1 的定稿表：`composer.label`、`composer.title`、`composer.section.model`、`composer.section.effort`、`composer.followGlobalShort`、`composer.pendingSession`、`composer.failed`、`composer.empty`、`effort.default`。本条不新增字典键。
+
+样式（定稿）：
+
+```css
+.dsafm_seat{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 8px;border:none;
+  border-radius:14px;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);
+  font-family:inherit;font-size:12px;cursor:pointer;min-width:0;max-width:100%}
+.dsafm_seat_model{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsafm_seat_effort{flex:none;white-space:nowrap}
+.dsafm_seat_pending{flex:0 1 auto;min-width:0;font-size:11px;color:var(--dsw-alias-state-warn-primary);
+  max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsafm_badge{flex:none;font-size:11px;color:var(--dsw-alias-state-warn-primary);margin-left:6px}
+```
+
+- 定稿块给出各选择器的完整规则文本：`.dsafm_seat_pending` 与 `.dsafm_badge` 在现行属性上追加 `flex`，`.dsafm_seat_pending` 另加 `min-width:0`，其余属性保持现行取值。10.2 逐属性断言，不按整条文本比对。
+- 公共规则 `.dsafm_chevron{flex:0 0 auto;color:var(--dsw-alias-label-tertiary)}` 不变：它已不收缩，且被另一个控件（`card.presets.label` 的多选触发器）共用，本条不改该选择器。
+- 触发器按内容宽度渲染，以容器宽度为上限，不设固定宽度上限。容器足够宽时模型段与档位段都完整可见。
+- 收缩只发生在两段：模型段与待生效提示段。模型段用 `min-width:0` 配省略号省略自身文本；提示段用 `min-width:0` 加其现行 `max-width` 与省略号。档位段与失败徽标 `flex:none`，容器变窄时不收缩、不被裁掉。
+- 触发器自身带 `min-width:0` 与 `max-width:100%`：百分比以父容器（`.dsafm_seatwrap` 或槽位的直接父元素）的内容盒为基准，宿主 flex 行把可用宽度约束到该父容器，`min-width:0` 使触发器可随之收缩；超宽时按父容器收敛，不把省略转移到档位段，也不横向溢出容器。
+- 父容器没有确定宽度时上述上限退化。带分置提示时父容器是按内容收缩的包裹层 `.dsafm_seatwrap`，属这种情形；10.3 对带提示与不带提示两种形态各取一帧，右缘断言是这条宽度约束链的验收：断言失败即说明上限未成立，按容器宽度重新核定方案，不以 `max-width:100%` 的存在替代实测。
+
+显示契约：
+
+| 通道 | 1280 视口 | 375 视口 |
+| --- | --- | --- |
+| 档位段 | 完整可见 | 完整可见 |
+| 模型段 | 宽度足够时完整可见 | 按剩余宽度省略 |
+| 无障碍名 | 含完整模型引用与完整档位文案 | 同左 |
+
+没有生效模型时只有模型段一段，文本为 `composer.followGlobalShort`，档位段条件渲染且不出现；该形态的判据是「`.dsafm_seat_model` 在场且文本为该键、`.dsafm_seat_effort` 不在渲染树」，无障碍名同样以该文本开头。上表是本条自定的显示契约，不是需求条款：需求 §6.2 就本条涉及的显示内容不作规定——该节的显隐、切换失败显示与分置提示要求见 7.3；需求 §6.4 规定名称与推理强度的表达。契约的落点是两条——两种视口下至少一个通道可读到模型与档位，档位不因宽度恒定丢失。视觉被省略时，完整取值仍可经无障碍名与菜单的当前项读到。容器宽度低于容纳档位段与图标所需时不在本条验收范围内：此时触发器仍以容器为上限，无障碍名照旧含完整取值，不据此声称 1280 与 375 之外的视口已验收。
+
+无障碍：
+
+- `aria-label`＝完整当前选择（即模型段与档位段的全文）＋分隔符＋说明句。说明句按现行三分支取 `composer.title`、`composer.pendingSession` 或「`composer.failed`：〈原因〉」。分隔符随界面语言取中文「；」或英文「; 」。
+- 可见的模型段与档位段是 `aria-label` 的前缀，无障碍名称包含这两段可见文本（与 7.2.1 同一口径）。待生效提示段与失败徽标不进无障碍名，其含义由说明句的对应分支承接。
+- `title` 保持现行说明句，不追加当前值；鼠标悬停仍读说明。
+- `aria-haspopup`、`aria-expanded`、禁用条件、错误徽标与待生效提示段的行为不变。
+
+不改的部分：菜单项、小节标题、选中标记、写入路径（`setSessionModel`）、回读（`getState`）、模型解析与持久化语义均不变；档位与模型引用按原值显示。
+
+验证：10.2 断言 DOM 两段结构、`aria-label` 组合与样式文本；10.3 在 1280 与 375 各取一帧，按计算布局断言档位段完整可见、省略只发生在模型段。
+
 ### 7.4 审批卡片内的自动审批状态条与倒计时
 
-`pendingState` 返回本插件正在处理的条目、状态、原因、原因类别、起点、截止时间与时限归属。状态枚举为 `reviewing`（审查中）与 `waiting-human`（已交人工、等待你决定）两个值，写错状态值按 `reviewing` 归一化。交人工的条目携带原因类别 `cause`，取值 `deny`（模型判定拒绝）、`timeout`（时限到点）、`error`（模型异常、队列已满、冷却中未执行等未取得有效结论的通道故障）；`cause` 写错或缺失按 `error` 归一化，原因子句走「未取得有效结论」。`pending-state` 的归一化透传 `cause` 字段，条目并带人工截止时间与 `deadlineKind: 'human'`。该枚举是插件内部 UI 状态通道的枚举，不是配置枚举；「不改枚举值」只约束配置枚举，此通道取 `reviewing`／`waiting-human` 两值满足 requirements §6.3 的状态区分要求，不触碰配置键与审批规则。`cause` 是 `pendingState` 的结果字段，按 7.1 三处同步落进 `typert.host.js`：`pendingState` 结果 schema、`PendingState` 类型声明与成员描述各补一处，缺任何一处该字段就会在校验或投影环节丢失。
+`pendingState` 返回本插件正在处理的条目、状态、原因、原因类别、起点、截止时间与时限归属。状态枚举为 `reviewing`（审查中）与 `waiting-human`（已交人工、等待你决定）两个值，写错状态值按 `reviewing` 归一化。交人工的条目携带原因类别 `cause`，取值 `deny`（模型判定拒绝）、`timeout`（时限到点）、`error`（模型异常、队列已满、冷却中未执行等未取得有效结论的通道故障）；`cause` 写错或缺失按 `error` 归一化，原因子句走「未取得有效结论」。`pending-state` 的归一化透传 `cause` 字段，条目并带人工截止时间与 `deadlineKind: 'human'`。`reason` 是判定侧写入的原因原文，与审查记录、结算记录的 `reason` 同源；记录出口另行脱敏与裁剪（审查记录与结算记录见 §8.2、§8.4，审计行见 §8.1），卡片显示值不承诺与记录逐字相同。卡片按 7.4.1 把原文归到固定类别后显示，归类只读 `cause` 与 `reason`，不新增通道字段、不改原文取值。该枚举是插件内部 UI 状态通道的枚举，不是配置枚举；「不改枚举值」只约束配置枚举，此通道取 `reviewing`／`waiting-human` 两值满足 requirements §6.3 的状态区分要求，不触碰配置键与审批规则。`cause` 是 `pendingState` 的结果字段，按 7.1 三处同步落进 `typert.host.js`：`pendingState` 结果 schema、`PendingState` 类型声明与成员描述各补一处，缺任何一处该字段就会在校验或投影环节丢失。
 
 状态行文案字典键：
 
@@ -559,17 +634,82 @@ aria 语义：`aria-expanded` 表开合；`aria-controls` 关联展开区域 `he
 | `cardstate.waiting.timeout` | 自动审查超时，未取得有效结论 | The review timed out without a conclusion |
 | `cardstate.waiting.error` | 自动审查未取得有效结论：{reason} | The review failed without a conclusion: {reason} |
 
-渲染规则：审查中显示「正在自动审批 · 审查时限剩余 N 秒」；审查截止时间恒有值——时限为零时立即到点结算，不进入审查中的倒计时显示态。进入人工阶段显示「等待你决定 · 〈按 cause 选择的原因子句〉 · 剩余 N 分 N 秒后自动拒绝」。倒计时一律按 `deadlineKind` 分派取值：`reviewing` 状态读审查截止时间（`deadlineKind: 'review'`），`waiting-human` 状态读人工截止时间（`deadlineKind: 'human'`），归一化错误不得使两类时限互串——`deadlineKind` 与状态矛盾的组合同样按状态锚定；`deadlineKind` 缺失时按状态回退推断取值（`reviewing`→审查时限语义），缺失不得导致不渲染或互串。原因子句明确归属自动审查，不冠「最终」字样，人工未作答前不把自动审查未允许呈现为最终审批已拒绝（requirements §6.3）。`cause=error` 的文案只说未取得有效结论并给出故障原因：模型异常、队列已满、冷却中未执行都经此呈现，任何状态下不得显示为「模型已判定危险」。`cause=deny` 且理由为空时，原因子句省略冒号与理由，只显示「自动审查结论为拒绝」。
+上表 `cardstate.waiting.*` 只承载模板句与标点，是模板句取值的唯一位置。`cardstate.waiting.error` 的 `{reason}` 取 7.4.1 的类别单元，不是判定侧原文字符串；`cardstate.waiting.deny` 的 `{reason}` 是模型理由原文，按 7.4.1 组成规则 4 原样显示；`cardstate.waiting.timeout` 不带原值。
+
+渲染规则：审查中显示「正在自动审批 · 审查时限剩余 N 秒」；审查截止时间恒有值——时限为零时立即到点结算，不进入审查中的倒计时显示态。进入人工阶段显示「等待你决定 · 〈按 cause 选择的原因子句〉 · 剩余 N 分 N 秒后自动拒绝」。倒计时一律按 `deadlineKind` 分派取值：`reviewing` 状态读审查截止时间（`deadlineKind: 'review'`），`waiting-human` 状态读人工截止时间（`deadlineKind: 'human'`），归一化错误不得使两类时限互串——`deadlineKind` 与状态矛盾的组合同样按状态锚定；`deadlineKind` 缺失时按状态回退推断取值（`reviewing`→审查时限语义），缺失不得导致不渲染或互串。原因子句明确归属自动审查，不冠「最终」字样，人工未作答前不把自动审查未允许呈现为最终审批已拒绝（requirements §6.3）。`cause=error` 的原因子句按 7.4.1 显示中文类别与原值，只说未取得有效结论：模型异常、队列已满、冷却中未执行各自可辨，任何状态下不得显示为「模型已判定危险」。`cause=deny` 且理由为空时，原因子句省略冒号与理由，只显示「自动审查结论为拒绝」。
 
 时限与零值：人工时限为零时不登记人工阶段状态（交人工立即按拒绝结算），不会出现无截止时间的等待状态，也不显示「将一直等待」类文案；人工等待的倒计时一律来自人工截止时间。结算后状态表清除该条目，客户端轮询不到即整条状态行移除，只保留关联命令与原按钮，不残留陈旧状态。
 
 卡片挂载后每秒重取状态，本地每 250ms 刷新倒数，只更新文字。状态为空或服务失败不伪造审查状态，保留原关联命令和原按钮；状态通道不可用时退回宿主原卡片。
 
+#### 7.4.1 卡片与记录的显示类别（requirements §6.3、§6.4）
+
+显示类别只影响呈现：不改判定，不改 `pendingState` 的状态与原因类别语义，不写回记录。`cause` 的三值（原因类别）决定顶层句；本节所说的显示类别是 `cause=error` 之下的展示细分，由类别单元承载，不改变 `cause` 取值。类别清单前两行（安全拒绝、超时）是 `cause` 决定的顶层句，不由显示类别细分。
+
+- 卡片侧归类只读 `cause` 与 `reason` 两个字段，不新增通道字段。
+- 记录视图的理由行另读合并行的 `decision`、`source` 与详情的 `degraded`：`reason` 与 `decision` 按合并行取值（审查记录优先，单边存在时取在场一方），`source` 取结算记录，`degraded` 按 §8.2 取详情补充字段（审查记录优先、缺失回落结算记录）。字段来源见 §8.2。这几个都是已写入记录的字段，不新增存储字段，不写回记录。未执行审查的审批只有结算记录，其 `reason` 取自结算记录；结算记录不携带 `degraded`，这类行的该标记按缺失呈现。通道故障行按本段取值。
+
+组成规则：
+
+1. 中文类别在前，原值或内部标记附在其后的圆括号内；中文用全角括号，英文用半角括号。原值为空时省去整个括号单元，正文不出现悬空括号或冒号：含 `{v}` 的键按同一规则删去「（{v}）」或「 ({v})」，只留类别名；`cardstate.waiting.deny` 的空理由按 §7.4 的既有写法处理。
+2. 同一原因只出现一次中文前缀。本条只作用于 `cause=error` 的原因子句与记录视图按本节归类的行（含超时类记录理由），`cause=deny` 的模型理由不剥前缀（规则 4）。判定侧写入的固定前缀 `审查未执行：`（§8.4）与重试进度前缀 `attempt N/M: `（§5.2）不在界面文案中显示——模板句「自动审查未取得有效结论」与类别名已承接其含义。归类时先剥 `attempt N/M: `、再剥 `审查未执行：`，各剥一次；两者现状不会叠加（前者只出现在模型尝试结果，后者只出现在调度失败）。记录与审计保留含前缀的原文。
+3. 类别按下方固定清单判定：先剥离上述前缀，再按「以固定标记开头」匹配。剥离后仍不命中清单的原文不编造具体类别：卡片统一显示为「其他通道故障」并把原文原样附在括号内，不解释未知标记的含义（requirements §6.4）；记录视图的适用范围见「记录视图的理由行」。
+4. 顶层句由 `cause` 决定。`deny` 用 `cardstate.waiting.deny`，模型理由属模型数据，按原文显示，不改写；理由是协议回落值（`No rationale provided by the reviewer.`）时改用 `view.reasonDefaulted`（§8.5.1），不显示该英文句。`timeout` 用 `cardstate.waiting.timeout`，不带原值。`error` 用 `cardstate.waiting.error`，其 `{reason}` 取类别单元。
+5. 英文与中文表达同一类别、同一原值位置，标点按英文习惯。
+
+类别清单与来源映射：
+
+| 类别 | 字典键 | 取值定稿 | 出现位置 | 来源（判定侧写入的原文） |
+| --- | --- | --- | --- | --- |
+| 安全拒绝 | `cardstate.waiting.deny` | 见 7.4 表 | 卡片 | 模型判定拒绝且进入人工（`cause=deny`）；`{reason}` 为模型理由，为空时只显示类别句。记录侧按原文显示，见「记录视图的理由行」 |
+| 超时 | `cardstate.waiting.timeout` | 见 7.4 表 | 卡片 | `cause=timeout`：审查时限到点，或排队等待上限到点（§5.1 的排队等待上限；零值语义见需求 §4.2）。两者同属超时类别；环节区分由 §4.4 的给执行助手通知承担，卡片不再分列 |
+| 审查超时（记录理由） | `cardcause.timeout` | 审查超时（review timeout）／Review timed out (review timeout) | 记录 | `review timeout`：审查时限到点的记录理由。卡片的超时子句沿用上一行，不用本行 |
+| 审查模型不可用 | `cardcause.modelUnavailable` | 审查模型不可用（model unavailable）／Reviewer model unavailable (model unavailable) | 两处 | `model unavailable`：模型解析层为 `unavailable`（§6.2），此时降级标记含 `all` |
+| 队列已满 | `degraded.queue-overflow` | 见 §8.5.1 | 两处 | `审查未执行：queue-overflow`：调度器容量触顶（§5.1） |
+| 排队超时（记录理由） | `degraded.queue-timeout` | 见 §8.5.1 | 记录 | `审查未执行：queue-timeout`：§5.1 的排队等待上限到点。卡片由 `cause=timeout` 承担，不用本行 |
+| 冷却中未执行 | `degraded.breaker-open` | 见 §8.5.1 | 两处 | `审查未执行：breaker-open（冷却中，拒绝密集或故障密集）`：冷却拦截（§5.3） |
+| 空输出 | `degraded.output-empty` | 见 §8.5.1 | 两处 | `empty payload`，降级标记 `output-empty`（§3.7） |
+| 输出截断 | `degraded.output-truncated` | 见 §8.5.1 | 两处 | `output truncated`，降级标记 `output-truncated`（§3.7） |
+| 输出无有效结论 | `cardcause.outputInvalid` | 输出无有效结论（{v}）／No valid conclusion in the output ({v}) | 两处 | `not valid JSON`、`invalid outcome: {v}`（§3.7 的解析失败族）；`{v}` 取剥离前缀后的整段原文标记（`not valid JSON` 或 `invalid outcome: deny`），不截取其中取值 |
+| 其他通道故障 | `cardcause.other` | 其他通道故障（{v}）／Other channel failure ({v}) | 两处 | 上表未列的通道故障原文：供应商或流异常、插件内部异常、非装配环节的计时回调抛错、中止回调抛错与未识别原文；`{v}` 取剥离前缀后的整段原文 |
+
+「取值定稿」列写明值的只在本节定稿（`cardcause.*` 四个新键）。`cardstate.waiting.*` 的模板句以 7.4 表为唯一位置，`degraded.*` 的取值以 §8.5.1 为唯一位置，本节不复制。
+
+复用 `degraded.*` 的五类，括号内是降级标记，不是原因原文：`empty payload` 的原因原文只在记录的原文字段保留。原值自带圆括号时按原文整体放入，不另加解释（如 `计时回调抛错（review）：…` 显示为「其他通道故障（计时回调抛错（review）：…）」）。
+
+字典与文案的权威位置：
+
+- 卡片状态行与显示类别的唯一权威是 `client.js` 的中英两份字典。`cardstate.waiting.*` 只承载模板句与标点，`cardcause.*` 承载本表新增的类别，`degraded.*` 承载记录侧降级标记。
+- 队列已满、排队超时、冷却中未执行、空输出、输出截断五类与 `degraded` 词条指同一标记，卡片与记录视图直接复用 `degraded.*` 的现行词条，不另立键——同一标记在各处显示同一名称（requirements §6.4）。
+- `degraded.all`（审查模型解析无可用结果）描述降级标记取值 `all`，`cardcause.modelUnavailable` 描述原因原文 `model unavailable`；两者观测的是不同取值，各自保留，不互相替代。
+- 本表新增四个键：`cardcause.modelUnavailable`、`cardcause.outputInvalid`、`cardcause.other`、`cardcause.timeout`。四个键必须中英成对、取值照「取值定稿」列，并由 10.2 的断言钉住；「原文 → 类别键」的映射同样逐项断言。
+
+记录与审计边界：
+
+- 归类只在客户端发生。记录字段与取值不变：`reason` 仍是被引用的原文（如 `model unavailable`、`审查未执行：breaker-open（冷却中，拒绝密集或故障密集）`），`degraded` 仍是 §8.2 的固定标记，审计行与结算记录的 `reason` 裁剪规则不变（§8.1、§8.4）。
+- 归类不改变 `state`、`cause`、`outcome`、`source`、`stage`、判定、通知文本与撤回行为；给执行助手的通知仍按 §4.3、§4.4 使用原文。
+- 认不出的原文不做替换：剥离前缀后仍不命中清单的，卡片显示「其他通道故障（原文）」；记录视图按「记录视图的理由行」的判定次序处理——属于通道故障的行同样套「其他通道故障」，其余按原文显示。两者都承认含义未知，不补造解释。类别由 `cause` 判定，不声称解释原值（requirements §6.4）。
+- 原因原文是客户端归类的输入约定：判定侧新增或改写原因字符串时，须同步本节的标记清单与 10.2 的映射断言；只改一端会使该原因退回「其他通道故障」或原文显示。
+
+记录视图的理由行：
+
+判定次序固定，先排除、再归类：
+
+1. 排除项：降级标记含 `superseded` 的审查记录；`decision='deny'` 的模型理由；`source` 为 `rule`、`hard`、`human` 的说明；装配超时与装配环节计时回调抛错的中文理由（`source=timeout`）。命中任一项即按原文显示，不再走归类。
+2. 其余行按组成规则 2 剥离前缀；命中清单时显示该行的类别单元。
+3. 未命中且该行已知为通道故障时用 `cardcause.other`；否则按原文显示（含理由被裁剪的情形）。
+
+- 排除项一律按原文显示，不套类别。其中 `decision='deny'` 的理由为协议回落值（`No rationale provided by the reviewer.`）时改用 `view.reasonDefaulted`（§8.5.1），不显示该英文句——与组成规则 4 同一口径。
+- 通道故障的判据取记录字段，三者任一成立即算：审查记录 `decision='error'`；结算记录 `source='error'`；`reason` 以 `审查未执行：` 开头（队列已满、排队超时、冷却未执行虽归 `source='llm'`，也由此判据覆盖，剥前缀后未命中清单的同样套「其他通道故障」）。未执行审查的结算记录只按在场字段取值（§8.2）。
+- 不按 `truncated` 推断哪一字段被裁剪：该标记是整行布尔（§8.2），不指明裁剪发生在理由段。理由整段缺失时走 §8.5.1 的缺段说明；理由在场时按上面的判定次序处理，不另设前缀完整性判断。
+
+验证：10.2 断言类别清单逐项映射与新增键取值；10.3 在中文与英文两种界面分别巡检卡片与记录视图。
+
 ### 7.5 字典与语言
 
 插件界面语言（`language.ui`）取宿主 locale 或强制中文／英文；发送给模型的文本语言（`language.agent`）按请求快照选择。字典键集完全一致，未知语言或缺键是可观测缺陷，不静默回退成另一语言。字段名、工具名、输出契约、不可信声明和缺证标记保持一致；审计固定格式不随开关改写。
 
-设计定稿（新增或改值）的字典键见 7.2.1、7.2.2、7.3.1、7.4、8.5.1 各表，未列键保持现行文案；随渲染分支退役的键与分支一并从字典删除，10.2 断言零残留。中英键集逐对相等；英文与中文表达同一含义与同一生效条件，枚举附原始 id 的既有形式保持。文案不改配置键、枚举值、默认值、审批规则或保存行为（requirements §6.4 末行）。
+设计定稿（新增或改值）的字典键见 7.2.1、7.2.2、7.3.1、7.4、7.4.1、8.5.1 各表，未列键保持现行文案；随渲染分支退役的键与分支一并从字典删除，10.2 断言零残留。中英键集逐对相等；英文与中文表达同一含义与同一生效条件，枚举附原始 id 的既有形式保持。文案不改配置键、枚举值、默认值、审批规则或保存行为（requirements §6.4 末行）。
 
 ## 8. 审计、记录存储、脱敏与容量
 
@@ -624,7 +764,7 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
 
 `policyTag` 的形状：`<语言>:<摘要>`，语言为 `zh` 或 `en`，摘要为随包策略文件内容的 SHA-256 前 12 位十六进制，取本次审查实际加载的策略读取结果计算，不用磁盘当前状态。策略缺失、读取失败或为空时摘要为 `missing`，对应「仅按基础风险分级执行」的降级状态；文件修复并重新加载后标识随之更新。
 
-生产到呈现的数据链贯通一次：审查器在审查收束回调产出全部 `review` 字段；存储层的产品字段白名单即本词汇表，未列产品字段不落盘。存储行另含存储内部字段（行主键 `reviewId`、会话键、落盘时刻），不进产品投影。旧格式行按自身内容原样读取，产品投影不透出词汇表外字段。RPC 声明按 7.1 的三处同步规则扩充，客户端呈现按同一词汇表扩充。列表行是合并行，携带 `approvalId`、`callId`、`toolName`、`origin`、`escalation`、`startedAt`、`endedAt`、三个分段耗时、`decision`、`outcome`、`source`、`model`、`effort`、`risk`、`auth`、`reason`、`subject`、`truncated`；行的组成由 `decision` 与 `outcome` 的在场表达——有 `decision` 即有审查记录，有 `outcome` 即有结算记录。合并行的 `startedAt` 取审查记录起点，无审查记录时取结算记录起点；`endedAt` 取结算记录终点，结算记录缺失时取审查记录终点。详情按 `approvalId` 返回该审批两类记录的合并详情，在列表之外补充 `stage`、`layer`、`attempts`、`preset`、`tools`、`capture`、`fieldsDefaulted`、`degraded`、`evidence`、`probes`、`configTag`、`policyTag`、`tokens` 与全文段。`decision` 词表保持审查判定，最终结算由 `outcome` 承载，两者不混用。
+生产到呈现的数据链贯通一次：审查器在审查收束回调产出全部 `review` 字段；存储层的产品字段白名单即本词汇表，未列产品字段不落盘。存储行另含存储内部字段（行主键 `reviewId`、会话键、落盘时刻），不进产品投影。旧格式行按自身内容原样读取，产品投影不透出词汇表外字段。RPC 声明按 7.1 的三处同步规则扩充，客户端呈现按同一词汇表扩充。列表行是合并行，携带 `approvalId`、`callId`、`toolName`、`origin`、`escalation`、`startedAt`、`endedAt`、三个分段耗时、`decision`、`outcome`、`source`、`model`、`effort`、`risk`、`auth`、`reason`、`subject`、`truncated`；行的组成由 `decision` 与 `outcome` 的在场表达——有 `decision` 即有审查记录，有 `outcome` 即有结算记录。合并行的 `startedAt` 取审查记录起点，无审查记录时取结算记录起点；`endedAt` 取结算记录终点，结算记录缺失时取审查记录终点。字段来源固定：`decision`、`model`、`effort`、`risk`、`auth`、`reason` 取审查记录，`outcome`、`source`、`humanWaitMs` 取结算记录，`subject` 审查记录优先、缺失时取结算记录；单边存在时以在场一方为准。详情的补充字段审查记录优先、缺失回落结算记录，`stage` 只在结算记录，`preset` 由 `gate` 经审批上下文注入审查记录。详情按 `approvalId` 返回该审批两类记录的合并详情，在列表之外补充 `stage`、`layer`、`attempts`、`preset`、`tools`、`capture`、`fieldsDefaulted`、`degraded`、`evidence`、`probes`、`configTag`、`policyTag`、`tokens` 与全文段。`decision` 词表保持审查判定，最终结算由 `outcome` 承载，两者不混用。
 
 全文主动开启后才保存 prompt、input、reasoning、output；详情整形按请求快照执行：审查记录落盘时，存储按随记录携带的采集计划（采集档与详情字节预算，取自该请求的 `ui.trace` 快照）决定详情字段的去留与裁剪，不按写入口当时的配置实例整形——排队或审查期间把采集档由 `full` 改为 `summary`（或反向、或改为 `off`），在途请求的记录内容与 `capture` 标记仍一致对应。采集计划由审查器随记录以控制字段携带，在产品字段白名单之外、落盘前剥离；不携带计划或计划非法的写入（结算记录、早退路径）回退存储实例的现行采集配置（单实例原地重配后的现行值，见 8.3）。提示和输入先使用请求快照脱敏，落盘按消费时点生效清单再脱敏并裁剪（需求 5.2 的例外只有脱敏出口）。`ui.trace.maxBytes=0` 使用需求 5.3 的默认单字段预算，不表示不裁剪或只保留零字节。只保存供应商实际返回的推理，不补造。采集故障不影响审查调用或结算。
 
@@ -789,10 +929,10 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
 | 配置 | 每个边界值、部分分节、volatile 现读、请求隔离、一次／两次配置结构序列化；实例级设置函数的直测不能冒充生产请求隔离；温度非有限数按入口可见拒绝：`Config(NaN)` 在 schema 校验即拒（退化步长经序列化往返仍拒），装载配置报错可见，设置页 JSON 通道无法表达，程序化写入由读取检查拒绝并按内部异常结算 |
 | 模型选择与映射 | 6.2 规则矩阵：斜杠 id（`parent.model` 不切分）、精确先于通用、通用命中、双 provider 同 id 各自命中、普通 id、旧纯 id 键、旧全引用键读作去首斜杠完整 id、旧全引用键归一冲突按 6.2 口径（值一致可用且与枚举顺序无关；值不一致不用冲突别名、审计留痕、直退全局默认）、坏末段键不猜测恢复、精确目标不可用直退全局默认（不改试通用规则）、全局默认空按零值语义用执行助手当前模型（layer=`follow-parent`）、已设置全局默认不可用按故障（layer=`unavailable`）、同 id 切 provider 后缓存不串；重复条件拒绝落点（装载阶段显式校验＋读取路径＋设置页）与运行时按可见配置错误拒绝结算；作用范围回显不猜目录（通用规则不显示目录首 provider）；含斜杠旧键迁移确认前原值保留、未被编辑的旧配置不重写、残留键装载口径见 6.2；modelIssues 结果扩展经 typert 清单测试验证：三处同步后新字段不被校验或投影丢失；空全局默认提示条目判据（scope=global、reason 定稿「全局默认审查模型未设置」、configured 空串；effectiveLayer／effectiveModel 按求值上下文取真实解析——会话求值复现三层序与直退终点，无会话求值取 follow-parent／空串；客户端按键分支渲染 followParent／globalUnsetShadowed；宿主不发 session 作用域空默认条目） |
 | 记录 | 摘要字段词汇表（含 `capture` 生效标记）四层贯通、字段来源与配置策略标识、主／子代理归属与升权目标、接管预设名、证据与取证摘要、尝试次数与解析层级、审查判定与最终结算关联及全路径覆盖、审查未执行前缀与 source 辨认、旧格式行独立成行、分段耗时缺失不当零、脱敏先截断、不同预算、写读失败、撕裂、读失败页面降级、回读、同时间轮转不删新文件、长期容量；采集计划按请求快照整形——full→summary、summary→full、off→full 热改与排队中快照的控制矩阵经生产装配断言 JSONL 的 `capture` 标记与详情段一致对应、RPC 详情读回一致，脱敏清单仍按消费时点生效（新增敏感串在热改后仍被遮蔽） |
-| 界面与语言 | 控件回读、暂存保存恢复、时限零值语义（审查 0 立即超时、人工 0 立即拒绝）、秒数非法输入仍保生效值、已配置但不存在的预设显式提示且不丢弃用户值、英文 id、两语言独立、卡片真实状态与及时显隐、人工零时限立即结算不出现等待瞬态；映射表作用范围控件回显与手输、重复条件行级错误与保存禁用、含斜杠旧键迁移确认两分支与确认前原值保留、三类分置提示按 7.2.0 位置与内容出现且级联同屏保留；空全局默认提示在设置页顶部与 composer 出现（reviewer.model 为空即出现；composer 条目与会话不可用条目互斥、控件附近至多一条；effectiveLayer=follow-parent 时用 followParent 键、否则用 globalUnsetShadowed 键且不得出现「按未设置的全局默认跟随」声称；effectiveModel 空串时省略「实际使用」句，不可用键与 globalUnsetShadowed 键的层含义句在场、followParent 与 globalUnset 键无冗余层句） |
-| 说明入口与名称 | 7.2.1/7.2.2/7.3.1/8.5.1 的键值与行为：20 个字段各有一个带可见文字的说明按钮、`aria-expanded`/`aria-controls` 成对、展开后按钮文字变「收起说明」、再点收起；鼠标点击与键盘激活各有用例——替身上对按钮分别调点击处理器与 keydown 处理器（Enter 与 Space 各一次），断言 `aria-expanded` 翻转与展开区显隐（装置层不转译键事件，键盘路径由组件自身承载）；开合前后暂存表、保存计划、保存可用性、输入值与常驻提醒句均不变；数字字段不传 `help` 且外套字段外壳（标签旁说明按钮、覆盖组自绘），归零与收行两条 `.dsafm_numhost` 承载规则、退役规则 `.dsafm_f_help` 零残留与统一分隔线 `.dsafm_field + .dsafm_field` 在场均在 CSS 文本断言，防官方空标签行露出、内边距叠加与字段间分隔线丢失；双主题样式类（`min-width/min-height:24px`、`label-secondary` 取色、`focus-visible`）在 CSS 文本与 DOM 替身双核对；名称表逐键断言中英定稿值、退役键不出现在字典（测试替身中仅防回潮装置可引用退役键名，并断言其不被消费）；`card.presets.none`/`missing.remedy`/`unavailable` 的定稿文案与空清单两分支 |
-| 卡片状态区分 | `pendingState` 枚举归一化为 `reviewing`/`waiting-human`，交人工序列断言为 `['reviewing','waiting-human']` 且带 `cause`（deny/timeout/error 三分支各一例；`cause` 写错按 `error` 归一化有用例），`test/pending-state.test.mjs` 断言使用新枚举与 `cause` 透传；`cause=error`（模型异常、队列已满、冷却未执行转人工）文案不含危险判定措辞；人工未决不出现「最终拒绝」措辞；人工零时限不登记状态；结算后状态清除 |
-| 记录双标注与缺段 | 列表行 `list.outcome`/`list.decision` 前缀成对出现于方向不一致的行，方向谓词按 8.5（`allow↔allowed-once`、`deny↔rejected` 同向不并列；`decision=error`、最终 `cancelled` 或反向并列；`decision` 缺失不渲染次级标注），并含同向反例断言——`decision=deny→outcome=rejected` 与 `decision=allow→outcome=allowed-once` 的行不出现次级标注；旧格式行（无 `outcome`）主位为 `list.decision` 并附 `view.noOutcome`；`absent.*` 五类分派按 8.5.1 优先级链（读取降级→统一缺省；任一全文段在场→可确认路径先过反证：`tools>0` 反证「未调用取证工具」、`degraded` 含上下文采集异常标记反证「未取上下文」，反证成立走统一缺省；全文段均不在场→仅 `decision` 在场且记录级 `capture` 标记为 `summary`／`off` 才判「未开启全文采集」，两条可确认缺段说明在该级不生效），含反例用例——`tools>0` 且 `probes` 缺失、`degraded` 含上下文采集异常标记且 `evidence` 缺失、`decision` 缺失的全文段缺失各自断言统一缺省，不误报可确认文案；钉「未开启全文采集」的样本必须是记录级 `capture` 标记为 `summary`／`off` 且已执行审查（`decision` 在场）的记录；`capture='full'` 的模型不可用早退与提示构建失败样本、无 `capture` 的旧记录、队列已满等未执行审查的样本一律断「本次未记录此项」；详情 `tools` 计数行在场；`layer`/`fieldsDefaulted`/`degraded` 枚举中英定稿附原值、`entry:*` 前缀映射与探测式取词（缺键走 `enum.unknown`：原值＋含义未知标注，不抛错）；`view.retention` 常驻在场 |
+| 界面与语言 | 控件回读、暂存保存恢复、时限零值语义（审查 0 立即超时、人工 0 立即拒绝）、秒数非法输入仍保生效值、已配置但不存在的预设显式提示且不丢弃用户值、英文 id、两语言独立、卡片真实状态与及时显隐、人工零时限立即结算不出现等待瞬态；映射表作用范围控件回显与手输、重复条件行级错误与保存禁用、含斜杠旧键迁移确认两分支与确认前原值保留、三类分置提示按 7.2.0 位置与内容出现且级联同屏保留；空全局默认提示在设置页顶部与 composer 出现（reviewer.model 为空即出现；composer 条目与会话不可用条目互斥、控件附近至多一条；effectiveLayer=follow-parent 时用 followParent 键、否则用 globalUnsetShadowed 键且不得出现「按未设置的全局默认跟随」声称；effectiveModel 空串时省略「实际使用」句，不可用键与 globalUnsetShadowed 键的层含义句在场、followParent 与 globalUnset 键无冗余层句）；触发器两段结构按 7.3.2 断言——`.dsafm_seat_model` 与 `.dsafm_seat_effort` 分别在场；档位文案取当前档位原值或 `effort.default`，档位缺失时无档位段；两段拼接文本逐字等于 `审查模型：{模型引用} · {档位文案}`；`aria-label` 以该拼接文本开头并含完整模型引用与档位文案；无生效模型时 `.dsafm_seat_model` 在场且文本为 `composer.followGlobalShort`（取值见 7.3.1）、`.dsafm_seat_effort` 不在渲染树；既有触发器的单段拼接断言与整体 `composer.followGlobalShort` 断言按两段结构改写为按元素断言；`.dsafm_seat_name` 在 CSS 文本与渲染树两处断言零残留（防只删样式不删元素），`max-width:160px` 在 CSS 文本断言零残留；样式逐属性断言——`.dsafm_seat` 含 `min-width:0` 与 `max-width:100%`，`.dsafm_seat_model` 含 `flex:0 1 auto`、`min-width:0`、`text-overflow:ellipsis`，`.dsafm_seat_effort` 含 `flex:none` 与 `white-space:nowrap`，`.dsafm_seat_pending` 含 `flex:0 1 auto`、`min-width:0`、`max-width:180px`、`overflow:hidden`、`text-overflow:ellipsis`、`white-space:nowrap`，`.dsafm_badge` 含 `flex:none`、`font-size:11px`、`margin-left:6px`，公共 `.dsafm_chevron` 规则逐字为 `flex:0 0 auto;color:var(--dsw-alias-label-tertiary)` |
+| 说明入口与名称 | 7.2.1/7.2.2/7.3.1/7.4/7.4.1/8.5.1 的键值与行为：20 个字段各有一个带可见文字的说明按钮、`aria-expanded`/`aria-controls` 成对、展开后按钮文字变「收起说明」、再点收起；鼠标点击与键盘激活各有用例——替身上对按钮分别调点击处理器与 keydown 处理器（Enter 与 Space 各一次），断言 `aria-expanded` 翻转与展开区显隐（装置层不转译键事件，键盘路径由组件自身承载）；开合前后暂存表、保存计划、保存可用性、输入值与常驻提醒句均不变；数字字段不传 `help` 且外套字段外壳（标签旁说明按钮、覆盖组自绘），归零与收行两条 `.dsafm_numhost` 承载规则、退役规则 `.dsafm_f_help` 零残留与统一分隔线 `.dsafm_field + .dsafm_field` 在场均在 CSS 文本断言，防官方空标签行露出、内边距叠加与字段间分隔线丢失；双主题样式类（`min-width/min-height:24px`、`label-secondary` 取色、`focus-visible`）在 CSS 文本与 DOM 替身双核对；名称表逐键断言中英定稿值、退役键不出现在字典（测试替身中仅防回潮装置可引用退役键名，并断言其不被消费）；`card.presets.none`/`missing.remedy`/`unavailable` 的定稿文案与空清单两分支；7.4.1 的 `cardcause.modelUnavailable`、`cardcause.outputInvalid`、`cardcause.other`、`cardcause.timeout` 四键中英定稿值进同一逐键断言清单；界面复用的 `degraded.queue-overflow`／`queue-timeout`／`breaker-open`／`output-empty`／`output-truncated` 五键不另立取值，断言与 §8.5.1 的既有词条同键同值 |
+| 卡片状态区分 | `pendingState` 枚举归一化为 `reviewing`/`waiting-human`，交人工序列断言为 `['reviewing','waiting-human']` 且带 `cause`（deny/timeout/error 三分支各一例；`cause` 写错按 `error` 归一化有用例），`test/pending-state.test.mjs` 断言使用新枚举与 `cause` 透传；`cause=error`（模型异常、队列已满、冷却未执行转人工）文案不含危险判定措辞；人工未决不出现「最终拒绝」措辞；人工零时限不登记状态；结算后状态清除；显示类别按 7.4.1 清单逐项断言——`model unavailable`、`审查未执行：queue-overflow`、`审查未执行：breaker-open（冷却中，拒绝密集或故障密集）`、`empty payload`、`output truncated`、`not valid JSON`、`invalid outcome: deny` 与带 `attempt 2/2: ` 前缀的各一例，断言卡片原因为「中文类别（原值标记）」、不含 `审查未执行：` 与 `attempt ` 前缀；`not valid JSON` 与 `invalid outcome: deny` 各钉一条完整文本（分别为「输出无有效结论（not valid JSON）」与「输出无有效结论（invalid outcome: deny）」），不截取 `invalid outcome` 后的取值；未命中清单的原文（供应商错误文本、`TypeError: …`）断言为「其他通道故障（原文）」；`cause=error` 且原因为空串的用例断言只出现类别名、无悬空括号与冒号，`cardcause.other` 的空原值同样只留「其他通道故障」；英文界面同一原文断言英文类别单元（`model unavailable` → `Reviewer model unavailable (model unavailable)`）且不含中文；既有卡片断言按本节改写——`cause` 缺失且原文 `boom` 的用例断言「其他通道故障（boom）」，拒绝理由类断言（高风险拒绝等）仍按原文、不套类别；给执行助手的注入通知仍含原因原文（如 `审查未执行：breaker-open（冷却中，拒绝密集或故障密集）`）且不含类别中文名；`cause=deny` 与 `cause=timeout` 的现行文案断言不回归 |
+| 记录双标注与缺段 | 列表行 `list.outcome`/`list.decision` 前缀成对出现于方向不一致的行，方向谓词按 8.5（`allow↔allowed-once`、`deny↔rejected` 同向不并列；`decision=error`、最终 `cancelled` 或反向并列；`decision` 缺失不渲染次级标注），并含同向反例断言——`decision=deny→outcome=rejected` 与 `decision=allow→outcome=allowed-once` 的行不出现次级标注；旧格式行（无 `outcome`）主位为 `list.decision` 并附 `view.noOutcome`；`absent.*` 五类分派按 8.5.1 优先级链（读取降级→统一缺省；任一全文段在场→可确认路径先过反证：`tools>0` 反证「未调用取证工具」、`degraded` 含上下文采集异常标记反证「未取上下文」，反证成立走统一缺省；全文段均不在场→仅 `decision` 在场且记录级 `capture` 标记为 `summary`／`off` 才判「未开启全文采集」，两条可确认缺段说明在该级不生效），含反例用例——`tools>0` 且 `probes` 缺失、`degraded` 含上下文采集异常标记且 `evidence` 缺失、`decision` 缺失的全文段缺失各自断言统一缺省，不误报可确认文案；钉「未开启全文采集」的样本必须是记录级 `capture` 标记为 `summary`／`off` 且已执行审查（`decision` 在场）的记录；`capture='full'` 的模型不可用早退与提示构建失败样本、无 `capture` 的旧记录、队列已满等未执行审查的样本一律断「本次未记录此项」；详情 `tools` 计数行在场；`layer`/`fieldsDefaulted`/`degraded` 枚举中英定稿附原值、`entry:*` 前缀映射与探测式取词（缺键走 `enum.unknown`：原值＋含义未知标注，不抛错）；`view.retention` 常驻在场；记录理由行按 7.4.1 归类——判定次序为先排除、再归类：`decision='error'` 且原文 `model unavailable` 的记录断言「审查模型不可用（model unavailable）」，`source='error'` 且原文为异常文本的记录断言「其他通道故障（…）」，原文 `审查未执行：queue-overflow` 与 `审查未执行：breaker-open（冷却中，拒绝密集或故障密集）` 的结算记录分别断言「队列已满（queue-overflow）」与「冷却中未执行（breaker-open）」，原文 `empty payload`、`output truncated`、`not valid JSON`、`invalid outcome: deny` 的四类记录分别断言「空输出（output-empty）」「输出截断（output-truncated）」「输出无有效结论（not valid JSON）」「输出无有效结论（invalid outcome: deny）」，`source='timeout'` 且原文 `review timeout` 的记录断言「审查超时（review timeout）」，原文 `审查未执行：queue-timeout` 的结算记录断言「排队超时（queue-timeout）」，`source=timeout` 且原文为「装配超时：…」「审查时限为零，立即超时（不开始尝试）」「计时回调抛错（装配）：…」的结算记录断言按原文显示、不出现「其他通道故障」，降级标记含 `superseded` 的记录断言理由按原文显示且不出现「其他通道故障」，`decision='deny'` 的理由按原文断言不套类别，同一理由为协议回落值（`No rationale provided by the reviewer.`）时断言显示 §8.5.1 的 `view.reasonDefaulted` 中文、不出现该英文句；理由为固定标记且同时属排除项时以排除项为准（如拒绝理由恰为 `empty payload` 时按原文显示）；只有结算记录的行（`reason` 以 `审查未执行：` 开头）同样按 7.4.1 归类，其 `degraded` 按缺失断言；落盘断言 `reason`、`degraded` 与归类前逐字一致（本地化不写回记录） |
 | 装卸 | 宿主组合干净装卸、保留原档、用户配置复制风险，不自动改 YAML；发布产物含完整入口 |
 | 版本 | 包与锁文件一致、版本及标签解析有效、依赖／peer 对应宿主信息；完整标签隔离安装、产物与管理界面展示核对，Release 标题顺序正确 |
 | 测试运行 | 全套准确计数与退出码：通过、失败、跳过分别计数，非零退出码即失败，跳过带理由；报告器可见范围不代替完整结论 |
@@ -812,8 +952,9 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
 界面文案与说明入口的真实页面验证（requirements §9「界面文案与说明入口还须证明」三条逐项），用 `tools/browser-shot.mjs` 驱动真实部署实例（实例地址经 `tools/local-config.mjs` 解析），浅色与深色主题各跑一轮，截图留证于输出目录。主题切换手段：经 `eval` 写宿主主题偏好（宿主设置服务的主题写入入口；不可行时注入宿主主题类名或存储键，具体键名实施时以 `--dump` 探测），每轮截图前用 `eval` 读取页面计算样式的主题 token 取值（如正文背景色）并断言两轮不同，防止两轮同主题；探测结论记录在验证产物里，供下次巡检复用。主题机制：宿主主题偏好存放于设置命名空间 `ui-theme.preference`（light|dark|system），真正驱动配色的是 `body[data-ds-dark-theme]` 属性——深色 `eval` 注入该属性、浅色移除即可，`documentElement.dataset.dsThemeSource` 只记录偏好名、不驱动配色。
 
 - 未展开巡检：逐字段核对常驻短句在场（影响对象、默认与零值含义），再用 `eval` 读取每个 `.dsafm_helpbtn` 的 `getBoundingClientRect`（≥24×24 CSS 像素）与计算样式取值，按 WCAG 相对亮度公式计算对比度并断言 ≥4.5:1——采样对象为按钮文字的 `color` 与最近带背景色的祖先元素的背景色，浅深两轮各测并记录原始取值与计算比值；鼠标路径 `clickSelector` 点开与收起各一次，键盘路径对同一按钮 `eval` 聚焦后派发 keydown（Enter 与 Space 各一次，组件自身处理键事件并 `preventDefault`），断言 `aria-expanded` 逐次翻转、展开区与「收起说明」文字随开合出现消失；开合前后用 `eval` 比对输入值、保存按钮可用态与常驻提醒句在场不变。七类字段（数字、下拉、多行文本、多选、布尔、模型选择、映射表）各抽至少一个代表截图（收起与展开两态）。
-- 名称一致性巡检：设置页、会话模型控件、审批卡片与审查记录四处截图，按 7.2.2/7.3.1/7.4/8.5.1 定稿逐名核对；审查使用相同模型的说明、推理强度「自动选择」、空预设清单与未知预设处置、通知范围与记录开关、文本拒绝规则与其他检查的区分各自可见；保存前后用设置快照核对配置键、枚举值与默认值不变。
-- 卡片与记录状态巡检：对安全拒绝、超时、模型故障、队列已满、冷却未执行、人工先答与迟到点击分别截同帧卡片，核对文案不误报危险、不暗示已完成的审批还能改判；记录列表中模型结论与最终结果不一致的行双标注可见，详情缺段按 `absent.*` 五类说明，摘要级记录不依赖开启全文解释；旧记录行附「未记录最终审批结果」。
+- 名称一致性巡检：设置页、会话模型控件、审批卡片与审查记录四处截图，按 7.2.2/7.3.1/7.4.1/8.5.1 定稿逐名核对；审查使用相同模型的说明、推理强度「自动选择」、空预设清单与未知预设处置、通知范围与记录开关、文本拒绝规则与其他检查的区分各自可见；保存前后用设置快照核对配置键、枚举值与默认值不变。
+- 会话模型触发器巡检：同一接管会话在 1280 与 375 两种视口各取一帧，两帧用同一模型引用——取测试实例目录中长度足以在 375 溢出的长引用（如 `zai/glm-5.3-flash`）作夹具；并在 375 视口对带分置提示（`.dsafm_seatwrap` 包裹）与不带提示两种形态各取一帧。逐帧读取 `.dsafm_seat_effort` 的 `getBoundingClientRect` 与 `scrollWidth`／`clientWidth`，断言档位段完整可见（`scrollWidth === clientWidth` 且右缘不超出触发器）；读取 `.dsafm_seat_model`，若其 `scrollWidth > clientWidth` 则断言省略只发生在该段，若两值相等则断言模型段完整可见；读取触发器与容器的右缘断言触发器不横向溢出容器；逐帧读 `aria-label`，断言以两段拼接文本开头并含完整模型引用与档位文案。中文与英文界面各做一轮。
+- 卡片与记录状态巡检：对安全拒绝、超时、模型故障、队列已满、冷却未执行、人工先答与迟到点击分别截同帧卡片，核对文案不误报危险、不暗示已完成的审批还能改判；中文界面分别构造模型不可用、冷却中未执行、队列已满三种人工卡片，同帧核对原因为「中文类别（原值标记）」、无裸英文标记、无重复中文前缀，另在 375 视口构造一张原因为长供应商错误文本（如 300 字符以上）的人工卡片，核对原因换行与卡片高度不溢出、不裁掉按钮；英文界面同帧核对英文表达，句中出现大写开头的类别名（如 `Queue full (queue-overflow)`）判为正常，含中文即判失败；记录列表中模型结论与最终结果不一致的行双标注可见，详情缺段按 `absent.*` 五类说明，摘要级记录不依赖开启全文解释；记录视图对同一审批的理由行按 7.4.1 归类呈现，落盘行原文不变；审查记录与结算记录同时在场时，同帧复核理由行与「缺失或异常情况」段出现同一 `degraded` 词条时两处名称逐字一致、全屏不出现第三种写法——名称不一致即判失败，只有结算记录的行不做该交叉核对；旧记录行附「未记录最终审批结果」。
 - 分置提示巡检：构造全局默认、映射规则、会话选择各自不可用的配置，核对三类提示按 7.2.0 位置出现、内容含可核实原因与实际回退结果；级联情形（规则与全局默认同时不可用）两处提示同屏保留；目标恢复可用后提示消失；提示不改变回退语义；空全局默认（零值语义生效）时设置页顶部与 composer 提示出现、视觉与不可用提示同规格、设置默认后提示消失；解析落到零值语义的 composer 文案含跟随与「使用相同模型」区分句式，被有效映射截住的 composer 文案用 `globalUnsetShadowed`、不出现「按未设置的全局默认跟随」句式；空全局默认两形态（零值语义与有效映射命中）在真实页面保存并重开设置页后各自成立、提示与配置一致；空串成句规则——不可用键与 `globalUnsetShadowed` 键空串时「实际使用」句省略且层含义句（`warn.modelIssue.layer`）在场，`globalUnset`／`followParent` 键无冗余层句；浅色与深色主题下分别用计算样式读取提示文字与背景取值，按 WCAG 相对亮度公式断言对比度 ≥4.5:1（与说明按钮巡检同法；浅色主题断言文字取插件声明的 `#92400e` 而非 warn-label 令牌值，深色主题断言 warn-label 令牌值）。
 
 静态 DOM 判据由 `tools/build-dom-dump.mjs` 三件套（`test/settings-dom-dump.test.mjs`、`test/fixtures/settings-dom-dump.txt`）同步承载：说明按钮计数 20 个、全部带可见文字与成对 aria 属性、点击后展开区在场；字段清单对照测试内转抄的 20 字段标签清单逐项核对（转抄清单不随字段集增删自动变红，字段集变更须重采夹具），控件取值经 `normalizeConfig` 与生效配置动态对账，退役字段不出现在 dump。旧截图与接口返回不作为界面验证证据。
@@ -822,10 +963,13 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
 
 本章是当前实施与验证差距的唯一工作清单。完成后删除对应项，不保存修正历史。仍待办理：
 
-- 真实宿主核验余量（10.3 清单）：反向双标注与旧格式行的真页面样本未取得，由单元测试与真页面机制验证覆盖；冷却样本维持离线验证——现场触发以故意配置不可用的审查模型为前提，不属常规验证操作。
+- 真实宿主核验余量（10.3 清单）：反向双标注与旧格式行的真页面样本未取得，由单元测试与真页面机制验证覆盖；冷却形态的人工卡片已取得真机读数。
 - 分置提示真页巡检余量（10.3）：会话指定不可用与 followParent 行互斥的真页形态——测试实例模型目录内引用全部可用，该状态环境不可达，由单元测试（设置页与 composer 分置提示、互斥至多一条）覆盖。
 - 发布链核验未执行（9.3）：发布产物读取的完整版本、完整 Git 标签隔离安装、宿主管理界面展示、Release 标题。标签与 Release 在发布流程执行时创建，不移动已有发布标签。
 - 功能批次修正的真机余量（12.1／3.4／5.1／8.2）：待真宿主（10.3 清单口径）复核的行为——硬性拦截命中与改写重送的端到端观感、工作者线程超时在真宿主负载下的时限表现、排队取消与超时计数的真并发形态。
+- 触发器显示契约的真机巡检余量（10.3）：实现与 10.2 的断言已就位；中文与英文界面的触发器 1280／375 两段（档位段完整可见、`aria-label` 含完整选择）已取得真机记录；375 视口的长模型引用省略帧、带分置提示（`.dsafm_seatwrap` 包裹）形态的 375 帧尚未取得；取得并归档后删除本项。
+- 卡片与记录视图显示类别的真机巡检余量（10.3）：实现与 10.2 的断言已就位；中文界面的「审查模型不可用（model unavailable）」人工卡片与记录视图理由行已取得真机记录；队列已满与排队超时的人工卡片帧（需构造调度器容量触顶）、375 视口下长供应商错误文本（300 字符以上）的人工卡片帧、英文界面一轮尚未取得；取得并归档后删除本项。
+- 英文界面标点统一：触发器可见文案沿用现行全角冒号与「 · 」分隔写法（7.3.2），英文界面下与半角标点混排，尚未统一；无障碍名的分隔符已按语言取半角「; 」，其后拼接的说明句仍含全角冒号（`composer.failed：`），与可见文案同属本项范围。核定后统一改写文案。新增键的英文取值用半角括号。
 
 ## 12. 增补设计
 

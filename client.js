@@ -23,6 +23,54 @@ window.__ModuleLoader__.load({
 		const REASON_DEFAULTED = "No rationale provided by the reviewer.";
 
 		/**
+		 * 判定侧写入原因原文的两个固定前缀（design §7.4.1 组成规则 2）：重试进度前缀与调度失败
+		 * 前缀。归类前各剥一次，只影响显示，记录与审计保留原文。
+		 */
+		const ATTEMPT_PREFIX = /^attempt \d+\/\d+: /u;
+		const NOT_RUN_PREFIX = /^审查未执行：/u;
+
+		/**
+		 * 原因原文归入显示类别（design §7.4.1）：先剥两个固定前缀，再按固定标记归类。
+		 *
+		 * 只做展示归类，不改判定、`cause`、记录字段或通知文本（design §7.4.1 边界）。返回的
+		 * `value` 是括号内的原值；空串表示该键文案已含标记（`degraded.*` 与 `cardcause.modelUnavailable`、
+		 * `cardcause.timeout`），或原文为空、按规则 1 省去整个括号单元。
+		 * @param {string} reason - 判定侧写入的原因原文。
+		 * @returns {{key: string, value: string}} 类别字典键与括号内原值。
+		 */
+		const displayClassOf = (reason) => {
+			const raw = typeof reason === "string" ? reason : "";
+			const body = raw.replace(ATTEMPT_PREFIX, "").replace(NOT_RUN_PREFIX, "");
+			if (body.startsWith("model unavailable")) return { key: "cardcause.modelUnavailable", value: "" };
+			if (body.startsWith("queue-overflow")) return { key: "degraded.queue-overflow", value: "" };
+			if (body.startsWith("queue-timeout")) return { key: "degraded.queue-timeout", value: "" };
+			if (body.startsWith("breaker-open")) return { key: "degraded.breaker-open", value: "" };
+			if (body.startsWith("empty payload")) return { key: "degraded.output-empty", value: "" };
+			if (body.startsWith("output truncated")) return { key: "degraded.output-truncated", value: "" };
+			if (body.startsWith("not valid JSON") || body.startsWith("invalid outcome:")) {
+				return { key: "cardcause.outputInvalid", value: body };
+			}
+			// `review timeout` 只出现在记录侧的理由里（审查记录与其结算记录带同一串）；卡片侧的超时由 cause=timeout 承担（design §7.4.1 超时行）。
+			if (body.startsWith("review timeout")) return { key: "cardcause.timeout", value: "" };
+			return { key: "cardcause.other", value: body };
+		};
+
+		/**
+		 * 渲染显示类别（design §7.4.1 规则 1）：原值为空时删去整个括号单元，不留悬空括号。
+		 * @param {Function} t - 本命名空间的翻译函数。
+		 * @param {{key: string, value: string}} unit - `displayClassOf` 的结果。
+		 * @returns {string} 类别文案。
+		 */
+		const displayClassText = (t, unit) => {
+			const template = t(unit.key);
+			if (unit.value.length === 0) {
+				return template.replace(/（\{v\}）/u, "").replace(/ \(\{v\}\)/u, "");
+			}
+			// 函数式替换：原值可能含 `$&` 一类替换模式（供应商或模型文本），按字面插入。
+			return template.replace("{v}", () => unit.value);
+		};
+
+		/**
 		 * 14px 下箭头（内联 SVG）。
 		 *
 		 * 为什么不用 `primitives.IconChevronDownOutline14`：宿主（基线 dsh 0.2.0-rc.2）的图标
@@ -243,6 +291,10 @@ window.__ModuleLoader__.load({
 			"degraded.queue-timeout": "排队超时（queue-timeout）",
 			"degraded.breaker-open": "冷却中未执行（breaker-open）",
 			"degraded.inject-fail": "通知失败（inject-fail）",
+			"cardcause.modelUnavailable": "审查模型不可用（model unavailable）",
+			"cardcause.outputInvalid": "输出无有效结论（{v}）",
+			"cardcause.other": "其他通道故障（{v}）",
+			"cardcause.timeout": "审查超时（review timeout）",
 			"enum.unknown": "{v}（含义未知）",
 			"source.rule": "规则（rule）",
 			"source.hard": "硬性拦截（hard）",
@@ -495,6 +547,10 @@ window.__ModuleLoader__.load({
 			"degraded.queue-timeout": "Queue wait timeout (queue-timeout)",
 			"degraded.breaker-open": "Skipped during cooldown (breaker-open)",
 			"degraded.inject-fail": "Notice delivery failure (inject-fail)",
+			"cardcause.modelUnavailable": "Reviewer model unavailable (model unavailable)",
+			"cardcause.outputInvalid": "No valid conclusion in the output ({v})",
+			"cardcause.other": "Other channel failure ({v})",
+			"cardcause.timeout": "Review timed out (review timeout)",
 			"enum.unknown": "{v} (unknown meaning)",
 			"source.rule": "rule",
 			"source.hard": "hard",
@@ -670,13 +726,15 @@ window.__ModuleLoader__.load({
 			// 排在前面会被 .dsafm_button 的 border:none/background:none/padding:0 覆盖回纯文本形态。
 			".dsafm_map_add{align-self:center;display:inline-flex;align-items:center;padding:4px 14px;border:.5px solid var(--dsw-alias-border-l4);border-radius:8px;background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-secondary)}",
 			".dsafm_map_add:hover:not(:disabled){color:var(--dsw-alias-label-primary)}",
-			".dsafm_badge{font-size:11px;color:var(--dsw-alias-state-warn-primary);margin-left:6px}",
+			".dsafm_badge{flex:none;font-size:11px;color:var(--dsw-alias-state-warn-primary);margin-left:6px}",
 			".dsafm_hint{color:var(--dsw-alias-label-tertiary);font-size:12px;overflow-wrap:anywhere}",
-			".dsafm_seat{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 8px;border:none;border-radius:14px;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:12px;cursor:pointer}",
-			".dsafm_seat_name{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+			".dsafm_seat{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 8px;border:none;border-radius:14px;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:12px;cursor:pointer;min-width:0;max-width:100%}",
+			// 触发器两段（design §7.3.2）：模型段可收缩并省略自身文本，档位段不参与省略。
+			".dsafm_seat_model{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+			".dsafm_seat_effort{flex:none;white-space:nowrap}",
 			".dsafm_item{display:flex;flex-direction:column}",
 			".dsafm_item_group{font-size:11px;color:var(--dsw-alias-label-tertiary)}",
-			".dsafm_seat_pending{font-size:11px;color:var(--dsw-alias-state-warn-primary);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+			".dsafm_seat_pending{flex:0 1 auto;min-width:0;font-size:11px;color:var(--dsw-alias-state-warn-primary);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
 			// 会话控件的分置提示挂在座位下方（design §7.2.0/§7.3）：纵向堆叠，不挤压输入行高度。
 			".dsafm_seatwrap{display:inline-flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0}",
 			".dsafm_stack{display:flex;flex-direction:column;gap:6px;min-width:0}",
@@ -692,7 +750,7 @@ window.__ModuleLoader__.load({
 			".dsafm_tag{font-size:10px;line-height:14px;padding:0 6px;border-radius:7px;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary)}",
 			".dsafm_warn{color:var(--dsw-alias-state-warn-primary)}",
 			".dsafm_carddetail{display:flex;flex-direction:column;gap:4px;font-family:var(--dsh-font-family-base,inherit)}",
-			".dsafm_state{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);font-weight:500}",
+			".dsafm_state{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);font-weight:500;overflow-wrap:anywhere}",
 			".dsafm_state_time{font-weight:400;color:var(--dsw-alias-label-secondary)}",
 			".dsafm_state_warn{color:var(--dsw-alias-state-warn-primary)}",
 			".dsafm_state_deny{color:var(--dsw-alias-state-error-primary)}",
@@ -1339,12 +1397,24 @@ window.__ModuleLoader__.load({
 			const model = typeof state.effective === "string" ? state.effective : "";
 			const currentEffort = state.sessionModel !== null && state.sessionModel !== undefined ? state.sessionEffort : state.effectiveEffort;
 			const effort = typeof currentEffort === "string" ? currentEffort : undefined;
-			const label =
-				model.length === 0
-					? t("composer.followGlobalShort")
-					: effort === undefined
-						? `${t("composer.label")}：${model}`
-						: `${t("composer.label")}：${model} · ${effort.length === 0 ? t("effort.default") : effort}`;
+			// 触发器两段（design §7.3.2）：模型段承载 `composer.label` 与模型引用，档位段承载
+			// 分隔符与档位文案。两段文本直接相连必须与单段写法逐字相同；没有生效模型时只有
+			// 模型段（跟随全局），不显示档位段。模型引用不改写取值，只由样式省略。
+			const labelModel =
+				model.length === 0 ? t("composer.followGlobalShort") : `${t("composer.label")}：${model}`;
+			const labelEffort =
+				model.length === 0 || effort === undefined
+					? null
+					: ` · ${effort.length === 0 ? t("effort.default") : effort}`;
+			const visibleLabel = labelModel + (labelEffort ?? "");
+			// 分隔符随界面语言取中文「；」或英文「; 」（design §7.3.2 无障碍）：不新增字典键，
+			// 按渲染语言的标签文本判定——中文标签含汉字，英文标签不含。
+			const labelSeparator = /[\u3400-\u9fff]/u.test(t("composer.label")) ? "；" : "; ";
+			const seatDescription = pendingSession
+				? t("composer.pendingSession")
+				: error === ""
+					? t("composer.title")
+					: `${t("composer.failed")}：${error}`;
 
 			const modelItems = [];
 			for (const provider of catalog?.providers ?? []) {
@@ -1409,21 +1479,20 @@ window.__ModuleLoader__.load({
 				});
 			};
 
+			// 触发器（design §7.3.2）：无障碍名＝完整当前选择＋分号＋现行说明句，视觉可见文案只承担
+			// 模型段与档位段；`title` 保持现行说明句，不追加当前值。
 			const seat = jsxRuntime.jsxs("button", {
 				type: "button",
 				className: "dsafm_seat",
 				"aria-haspopup": "menu",
 				"aria-expanded": open,
-				title:
-					pendingSession
-						? t("composer.pendingSession")
-						: error === ""
-							? t("composer.title")
-							: `${t("composer.failed")}：${error}`,
+				"aria-label": `${visibleLabel}${labelSeparator}${seatDescription}`,
+				title: seatDescription,
 				disabled: busy || modelItems.length === 0,
 				onClick: () => setOpen((value) => !value),
 				children: [
-					jsxRuntime.jsx("span", { className: "dsafm_seat_name", children: label }),
+					jsxRuntime.jsx("span", { className: "dsafm_seat_model", children: labelModel }),
+					labelEffort === null ? null : jsxRuntime.jsx("span", { className: "dsafm_seat_effort", children: labelEffort }),
 					pendingSession ? jsxRuntime.jsx("span", { className: "dsafm_seat_pending", children: t("composer.pendingSession") }) : null,
 					error === "" ? null : jsxRuntime.jsx("span", { className: "dsafm_badge", children: t("composer.failed") }),
 					jsxRuntime.jsx(ChevronDownIcon, { className: "dsafm_chevron" }),
@@ -1672,17 +1741,26 @@ window.__ModuleLoader__.load({
 			// 状态行（design §7.4）：`reviewing` →「正在自动审批」；`waiting-human` →「等待你决定 · 原因子句」。
 			// 原因子句明确归属自动审查（deny/timeout/error），不冠「最终」字样——人工未决不是最终拒绝；
 			// deny 且理由为空时省略冒号与理由；cause 缺失或写错按 error（与 pending-state 归一化同向）。
+			// `cause=error` 的原因子句取显示类别（design §7.4.1）：中文类别在前、原值附后；
+			// `cause=deny` 的模型理由属模型数据，按原文显示，不改写。
 			const causeOf = () => (entry.cause === "deny" || entry.cause === "timeout" ? entry.cause : "error");
 			const causeText =
 				entry.state === "waiting-human"
 					? causeOf() === "timeout"
 						? t("cardstate.waiting.timeout")
-						: causeOf() === "deny" && (entry.reason ?? "") === ""
-							? t("cardstate.waiting.deny").replace(/[:：]\s*\{reason\}/u, "")
-							: t(`cardstate.waiting.${causeOf()}`).replace(
+						: causeOf() === "deny"
+							? (entry.reason ?? "") === ""
+								? t("cardstate.waiting.deny").replace(/[:：]\s*\{reason\}/u, "")
+								: t("cardstate.waiting.deny").replace(
+										"{reason}",
+										// 协议回落值按界面语言改写，中文界面不出现英文行（与记录视图同一口径）。
+										entry.reason === REASON_DEFAULTED ? t("view.reasonDefaulted") : entry.reason ?? "",
+									)
+							: t("cardstate.waiting.error").replace(
 									"{reason}",
-									// 协议回落值按界面语言改写，中文界面不出现英文行（与记录视图同一口径）。
-									entry.reason === REASON_DEFAULTED ? t("view.reasonDefaulted") : entry.reason ?? "",
+									entry.reason === REASON_DEFAULTED
+										? t("view.reasonDefaulted")
+										: displayClassText(t, displayClassOf(entry.reason)),
 								)
 					: null;
 			const stateText = entry.state === "waiting-human" ? `${t("cardstate.waiting")} · ${causeText}` : t("cardstate.reviewing");
@@ -2048,6 +2126,35 @@ window.__ModuleLoader__.load({
 						.map((item) => (item.startsWith("entry:") ? t("degraded.entry").replace("entry:…", item) : enumText(prefix, item)))
 						.join("、");
 				};
+				/**
+				 * 记录视图的理由行（design §7.4.1）：判定次序固定，先排除、再归类。
+				 *
+				 * 排除项按原文显示——降级标记含 `superseded`、`decision='deny'` 的模型理由、
+				 * `source` 为 rule/hard/human 的说明、装配超时与装配环节计时回调抛错（`source=timeout`
+				 * 且 `stage=assembly`；`stage` 只在详情里）。其余行先剥固定前缀再按清单归类；已知通道
+				 * 故障但未命中清单的套「其他通道故障」，非通道故障一律按原文显示（含理由被裁剪的情形）。
+				 * @param {object} record - 合并后的记录行（列表字段，不含 stage）。
+				 * @param {{reason?: string, degraded?: string, stage?: string} | undefined} detail - 详情补充字段。
+				 * @returns {string | null | undefined} 理由文案；段缺失时返回原值交由缺段说明处理。
+				 */
+				const recordReasonText = (record, detail) => {
+					const raw = detail?.reason;
+					if (raw === REASON_DEFAULTED) return t("view.reasonDefaulted");
+					if (typeof raw !== "string" || raw.length === 0) return raw;
+					const degraded = typeof detail?.degraded === "string" ? detail.degraded.split(/[,+]/u) : [];
+					const excluded =
+						degraded.includes("superseded") ||
+						record.decision === "deny" ||
+						record.source === "rule" ||
+						record.source === "hard" ||
+						record.source === "human" ||
+						(record.source === "timeout" && detail?.stage === "assembly");
+					if (excluded) return raw;
+					const channelFailure =
+						record.decision === "error" || record.source === "error" || raw.startsWith("审查未执行：");
+					if (!channelFailure) return raw;
+					return displayClassText(t, displayClassOf(raw));
+				};
 				// 详情元信息段：只列在场字段（design §8.4「取不到明确缺失」——缺失段不显示假占位）。
 				const metaParts = [];
 				const metaOf = (titleKey, value, formatter) => {
@@ -2140,8 +2247,9 @@ window.__ModuleLoader__.load({
 														].join(""),
 													}),
 													metaParts.length === 0 ? null : jsxRuntime.jsx("div", { className: "dsafm_review_meta", children: metaParts.join(" · ") }),
-													// 协议回落值按界面语言改写，中文界面不出现英文行。
-													sectionOf("detail.reason", absentKeyOf("reason"), detail.reason === REASON_DEFAULTED ? t("view.reasonDefaulted") : detail.reason, truncated),
+													// 协议回落值按界面语言改写，中文界面不出现英文行；通道故障行按显示类别
+													// 呈现（design §7.4.1 记录视图的理由行：先排除、再归类）。
+													sectionOf("detail.reason", absentKeyOf("reason"), recordReasonText(record, detail), truncated),
 													sectionOf("detail.evidence", absentKeyOf("evidence"), detail.evidence, truncated),
 													sectionOf("detail.probes", absentKeyOf("probes"), detail.probes, truncated),
 													sectionOf("detail.prompt", absentKeyOf("prompt"), detail.prompt, truncated),

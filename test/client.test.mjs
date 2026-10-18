@@ -290,6 +290,19 @@ function findByClass(node, className) {
 }
 
 /**
+ * 把元素树里的文本拼成一段（忽略属性与空节点），用于断言两段触发器的合并文本。
+ * @param {unknown} node - 元素树根或子树。
+ * @returns {string} 拼接后的文本。
+ */
+function flatText(node) {
+  if (node === null || node === undefined || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(flatText).join('');
+  if (node.props && node.props.children !== undefined) return flatText(node.props.children);
+  return '';
+}
+
+/**
  * 渲染设置卡片并展开：折叠头点一次，副作用用 tick 推进。
  * @param {Function} component - 卡片组件。
  * @param {object} props - 属性。
@@ -1090,8 +1103,9 @@ test('composer 下拉：两段式菜单，档位项来自 modelEfforts', async (
     },
   });
   client.apply(env.ctx);
+  const dicts = env.dictionaries[0].dicts;
   const dropdown = env.registrations.find((entry) => entry.options.name === 'conversation.input.left');
-  const props = { t: (key) => key, ...dropdown.options.inject() };
+  const props = { t: (key) => dicts.zh[key] ?? key, ...dropdown.options.inject() };
   // 两轮：先等 getState 到货，再等档位表到货。
   render(dropdown.component, props);
   await tick();
@@ -1105,7 +1119,16 @@ test('composer 下拉：两段式菜单，档位项来自 modelEfforts', async (
   const ids = menu.props.items.filter((item) => typeof item.id === 'string').map((item) => item.id);
   assert.ok(ids.includes('__effort__'), '缺「自动选择」推理强度项');
   assert.ok(ids.includes('__effort__:low') && ids.includes('__effort__:high'), '缺模型支持的档位项');
-  assert.match(JSON.stringify(menu.props.anchor.props.children), /zai\/glm-5\.3 · low/, '触发器应显示模型与档位');
+  // 触发器为两段结构（design §7.3.2）：两段文本直接相连与单段写法逐字相同；档位段不参与省略。
+  const anchor = menu.props.anchor;
+  assert.equal(flatText(anchor), '审查模型：zai/glm-5.3 · low', '两段相连应等于单段写法');
+  const modelSpan = findByClass(anchor, 'dsafm_seat_model');
+  const effortSpan = findByClass(anchor, 'dsafm_seat_effort');
+  assert.ok(modelSpan, '缺模型段');
+  assert.ok(effortSpan, '缺档位段');
+  assert.equal(flatText(modelSpan), '审查模型：zai/glm-5.3');
+  assert.equal(flatText(effortSpan), ' · low');
+  assert.match(String(anchor.props['aria-label']), /^审查模型：zai\/glm-5\.3 · low；/, '无障碍名应含完整当前选择与中文分隔符');
 
   menu.props.onSelect('__effort__:high');
   await tick();
@@ -1144,8 +1167,9 @@ test('composer 下拉：没有生效模型时档位段不出现', async () => {
     },
   });
   client.apply(env.ctx);
+  const dicts = env.dictionaries[0].dicts;
   const dropdown = env.registrations.find((entry) => entry.options.name === 'conversation.input.left');
-  const props = { t: (key) => key, ...dropdown.options.inject() };
+  const props = { t: (key) => dicts.zh[key] ?? key, ...dropdown.options.inject() };
   render(dropdown.component, props);
   await tick();
   await tick();
@@ -1154,7 +1178,83 @@ test('composer 下拉：没有生效模型时档位段不出现', async () => {
   const menu = findNode(tree, primitivesStub.Menu);
   const ids = menu.props.items.filter((item) => typeof item.id === 'string').map((item) => item.id);
   assert.equal(ids.includes('__effort__'), false, '无模型时不应出现档位段');
-  assert.match(JSON.stringify(menu.props.anchor), /composer\.followGlobalShort/, '未配置时触发器应当显示跟随全局');
+  // 无生效模型的形态（design §7.3.2）：只有模型段一段，文本为跟随全局；无障碍名以该文本开头。
+  assert.equal(flatText(menu.props.anchor), '跟随全局', '未配置时触发器应当显示跟随全局');
+  assert.equal(findByClass(menu.props.anchor, 'dsafm_seat_model') !== undefined, true, '无模型时仍有模型段');
+  assert.equal(findByClass(menu.props.anchor, 'dsafm_seat_effort'), undefined, '无生效模型时不渲染档位段');
+  assert.match(String(menu.props.anchor.props['aria-label']), /^跟随全局；/, '无模型时无障碍名以跟随全局与中文分隔符开头');
+});
+
+test('composer 下拉：未指定档位显示自动选择；英文界面用半角分隔符（design §7.3.2）', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/getState') {
+        return {
+          ok: true,
+          value: { found: true, active: true, preset: 'auto-approve', sessionModel: null, sessionEffort: '', globalDefault: 'zai/glm-5.3', globalEffort: '', byParentModel: {}, effective: 'zai/glm-5.3', effectiveEffort: '', layer: 'global' },
+        };
+      }
+      if (endpoint === 'approveForMe/modelCatalog') return { ok: true, value: { providers: [{ id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      if (endpoint === 'approveForMe/modelEfforts') return { ok: true, value: { efforts: [{ id: 'low' }], defaultEffort: 'low' } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const dicts = env.dictionaries[0].dicts;
+  const dropdown = env.registrations.find((entry) => entry.options.name === 'conversation.input.left');
+  const props = { t: (key) => dicts.en[key] ?? key, ...dropdown.options.inject() };
+  render(dropdown.component, props);
+  await tick();
+  render(dropdown.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const tree = render(dropdown.component, props);
+  const menu = findNode(tree, primitivesStub.Menu);
+  const anchor = menu.props.anchor;
+  assert.equal(flatText(anchor), 'Reviewer model：zai/glm-5.3 · Automatic', '未指定档位显示自动选择的英文定稿');
+  assert.equal(flatText(findByClass(anchor, 'dsafm_seat_effort')), ' · Automatic');
+  assert.match(String(anchor.props['aria-label']), /^Reviewer model：zai\/glm-5\.3 · Automatic; /, '英文界面无障碍名用半角分号加空格');
+  assert.ok(!String(anchor.props['aria-label']).includes('；'), '英文界面无障碍名不得出现中文分隔符');
+});
+
+test('composer 下拉：宿主不提供档位时不渲染档位段（design §7.3.2）', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/getState') {
+        // effectiveEffort 缺失（旧宿主或求值失败）：档位不可知，不补造取值。
+        return {
+          ok: true,
+          value: { found: true, active: true, preset: 'auto-approve', sessionModel: null, sessionEffort: '', globalDefault: 'zai/glm-5.3', byParentModel: {}, effective: 'zai/glm-5.3', layer: 'global' },
+        };
+      }
+      if (endpoint === 'approveForMe/modelCatalog') return { ok: true, value: { providers: [{ id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      if (endpoint === 'approveForMe/modelEfforts') return { ok: true, value: { efforts: [{ id: 'low' }], defaultEffort: 'low' } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const dicts = env.dictionaries[0].dicts;
+  const dropdown = env.registrations.find((entry) => entry.options.name === 'conversation.input.left');
+  const props = { t: (key) => dicts.zh[key] ?? key, ...dropdown.options.inject() };
+  render(dropdown.component, props);
+  await tick();
+  render(dropdown.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const tree = render(dropdown.component, props);
+  const menu = findNode(tree, primitivesStub.Menu);
+  const anchor = menu.props.anchor;
+  assert.equal(flatText(anchor), '审查模型：zai/glm-5.3', '档位不可知时只显示模型段');
+  assert.equal(findByClass(anchor, 'dsafm_seat_effort'), undefined, '档位不可知时不渲染档位段');
+  assert.match(String(anchor.props['aria-label']), /^审查模型：zai\/glm-5\.3；/, '无障碍名只含模型段与分隔符');
 });
 
 test('composer 下拉：宿主里没有该会话时仍可写（会话开始前即可设置，requirements §6.2）', async () => {
@@ -2541,14 +2641,15 @@ test('审批卡片状态条：非审查状态的 null 截止不渲染任何无�
   });
   client.apply(env.ctx);
   const detail = env.registrations.find((entry) => entry.options.name === 'conversation.approval.detail');
-  const t = (key) => ({ 'cardstate.waiting': '等待你决定', 'cardstate.waiting.error': '自动审查未取得有效结论：{reason}', 'cardstate.waiting.deny': '自动审查结论为拒绝：{reason}', 'countdown.unlimited': '审查无时限', 'countdown.none': '无自动拒绝时限，将一直等待你的决定' })[key] ?? key;
+  const t = (key) => ({ 'cardstate.waiting': '等待你决定', 'cardstate.waiting.error': '自动审查未取得有效结论：{reason}', 'cardstate.waiting.deny': '自动审查结论为拒绝：{reason}', 'cardcause.other': '其他通道故障（{v}）', 'countdown.unlimited': '审查无时限', 'countdown.none': '无自动拒绝时限，将一直等待你的决定' })[key] ?? key;
   const props = { callId: 'call_1', t, useChat: () => 'rm x', ...detail.options.inject() };
   render(detail.component, props);
   await tick();
   hookIndex = 0;
   const text = JSON.stringify(render(detail.component, props));
   assert.match(text, /等待你决定/);
-  assert.match(text, /风险高/);
+  // 未命中类别清单的原因按「其他通道故障（原文）」显示（design §7.4.1）。
+  assert.match(text, /其他通道故障（风险高）/);
   assert.ok(!text.includes('审查无时限'), '非审查状态的 null 截止不得显示无上限文案');
   assert.ok(!text.includes('无自动拒绝时限'), '退役文案 countdown.none 不得出现');
   assert.ok(!text.includes('后自动拒绝'), '没有倒计时时不得渲染自动拒绝倒计时文案');
@@ -2631,6 +2732,10 @@ const REVIEW_TEXT = {
   'degraded.queue-timeout': '排队超时（queue-timeout）',
   'degraded.breaker-open': '冷却中未执行（breaker-open）',
   'degraded.inject-fail': '通知失败（inject-fail）',
+  'cardcause.modelUnavailable': '审查模型不可用（model unavailable）',
+  'cardcause.outputInvalid': '输出无有效结论（{v}）',
+  'cardcause.other': '其他通道故障（{v}）',
+  'cardcause.timeout': '审查超时（review timeout）',
   'enum.unknown': '{v}（含义未知）',
   'source.llm': '审查（llm）',
   'source.human': '人工（human）',
@@ -2843,7 +2948,9 @@ test('审查视图：合并行主判定为 outcome、判定与结算并存可分
   assert.match(cText, /排队 — · 审查 — · 人工 —/, '缺失段显示 —，不按 0 计');
   assert.match(cText, /环节: 排队（queue）/);
   assert.match(cText, /缺失或异常情况: 队列已满（queue-overflow）/);
-  assert.match(cText, /审查未执行：queue-overflow/, '理由段携带固定前缀原文');
+  // 记录视图按显示类别呈现（design §7.4.1）：固定前缀不在界面显示，记录原值仍在存储层。
+  assert.match(cText, /队列已满（queue-overflow）/, '理由段按显示类别呈现');
+  assert.ok(!cText.includes('审查未执行：'), '固定前缀不得显示在界面文案中');
   assert.ok(!cText.includes('工具总计'), '匹配不上时不得显示等式');
   assert.match(cText, /未匹配到工具行/, '匹配不上时必须标注，不猜 X');
   assert.match(cText, /审批 0 ms/, '无在场分段时 Z=0（求和口径）');
@@ -3254,6 +3361,7 @@ test('审批卡片状态条 §10.2：三类原因子句与 deny 空理由省略�
     'cardstate.waiting.deny': '自动审查结论为拒绝：{reason}',
     'cardstate.waiting.timeout': '自动审查超时，未取得有效结论',
     'cardstate.waiting.error': '自动审查未取得有效结论：{reason}',
+    'cardcause.other': '其他通道故障（{v}）',
   };
   const renderEntry = async (entry) => {
     resetHooks();
@@ -3273,9 +3381,9 @@ test('审批卡片状态条 §10.2：三类原因子句与 deny 空理由省略�
   // timeout：固定文案，不带理由位。
   const timeout = await renderEntry({ callId: 'call_1', state: 'waiting-human', cause: 'timeout', reason: 'ignored', startedAt: 1, deadlineAt: null, deadlineKind: null, updatedAt: 1 });
   assert.match(timeout, /等待你决定 · 自动审查超时，未取得有效结论/);
-  // 客户端防御（§10.2）：cause 缺失按 error 展示，不裸抛、渲染树里不出现 undefined 原文。
+  // 客户端防御（§10.2）：cause 缺失按 error 展示，未命中类别清单的原因按「其他通道故障（原文）」。
   const noCause = await renderEntry({ callId: 'call_1', state: 'waiting-human', reason: 'boom', startedAt: 1, deadlineAt: null, deadlineKind: null, updatedAt: 1 });
-  assert.match(noCause, /等待你决定 · 自动审查未取得有效结论：boom/, 'cause 缺失时回退 error 文案');
+  assert.match(noCause, /等待你决定 · 自动审查未取得有效结论：其他通道故障（boom）/, 'cause 缺失时回退 error 文案并套显示类别');
   assert.ok(!noCause.includes('undefined'));
 });
 
@@ -3536,6 +3644,10 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['degraded.queue-timeout', '排队超时（queue-timeout）', "Queue wait timeout (queue-timeout)"],
     ['degraded.breaker-open', '冷却中未执行（breaker-open）', "Skipped during cooldown (breaker-open)"],
     ['degraded.inject-fail', '通知失败（inject-fail）', "Notice delivery failure (inject-fail)"],
+    ['cardcause.modelUnavailable', '审查模型不可用（model unavailable）', "Reviewer model unavailable (model unavailable)"],
+    ['cardcause.outputInvalid', '输出无有效结论（{v}）', "No valid conclusion in the output ({v})"],
+    ['cardcause.other', '其他通道故障（{v}）', "Other channel failure ({v})"],
+    ['cardcause.timeout', '审查超时（review timeout）', "Review timed out (review timeout)"],
     ['enum.unknown', '{v}（含义未知）', "{v} (unknown meaning)"],
   ];
   for (const [key, zhText, enText] of DESIGN_FINAL) {
@@ -4187,4 +4299,192 @@ test('近似行：legacyRow 开启时等 uiConversation 并注册定义；缺字
   client.apply(failing.ctx);
   await tick();
   assert.equal(registered.length, 1, '失败路径不新增注册');
+});
+
+test('审批卡片状态条 §7.4.1：原因原文映射到显示类别，前缀不显示，deny 理由按原文', async () => {
+  resetHooks();
+  const client = loadClient();
+  const dict = {
+    'cardstate.waiting': '等待你决定',
+    'cardstate.waiting.deny': '自动审查结论为拒绝：{reason}',
+    'cardstate.waiting.timeout': '自动审查超时，未取得有效结论',
+    'cardstate.waiting.error': '自动审查未取得有效结论：{reason}',
+    'cardcause.modelUnavailable': '审查模型不可用（model unavailable）',
+    'cardcause.outputInvalid': '输出无有效结论（{v}）',
+    'cardcause.other': '其他通道故障（{v}）',
+    'cardcause.timeout': '审查超时（review timeout）',
+    'degraded.queue-overflow': '队列已满（queue-overflow）',
+    'degraded.breaker-open': '冷却中未执行（breaker-open）',
+    'degraded.output-empty': '空输出（output-empty）',
+    'degraded.output-truncated': '输出截断（output-truncated）',
+  };
+  const renderEntry = async (entry) => {
+    resetHooks();
+    const env = makeCtx({ currentSession: 's1', call: async () => ({ ok: true, value: { entries: [entry] } }) });
+    client.apply(env.ctx);
+    const detail = env.registrations.find((item) => item.options.name === 'conversation.approval.detail');
+    const t = (key) => dict[key] ?? key;
+    const props = { callId: 'call_1', t, useChat: () => 'x', ...detail.options.inject() };
+    render(detail.component, props);
+    await tick();
+    hookIndex = 0;
+    return JSON.stringify(render(detail.component, props));
+  };
+  const make = (cause, reason) => ({ callId: 'call_1', state: 'waiting-human', cause, reason, startedAt: 1, deadlineAt: null, deadlineKind: null, updatedAt: 1 });
+  const mapped = [
+    ['model unavailable', '审查模型不可用（model unavailable）'],
+    ['审查未执行：queue-overflow', '队列已满（queue-overflow）'],
+    ['审查未执行：breaker-open（冷却中，拒绝密集或故障密集）', '冷却中未执行（breaker-open）'],
+    ['empty payload', '空输出（output-empty）'],
+    ['output truncated', '输出截断（output-truncated）'],
+    ['not valid JSON', '输出无有效结论（not valid JSON）'],
+    ['invalid outcome: deny', '输出无有效结论（invalid outcome: deny）'],
+    ['attempt 2/2: model unavailable', '审查模型不可用（model unavailable）'],
+    ['boom', '其他通道故障（boom）'],
+  ];
+  for (const [reason, expected] of mapped) {
+    const text = await renderEntry(make('error', reason));
+    assert.ok(text.includes(expected), `${reason} 应显示为 ${expected}`);
+    assert.ok(!text.includes('审查未执行：'), `${reason} 不应把固定前缀带进界面`);
+    assert.ok(!text.includes('attempt '), `${reason} 不应把重试前缀带进界面`);
+  }
+  // 原值为空：省去整个括号单元，不留悬空括号。
+  const emptyReason = await renderEntry(make('error', ''));
+  assert.match(emptyReason, /自动审查未取得有效结论：其他通道故障/);
+  assert.ok(!emptyReason.includes('其他通道故障（）'), '空原值不得渲染空括号');
+  // 英文界面：同一类别用英文键值（design §7.4.1 组成规则 5）。
+  resetHooks();
+  const enEnv = makeCtx({ currentSession: 's1', call: async () => ({ ok: true, value: { entries: [make('error', 'model unavailable')] } }) });
+  client.apply(enEnv.ctx);
+  const enDetail = enEnv.registrations.find((item) => item.options.name === 'conversation.approval.detail');
+  const enDict = enEnv.dictionaries[0].dicts.en;
+  const enProps = { callId: 'call_1', t: (key) => enDict[key] ?? key, useChat: () => 'x', ...enDetail.options.inject() };
+  render(enDetail.component, enProps);
+  await tick();
+  hookIndex = 0;
+  const enText = JSON.stringify(render(enDetail.component, enProps));
+  assert.match(enText, /Reviewer model unavailable \(model unavailable\)/, '英文界面显示英文类别单元');
+  assert.ok(!enText.includes('审查模型不可用'), '英文界面不得混入中文类别名');
+  // deny 的模型理由按原文显示，不套类别。
+  const denyReason = await renderEntry(make('deny', 'boom'));
+  assert.match(denyReason, /自动审查结论为拒绝：boom/);
+  assert.ok(!denyReason.includes('其他通道故障'), 'deny 理由不得被套成通道故障');
+});
+
+test('审查视图 §7.4.1：记录理由先排除再归类，排除项按原文显示', async () => {
+  resetHooks();
+  const client = loadClient();
+  const base = {
+    approvalId: 'apX', callId: 'call_X', toolName: 'pwsh', origin: 'main', escalation: null,
+    startedAt: 1_700_000_030_000, endedAt: 1_700_000_030_500, queueMs: 0, reviewMs: 500, humanWaitMs: null,
+    model: 'zai/glm-5.3', effort: 'low', risk: 'high', auth: 'low', subject: 'npm run build', truncated: false,
+  };
+  const renderRow = async (row, detailExtra = {}) => {
+    resetHooks();
+    const detail = { ...row, ...detailExtra };
+    const env = makeCtx({
+      currentSession: 's1',
+      call: async (endpoint) => {
+        if (endpoint === 'approveForMe/traceRecords') return { ok: true, value: { records: [row], readFailed: false } };
+        if (endpoint === 'approveForMe/traceRecord') return { ok: true, value: { record: detail } };
+        if (endpoint === 'approveForMe/getState') return { ok: true, value: { trace: { capture: 'summary', ownView: true, turnSummary: true } } };
+        return { ok: true, value: {} };
+      },
+    });
+    client.apply(env.ctx);
+    const view = env.registrations.find((entry) => entry.options.name === 'conversation.view');
+    const props = { t: reviewT, ...view.options.inject() };
+    render(view.component, props);
+    await tick();
+    await tick();
+    hookIndex = 0;
+    const listTree = render(view.component, props);
+    const head = findAllByClass(listTree, 'dsafm_review_head')[0];
+    head.props.onClick();
+    hookIndex = 0;
+    render(view.component, props);
+    await tick();
+    await tick();
+    hookIndex = 0;
+    return JSON.stringify(render(view.component, props));
+  };
+  // 通道故障行：按显示类别呈现，前缀不显示。
+  const channel = await renderRow(
+    { ...base, decision: 'error', outcome: 'rejected', source: 'llm', reason: 'model unavailable' },
+    { degraded: 'all' },
+  );
+  assert.match(channel, /审查模型不可用（model unavailable）/);
+  // 结算记录 source='error' 且原文为异常文本：未命中也套「其他通道故障」。
+  const other = await renderRow({ ...base, decision: null, outcome: 'rejected', source: 'error', reason: 'boom' });
+  assert.match(other, /其他通道故障（boom）/);
+  // task-error 一类同前缀原因：剥前缀后未命中，同样套「其他通道故障」。
+  const taskError = await renderRow({ ...base, decision: null, outcome: 'rejected', source: 'llm', reason: '审查未执行：task-error: exploded' });
+  assert.match(taskError, /其他通道故障（task-error: exploded）/);
+  assert.ok(!taskError.includes('审查未执行：'));
+  // 排除项：deny 理由按原文。
+  const deny = await renderRow({ ...base, decision: 'deny', outcome: 'rejected', source: 'llm', reason: 'boom' });
+  assert.match(deny, /理由[\s\S]*boom/);
+  assert.ok(!deny.includes('其他通道故障'), 'deny 理由不得被归类');
+  // 排除项：superseded 的审查记录按原文。
+  const superseded = await renderRow(
+    { ...base, decision: 'error', outcome: 'rejected', source: 'llm', reason: 'boom' },
+    { degraded: 'superseded' },
+  );
+  assert.ok(!superseded.includes('其他通道故障'), 'superseded 记录不得被归类');
+  // 排除项：规则与硬性拦截的说明按原文。
+  const rule = await renderRow({ ...base, decision: null, outcome: 'rejected', source: 'rule', reason: '命中规则：rm -rf' });
+  assert.ok(!rule.includes('其他通道故障'), '规则理由不得被归类');
+  const hard = await renderRow({ ...base, decision: null, outcome: 'rejected', source: 'hard', reason: '硬性危险指令' });
+  assert.ok(!hard.includes('其他通道故障'), '硬性拦截理由不得被归类');
+  // 排除项：装配环节超时按原文。
+  const assembly = await renderRow({ ...base, decision: null, outcome: 'rejected', source: 'timeout', stage: 'assembly', reason: '装配超时：配置读取未完成' });
+  assert.ok(!assembly.includes('其他通道故障'), '装配超时理由不得被归类');
+  // 审查超时（review timeout）按类别显示。
+  const reviewTimeout = await renderRow({ ...base, decision: 'error', outcome: 'rejected', source: 'timeout', stage: 'review', reason: 'review timeout' });
+  assert.match(reviewTimeout, /审查超时（review timeout）/);
+  // 其余通道故障类别逐项（design §7.4.1 类别清单）。
+  const queueOverflow = await renderRow({ ...base, decision: null, outcome: 'rejected', source: 'llm', reason: '审查未执行：queue-overflow' }, { degraded: 'queue-overflow' });
+  assert.match(queueOverflow, /队列已满（queue-overflow）/);
+  assert.ok(!queueOverflow.includes('审查未执行：'), '队列已满行不得显示固定前缀');
+  const queueTimeout = await renderRow({ ...base, decision: null, outcome: 'rejected', source: 'timeout', stage: 'queue', reason: '审查未执行：queue-timeout' });
+  assert.match(queueTimeout, /排队超时（queue-timeout）/);
+  const breaker = await renderRow({ ...base, decision: 'error', outcome: 'rejected', source: 'llm', reason: '审查未执行：breaker-open（冷却中，拒绝密集或故障密集）' }, { degraded: 'breaker-open' });
+  assert.match(breaker, /冷却中未执行（breaker-open）/);
+  assert.ok(!breaker.includes('breaker-open（冷却中'), '冷却行不得原样显示英文标记前后缀');
+  const emptyOutput = await renderRow({ ...base, decision: 'error', outcome: 'rejected', source: 'llm', reason: 'empty payload' }, { degraded: 'output-empty' });
+  assert.match(emptyOutput, /空输出（output-empty）/);
+  const truncated = await renderRow({ ...base, decision: 'error', outcome: 'rejected', source: 'llm', reason: 'output truncated' }, { degraded: 'output-truncated' });
+  assert.match(truncated, /输出截断（output-truncated）/);
+  const notJson = await renderRow({ ...base, decision: 'error', outcome: 'rejected', source: 'llm', reason: 'not valid JSON' });
+  assert.match(notJson, /输出无有效结论（not valid JSON）/);
+  const invalidOutcome = await renderRow({ ...base, decision: 'error', outcome: 'rejected', source: 'llm', reason: 'invalid outcome: deny' });
+  assert.match(invalidOutcome, /输出无有效结论（invalid outcome: deny）/);
+  // 装配环节另两样本：装配超时与装配环节计时回调抛错均按原文。
+  const assemblyZero = await renderRow({ ...base, decision: null, outcome: 'rejected', source: 'timeout', stage: 'assembly', reason: '审查时限为零，立即超时（不开始尝试）' });
+  assert.match(assemblyZero, /审查时限为零，立即超时（不开始尝试）/);
+  assert.ok(!assemblyZero.includes('其他通道故障'), '零时限装配理由不得被归类');
+  const assemblyTimer = await renderRow({ ...base, decision: null, outcome: 'rejected', source: 'timeout', stage: 'assembly', reason: '计时回调抛错（assembly）：boom' });
+  assert.match(assemblyTimer, /计时回调抛错（assembly）：boom/);
+  assert.ok(!assemblyTimer.includes('其他通道故障'), '装配计时回调抛错不得被归类');
+  // 排除项优先于固定标记匹配：拒绝理由即使恰为固定标记也按原文。
+  const denyMarker = await renderRow({ ...base, decision: 'deny', outcome: 'rejected', source: 'llm', reason: 'model unavailable' });
+  assert.match(denyMarker, /model unavailable/);
+  assert.ok(!denyMarker.includes('审查模型不可用'), 'deny 理由恰为固定标记时也不得套类别');
+  // 协议回落值：显示中文改写，不出现英文句。
+  const defaulted = await renderRow({ ...base, decision: 'deny', outcome: 'rejected', source: 'llm', reason: DEFAULT_RATIONALE });
+  assert.match(defaulted, /审查器未提供理由/);
+  assert.ok(!defaulted.includes('No rationale provided by the reviewer.'));
+});
+
+test('触发器样式 §7.3.2：两段规则在场、固定宽度上限与旧类名零残留', () => {
+  const source = readFileSync(new URL('../client.js', import.meta.url), 'utf8');
+  assert.ok(source.includes('.dsafm_seat_model{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'), '缺模型段规则');
+  assert.ok(source.includes('.dsafm_seat_effort{flex:none;white-space:nowrap}'), '缺档位段规则');
+  assert.ok(source.includes('.dsafm_seat_pending{flex:0 1 auto;min-width:0;font-size:11px;color:var(--dsw-alias-state-warn-primary);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'), '待生效提示段缺收缩规则或既有属性');
+  assert.ok(source.includes('.dsafm_badge{flex:none;font-size:11px;color:var(--dsw-alias-state-warn-primary);margin-left:6px}'), '失败徽标缺 flex:none、字号或间距');
+  assert.ok(source.includes('.dsafm_state{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);font-weight:500;overflow-wrap:anywhere}'), '状态行缺长文本换行规则');
+  assert.ok(source.includes('cursor:pointer;min-width:0;max-width:100%}'), '触发器缺宽度上限');
+  assert.ok(!source.includes('dsafm_seat_name'), '旧类名不得残留');
+  assert.ok(!source.includes('max-width:160px'), '固定宽度上限不得残留');
+  assert.ok(source.includes('.dsafm_chevron{flex:0 0 auto;color:var(--dsw-alias-label-tertiary)}'), '公共箭头规则应保持不变');
 });
