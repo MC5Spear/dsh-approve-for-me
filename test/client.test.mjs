@@ -4780,6 +4780,11 @@ test('静态扫描：退役文案与失效令牌零命中、外壳类退役', as
   assert.ok(warnlineRule.length > 0, '应有 .dsafm_warnline 规则');
   assert.equal(warnlineRule.includes('background:var(--dsw-alias-state-warn-tertiary)'), true, '行背景两主题均取 warn-tertiary');
   assert.equal(warnlineRule.includes('color:#92400e'), true, '浅色文字取深琥珀 #92400e（对 #fef5e7 约 6.6:1，requirements §6.5）');
+  // 提示行几何构成断言（design §7.3.2 窄幅带登记条）：盒下限 50px＝内边距 20＋图标 12＋间距 6＋
+  // 一字宽约 12，内边距与间距来自本规则；overflow-wrap:anywhere 是避让条「收窄断行、不外扩」的机制依据。
+  assert.equal(warnlineRule.includes('padding:6px 10px'), true, '提示行内边距定稿 6px 10px（盒下限构成项）');
+  assert.equal(warnlineRule.includes('gap:6px'), true, '提示行图标与文字间距 6px（盒下限构成项）');
+  assert.equal(warnlineRule.includes('overflow-wrap:anywhere'), true, '提示行逐字断行机制（避让条收窄依据）');
   assert.ok(SOURCE.includes('.dsafm_warnline svg{flex:none;color:#92400e}'), '浅色图标与文字同取深琥珀');
   assert.ok(
     SOURCE.includes('body[data-ds-dark-theme] .dsafm_warnline,body[data-ds-dark-theme] .dsafm_warnline svg{color:var(--dsw-alias-state-warn-label)}'),
@@ -5067,7 +5072,50 @@ test('触发器样式 §7.3.2：两段规则在场、固定宽度上限与旧类
   assert.ok(source.includes('.dsafm_seat_pending{flex:0 1 auto;min-width:0;font-size:11px;color:var(--dsw-alias-state-warn-primary);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'), '待生效提示段缺收缩规则或既有属性');
   assert.ok(source.includes('.dsafm_badge{flex:none;font-size:11px;color:var(--dsw-alias-state-warn-primary);margin-left:6px}'), '失败徽标缺 flex:none、字号或间距');
   assert.ok(source.includes('.dsafm_seatwrap>*{min-width:0;max-width:100%}'), '分置提示包裹层的直接子元素缺收缩规则');
-  assert.ok(source.includes('@media (max-width:1279.98px){.dsafm_seatwrap .dsafm_warnline{margin-left:78px}}'), '窄视口避让媒体查询缺定稿规则（design §7.3.2 避让条）');
+  const WARNLINE_AVOID_QUERY = '(max-width:1279.98px){.dsafm_seatwrap .dsafm_warnline{margin-left:78px}}';
+  assert.ok(source.includes('@media ' + WARNLINE_AVOID_QUERY), '窄视口避让媒体查询缺定稿规则（design §7.3.2 避让条；与下方块体全等断言共用同一常量）');
+  // 反向断言（design §10.2 / §7.3.2 窄幅带登记条）：不设窄幅媒体分支。①全文无 319.98px；
+  // ②结构断言——作用于 .dsafm_warnline 的媒体查询只有 1279.98px 避让条且块体恰为定稿那条
+  // （按块配对扫描、大小写不敏感；同块尾追加等价覆盖会因块体不等而红）；③媒体块外任何
+  // 提示行规则（含 :hover/属性选择器等任意形态）不得把左边距归零（margin 与 margin-left/
+  // margin-inline/margin-inline-start 显式零值；margin:0 auto 的 auto 左右值不算归零）。
+  assert.ok(!source.includes('319.98px'), '不得出现 319.98px 窄幅媒体条件（窄幅带为登记局限，不做 CSS 修正）');
+  const mediaHeads = [...source.matchAll(/@media([^{]+)\{/gi)];
+  assert.ok(mediaHeads.length > 0, '应能定位 @media 块');
+  let warnMediaCount = 0;
+  const mediaSpans = [];
+  for (const m of mediaHeads) {
+    let depth = 1;
+    let i = m.index + m[0].length;
+    while (i < source.length && depth > 0) {
+      if (source[i] === '{') depth += 1;
+      else if (source[i] === '}') depth -= 1;
+      i += 1;
+    }
+    const body = source.slice(m.index + m[0].length, i - 1);
+    mediaSpans.push([m.index, i]);
+    if (body.includes('.dsafm_warnline')) {
+      warnMediaCount += 1;
+      assert.equal(
+        `${m[1].trim()}{${body}}`,
+        WARNLINE_AVOID_QUERY,
+        `作用于 .dsafm_warnline 的媒体块应恰为避让定稿（实际：@media ${m[1].trim()}{${body}}，累计命中：${warnMediaCount}）`,
+      );
+    }
+  }
+  assert.equal(warnMediaCount, 1, `作用于 .dsafm_warnline 的媒体查询应只有一条（实际 ${warnMediaCount}）`);
+  // 已知边界（记录级）：文本扫描不建模简写位置语义——`margin:0 10px`（左右实为 10px）误红、
+  // `margin:10px 0`（左右实为 0）漏；本仓库不用带非零值的简写，按保守侧接受。
+  const RE_MARGIN_ZERO = /(?:^|;)\s*margin\s*:\s*0(?![.\d])(?!\s*auto)|(?:^|;)\s*margin-(?:left|inline-start|inline)\s*:\s*0(?![.\d])/u;
+  let warnRuleOutsideMedia = 0;
+  const marginZeroOutside = [];
+  for (const s of source.matchAll(/([^{}]*\.dsafm_warnline[^{}]*)\{([^}]*)\}/g)) {
+    if (mediaSpans.some(([a, b]) => s.index >= a && s.index < b)) continue;
+    warnRuleOutsideMedia += 1;
+    if (RE_MARGIN_ZERO.test(s[2])) marginZeroOutside.push(`${s[1].trim().split('\n').pop()}{${s[2]}}`);
+  }
+  assert.ok(warnRuleOutsideMedia >= 1, `媒体块外应有 .dsafm_warnline 基础规则（实际 ${warnRuleOutsideMedia} 条，防零命中静默通过）`);
+  assert.equal(marginZeroOutside.length, 0, `媒体块外的提示行规则不得把左边距归零（实际 ${marginZeroOutside.length} 条：${JSON.stringify(marginZeroOutside.slice(0, 4))}）`);
   assert.ok(source.includes('.dsafm_seatwrap{display:inline-flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0}'), '分置提示包裹层缺定稿规则（纵向排列与可收缩）');
   assert.ok(source.includes('.dsafm_state{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);font-weight:500;word-break:normal;overflow-wrap:break-word}'), '状态行缺按词换行规则');
   assert.ok(source.includes('cursor:pointer;min-width:0;max-width:min(100%, calc(100vw - 156px))}'), '触发器缺宽度上限（窄视口收缩）');
