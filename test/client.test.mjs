@@ -4371,6 +4371,30 @@ test('审批卡片状态条 §7.4.1：原因原文映射到显示类别，前缀
   assert.ok(!denyReason.includes('其他通道故障'), 'deny 理由不得被套成通道故障');
 });
 
+test('审批卡片状态条 §5.4：强制语言档优先于宿主 t（language.ui=en 时卡片为英文）', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async () => ({ ok: true, value: { entries: [{ callId: 'call_1', state: 'waiting-human', cause: 'error', reason: 'model unavailable', startedAt: 1, deadlineAt: null, deadlineKind: null, updatedAt: 1 }] } }),
+  });
+  client.apply(env.ctx);
+  const detail = env.registrations.find((item) => item.options.name === 'conversation.approval.detail');
+  const dicts = env.dictionaries[0].dicts;
+  const hostT = (key) => dicts.zh[key] ?? key;
+  // 宿主 t 为中文（auto 行为），useNsT 走强制英文档；注入顺序保证 useNsT 覆盖槽位默认值。
+  const props = { callId: 'call_1', useChat: () => 'x', ...detail.options.inject(), t: hostT, useNsT: () => (key) => dicts.en[key] ?? key };
+  // 槽位必须注入 useNsT，卡片才能在强制语言档下取到插件字典；手写桩只保证本用例可判别。
+  assert.equal(typeof detail.options.inject().useNsT, 'function', '审批卡片槽位应注入 useNsT');
+  render(detail.component, props);
+  await tick();
+  hookIndex = 0;
+  const text = JSON.stringify(render(detail.component, props));
+  assert.match(text, /Waiting for your decision/, '强制英文档时卡片状态句为英文');
+  assert.match(text, /Reviewer model unavailable \(model unavailable\)/, '强制英文档时类别为英文');
+  assert.ok(!text.includes('等待你决定'), '强制英文档不得混入中文卡片文案');
+});
+
 test('审查视图 §7.4.1：记录理由先排除再归类，排除项按原文显示', async () => {
   resetHooks();
   const client = loadClient();
@@ -4482,7 +4506,7 @@ test('触发器样式 §7.3.2：两段规则在场、固定宽度上限与旧类
   assert.ok(source.includes('.dsafm_seat_effort{flex:none;white-space:nowrap}'), '缺档位段规则');
   assert.ok(source.includes('.dsafm_seat_pending{flex:0 1 auto;min-width:0;font-size:11px;color:var(--dsw-alias-state-warn-primary);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'), '待生效提示段缺收缩规则或既有属性');
   assert.ok(source.includes('.dsafm_badge{flex:none;font-size:11px;color:var(--dsw-alias-state-warn-primary);margin-left:6px}'), '失败徽标缺 flex:none、字号或间距');
-  assert.ok(source.includes('.dsafm_state{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);font-weight:500;overflow-wrap:anywhere}'), '状态行缺长文本换行规则');
+  assert.ok(source.includes('.dsafm_state{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);font-weight:500;word-break:normal;overflow-wrap:break-word}'), '状态行缺按词换行规则');
   assert.ok(source.includes('cursor:pointer;min-width:0;max-width:100%}'), '触发器缺宽度上限');
   assert.ok(!source.includes('dsafm_seat_name'), '旧类名不得残留');
   assert.ok(!source.includes('max-width:160px'), '固定宽度上限不得残留');

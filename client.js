@@ -750,7 +750,9 @@ window.__ModuleLoader__.load({
 			".dsafm_tag{font-size:10px;line-height:14px;padding:0 6px;border-radius:7px;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary)}",
 			".dsafm_warn{color:var(--dsw-alias-state-warn-primary)}",
 			".dsafm_carddetail{display:flex;flex-direction:column;gap:4px;font-family:var(--dsh-font-family-base,inherit)}",
-			".dsafm_state{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);font-weight:500;overflow-wrap:anywhere}",
+			// 宿主审批卡容器对命令区设了 `word-break:break-all`（便于路径断行），状态行会继承它；
+			// 状态行是自然语言，改回按词换行；仅超长不可断 token 交给 break-word。
+			".dsafm_state{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);font-weight:500;word-break:normal;overflow-wrap:break-word}",
 			".dsafm_state_time{font-weight:400;color:var(--dsw-alias-label-secondary)}",
 			".dsafm_state_warn{color:var(--dsw-alias-state-warn-primary)}",
 			".dsafm_state_deny{color:var(--dsw-alias-state-error-primary)}",
@@ -1677,11 +1679,15 @@ window.__ModuleLoader__.load({
 		 * 与 `dsh-client-ui-chat` 的 `ApprovalCommand` 同源：先用 `useChat` 找到关联命令并原样渲染，
 		 * 再在其上方叠加状态行与倒计时。该 seat 是 `single`，本组件接管后必须自己渲染命令，
 		 * 因此注册时用负数 priority 抢到 `entriesOfSlot[0]`，且在没有状态数据时只渲染命令文本（其他预设观感不变）。
-		 * @param {object} props - owner props `{ callId }` 与标准 props `{ useChat, t }`。
+		 * @param {object} props - owner props `{ callId }`、标准 props `{ useChat, t }` 与槽位注入的
+		 * `{ rpcCall, sessionIdOf, useNsT }`；`useNsT` 用于强制语言档，缺失时退回宿主 `t`。
 		 * @returns {object | null} React 元素。
 		 */
 		function ApprovalDetail(props) {
-			const { callId, t } = props;
+			// 强制语言档优先（requirements §5.4：`language.ui` 控制插件所有界面文案，审批卡片同样适用）；
+			// 旧宿主或直调测试未传 `useNsT` 时退回宿主 `t`（auto 行为），与设置卡、composer 与记录视图同一口径。
+			const { callId, t: hostT, useNsT } = props;
+			const t = typeof useNsT === "function" ? useNsT(hostT) : typeof hostT === "function" ? hostT : (key) => key;
 			// 会话 id 与 composer 下拉同一条通道；宿主也传标准 `sessionId` prop，作为备用（design §7.1）。
 			const sessionId = react.useMemo(() => {
 				const fromSessions = typeof props.sessionIdOf === "function" ? props.sessionIdOf(props.sessionId) : "";
