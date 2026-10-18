@@ -728,7 +728,10 @@ window.__ModuleLoader__.load({
 			".dsafm_map_add:hover:not(:disabled){color:var(--dsw-alias-label-primary)}",
 			".dsafm_badge{flex:none;font-size:11px;color:var(--dsw-alias-state-warn-primary);margin-left:6px}",
 			".dsafm_hint{color:var(--dsw-alias-label-tertiary);font-size:12px;overflow-wrap:anywhere}",
-			".dsafm_seat{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 8px;border:none;border-radius:14px;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:12px;cursor:pointer;min-width:0;max-width:100%}",
+			// 座位按内容取宽，窄视口下会越出视口（不加上限时 375 英文档右缘 378）；上限取「容器宽」与
+			// 「视口宽减 156（左邻接约 124 与右缘留白约 32 的预算）」的较小值，模型段随省略号收缩、档位段保持完整。
+			// 宿主布局变化时重核该预算。
+			".dsafm_seat{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 8px;border:none;border-radius:14px;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:12px;cursor:pointer;min-width:0;max-width:min(100%, calc(100vw - 156px))}",
 			// 触发器两段（design §7.3.2）：模型段可收缩并省略自身文本，档位段不参与省略。
 			".dsafm_seat_model{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
 			".dsafm_seat_effort{flex:none;white-space:nowrap}",

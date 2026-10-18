@@ -4507,7 +4507,8 @@ test('触发器样式 §7.3.2：两段规则在场、固定宽度上限与旧类
   assert.ok(source.includes('.dsafm_seat_pending{flex:0 1 auto;min-width:0;font-size:11px;color:var(--dsw-alias-state-warn-primary);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'), '待生效提示段缺收缩规则或既有属性');
   assert.ok(source.includes('.dsafm_badge{flex:none;font-size:11px;color:var(--dsw-alias-state-warn-primary);margin-left:6px}'), '失败徽标缺 flex:none、字号或间距');
   assert.ok(source.includes('.dsafm_state{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);font-weight:500;word-break:normal;overflow-wrap:break-word}'), '状态行缺按词换行规则');
-  assert.ok(source.includes('cursor:pointer;min-width:0;max-width:100%}'), '触发器缺宽度上限');
+  assert.ok(source.includes('cursor:pointer;min-width:0;max-width:min(100%, calc(100vw - 156px))}'), '触发器缺宽度上限（窄视口收缩）');
+  assert.ok(!source.includes('cursor:pointer;min-width:0;max-width:100%}'), '旧上限写法不得残留');
   assert.ok(!source.includes('dsafm_seat_name'), '旧类名不得残留');
   assert.ok(!source.includes('max-width:160px'), '固定宽度上限不得残留');
   assert.ok(source.includes('.dsafm_chevron{flex:0 0 auto;color:var(--dsw-alias-label-tertiary)}'), '公共箭头规则应保持不变');

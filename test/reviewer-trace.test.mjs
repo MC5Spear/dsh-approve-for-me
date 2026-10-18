@@ -354,6 +354,24 @@ async function waitForLines(path, expect, timeoutMs = 4000) {
   }
 }
 
+// 按行数等待会在并行负载下提前返回：第 N 行可能还是同一次请求的 review 行，不是目标请求的结算行。
+// 同步点改为「这些 callId 的 settle 行都已落盘」，与写入顺序无关。
+async function waitForSettles(path, callIds, timeoutMs = 4000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      const raw = await readFile(path, 'utf8');
+      const rows = raw.split('\n').filter((line) => line.trim().length > 0).map((line) => JSON.parse(line));
+      const settles = rows.filter((row) => row.kind === 'settle');
+      if (callIds.every((id) => settles.some((row) => row.callId === id))) return rows;
+    } catch {
+      // 文件还没建出来 / 还没写完：继续等。
+    }
+    if (Date.now() > deadline) throw new Error(`等待 ${path} 的结算行（${callIds.join('、')}）超时`);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 test('index 接线：record 收到 sessionId/callId/toolName，配置签名变化后单实例原地重配、同一 JSONL 不丢数据', async (t) => {
   const host = await loadHost();
   if (host === undefined) {
@@ -919,7 +937,7 @@ test('真链：审查计时在排队期间到点——按超时结算且冷却�
     assert.ok(firstOutcome === 'allowed-once' || firstOutcome === 'rejected', `占位请求结局合法（实得 ${firstOutcome}）`);
     assert.equal(streamCalls, 1, '排队请求与冷却拦截请求都不发起模型流（1＝占位请求）');
     const file = join(tmp, 'approve-for-me', 'reviews', 'qtimer.jsonl');
-    const lines = await waitForLines(file, 3);
+    const lines = await waitForSettles(file, ['call-t1', 'call-t2', 'call-t3']);
     const settles = lines.filter((row) => row.kind === 'settle');
     const firstSettle = settles.find((row) => row.callId === 'call-t1');
     if (firstOutcome === 'rejected') {
