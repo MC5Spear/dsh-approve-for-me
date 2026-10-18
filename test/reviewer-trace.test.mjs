@@ -4,6 +4,7 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createReviewer } from '../lib/reviewer.js';
+import { REVIEW_TIMEOUT_ABORT_MESSAGE } from '../lib/gate.js';
 
 /**
  * 审查记录接线测试（design §8.2/§8.3）。
@@ -353,7 +354,7 @@ async function waitForLines(path, expect, timeoutMs = 4000) {
   }
 }
 
-test('index 接线：record 收到 sessionId/callId/toolName，配置签名变化重建后同一 JSONL 不丢数据', async (t) => {
+test('index 接线：record 收到 sessionId/callId/toolName，配置签名变化后单实例原地重配、同一 JSONL 不丢数据', async (t) => {
   const host = await loadHost();
   if (host === undefined) {
     t.skip('宿主包不可解析（离线环境）');
@@ -441,14 +442,15 @@ test('index 接线：record 收到 sessionId/callId/toolName，配置签名变�
     assert.notEqual(first[1].reviewId, first[0].reviewId, 'kind 进键：两行主键不同');
     assert.ok(first[1].reviewId.endsWith(`:settle:${first[1].approvalId}`), '结算行主键＝四段键的 settle 段');
 
-    // 改配置签名（maxBytes 变化）→ 重建存储实例；事实源是 JSONL，同一文件继续追加、旧数据不丢。
+    // 改配置签名（maxBytes 变化）→ 单实例原地重配（不重建实例）；事实源是 JSONL，同一文件
+    // 继续追加、旧数据不丢；写入与读回同源，热改窗口内不存在互相看不见的两组状态。
     // 0.1.7：直接原地改 config 对象——current() 现算即读到新签名，无需任何设置服务回调。
     config.ui = { trace: { maxBytes: 512 } };
     callId = 'call-2';
     assert.equal(await answerer(request(), next), 'rejected');
     const both = await waitForLines(file, 4);
     assert.equal(both.length, 4, '两次审批各两条记录都落在同一会话的 JSONL 里');
-    assert.equal(both[0].callId, 'call-1', '重建前的记录仍在（数据不丢）');
+    assert.equal(both[0].callId, 'call-1', '重配前的记录仍在（数据不丢）');
     assert.equal(both[2].kind, 'review');
     assert.equal(both[2].callId, 'call-2');
     assert.equal(both[3].kind, 'settle');
@@ -456,6 +458,18 @@ test('index 接线：record 收到 sessionId/callId/toolName，配置签名变�
     assert.equal(both[2].sessionId, 'trace-wire');
     assert.notEqual(both[0].reviewId, both[2].reviewId);
     assert.notEqual(both[0].approvalId, both[2].approvalId, '两次审批是不同审批实例');
+
+    // 重配热生效直接断言：再次热改签名到 full 档，下一审批的审查记录按新档落详情全文
+    // （单实例重配后无计划的写入与计划缺省回退都取现行值），旧记录不回补详情。
+    config.ui = { trace: { capture: 'full', maxBytes: 512 } };
+    callId = 'call-3';
+    assert.equal(await answerer(request(), next), 'rejected');
+    const all = await waitForLines(file, 6);
+    assert.equal(all.length, 6, '第三次审批两条记录照常落盘');
+    assert.equal(all[4].capture, 'full', '重配后新请求的记录级 capture 标记取新档');
+    assert.ok(all[4].prompt !== undefined, '重配 full 后新请求落详情全文');
+    assert.ok(Buffer.byteLength(all[4].prompt, 'utf8') <= 512, '详情按重配后的字节预算裁剪');
+    assert.equal(all[0].prompt, undefined, '重配前的 summary 记录不回补详情（采集改少不删改已有记录，反向也不追补）');
   } finally {
     if (previousHome === undefined) delete process.env.DSH_HOME;
     else process.env.DSH_HOME = previousHome;
@@ -992,4 +1006,197 @@ test('真链：在飞审查期间配置热改采集档 full→summary，记录�
     if (previousHome === undefined) delete process.env.DSH_HOME;
     else process.env.DSH_HOME = previousHome;
   }
+});
+
+// ── 取消时序（design §5.1 取消贯通）：每次模型流启动前复核信号，含工具轮之间的步进边界 ──
+
+/**
+ * 构造可控的中止时序环境：记录每次 llm.stream 调用（发起时的信号状态、是否带工具、消息序列），
+ * 工具执行可挂起；审计行全部收集（includeRaw 开启——raw 行只应在尝试正常收束后写）。
+ * @param {object} [options] - `turns`（每次流的块序列，函数形按流序号取，可带 `after` 钩子与
+ *   自定义 `finish`）、`toolRun`（工具执行替身）、`cfgOverrides`（配置覆盖）。
+ * @returns {object} `{ streams, audits, entries, review }`。
+ */
+function makeAbortEnv({ turns, toolRun, cfgOverrides } = {}) {
+  const streams = [];
+  const audits = [];
+  const entries = [];
+  let index = 0;
+  const llm = {
+    stream(args) {
+      const n = streams.length + 1;
+      const turn = typeof turns === 'function' ? turns(n, args) : turns[Math.min(index, turns.length - 1)];
+      index += 1;
+      streams.push({ n, abortedAtCall: args?.signal?.aborted === true, hadTools: args?.tools !== undefined, messageCount: args?.messages?.length });
+      return (async function* generate() {
+        for (const block of turn.blocks) yield { type: 'block', index: 0, block };
+        if (turn.after !== undefined) await turn.after();
+        yield { type: 'finish', reason: turn.finish ?? { kind: 'stop' } };
+      })();
+    },
+  };
+  const reviewer = createReviewer({
+    llm,
+    blocks: { BlockAssembler: FakeAssembler },
+    messages,
+    tools: {
+      schemas: [{ type: 'function', name: 'probe_tool' }],
+      run: toolRun ?? (async () => ({ text: 'ok', isError: false })),
+    },
+    prompt,
+    audit: (fields) => audits.push(fields),
+    onReview: (entry) => entries.push(entry),
+  });
+  const cfg = {
+    reviewer: { maxTokens: 0, temperature: 0, maxToolSteps: 4, timeoutMs: 1000 },
+    audit: { includeRaw: true },
+    resolution: { provider: 'p1', model: 'm1', layer: 'user', effort: 'low' },
+    ...cfgOverrides,
+  };
+  return {
+    streams,
+    audits,
+    entries,
+    review: (opts) =>
+      reviewer.review(
+        { toolName: 'pwsh', reason: 'escalate sandbox to danger-full-access: x' },
+        { command: 'npm i', description: 'install deps', arguments: { command: 'npm i' } },
+        { fields: {}, evidence: 'E' },
+        cfg,
+        { id: 'r1', signal: new AbortController().signal, ...opts },
+      ),
+  };
+}
+
+test('取消时序：入口前已中止——零次 llm.stream，请求取消按被替代形状返回、不写 raw 行', async () => {
+  const controller = new AbortController();
+  controller.abort(new Error('user cancelled'));
+  const env = makeAbortEnv({ turns: [{ blocks: [text('{"outcome":"allow","rationale":"late"}')] }] });
+  const verdict = await env.review({ signal: controller.signal });
+  assert.equal(env.streams.length, 0, '入口前中止：不开任何模型流');
+  assert.equal(verdict.decision, 'error');
+  assert.equal(verdict.superseded, true, '请求取消按被替代形状返回（不计数，gate 竞速结算承担）');
+  assert.equal(verdict.timedOut, undefined, '非超时中止不带 timedOut');
+  assert.match(verdict.reason, /aborted（gate 他路先结算，非通道故障）/u);
+  assert.match(verdict.reason, /user cancelled/u);
+  assert.equal(env.audits.some((row) => row.phase === 'raw'), false, '中止出口不经 raw 审计行');
+  assert.equal(env.entries.find((row) => row.kind === 'review').attempts, 0, '未开流：attempts 记 0');
+});
+
+test('取消时序：入口前已中止（审查计时器标记）——按超时口径返回 timedOut，两类中止互斥', async () => {
+  const controller = new AbortController();
+  controller.abort(new Error(REVIEW_TIMEOUT_ABORT_MESSAGE));
+  const env = makeAbortEnv({ turns: [{ blocks: [text('{"outcome":"allow","rationale":"late"}')] }] });
+  const verdict = await env.review({ signal: controller.signal });
+  assert.equal(env.streams.length, 0);
+  assert.equal(verdict.decision, 'error');
+  assert.equal(verdict.timedOut, true, '审查计时器的中止与流内超时同权（计数 error 由 gate 承担）');
+  assert.equal(verdict.superseded, undefined, '两类中止互斥：超时不带被替代标记');
+  assert.equal(verdict.reason, 'review timeout');
+});
+
+test('取消时序：工具执行中取消——工具返回后不再开下一轮流（流恰一次）', async () => {
+  const controller = new AbortController();
+  let releaseTool;
+  const toolGate = new Promise((resolve) => {
+    releaseTool = resolve;
+  });
+  const env = makeAbortEnv({
+    turns: [
+      { blocks: [toolCall('c1', 'probe_tool', '{}')] },
+      { blocks: [text('{"outcome":"allow","rationale":"late"}')] },
+    ],
+    toolRun: async () => {
+      controller.abort(new Error('user cancelled during tool'));
+      await toolGate;
+      return { text: 'slow tool done', isError: false };
+    },
+  });
+  const pending = env.review({ signal: controller.signal });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  releaseTool();
+  const verdict = await pending;
+  assert.equal(env.streams.length, 1, '工具执行中取消：工具返回后不再开下一轮流');
+  assert.equal(env.streams[0].abortedAtCall, false, '首轮流发起时信号未中止');
+  assert.equal(verdict.superseded, true);
+  assert.match(verdict.reason, /user cancelled during tool/u);
+  assert.equal(verdict.toolCalls, 1, '已执行的工具照常计数');
+  assert.equal(env.audits.some((row) => row.phase === 'raw'), false, '步进边界中止不经 raw 审计行');
+  assert.equal(env.entries.find((row) => row.kind === 'review').probes.includes('probe_tool:ok'), true, '已执行工具的取证摘要仍在');
+});
+
+test('取消时序：工具轮结束后取消——下一轮不开流（全程流恰一次，被替代结局、late 观测）', async () => {
+  const controller = new AbortController();
+  const env = makeAbortEnv({
+    turns: (n) =>
+      n === 1
+        ? { blocks: [toolCall('c1', 'probe_tool', '{}')], after: () => { controller.abort(new Error('cancel after first tool round')); } }
+        : { blocks: [text('{"outcome":"allow","rationale":"late"}')] },
+  });
+  const verdict = await env.review({ signal: controller.signal });
+  assert.equal(env.streams.length, 1, '第一工具轮结束后取消：不发起下一轮 llm.stream');
+  assert.equal(env.streams[0].hadTools, true, '首轮流带工具定义');
+  assert.equal(env.streams[0].abortedAtCall, false, '首轮流发起时信号未中止');
+  assert.equal(verdict.superseded, true, '步进边界中止按被替代形状返回');
+  assert.match(verdict.reason, /cancel after first tool round/u);
+  const reviewAudit = env.audits.find((row) => row.phase === 'review');
+  assert.equal(reviewAudit.late, 'yes', '迟到结论观测：中止信号是权威标记');
+  assert.equal(env.audits.some((row) => row.phase === 'raw'), false, '轮间中止出口不写 raw 审计行（includeRaw 也不写）');
+  const entry = env.entries.find((row) => row.kind === 'review');
+  assert.equal(entry.attempts, 1);
+  assert.equal(entry.tools, 1, '已执行工具计入记录');
+});
+
+test('取消时序：流收尾后、重试判定前取消——可重试结局不再开重试流', async () => {
+  const controller = new AbortController();
+  const env = makeAbortEnv({
+    turns: (n) =>
+      n === 1
+        ? {
+          blocks: [],
+          finish: { kind: 'error', failure: { code: 'PROBE_FAILURE' } },
+          after: () => { controller.abort(new Error('cancel before retry')); },
+        }
+        : { blocks: [text('{"outcome":"allow","rationale":"late"}')] },
+  });
+  const verdict = await env.review({ signal: controller.signal });
+  assert.equal(env.streams.length, 1, '可重试结局在重试判定前取消：不开重试流');
+  assert.equal(verdict.decision, 'error');
+  assert.equal(verdict.reason.includes('empty payload'), true, '无正文收尾按空输出收敛（fail-closed）');
+  assert.equal(env.entries.find((row) => row.kind === 'review').attempts, 1);
+});
+
+test('取消时序对照：未取消时多工具轮逐轮流正常发起；轮次用尽的追加指令流不带工具', async () => {
+  const env = makeAbortEnv({
+    turns: (n) => {
+      if (n === 1) return { blocks: [toolCall('c1', 'probe_tool', '{}')] };
+      if (n === 2) return { blocks: [toolCall('c2', 'probe_tool', '{}')] };
+      return { blocks: [text('{"outcome":"deny","rationale":"done"}')] };
+    },
+  });
+  const verdict = await env.review();
+  assert.equal(verdict.decision, 'deny');
+  assert.equal(env.streams.length, 3, '两轮工具 + 一轮终判：取消检查不影响正常步进');
+  assert.deepEqual(env.streams.map((s) => s.hadTools), [true, true, true], '未到轮次上限的流都带工具定义');
+  assert.deepEqual(env.streams.map((s) => s.messageCount), [2, 4, 6], '消息序列按 assistant+tool-result 逐轮累积');
+  const raw = env.audits.find((row) => row.phase === 'raw');
+  assert.ok(raw, '正常收尾照常写 raw 审计行');
+  assert.equal(raw.reason, '{"outcome":"deny","rationale":"done"}', 'includeRaw 时 raw 行带最终正文');
+
+  // 轮次用尽（maxToolSteps=1）：第二轮流不带工具、消息尾追加「轮次用尽」指令——该路径不受步进边界中止检查影响。
+  const exhausted = makeAbortEnv({
+    cfgOverrides: { reviewer: { maxTokens: 0, temperature: 0, maxToolSteps: 1, timeoutMs: 1000 } },
+    turns: (n) => (n === 1
+      ? { blocks: [toolCall('c1', 'probe_tool', '{}')] }
+      : { blocks: [text('{"outcome":"deny","rationale":"budget"}')] }),
+  });
+  const budgetVerdict = await exhausted.review();
+  assert.equal(budgetVerdict.decision, 'deny');
+  assert.equal(exhausted.streams.length, 2, '轮次用尽追加一轮无工具流');
+  assert.deepEqual(exhausted.streams.map((s) => s.hadTools), [true, false], '追加流不带工具定义');
+  assert.deepEqual(
+    exhausted.streams.map((s) => s.messageCount),
+    [2, 5],
+    '追加流的消息尾多一条「轮次用尽」user 指令（assistant+tool-result+追加指令）',
+  );
 });

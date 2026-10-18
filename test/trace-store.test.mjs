@@ -507,3 +507,109 @@ test('record(entry, plan)：计划值覆盖构造值、缺省回退、tracePlan 
   const row4 = createTraceStore({ dir }).approval('s4', 'a4').review;
   assert.equal(row4.tracePlan, undefined, 'entry 上的 tracePlan 不落盘（构造档 full 下 prompt 允许在场）');
 });
+
+// ── reconfigure 原地重配（design §8.3 单实例长存） ────────────────────────────
+
+test('reconfigure 全方向：采集档与字节预算原地更新，新写入按新值整形、已落盘行不变', async (t) => {
+  const dir = makeDir(t);
+  const store = createTraceStore({ dir, capture: 'full', maxBytes: 4096 });
+  await store.record(makeEntry({ sessionId: 's1', approvalId: 'a1', prompt: 'p'.repeat(100), output: 'o'.repeat(100) }));
+  await store.flush();
+  assert.equal(store.approval('s1', 'a1').review.prompt.length, 100, '构造 full 档不裁剪');
+
+  // full → summary：新记录不落详情；已落盘的 full 行保持原样（采集改少不删除已有记录）。
+  store.reconfigure({ capture: 'summary' });
+  await store.record(makeEntry({ sessionId: 's2', approvalId: 'a2', prompt: 'p'.repeat(100) }));
+  await store.flush();
+  assert.equal(store.approval('s2', 'a2').review.prompt, undefined, '重配 summary 后新写入不落详情');
+  assert.equal(store.approval('s1', 'a1').review.prompt.length, 100, '已落盘 full 行不受重配影响');
+
+  // summary → full：新记录落详情。
+  store.reconfigure({ capture: 'full' });
+  await store.record(makeEntry({ sessionId: 's3', approvalId: 'a3', prompt: 'p'.repeat(100) }));
+  await store.flush();
+  assert.equal(store.approval('s3', 'a3').review.prompt.length, 100, '重配 full 后新写入落详情');
+
+  // off 与 summary 同为不落详情。
+  store.reconfigure({ capture: 'off' });
+  await store.record(makeEntry({ sessionId: 's4', approvalId: 'a4', prompt: 'p'.repeat(100) }));
+  await store.flush();
+  assert.equal(store.approval('s4', 'a4').review.prompt, undefined, 'off 档不落详情');
+
+  // maxBytes 收缩即时生效（新写入按新预算裁剪并置 truncated）。
+  store.reconfigure({ capture: 'full', maxBytes: 16 });
+  await store.record(makeEntry({ sessionId: 's5', approvalId: 'a5', output: 'x'.repeat(64) }));
+  await store.flush();
+  const shrunk = store.approval('s5', 'a5').review;
+  assert.ok(Buffer.byteLength(shrunk.output, 'utf8') <= 16, 'maxBytes 收缩即时生效');
+  assert.equal(shrunk.truncated, true, '按重配预算裁剪置 truncated');
+  // maxBytes 放开后新写入放宽；非法值（0）回默认预算，不裁空。
+  store.reconfigure({ capture: 'full', maxBytes: 8192 });
+  await store.record(makeEntry({ sessionId: 's6', approvalId: 'a6', output: 'y'.repeat(64) }));
+  await store.flush();
+  assert.equal(store.approval('s6', 'a6').review.output.length, 64, 'maxBytes 放开后新写入不裁剪');
+  store.reconfigure({ capture: 'full', maxBytes: 0 });
+  await store.record(makeEntry({ sessionId: 's7', approvalId: 'a7', output: 'z'.repeat(20000) }));
+  await store.flush();
+  const defaulted = store.approval('s7', 'a7').review;
+  assert.ok(defaulted.output.length > 100 && defaulted.output.length < 20000, '重配 maxBytes=0 回默认预算');
+});
+
+test('reconfigure 收缩窗口：已加载窗口即时裁剪到新上限；lineCap 收缩后由下次写入触发重写只留窗口', async (t) => {
+  const dir = makeDir(t);
+  const store = createTraceStore({ dir, maxRecords: 5 });
+  for (let i = 1; i <= 5; i += 1) await store.record(makeEntry({ approvalId: `a${i}` }));
+  await store.flush();
+  assert.equal(store.list('s1').length, 5);
+
+  // 收缩：已加载窗口即时裁剪（读路径立刻看到新窗口，保留最近的记录）。
+  store.reconfigure({ maxRecords: 2 });
+  assert.equal(store.list('s1').length, 2, 'limit 收缩即时裁剪已加载窗口');
+  assert.deepEqual(
+    store.list('s1').map((row) => row.reviewId),
+    ['s1:c1:review:a4', 's1:c1:review:a5'],
+    '裁剪保留最近窗口',
+  );
+
+  // lineCap 随 limit 收缩为 8：磁盘现有 5 行，继续写入直到超过 8 触发整文件重写、只留窗口 2 行。
+  for (let i = 6; i <= 9; i += 1) await store.record(makeEntry({ approvalId: `a${i}` }));
+  await store.flush();
+  const lines = readLines(join(dir, 's1.jsonl'));
+  assert.equal(lines.length, 2, 'lineCap 收缩后由下次写入触发重写、只留窗口');
+  assert.deepEqual(
+    lines.map((line) => JSON.parse(line).reviewId),
+    ['s1:c1:review:a8', 's1:c1:review:a9'],
+    '重写后磁盘与窗口一致',
+  );
+  // 新实例按重配后的窗口重放，也只剩窗口。
+  assert.equal(createTraceStore({ dir, maxRecords: 2 }).list('s1').length, 2);
+
+  // 放大：只影响后续写入与加载，窗口逐步增长到新上限。
+  store.reconfigure({ maxRecords: 4 });
+  for (let i = 10; i <= 12; i += 1) await store.record(makeEntry({ approvalId: `a${i}` }));
+  await store.flush();
+  assert.deepEqual(
+    store.list('s1').map((row) => row.approvalId),
+    ['a9', 'a10', 'a11', 'a12'],
+    '放大后新写入把窗口增长到新上限',
+  );
+});
+
+test('reconfigure 不回退计划覆盖语义：record 携带的采集计划仍覆盖重配后的现行值', async (t) => {
+  const dir = makeDir(t);
+  const store = createTraceStore({ dir, capture: 'summary', maxBytes: 4096 });
+  // 在飞请求的计划 full/16：重配 summary/4096 后写入，仍按计划落详情并按 16 裁剪。
+  store.reconfigure({ capture: 'summary', maxBytes: 4096 });
+  await store.record(
+    makeEntry({ sessionId: 's1', approvalId: 'a1', prompt: 'p'.repeat(40) }),
+    { capture: 'full', maxBytes: 16 },
+  );
+  await store.flush();
+  const row = store.approval('s1', 'a1').review;
+  assert.ok(row.prompt !== undefined && row.prompt.length <= 16, '计划 full 覆盖重配 summary：详情按计划落盘');
+  assert.equal(row.truncated, true, '按计划预算裁剪置 truncated');
+  // 无计划写入（结算路径形态）按重配后的现行值整形。
+  await store.record({ ...makeEntry({ sessionId: 's2', approvalId: 'a2', kind: 'settle', prompt: 'p'.repeat(40) }) });
+  await store.flush();
+  assert.equal(store.approval('s2', 'a2').settle.prompt, undefined, '无计划写入按重配 summary 不落详情');
+});

@@ -415,3 +415,86 @@ test('簇/参数扫描/引号拆句的控制形态：既有偏多拦口径与 CM
   assert.equal(hardCmd('rd /s $dir').code, 'hard-h2-target');
   assert.equal(hardCmd('del /s C:\\lit'), undefined);
 });
+
+// ── 动态删除目标的确定性拦截（design §12.1 按命令族分道）——回归钉住 ─────────────
+// 30 条口径与探针口径一致：14 条失败组（应确定性拒绝）＋16 条对照组（不回退）。
+
+test('动态删除目标失败组：确定性拒绝（deny＋source=hard＋短码，不经 LLM）', () => {
+  // [命令, 期望短码]：问题清单五条 ＋ 包装 del ＋ 近邻（顺序、混合目标、标志后置、
+  // 嵌套表达式、含空格延迟变量名、cmd /k 包装、cmd /k 的 H1 形态、标志后置裸形态）。
+  const failures = [
+    ['rm -i $victim -f ./literal', 'hard-h2-target'],
+    ['cmd /v:on /c "rd /s !ACCEPT_TARGET!"', 'hard-h2-target'],
+    ['del /s !ACCEPT_TARGET!', 'hard-h2-target'],
+    ['Remove-Item @ACCEPT_PATHS -Force', 'hard-h2-target'],
+    ["Remove-Item -Force (Join-Path 'D:/accept' 'child')", 'hard-h2-target'],
+    ['cmd /v:on /c "del /s !ACCEPT_TARGET!"', 'hard-h2-target'],
+    ['rd /s D:/accept/literal !ACCEPT_TARGET!', 'hard-h2-target'],
+    ['cmd /v:on /c "rd !ACCEPT_TARGET! /s"', 'hard-h2-target'],
+    ['rd !ACCEPT_TARGET! /s', 'hard-h2-target'],
+    ['Remove-Item -Force ((Get-ChildItem).FullName)', 'hard-h2-target'],
+    ['rm -i -f $victim', 'hard-h2-target'],
+    ['rd /s !AC CEPT!', 'hard-h2-target'],
+    ['cmd /v:on /k "rd /s !ACCEPT_TARGET!"', 'hard-h2-target'],
+    ['cmd /k "rd /s /q D:\\accept\\literal"', 'hard-h1-cmd'],
+  ];
+  for (const [command, code] of failures) {
+    const result = screened({ command });
+    assert.equal(result.action, 'deny', command);
+    assert.equal(result.fields.source, 'hard', command);
+    assert.match(result.why, new RegExp(`hard deny ${code}:`), command);
+  }
+});
+
+test('动态删除目标对照组：字面与既有形态不回退（16 条）', () => {
+  const controls = [
+    // [命令, 期望]：undefined＝不命中硬性拦截（交审查层），字符串＝期望短码。
+    ['rm -f ./literal', undefined],
+    ['rd /s D:\\accept\\literal', undefined],
+    ['Remove-Item -Force D:/accept/literal', undefined],
+    ['rm -rfvv ./fixture', 'hard-h1-posix'],
+    ['Remove-Item -Recurse D:/accept/literal', 'hard-h1-powershell'],
+    ['Remove-Item -ErrorAction:Continue -Force D:/accept/literal', undefined],
+    ['Remove-Item -Force:$true D:/accept/literal', undefined],
+    ['Remove-Item -Force:-1 D:/accept/literal', undefined],
+    ["Remove-Item 'C:\\a;b' -Force", undefined],
+    ['rm -i -f ./literal', undefined],
+    ['rm -f $victim ./literal', 'hard-h2-target'],
+    ['cmd /c "rd /s /q D:\\accept\\literal"', 'hard-h1-cmd'],
+    ['Remove-Item -Include $x -Force', 'hard-h2-target'],
+    ['rm --interactive=never -f ./literal', undefined],
+    ['cmd /k "echo hi"', undefined],
+    ['rm -i $victim', undefined],
+  ];
+  for (const [command, expected] of controls) {
+    const hit = hardCmd(command);
+    assert.equal(hit === undefined ? undefined : hit.code, expected, command);
+    if (expected === undefined) {
+      // 对照组的「不拦」不是放行：screen 层仍交审查（review），判定权不再交给确定性层。
+      assert.equal(screened({ command }).action, 'review', command);
+    }
+  }
+});
+
+test('参数消费顺序不敏感：-i、-f 与目标的任意排列都拒绝；仅 -i 带动态目标仍交审查', () => {
+  // 目标是否被吞不取决于它是否紧跟某个旗标：rm 的单横线 token 一律不消费后随 token，
+  // 带 -f（仅强制族）且目标动态时，`-i`/`-f`/`$victim`/`./literal` 的任意排列均拒绝。
+  const parts = ['-i', '-f', '$victim', './literal'];
+  const permutations = [
+    ['-i', '$victim', '-f', './literal'],
+    ['-i', '-f', '$victim', './literal'],
+    ['-f', '$victim', '-i', './literal'],
+    ['-f', '-i', '$victim', './literal'],
+    ['$victim', '-i', '-f', './literal'],
+    ['$victim', '-f', '-i', './literal'],
+    ['-f', '$victim', './literal', '-i'],
+    ['./literal', '-f', '$victim', '-i'],
+  ];
+  assert.equal(permutations.length, 8, '排列样本数守恒（抽样全排列子集）');
+  for (const perm of permutations) {
+    assert.equal(perm.slice().sort().join(','), parts.slice().sort().join(','), '排列样本元素守恒');
+    assert.equal(hardCmd(`rm ${perm.join(' ')}`).code, 'hard-h2-target', `rm ${perm.join(' ')}`);
+  }
+  // 边界对照：不带 -f/递归的 `rm -i $victim` 不属仅强制/仅递归形态族，交审查层（不列为应拦）。
+  assert.equal(hardCmd('rm -i $victim'), undefined);
+});

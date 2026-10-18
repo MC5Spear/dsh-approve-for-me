@@ -399,14 +399,37 @@ test('review：空响应（EMPTY_RESPONSE）记 degraded=output-empty 并 fail-c
   assert.equal(h.audits.filter((row) => row.phase === 'raw').length, 1);
 });
 
-test('review：普通 stop 但模型没给正文时记为空 payload（无 finish 降级标记）', async () => {
+test('review：普通 stop 但模型没给正文时按无响应记 output-empty（与 EMPTY_RESPONSE 同口径，design §3.7）', async () => {
   const h = harness([{ blocks: [] }]);
   const verdict = await h.review();
-  // 空输出（finish 正常收尾、无文本块）同样整建重试一次；替身重复同款轮次，仍空。
+  // 空输出（finish 正常收尾、无文本块）属可重试类——替身重复同款轮次，重试用尽仍空。
   assert.equal(h.requests.length, 2);
   assert.equal(verdict.decision, 'error');
   assert.equal(verdict.reason, 'attempt 2/2: empty payload');
-  assert.equal(verdict.fields.degraded, 'none');
+  // design §3.7 把「error:EMPTY_RESPONSE 或空正文」在同句定义为无响应：正常收尾无正文
+  // 与供应商失败码路径同收敛口径——同为 fail-closed 且记同一降级标记，不落 none。
+  assert.equal(verdict.fields.degraded, 'output-empty');
+  assert.equal(verdict.fields.finish, 'stop', 'finish 观测保持真实收尾原因（无失败码）');
+  // 纯空白正文同口径：trim 后无内容＝无正文。
+  const ws = harness([{ blocks: [text('   \n  ')] }]);
+  const wsVerdict = await ws.review();
+  assert.equal(wsVerdict.decision, 'error');
+  assert.equal(wsVerdict.fields.degraded, 'output-empty');
+  // 有正文且正常解析的对照组：无任何标记。
+  const ok = harness([{ blocks: [text('{"outcome":"allow","risk_level":"low","user_authorization":"high","rationale":"fine"}')] }]);
+  const okVerdict = await ok.review();
+  assert.equal(okVerdict.decision, 'allow');
+  assert.equal(okVerdict.fields.degraded, 'none');
+});
+
+test('review：有正文但不可解析（畸形输出）不串无响应/截断标记（口径保持）', async () => {
+  const h = harness([{ blocks: [text('这不是 JSON')] }, { blocks: [text('还是不是')] }]);
+  const verdict = await h.review();
+  // 有正文＝有响应，不在空输出可重试类：一次尝试即收敛（design §5.2 可重试谓词）。
+  assert.equal(h.requests.length, 1);
+  assert.equal(verdict.decision, 'error');
+  assert.equal(verdict.reason, 'not valid JSON');
+  assert.equal(verdict.fields.degraded, 'none', '畸形输出不加审查侧标记（与无响应、截断两口径都不串）');
 });
 
 test('finishTag / finishDegraded：宿主 FinishReason 的收敛规则', () => {

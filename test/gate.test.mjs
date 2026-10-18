@@ -276,9 +276,14 @@ test('路径 3：审查超时 → rejected + 注入（超时文案，点明可�
   assert.doesNotMatch(state.injections[0], /不要用等价手段绕过该拒绝/u);
   const decide = state.audits.find((entry) => entry.phase === 'decide');
   assert.equal(decide.source, 'llm');
+  // 正时限对照（与零值路径的分界）：开卡模式下卡片照常随审查弹出、结算时正确撤回——
+  // 该路径有 await 竞速边界，宿主撤回通道可观测投影信号。
+  assert.equal(state.nextCalls, 1, '正时限：卡片随审查开始弹出');
+  assert.equal(state.aborts.length, 1, '超时结算撤回已弹卡片（waterfall + cancel 成对）');
+  assert.equal(state.pending.filter((entry) => entry.op === 'set').length, 1, 'reviewing 卡片状态在场');
 });
 
-test('路径 3：reviewer.timeoutMs=0 立即超时（不开始尝试，环节记装配，撤卡＋计数）', async () => {
+test('路径 3：reviewer.timeoutMs=0 立即超时（不开始尝试，环节记装配，不弹卡＋计数）', async () => {
   const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 0 } }));
   const outcome = await onApprovalRequest(request(), next, rt);
   assert.equal(outcome, 'rejected');
@@ -286,14 +291,49 @@ test('路径 3：reviewer.timeoutMs=0 立即超时（不开始尝试，环节记
   assert.equal(state.reviewSignals.length, 0);
   assert.match(state.injections[0], /超时环节：装配超时/u);
   assert.doesNotMatch(state.injections[0], /ms/u);
-  // 默认 humanCardDuringReview=true：卡片已随审查开始弹出，立即结算必须撤回（requirements §4.1）。
-  assert.equal(state.nextCalls, 1, '默认开卡：卡片已弹出');
-  assert.equal(state.aborts.length, 1, '立即结算撤回已弹卡片');
+  // 零值/装配耗尽先于弹卡拒绝：默认 humanCardDuringReview=true 也不调
+  // next()——立即结算与收尾信号恢复同拍完成，先弹后撤的卡片会残留为可操作的孤儿分发；
+  // 一张弹出即撤的卡片展示的也是一次从未开始的尝试。不弹卡即无撤回动作。
+  assert.equal(state.nextCalls, 0, '零值路径不调 next()：不弹卡');
+  assert.equal(state.aborts.length, 0, '无卡可撤：无撤回动作');
+  // 卡片状态表零登记（客户端无瞬态、无残留条目可轮询）；收尾 clear 照常执行。
+  assert.equal(state.pending.filter((entry) => entry.op === 'set').length, 0, '不注册卡片状态');
+  assert.equal(state.pending.filter((entry) => entry.op === 'clear').length, 1, '收尾清理照常');
+  assert.equal(state.audits.some((entry) => entry.phase === 'handoff'), false, '无 handoff 行');
+  assert.equal(state.settles.length, 1, '结算恰一条');
   assert.equal(state.countTimeouts, 1, '零值立即到点与真实超时同一路径计数（design §5.3）');
   const decide = state.audits.find((entry) => entry.phase === 'decide');
   assert.equal(decide.source, 'timeout');
   assert.equal(decide.decision, 'rejected');
   assert.equal(state.settles[0].stage, 'assembly');
+});
+
+// ── 零值/装配耗尽的弹卡边界（design §4.3）对照 ───────────────────────────────
+
+test('零值 × 关卡（humanCardDuringReview=false）：与开卡一致——不弹卡、按装配超时拒绝', async () => {
+  const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 0 }, ui: { humanCardDuringReview: false } }));
+  const outcome = await onApprovalRequest(request(), next, rt);
+  assert.equal(outcome, 'rejected');
+  // 关卡开关不改变零值路径：两条开关态在同一分支结算（不弹卡）。
+  assert.equal(state.nextCalls, 0);
+  assert.equal(state.aborts.length, 0);
+  assert.equal(state.pending.filter((entry) => entry.op === 'set').length, 0);
+  assert.equal(state.settles[0].stage, 'assembly');
+  assert.equal(state.settles[0].source, 'timeout');
+  assert.match(state.injections[0], /超时环节：装配超时/u);
+});
+
+test('零值起算组合：timeoutFrom=request/handoff 在审查零值下等价（同一分支结算）', async () => {
+  for (const timeoutFrom of ['request', 'handoff']) {
+    const { rt, state, next } = makeRt(
+      baseConfig({ reviewer: { timeoutMs: 0 }, human: { timeoutMs: 5000, timeoutFrom } }),
+    );
+    assert.equal(await onApprovalRequest(request(), next, rt), 'rejected', `timeoutFrom=${timeoutFrom}`);
+    assert.equal(state.nextCalls, 0, `timeoutFrom=${timeoutFrom}：零值路径不弹卡`);
+    assert.equal(state.settles.length, 1, `timeoutFrom=${timeoutFrom}：结算恰一条`);
+    assert.equal(state.settles[0].source, 'timeout', `timeoutFrom=${timeoutFrom}：按超时结算`);
+    assert.equal(state.settles[0].stage, 'assembly', `timeoutFrom=${timeoutFrom}：环节记装配`);
+  }
 });
 
 test('路径 4：req.signal abort → cancelled，不注入', async () => {
@@ -854,6 +894,11 @@ test('装配慢于真实时限：装配计时器按回溯起点到点拒绝（�
   const outcome = await onApprovalRequest(request(), next, rt);
   assert.equal(outcome, 'rejected');
   assert.equal(state.reviewSignals.length, 0, '预算被装配耗尽：审查未开始');
+  // 装配耗尽与零值同款：检查先于弹卡，默认开卡配置下也不调 next()、无撤回动作、
+  // 不注册卡片状态——宿主不会收到弹出即撤的孤儿分发。
+  assert.equal(state.nextCalls, 0, '装配耗尽不弹卡（不调 next()）');
+  assert.equal(state.aborts.length, 0, '无卡可撤：无撤回动作');
+  assert.equal(state.pending.filter((entry) => entry.op === 'set').length, 0, '不注册卡片状态');
   assert.match(state.injections[0], /超时环节：装配超时 30 ms/u);
   assert.equal(state.countTimeouts, 1, '装配耗尽到点与真实超时同一路径计数');
   assert.equal(state.settles[0].stage, 'assembly');
