@@ -1467,6 +1467,98 @@ test('composer 分置提示（§7.2.0）：session 条目渲染在选择控件�
   assert.equal(findAllNodes(wrap, (node) => node.type === primitivesStub.IconWarningOutlineRegular).length, 1, '提示行带警告图标');
 });
 
+test('composer 触发器档位段取会话所选档位（§7.3.2）：会话已选未指定档位显示自动选择，模型段仍显示回退后的生效模型', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/getState') {
+        return {
+          ok: true,
+          value: {
+            found: true,
+            active: true,
+            preset: 'auto-approve',
+            sessionModel: 'zai/gone-9',
+            sessionEffort: '',
+            globalDefault: 'zai/glm-5.3',
+            globalEffort: 'high',
+            modelIssues: [
+              { scope: 'session', ruleProvider: null, ruleModel: '', configured: 'zai/gone-9', reason: 'provider 不存在', effectiveLayer: 'global', effectiveModel: 'zai/glm-5.3' },
+            ],
+            effective: 'zai/glm-5.3',
+            effectiveEffort: 'high',
+            layer: 'global',
+          },
+        };
+      }
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      return { ok: true, value: { efforts: [{ id: 'low' }, { id: 'high' }] } };
+    },
+  });
+  client.apply(env.ctx);
+  const dicts = env.dictionaries[0].dicts;
+  const dropdown = env.registrations.find((entry) => entry.options.name === 'conversation.input.left');
+  const props = { t: (key) => dicts.zh[key] ?? key, ...dropdown.options.inject() };
+  render(dropdown.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const tree = render(dropdown.component, props);
+  const menu = findNode(tree, primitivesStub.Menu);
+  const anchor = menu.props.anchor;
+  // 模型段显示回退后的生效模型，档位段回显会话所选档位（未指定即自动选择）：两段来源不同，不得互相改写。
+  assert.equal(flatText(findByClass(anchor, 'dsafm_seat_model')), '审查模型：zai/glm-5.3', '模型段显示回退后的生效模型');
+  assert.equal(flatText(findByClass(anchor, 'dsafm_seat_effort')), ' · 自动选择', '档位段取会话所选档位（未指定即自动选择）');
+});
+
+test('composer 触发器档位段取会话所选档位（§7.3.2）：会话已指定档位时显示该档位原值', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/getState') {
+        return {
+          ok: true,
+          value: {
+            found: true,
+            active: true,
+            preset: 'auto-approve',
+            sessionModel: 'zai/glm-5.3',
+            sessionEffort: 'high',
+            globalDefault: '',
+            globalEffort: '',
+            byParentModel: {},
+            effective: 'zai/glm-5.3',
+            effectiveEffort: 'low',
+            layer: 'session',
+          },
+        };
+      }
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      return { ok: true, value: { efforts: [{ id: 'low' }, { id: 'high' }] } };
+    },
+  });
+  client.apply(env.ctx);
+  const dicts = env.dictionaries[0].dicts;
+  const dropdown = env.registrations.find((entry) => entry.options.name === 'conversation.input.left');
+  const props = { t: (key) => dicts.zh[key] ?? key, ...dropdown.options.inject() };
+  render(dropdown.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const tree = render(dropdown.component, props);
+  const anchor = findNode(tree, primitivesStub.Menu).props.anchor;
+  assert.equal(flatText(findByClass(anchor, 'dsafm_seat_model')), '审查模型：zai/glm-5.3', '模型段取会话所选模型');
+  assert.equal(flatText(findByClass(anchor, 'dsafm_seat_effort')), ' · high', '档位段取会话所选档位原值（不被生效档位改写）');
+});
+
 test('composer 分置提示（§7.2.0）：无 modelIssues 字段（旧宿主）或求值失败时不渲染', async () => {
   resetHooks();
   const client = loadClient();
@@ -4506,6 +4598,8 @@ test('触发器样式 §7.3.2：两段规则在场、固定宽度上限与旧类
   assert.ok(source.includes('.dsafm_seat_effort{flex:none;white-space:nowrap}'), '缺档位段规则');
   assert.ok(source.includes('.dsafm_seat_pending{flex:0 1 auto;min-width:0;font-size:11px;color:var(--dsw-alias-state-warn-primary);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'), '待生效提示段缺收缩规则或既有属性');
   assert.ok(source.includes('.dsafm_badge{flex:none;font-size:11px;color:var(--dsw-alias-state-warn-primary);margin-left:6px}'), '失败徽标缺 flex:none、字号或间距');
+  assert.ok(source.includes('.dsafm_seatwrap>*{min-width:0;max-width:100%}'), '分置提示包裹层的直接子元素缺收缩规则');
+  assert.ok(source.includes('.dsafm_seatwrap{display:inline-flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0}'), '分置提示包裹层缺定稿规则（纵向排列与可收缩）');
   assert.ok(source.includes('.dsafm_state{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);font-weight:500;word-break:normal;overflow-wrap:break-word}'), '状态行缺按词换行规则');
   assert.ok(source.includes('cursor:pointer;min-width:0;max-width:min(100%, calc(100vw - 156px))}'), '触发器缺宽度上限（窄视口收缩）');
   assert.ok(!source.includes('cursor:pointer;min-width:0;max-width:100%}'), '旧上限写法不得残留');

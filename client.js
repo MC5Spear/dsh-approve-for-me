@@ -740,6 +740,10 @@ window.__ModuleLoader__.load({
 			".dsafm_seat_pending{flex:0 1 auto;min-width:0;font-size:11px;color:var(--dsw-alias-state-warn-primary);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
 			// 会话控件的分置提示挂在座位下方（design §7.2.0/§7.3）：纵向堆叠，不挤压输入行高度。
 			".dsafm_seatwrap{display:inline-flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0}",
+			// 带提示时宿主在包裹层里再套一层锚点（min-width:auto），其内容宽度可超出包裹层；
+			// 允许包裹层的直接子元素收缩，座位才按包裹层宽度收窄（否则 375 下座位会越过宿主容器右缘）。
+			// 按位置命中宿主锚点根，不依赖宿主类名；包裹层之外的元素不受影响。
+			".dsafm_seatwrap>*{min-width:0;max-width:100%}",
 			".dsafm_stack{display:flex;flex-direction:column;gap:6px;min-width:0}",
 			".dsafm_picker{display:flex;align-items:center;gap:8px;width:100%;text-align:left;cursor:pointer}",
 			".dsafm_picker_text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
