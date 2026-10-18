@@ -5077,8 +5077,8 @@ test('触发器样式 §7.3.2：两段规则在场、固定宽度上限与旧类
   // 反向断言（design §10.2 / §7.3.2 窄幅带登记条）：不设窄幅媒体分支。①全文无 319.98px；
   // ②结构断言——作用于 .dsafm_warnline 的媒体查询只有 1279.98px 避让条且块体恰为定稿那条
   // （按块配对扫描、大小写不敏感；同块尾追加等价覆盖会因块体不等而红）；③任何位置（媒体块
-  // 内外）不得有把提示行左边距归零的规则——命中含 .dsafm_warnline 名名（含属性选择器写法）
-  // 与 .dsafm_seatwrap 后代/子代结构性捕获两种口径，取值含字面 0 与 initial/unset/revert。
+  // 内外）不得有把提示行左边距归零的规则——命中选择器名档（选择器名含 warnline，含属性选择器写法）
+  // 与选择器结构档（选择器名含 seatwrap 而不含 warnline）两种口径，取值含字面 0 与 initial/unset/revert。
   assert.ok(!source.includes('319.98px'), '不得出现 319.98px 窄幅媒体条件（窄幅带为登记局限，不做 CSS 修正）');
   const mediaHeads = [...source.matchAll(/@media([^{]+)\{/gi)];
   assert.ok(mediaHeads.length > 0, '应能定位 @media 块');
@@ -5135,12 +5135,12 @@ test('触发器样式 §7.3.2：两段规则在场、固定宽度上限与旧类
     const decls = s[2];
     if (!/warnline|seatwrap/u.test(selector)) continue;
     if (/warnline/u.test(selector)) {
-      // 名名命中（含 [class~=…]/[class*=…] 属性写法按子串命中）：左边距要么不声明、要么恰 78px
+      // 选择器名档命中（含 [class~=…]/[class*=…] 属性写法按子串命中）：左边距要么不声明、要么恰 78px
       if (RE_MARGIN_SUSPECT.test(decls) || RE_MARGIN_LEFT_MUST_78.test(decls) || RE_ALL_UNSET.test(decls) || RE_SHIFT_PROPS.test(decls)) {
         ruleViolation(selector, decls);
       }
     } else if (RE_MARGIN_SUSPECT.test(decls) || RE_ALL_UNSET.test(decls) || RE_SHIFT_PROPS.test(decls)) {
-      // 结构命中：.dsafm_seatwrap 后代/子代选择器捕获提示行，margin 禁零/负/函数式、位移属性禁用
+      // 选择器结构档命中：.dsafm_seatwrap 后代/子代选择器捕获提示行，margin 禁零/负/函数式、位移属性禁用
       ruleViolation(selector, decls);
     }
   }
