@@ -1,6 +1,6 @@
 # 设置表单 DOM 证据档（结构判据＋毫秒字段秒数读数；机器可核留档）
 
-- 采集：2026-10-16，真实部署实例（loopback）。采集工具链随仓发布（`tools/browser-shot.mjs` 驱动取证、`tools/build-dom-dump.mjs` 汇编成档），本次采集的采集步骤脚本属开发期工件、不随仓发布。主取证步骤含暂存往返（暂存不保存→重开读旧值→保存 unset→复原）；换算读数（seconds 段）与 CSS 收窄扫描（scoped 段，只读本包注入的 `style[data-plugin-css="dsh-approve-for-me"]`）并入同一脚本。
+- 采集：2026-10-19，真实部署实例（loopback）。采集工具链随仓发布（`tools/browser-shot.mjs` 驱动取证、`tools/build-dom-dump.mjs` 汇编成档），本次采集的采集步骤脚本属开发期工件、不随仓发布。主取证步骤含暂存往返（暂存不保存→重开读旧值→保存 unset→复原）；换算读数（seconds 段）与 CSS 收窄扫描（scoped 段，只读本包注入的 `style[data-plugin-css="dsh-approve-for-me"]`）并入同一脚本。
 - 入口路径：侧栏「插件」→ `dsh-approve-for-me` → 本包详情页；页面身份 `[data-plugin-detail="dsh-approve-for-me"]`。
 - 常驻断言：`test/settings-dom-dump.test.mjs` 读本文件逐项核对（变异验证：篡改本文件对应断言变红）。
 
@@ -213,7 +213,7 @@ approve-for-me
 
 ## 6. 交付 CSS 串失效令牌零命中（收窄到本包 style 元素）
 
-本包注入样式 10681 字符（103 条规则）：`--dsw-alias-state-warning-primary`×0、`--dsw-alias-label-error`×0、`--dsw-alias-bg-layer-4`×0（页面级命中来自宿主/其它包样式，不属本包交付串）。
+本包注入样式 10760 字符（104 条规则）：`--dsw-alias-state-warning-primary`×0、`--dsw-alias-label-error`×0、`--dsw-alias-bg-layer-4`×0（页面级命中来自宿主/其它包样式，不属本包交付串）。
 关键规则原文：`.dsafm_form{display:flex;flex-direction:column;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary)}`；`.dsafm_save{appearance:none;border:1px solid transparent;border-radius:8px;padding:5px 14px;font-family:inherit;font-size:13px;line-height:1.5;cursor:pointer;background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3)}`；`.dsafm_helpbtn{display:inline-flex;align-items:center;gap:4px;justify-content:center;flex:none;min-width:24px;min-height:24px;padding:0 8px;border:0;border-radius:6px;background:none;color:var(--dsw-alias-label-secondary);cursor:pointer;font-family:inherit;font-size:12px;line-height:1.5}`；`.dsafm_input{flex:1;min-width:0;width:100%;height:34px;padding:0 12px;border:.5px solid var(--dsw-alias-border-l4);border-radius:8px;background:var(--dsw-alias-bg-layer-3);font-family:inherit;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-primary)}`。
 数字字段承载规则（design §7.2.1）：`.dsafm_numhost > div{padding:0}` 与 `.dsafm_numhost > div > div:first-child{display:none}`；退役规则（旧分隔线选择器组与 `.dsafm_f_help`）零残留=`true`；字段间分隔线统一 `.dsafm_field + .dsafm_field` 在场=`.dsafm_field + .dsafm_field{border-top:.5px solid var(--dsw-alias-border-l2)}`。
 
@@ -251,14 +251,14 @@ dsafm_form / dsafm_area / dsafm_badges / dsafm_button / dsafm_chevron / dsafm_ct
 
 ## 9. 失败登录计数
 
-- 采集前 `BadPasswordAttempts=未读`，采集后 `=未读`（Get-LocalUser 返回 null，如实留档未读；本次采集启动无头 Edge 2 次，窗口阈值内；无头 Edge 启动次数以 shots-manifest 记录表为准）。
+- 采集前 `BadPasswordAttempts=未读`，采集后 `=未读`（Get-LocalUser 返回 null，如实留档未读；无头 Edge 启动次数以 shots-manifest 记录表为准；窗口阈值 10/10min，纪律 ≤5 次/10min）。
 
 ## 10. 毫秒字段换算读数（.dsafm_f_sec，干净页＝无暂存）
 
 读数行 2 行（恰两个 ms 字段各一行；字节/令牌字段不做换算）：
 
-- `approve-for-me-sec-reviewer-timeoutMs`：`生效：300 秒 · 草稿：300 秒`（生效＝`生效：300 秒`、草稿＝`草稿：300 秒`、draftInvalid=false）；行样式 fontSize=`12px`、color=`rgb(129, 133, 140)`、marginTop=`-6px`；后继节点 class=`dsafm_field`（design §7.2.1 新结构：秒数行的后继是展开说明区（展开时）或下一字段的 `.dsafm_field`；字段间分隔线统一 `.dsafm_field + .dsafm_field`）。
-- `approve-for-me-sec-human-timeoutMs`：`生效：300 秒 · 草稿：300 秒`（生效＝`生效：300 秒`、草稿＝`草稿：300 秒`、draftInvalid=false）；行样式 fontSize=`12px`、color=`rgb(129, 133, 140)`、marginTop=`-6px`；后继节点 class=`dsafm_field`（design §7.2.1 新结构：秒数行的后继是展开说明区（展开时）或下一字段的 `.dsafm_field`；字段间分隔线统一 `.dsafm_field + .dsafm_field`）。
+- `approve-for-me-sec-reviewer-timeoutMs`：`生效：300 秒 · 草稿：300 秒`（生效＝`生效：300 秒`、草稿＝`草稿：300 秒`、draftInvalid=false）；行样式 fontSize=`12px`、color=`rgb(97, 102, 107)`、marginTop=`-6px`；后继节点 class=`dsafm_field`（design §7.2.1 新结构：秒数行的后继是展开说明区（展开时）或下一字段的 `.dsafm_field`；字段间分隔线统一 `.dsafm_field + .dsafm_field`）。
+- `approve-for-me-sec-human-timeoutMs`：`生效：300 秒 · 草稿：300 秒`（生效＝`生效：300 秒`、草稿＝`草稿：300 秒`、draftInvalid=false）；行样式 fontSize=`12px`、color=`rgb(97, 102, 107)`、marginTop=`-6px`；后继节点 class=`dsafm_field`（design §7.2.1 新结构：秒数行的后继是展开说明区（展开时）或下一字段的 `.dsafm_field`；字段间分隔线统一 `.dsafm_field + .dsafm_field`）。
 
-生效值读数与控件值一致（§7 控件表同 id 行）；初始草稿＝生效值文本。实时行为（键入即换算、占位、非法、保存重开、en 档单位）的验证不在本档范围，由开发期工件承载、不随仓发布。
+生效值读数与控件值一致（本档 §7 控件表同 id 行）；初始草稿＝生效值文本。实时行为（键入即换算、占位、非法、保存重开、en 档单位）的验证不在本档范围，由开发期工件承载、不随仓发布。
 
