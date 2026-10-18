@@ -5076,9 +5076,9 @@ test('触发器样式 §7.3.2：两段规则在场、固定宽度上限与旧类
   assert.ok(source.includes('@media ' + WARNLINE_AVOID_QUERY), '窄视口避让媒体查询缺定稿规则（design §7.3.2 避让条；与下方块体全等断言共用同一常量）');
   // 反向断言（design §10.2 / §7.3.2 窄幅带登记条）：不设窄幅媒体分支。①全文无 319.98px；
   // ②结构断言——作用于 .dsafm_warnline 的媒体查询只有 1279.98px 避让条且块体恰为定稿那条
-  // （按块配对扫描、大小写不敏感；同块尾追加等价覆盖会因块体不等而红）；③媒体块外任何
-  // 提示行规则（含 :hover/属性选择器等任意形态）不得把左边距归零（margin 与 margin-left/
-  // margin-inline/margin-inline-start 显式零值；margin:0 auto 的 auto 左右值不算归零）。
+  // （按块配对扫描、大小写不敏感；同块尾追加等价覆盖会因块体不等而红）；③任何位置（媒体块
+  // 内外）不得有把提示行左边距归零的规则——命中含 .dsafm_warnline 名名（含属性选择器写法）
+  // 与 .dsafm_seatwrap 后代/子代结构性捕获两种口径，取值含字面 0 与 initial/unset/revert。
   assert.ok(!source.includes('319.98px'), '不得出现 319.98px 窄幅媒体条件（窄幅带为登记局限，不做 CSS 修正）');
   const mediaHeads = [...source.matchAll(/@media([^{]+)\{/gi)];
   assert.ok(mediaHeads.length > 0, '应能定位 @media 块');
@@ -5104,18 +5104,59 @@ test('触发器样式 §7.3.2：两段规则在场、固定宽度上限与旧类
     }
   }
   assert.equal(warnMediaCount, 1, `作用于 .dsafm_warnline 的媒体查询应只有一条（实际 ${warnMediaCount}）`);
-  // 已知边界（记录级）：文本扫描不建模简写位置语义——`margin:0 10px`（左右实为 10px）误红、
-  // `margin:10px 0`（左右实为 0）漏；本仓库不用带非零值的简写，按保守侧接受。
-  const RE_MARGIN_ZERO = /(?:^|;)\s*margin\s*:\s*0(?![.\d])(?!\s*auto)|(?:^|;)\s*margin-(?:left|inline-start|inline)\s*:\s*0(?![.\d])/u;
+  // 已知边界（记录级）：①简写位置语义不建模——`margin:0 10px` 误红、`margin:10px 0` 漏，
+  // `margin:auto` 语境依赖不判（本仓库不用这些写法，保守侧接受）；②片段命中不覆盖——
+  // `[class^="dsafm_warn"]`、`[class*="seat"]` 这类截断子串写法不命中（放宽到 warn/seat 会
+  // 误伤，登记为边界）；③包裹层 padding/宽度改动不在本断言职责内（如 N8 形态）。
+  // 取值口径：margin 族出现 0/initial/unset/revert/负值/calc(/var( 即判可疑（initial/unset/
+  // revert 在 margin 上计算值均为 0）；`all:unset/initial/revert` 会连带还原左边距，同判。
+  // 位移口径：left/right/inset*/translate/transform/direction/writing-mode/text-indent 在提示行
+  // 相关规则上出现即判——它们能不动 margin 达成同样的左移效果（text-indent 移的是行内文字）。
+  // 剥壳：at-rule 头（@media/@supports/@layer/@container，大小写不敏感）连同其 "{" 剥掉
+  // （循环处理嵌套），媒体/条件块内层规则因此逐条暴露给平铺扫描；落单的 "}" 只起分隔作用。
+  const flattenAtRules = (cssText) => {
+    let out = cssText;
+    let prev;
+    do {
+      prev = out;
+      out = out.replace(/@(?:media|supports|layer|container)[^{]*\{/giu, '');
+    } while (out !== prev);
+    return out;
+  };
+  const RE_MARGIN_SUSPECT = /(?:^|;)\s*margin(?:-(?:left|inline-start|inline))?\s*:\s*(?:0(?![.\d])(?!\s*auto)|initial|unset|revert|-[.\d]|calc\(|var\()/u;
+  const RE_MARGIN_LEFT_DECL = /(?:^|;)\s*margin-(?:left|inline-start|inline)\s*:/u;
+  const RE_MARGIN_LEFT_MUST_78 = /(?:^|;)\s*margin-(?:left|inline-start|inline)\s*:(?!\s*78px)/u;
+  const RE_ALL_UNSET = /(?:^|;)\s*all\s*:\s*(?:unset|initial|revert)/u;
+  const RE_SHIFT_PROPS = /(?:^|;)\s*(?:left|right|inset|inset-inline-start|inset-inline-end|inset-inline|translate|transform|direction|writing-mode|text-indent)\s*:/u;
+  const marginZeroRules = [];
+  const ruleViolation = (selector, decls) => marginZeroRules.push(`${selector.trim().split('\n').pop()}{${decls}}`);
+  for (const s of flattenAtRules(source).matchAll(/([^{}]*)\{([^}]*)\}/g)) {
+    const selector = s[1];
+    const decls = s[2];
+    if (!/warnline|seatwrap/u.test(selector)) continue;
+    if (/warnline/u.test(selector)) {
+      // 名名命中（含 [class~=…]/[class*=…] 属性写法按子串命中）：左边距要么不声明、要么恰 78px
+      if (RE_MARGIN_SUSPECT.test(decls) || RE_MARGIN_LEFT_MUST_78.test(decls) || RE_ALL_UNSET.test(decls) || RE_SHIFT_PROPS.test(decls)) {
+        ruleViolation(selector, decls);
+      }
+    } else if (RE_MARGIN_SUSPECT.test(decls) || RE_ALL_UNSET.test(decls) || RE_SHIFT_PROPS.test(decls)) {
+      // 结构命中：.dsafm_seatwrap 后代/子代选择器捕获提示行，margin 禁零/负/函数式、位移属性禁用
+      ruleViolation(selector, decls);
+    }
+  }
+  // 78px 只许出现在 1279.98px 避让块内：平铺扫描允许的 78px，再由原文本扫描限定位置——
+  // 顶层（媒体块外）名名或结构式规则声明 margin-left 一律判（唯一合法的 78px 在媒体块内层，
+  // 顶层扫不到）。
+  for (const s of source.matchAll(/([^{}]*)\{([^}]*)\}/g)) {
+    if (!/warnline|seatwrap/u.test(s[1])) continue;
+    if (RE_MARGIN_LEFT_DECL.test(s[2])) ruleViolation(s[1], s[2]);
+  }
   let warnRuleOutsideMedia = 0;
-  const marginZeroOutside = [];
-  for (const s of source.matchAll(/([^{}]*\.dsafm_warnline[^{}]*)\{([^}]*)\}/g)) {
-    if (mediaSpans.some(([a, b]) => s.index >= a && s.index < b)) continue;
-    warnRuleOutsideMedia += 1;
-    if (RE_MARGIN_ZERO.test(s[2])) marginZeroOutside.push(`${s[1].trim().split('\n').pop()}{${s[2]}}`);
+  for (const s of source.matchAll(/\.dsafm_warnline\{/g)) {
+    if (!mediaSpans.some(([a, b]) => s.index >= a && s.index < b)) warnRuleOutsideMedia += 1;
   }
   assert.ok(warnRuleOutsideMedia >= 1, `媒体块外应有 .dsafm_warnline 基础规则（实际 ${warnRuleOutsideMedia} 条，防零命中静默通过）`);
-  assert.equal(marginZeroOutside.length, 0, `媒体块外的提示行规则不得把左边距归零（实际 ${marginZeroOutside.length} 条：${JSON.stringify(marginZeroOutside.slice(0, 4))}）`);
+  assert.equal(marginZeroRules.length, 0, `任何位置（含 at-rule 块内）提示行相关规则不得归零/负值/函数式左边距、位移左移或 all 还原；78px 只许在避让块内（实际 ${marginZeroRules.length} 条：${JSON.stringify(marginZeroRules.slice(0, 4))}）`);
   assert.ok(source.includes('.dsafm_seatwrap{display:inline-flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0}'), '分置提示包裹层缺定稿规则（纵向排列与可收缩）');
   assert.ok(source.includes('.dsafm_state{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);font-weight:500;word-break:normal;overflow-wrap:break-word}'), '状态行缺按词换行规则');
   assert.ok(source.includes('cursor:pointer;min-width:0;max-width:min(100%, calc(100vw - 156px))}'), '触发器缺宽度上限（窄视口收缩）');
