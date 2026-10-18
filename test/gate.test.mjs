@@ -56,7 +56,7 @@ function makeRt(cfg, options = {}) {
       state.reviewSignals.push(opts?.signal);
       if (options.reviewDelayMs !== undefined) await delay(options.reviewDelayMs);
       if (options.reviewThrows === true) throw new Error('review exploded');
-      // 测试缝（迟到观测端到端链）：真实审查器收尾时写 phase=review 审计行且带 late 观测（reviewer.js:345 同形）。
+      // 测试缝（迟到观测端到端链）：真实审查器收尾时写 phase=review 审计行且带 late 观测（与 reviewer 的 review 审计行同形）。
       if (options.reviewWritesAudit === true) {
         state.audits.push({
           phase: 'review',
@@ -1687,7 +1687,7 @@ test('§5.3 中止侧回调抛错：在飞审查信号不带超时标记（不�
 
 test('design §5.3 计数口径端到端：审查计时回调抛错与真实超时同形——两次计数后第三次被冷却拦截', async () => {  // 公共审批流水线注入不了回调抛错（design §5.3），故在 gate 层直接驱动：fake rt 的计时器注入抛错，
   // 审查侧用最小镜像把 gate 的中止标记接到**真 scheduler**（lib/scheduler.js）上——
-  // 镜像的仅是 index.js rt.review 的调度包装（L82-96）与 reviewer 的中止分类（L399-411），
+  // 镜像的仅是 index.js rt.review 的调度包装与 reviewer 的中止分类出口，
   // 两处各有真接线测试（冷却计数真接线用例／reviewer 用例）；本用例验证的是「两种情形在计数上同权」这一判据。
   for (const [label, throwMode] of [['计时回调抛错', true], ['真实超时', false]]) {
     const scheduler = createScheduler({ breaker: { consecutiveDenials: 2, windowDenials: 99, cooldownMs: 600000 } });

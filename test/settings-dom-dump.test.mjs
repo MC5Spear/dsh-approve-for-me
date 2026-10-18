@@ -140,7 +140,7 @@ test('配置区容器无自绘卡片外壳（计算样式）', () => {
   assert.match(dump, /background=`rgba\(0, 0, 0, 0\)`/u, '不应有成片底色');
 });
 
-test('说明入口（§7.2.1）：20 个按钮带可见文字，aria 成对，展开文本为新总开关文案', () => {
+test('说明入口（§7.2.1）：20 个按钮带可见文字，aria 成对，展开文本为总开关定稿文案', () => {
   assert.match(dump, /说明按钮 20 个（全部位于字段外壳标签行的 `\.dsafm_labelgroup` 内，标签旁）/u, '说明按钮应 20 个（全部经字段外壳标签行）');
   assert.match(dump, /按钮带可见文字「说明／收起说明」（`\.dsafm_helpbtn_text`）/u, '说明按钮应带可见文字');
   assert.match(dump, /`aria-label`＝「字段名：说明」、Enter\/Space 键盘可达/u, '无障碍名格式与键盘可达应在档');
@@ -199,7 +199,7 @@ test('控件清单：生效值就在控件里，id 挂在控件上', () => {
 });
 
 // ── 取值逐项等于生效值（结构断言抓不到整片为空） ─────────────────────────────
-// 夹具＝真实部署的 profile patch 的 approve-for-me 用户层逐字（cordis.patch.yml :129-143）。
+// 夹具＝真实部署的 profile patch 的 approve-for-me 用户层逐字（宿主 profile 目录下部署侧的 cordis.patch.yml）。
 const REAL_PROFILE = {
   reviewer: { model: { model: 'zai/glm-5.3-flash', effort: 'high' }, timeoutMs: 300000 },
   human: {},
@@ -256,12 +256,12 @@ test('控件取值逐项等于生效值（profile 用户层＋默认合并的产
   }
 });
 
-test('失败登录计数在阈值内留档', () => {
-  assert.match(dump, /采集前 `BadPasswordAttempts=未读`，采集后 `=未读`/u, '失败登录计数应留档（Get-LocalUser 的 BadPasswordAttempts 非提升与提升查询均返回 null，如实留档未读；无头 Edge 启动次数以 shots-manifest 记录表为准）');
+test('失败登录计数未读时如实留档', () => {
+  assert.match(dump, /采集前 `BadPasswordAttempts=未读`，采集后 `=未读`/u, '失败登录计数应留档（Get-LocalUser 的 BadPasswordAttempts 非提升与提升查询均返回 null，如实留档未读）');
 });
 
 test('毫秒字段换算读数常驻（生效值＝控件值、样式与分隔线恢复）', () => {
-  // 读数行恰两行，且生效值读数与 §7 控件表同字段值一致（300000→300 秒 ×2）。
+  // 读数行恰两行，且生效值读数＝毫秒控件值换算（300000→300 秒 ×2：reviewer 与 human 的 timeoutMs）。
   assert.match(dump, /读数行 2 行（恰两个 ms 字段各一行；字节\/令牌字段不做换算）/u, '读数行应恰 2 行');
   for (const row of [
     '`approve-for-me-sec-reviewer-timeoutMs`：`生效：300 秒 · 草稿：300 秒`（生效＝`生效：300 秒`、草稿＝`草稿：300 秒`、draftInvalid=false）',
@@ -270,10 +270,10 @@ test('毫秒字段换算读数常驻（生效值＝控件值、样式与分隔�
     assert.ok(dump.includes(row), `换算读数行缺失或漂移：${row}`);
   }
   // 行样式与官方 .hint 同规格：12px／三级色；负 margin 抵 numhost 与读数行之间的外壳 gap（贴住官方校验文案行）。
-  // 新结构（design §7.2.1）：外壳 gap＝6px，负边距定值按真页实测同步（-6px）。
+  // 现行结构（design §7.2.1）：外壳 gap＝6px，负边距定值按真页实测同步（-6px）。
   assert.match(dump, /fontSize=`12px`、color=`rgb\(129, 133, 140\)`、marginTop=`-6px`/u, '读数行应为 12px 三级色＋-6px 负边距（贴住官方校验文案行）');
-  // 新结构（design §7.2.1）：数字字段进字段外壳后，秒数行的后继是展开说明区（展开时）或下一字段的
-  // .dsafm_field；字段间分隔线统一 .dsafm_field + .dsafm_field，没有旧式说明行锚点。宿主 CSS 模块哈希
+  // 现行结构（design §7.2.1）：数字字段进字段外壳后，秒数行的后继是展开说明区（展开时）或下一字段的
+  // .dsafm_field；字段间分隔线统一 .dsafm_field + .dsafm_field，没有退役说明行锚点。宿主 CSS 模块哈希
   // 随宿主版本变化（ui-primitives 改版后为 `_field_bjqpo_3`，0.2.0-rc.2 实测未变）；宿主升级后复核本档 DOM。
   assert.match(dump, /后继节点 class=`dsafm_field`/u, '秒数行的后继应为下一字段的外壳（或展开说明区）');
   // 实时行为边界声明在档。
@@ -285,5 +285,5 @@ test('反恒真对照：匹配器能命中（正向）、表单无幽灵字段�
   assert.ok(hasLine('启用自动审批的权限预设'), '正向对照失败：匹配器连在场字段都找不到');
   // 反向：这些从未是 config 字段，出现在表单上反而说明漂移。
   assert.equal(hasLine('系统提示词'), false, '「系统提示词」不是 config 字段，表单出现即为漂移');
-  assert.equal(dump.includes('Tooltip'), false, '设置界面不应再出现 Tooltip（帮助改为内联展开）');
+  assert.equal(dump.includes('Tooltip'), false, '设置界面不得出现 Tooltip（帮助走内联展开）');
 });

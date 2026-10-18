@@ -73,7 +73,7 @@ npm run check:public-surface     # 结构 / 本机指纹 / 内部引用，三类
 
 **代码约定**：
 
-- 不随意新增运行时依赖；当前声明含 `zod`、`yaml`、`@deepseek-ai/schemastery`、`@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-typert-protocol`（peer：`@deepseek-ai/cordis`）。实现调整后按实际用途核对依赖，不因某个包存在就保留不需要的功能。
+- 不随意新增运行时依赖；当前声明以 `package.json` 的 dependencies 与 peerDependencies 为准（运行依赖含 `zod`、`@deepseek-ai/schemastery`、`@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-typert-protocol`；peer：`@deepseek-ai/cordis`、`@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-typert-protocol`）。实现调整后按实际用途核对依赖，不因某个包存在就保留不需要的功能。
 - 不修改宿主源码、不打源码补丁。当前产品合同不提供插件侧用户 YAML 解析或自动清理；卸载残留风险须如实说明，不能降低用户配置保全要求。
 - `client.js` 是宿主加载器用的工厂式 CJS（`window.__ModuleLoader__.load({ id, factory })`，`factory(require)`，`require('react')` 由加载器提供），**没有 JSX、没有构建步骤**；改它时保持这个形态。
 - 新增配置字段：在 `lib/config.js` 的 `Config` 里声明，需要热改就加 `.volatile()`（`@deepseek-ai/schemastery` ≥ 3.18.4），并在 `test/config.test.mjs` 补解析用例。界面文案分两处维护：设置卡、composer 等客户端界面文案进 `client.js` 内的中英字典（`test/client.test.mjs` 守字典齐备与双语同步）；面向模型的文案见下一条的 `lib/agent-texts.js`（缺键即抛错，不静默回退，`test/agent-texts.test.mjs` 补用例）。

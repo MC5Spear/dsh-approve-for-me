@@ -374,7 +374,7 @@ test('动作段命令按本请求清单遮蔽：秘密在全部送模请求零�
     config: { context: { maxEntries: 0, maxEntryBytes: 0, redactPatterns: [...DEFAULT_REDACT_PATTERNS] } },
     text: denyIfVisible('syntheticCommandSecret'),
   });
-  const outcome = await w.request(req('r2-001', 'call-r2-001', args, w.injections, undefined, 'pwsh'), () => new Promise(() => {}));
+  const outcome = await w.request(req('arg-redact', 'call-arg-redact', args, w.injections, undefined, 'pwsh'), () => new Promise(() => {}));
   // 零出现断言覆盖整个实际请求（system、全部消息与工具 schema），不以单一消息代替。
   const sent = JSON.stringify(w.options);
   assert.ok(!sent.includes('syntheticCommandSecret'), '动作段与参数段的秘密都不得进入送模请求');
@@ -391,7 +391,7 @@ test('动作段命令按本请求清单遮蔽：秘密在全部送模请求零�
 test('普通无秘密命令不受遮蔽影响：原样送审、无多余遮蔽、结算不变', async () => {
   const args = { command: 'echo plain-audit-command', metadata: { operation: 'audit' } };
   const w = wired({ config: { context: { maxEntries: 0, maxEntryBytes: 0, redactPatterns: [...DEFAULT_REDACT_PATTERNS] } } });
-  const outcome = await w.request(req('r2-001-plain', 'call-r2-001-plain', args, w.injections, undefined, 'pwsh'), () => new Promise(() => {}));
+  const outcome = await w.request(req('arg-redact-plain', 'call-arg-redact-plain', args, w.injections, undefined, 'pwsh'), () => new Promise(() => {}));
   const actionText = w.options[0].messages[1].content[0].text;
   assert.ok(actionText.includes('"command": "echo plain-audit-command"'), '无秘密命令原样进入动作 JSON');
   assert.ok(!actionText.includes('[redacted]'), '不产生多余遮蔽');
@@ -412,7 +412,7 @@ test('详情采集不中止审查：full/summary/off 下异常参数都实际送
       config: { context: { maxEntries: 0 }, ui: { humanCardDuringReview: false, trace: { capture } } },
       text: denyIfVisible('[unserializable]'),
     });
-    const outcome = await w.request(req(`r2-002-${capture}`, `call-r2-002-${capture}`, makeArgs(), w.injections), () => new Promise(() => {}));
+    const outcome = await w.request(req(`arg-unserializable-${capture}`, `call-arg-unserializable-${capture}`, makeArgs(), w.injections), () => new Promise(() => {}));
     assert.equal(w.options.length, 1, `capture=${capture}：模型调用实际发生`);
     const sent = JSON.stringify(w.options[0].messages);
     assert.ok(sent.includes('[unserializable]'), `capture=${capture}：参数段以占位符实际送审`);
@@ -421,7 +421,7 @@ test('详情采集不中止审查：full/summary/off 下异常参数都实际送
     assert.ok(!JSON.stringify(w.injections).includes('Cannot convert object to primitive value'), `capture=${capture}：不出现详情转换导致的通道故障注入`);
   }
   // full 档详情落盘可读：input 摘要是安全占位，不是无保护转换的抛错文本（记录文件按 sessionId 命名）。
-  const file = join(process.env.DSH_HOME, 'approve-for-me', 'reviews', 'r2-002-full.jsonl');
+  const file = join(process.env.DSH_HOME, 'approve-for-me', 'reviews', 'arg-unserializable-full.jsonl');
   let lines = '';
   for (let i = 0; i < 60; i += 1) {
     try {

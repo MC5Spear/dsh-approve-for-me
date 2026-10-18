@@ -75,7 +75,7 @@ test('screen：超过 allowEscalationTo 直接 deny', () => {
 });
 
 test('screen：denyPatterns 命中直接 deny，未命中进 review', () => {
-  // 样例用 mkfs：命中出厂规则、不触硬性拦截层（rm -rf 现由硬性拦截先拒，见 hard-block 矩阵）。
+  // 样例用 mkfs：命中出厂规则、不触硬性拦截层（rm -rf 由硬性拦截层先拒，见 hard-block 矩阵）。
   const denied = screen(escalation(), located({ command: 'mkfs /dev/sda1' }), baseConfig);
   assert.equal(denied.action, 'deny');
   assert.match(denied.why, /deny pattern/);
@@ -149,41 +149,43 @@ test('回归：既有命中形态仍拒绝（锚定只收紧不放松）', () =>
   }
 });
 
-// ── denyPatterns 出厂默认清空（requirements §5.3：denyPatterns 规则降位为用户可选黑名单）──
+// ── denyPatterns 默认不装填（requirements §5.3：denyPatterns 是用户可选文本黑名单，
+// 出厂只提供参考清单）──
 // baseConfig 显式展开 `[...DEFAULT_DENY_PATTERNS]`＝显式配置部署；上面的既有命中用例
-// 在默认值清空后不受影响，天然构成显式配置行为不变的回归。
+// 自带显式清单、与默认值无关，天然构成显式配置行为不变的回归。
 
-test('未配置实例的生效配置 denyPatterns 为空数组；显式写入出厂参考清单后命中恢复 deny', () => {
+test('未配置实例的生效配置 denyPatterns 为空数组；显式写入出厂参考清单后按规则命中 deny', () => {
   assert.deepEqual(normalizeConfig().denyPatterns, []);
-  // 恢复段（防「删掉 deny 路径」的假实现）：清单显式写入配置 → 命中路径完整可用。
+  // 正例段（防「删掉 deny 路径」的假实现）：清单显式写入配置 → 命中路径完整可用。
   const restored = screen(escalation(), located({ command: 'rm -rf /' }), { ...baseConfig, denyPatterns: [...DEFAULT_DENY_PATTERNS] });
   assert.equal(restored.action, 'deny');
 });
 
 test('场景回归：提交说明含出厂清单样例文本的 git commit 默认进审查', () => {
   // 样例文本用 format c:：随命令走的提交说明命中出厂规则、不触硬性拦截层
-  // （说明里含 Remove-Item -Recurse 一类硬性拦截形态时按硬性拦截拒绝，属新增的偏多拦口径）。
+  // （说明里含 Remove-Item -Recurse 一类硬性拦截形态时按硬性拦截拒绝，偏多拦口径
+  // 见 hard-block 矩阵）。
   const command = 'git commit -m "docs: warn about format c: data loss in guides"';
   // 默认侧走真 normalizeConfig()（未配置实例的生效配置），使「默认改回出厂清单」变异可检出。
   assert.equal(screen(escalation(), located({ command }), normalizeConfig()).action, 'review');
-  // 同命令在显式配置清单下仍被规则强制拒绝（原行为——denyPatterns 规则仍在，默认不装填）。
+  // 同命令在显式配置清单下按规则强制拒绝（denyPatterns 的命中处理始终在，默认只是不装填清单）。
   assert.equal(screen(escalation(), located({ command }), baseConfig).action, 'deny');
 });
 
-test('误伤范围翻转钉住（design §3.5）：默认进审查、显式配置恢复 deny', () => {
+test('误伤边界钉住（design §3.5）：默认进审查、显式配置命中 deny', () => {
   for (const command of ["bash -c 'mkfs /dev/sda1'", 'grep mkfs readme.md']) {
     const byDefault = screen(escalation(), located({ command }), normalizeConfig());
     assert.equal(byDefault.action, 'review', `默认配置应进审查：${command}`);
     const explicit = screen(escalation(), located({ command }), baseConfig);
-    assert.equal(explicit.action, 'deny', `显式清单应恢复 deny：${command}`);
+    assert.equal(explicit.action, 'deny', `显式清单应命中 deny：${command}`);
   }
 });
 
-// ── 规则扫描次序与 unknownSubject 交叉（§3.5）──────────────────────────────
+// ── 规则扫描次序与 unknownSubject 交叉（design §3.5 可选拒绝规则）───────────
 // 前置条件＝回查参数无命令类键（即无法辨认实际操作）：规则扫描先于主体判定执行，
 // 其他键的载荷同样过检；命中即直拒（不带 command 降级标记），未命中才按 unknownSubject 处置。
 
-test('§3.5 交叉表：无命令类键载荷命中规则 → deny 带命中键路径与模式，不带 command 降级标记（两种取值同形）', () => {
+test('design §3.5 交叉表：无命令类键载荷命中规则 → deny 带命中键路径与模式，不带 command 降级标记（两种取值同形）', () => {
   for (const unknownSubject of ['reject', 'review']) {
     const verdict = screen(
       escalation(),
@@ -198,7 +200,7 @@ test('§3.5 交叉表：无命令类键载荷命中规则 → deny 带命中键�
   }
 });
 
-test('§3.5 交叉表：无命令类键载荷未命中 → 按 unknownSubject 处置，两分支都带 command 降级标记', () => {
+test('design §3.5 交叉表：无命令类键载荷未命中 → 按 unknownSubject 处置，两分支都带 command 降级标记', () => {
   const rejected = screen(escalation(), located({ env: { PAYLOAD: 'echo hi' } }), baseConfig);
   assert.equal(rejected.action, 'deny');
   assert.equal(rejected.fields.degraded, 'command', 'reject 取值：拒绝且带缺证标记');
@@ -208,7 +210,7 @@ test('§3.5 交叉表：无命令类键载荷未命中 → 按 unknownSubject �
   assert.equal(reviewed.fields.degraded, 'command', 'review 取值：携缺证标记进入审查');
 });
 
-test('§3.5 回查失败无值可扫：按 unknownSubject 处置，非空规则清单不改变结果', () => {
+test('design §3.5 回查失败无值可扫：按 unknownSubject 处置，非空规则清单不改变结果', () => {
   const rejected = screen(escalation(), null, baseConfig);
   assert.equal(rejected.action, 'deny');
   assert.equal(rejected.fields.degraded, 'command');
@@ -218,7 +220,7 @@ test('§3.5 回查失败无值可扫：按 unknownSubject 处置，非空规则�
   assert.equal(reviewed.fields.degraded, 'command');
 });
 
-test('§3.5 次序钉住：升权上限拒绝先于规则扫描（超上限的危险命令按上限拒，不按规则拒）', () => {
+test('design §3.5 次序钉住：升权上限拒绝先于规则扫描（超上限的危险命令按上限拒，不按规则拒）', () => {
   const verdict = screen(
     escalation('danger-full-access'),
     located({ command: 'rm -rf /' }),
@@ -228,11 +230,11 @@ test('§3.5 次序钉住：升权上限拒绝先于规则扫描（超上限的�
   assert.match(verdict.why, /exceeds allowEscalationTo/u, '上限判定优先，不落规则命中');
 });
 
-test('§3.5 次序钉住：mode=off 不运行规则扫描（危险命令仍 skip）', () => {
+test('design §3.5 次序钉住：mode=off 不运行规则扫描（危险命令仍 skip）', () => {
   assert.equal(screen(escalation(), located({ command: 'rm -rf /' }), { ...baseConfig, mode: 'off' }).action, 'skip');
 });
 
-test('§3.5 键路径形态：嵌套数组下标（点分与下标组合）', () => {
+test('design §3.5 键路径形态：嵌套数组下标（点分与下标组合）', () => {
   const verdict = screen(escalation(), located({ command: 'ls', notes: ['shutdown /s'] }), baseConfig);
   assert.equal(verdict.action, 'deny');
   assert.match(verdict.reason, /notes\[0\]/u);

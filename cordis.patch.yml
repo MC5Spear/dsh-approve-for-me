@@ -1,30 +1,28 @@
-# dsh-approve-for-me bundle patch: one host row over the web profile,
-# plus the permission-presets row restated with the extra「自动审批」tier.
-# The row name resolves from the profile's own node_modules where
-# `dsh plugin --profile web add <path>` installed this package.
+# dsh-approve-for-me 的 bundle patch：在 web profile 之上加一行宿主行，
+# 并以整行重述 permission-presets 行、额外提供「自动审批」档位。
+# 行名从 profile 自身的 node_modules 解析——`dsh plugin --profile web add <path>`
+# 把本包装进哪里，就从哪里装载。
 #
-# The answerer is prepended to the `approval/request` waterfall, so it decides
-# first; a request it does not take over is delegated with `next()` to the
-# browser approval UI, which keeps the human in the loop.
+# 应答者前插到 `approval/request` 瀑布，因此最先拿到请求；不接管的请求经
+# `next()` 交给浏览器审批界面，人工仍在环路内。
 #
-# Override the row's configuration in the profile's own cordis.patch.yml (the
-# profile layer replaces the whole row) or via the settings page — since 0.1.7
-# both paths land in the profile patch's `config:` block (settings.yaml is no
-# longer read; the `approve-for-me` row id IS the settings namespace):
+# 行配置的覆盖写在 profile 自己的 cordis.patch.yml 里（profile 层按 id 整行
+# 替换，不做深合并），或经设置页写入——两条路都落在 profile patch 的 `config:`
+# 块（设置不读写独立的 settings.yaml 分节；`approve-for-me` 行 id 即设置命名空间）：
 #   - id: approve-for-me
 #     config:
 #       fallback: ask
 #       reviewer:
 #         model: deepseek-official/deepseek-v4-pro
 #
-# The `permission` row below is a whole-row restatement of the row dsh-base
-# inserts (patch semantics: a later bundle layer replaces an earlier row's
-# fields by id, no deep merge). The three standard tiers are byte-equal to
-# dsh-base's; `auto-approve` is added between workspace-write and
-# danger-full-access. Because this patch ships inside the package, installing
-# it adds the tier and uninstalling removes it — the profile's own patch layer
-# is never touched. `derive` picks the first matching tier in declaration
-# order, so auto-approve must stay after the workspace-write it equals.
+# 下方 `permission` 行是对 dsh-base 所插行的整行重述（patch 语义：后进的
+# bundle 层按 id 替换前行字段，同样不做深合并）。三个标准档位与 dsh-base 的
+# 逐字节一致；`auto-approve` 加在 workspace-write 与 danger-full-access 之间。
+# 本 patch 随包分发，装卸改变的只是包层的这一行贡献；宿主可能把预设选择
+# 持久化进用户层配置，卸载后的用户配置与运行数据残留按公开需求的卸载条款
+# 处理（docs/requirements.md），包内不提供也不承诺任何 YAML 清理。`derive`
+# 按声明顺序取首个匹配档位，auto-approve 必须排在与其等值的 workspace-write
+# 之后。
 - insert:
     - id: approve-for-me
       name: dsh-approve-for-me

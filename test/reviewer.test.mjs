@@ -183,7 +183,8 @@ test('review：一轮工具调用后回喂并解析最终 JSON', async () => {
   assert.equal(verdict.toolCalls, 1);
   assert.deepEqual(h.toolRuns, [{ name: 'read_file', args: { path: 'a.txt' } }]);
 
-  // I5/I6：第一次请求带工具与两条 user 消息；第二次追加 assistant(tool_calls) + tool result。
+  // reviewer.js 头注不变量 I5（每个 tool-call 恰一条 ToolResultMessage）／I6（先 assistant 再 tool）：
+  // 第一次请求带工具与两条 user 消息；第二次追加 assistant(tool_calls) + tool result。
   assert.equal(h.requests.length, 2);
   assert.equal(h.requests[0].messages.length, 2);
   assert.equal(h.requests[0].tools.length, 1);
@@ -196,7 +197,7 @@ test('review：一轮工具调用后回喂并解析最终 JSON', async () => {
   assert.equal(second[3].isError, false);
 });
 
-test('review：多个工具调用逐个配对，非法 JSON 参数仍回喂 isError（I7）', async () => {
+test('review：多个工具调用逐个配对，非法 JSON 参数仍回喂 isError（reviewer.js 头注不变量 I7：参数解析失败也回喂错误结果）', async () => {
   const h = harness(
     [
       { blocks: [call('c1', 'read_file', '{"path":"a"}'), call('c2', 'grep', 'not-json')] },

@@ -363,7 +363,7 @@ test('index 接线：record 收到 sessionId/callId/toolName，配置签名变�
   const tmp = await mkdtemp(join(tmpdir(), 'afm-trace-'));
   const previousHome = process.env.DSH_HOME;
   process.env.DSH_HOME = tmp; // reviews 目录取 $DSH_HOME/approve-for-me/reviews，借此注入临时目录。
-  // 0.1.7 读通道：配置＝apply 的第二参数；current() 每次现算 normalizeConfig，
+  // 读通道：配置＝apply 的第二参数；current() 每次现算 normalizeConfig，
   // 「热改」＝原地改这个对象（真机上是宿主对 volatile 引用的原地更新，取值效果相同）。
   const config = { mode: 'rules', reviewer: { model: 'deepseek-official/probe-model' } };
   let callId = 'call-1';
@@ -444,7 +444,7 @@ test('index 接线：record 收到 sessionId/callId/toolName，配置签名变�
 
     // 改配置签名（maxBytes 变化）→ 单实例原地重配（不重建实例）；事实源是 JSONL，同一文件
     // 继续追加、旧数据不丢；写入与读回同源，热改窗口内不存在互相看不见的两组状态。
-    // 0.1.7：直接原地改 config 对象——current() 现算即读到新签名，无需任何设置服务回调。
+    // 直接原地改 config 对象——current() 现算即读到新签名，无需任何设置服务回调。
     config.ui = { trace: { maxBytes: 512 } };
     callId = 'call-2';
     assert.equal(await answerer(request(), next), 'rejected');
@@ -992,7 +992,7 @@ test('真链：在飞审查期间配置热改采集档 full→summary，记录�
       reason: 'escalate sandbox to danger-full-access: run npm i',
     };
     const settled = answerer(request, () => new Promise(() => {}));
-    // 在飞期间热改采集档 full→summary（原始缺陷方向：降档不得丢掉本请求的详情）。
+    // 在飞期间热改采集档 full→summary（反例方向：降档不得丢掉本请求的详情）。
     config.ui = { trace: { capture: 'summary' } };
     releaseStream();
     assert.equal(await settled, 'allowed-once');

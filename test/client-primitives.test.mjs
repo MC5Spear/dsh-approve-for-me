@@ -1,11 +1,11 @@
 /**
  * 客户端半边对宿主 `@deepseek-ai/dsh-client-ui-primitives` 的引用核验。
  *
- * 存在的理由：0.1.7 把图标由 `IconXxxOutline14` 改成尺寸变体命名
- * （`IconXxxOutline` + `Regular`/`Medium`/`Artwork`），旧名在宿主里不存在；
- * `jsx(undefined)` 触发 React #130「Element type is invalid」，
- * 槽条目**整条崩溃且页面静默空白**（实测：`slot entry crashed in 'plugins.row.config'`），
- * 挂点 1 因此完全不渲染。
+ * 存在的理由：宿主（基线 dsh 0.2.0-rc.2，requirements §1.3）的图标用尺寸变体命名
+ * （`IconXxxOutline` + `Regular`/`Medium`/`Artwork`），`IconXxxOutline14` 一类 0.1.5
+ * 命名体系的名字在宿主里不存在；`jsx(undefined)` 触发 React #130「Element type is invalid」，
+ * 槽条目**整条崩溃且页面静默空白**（宿主 renderer 的报错模板：`slot entry crashed in '<slotKey>'`），
+ * 所在挂点因此完全不渲染（现行唯一注册槽＝设置卡片 `plugins.bundle.config`）。
  *
  * 本测试把「我们引用的每个 primitives 名字都必须真的存在于宿主制品里」变成一条
  * **能失败**的断言：解析 `primitives.<Name>` → 在宿主包的实现与类型声明里逐个查名。
@@ -79,13 +79,13 @@ test('client.js 引用的每个 primitives 名字都存在于宿主制品里', (
   if (artifact === undefined) return;
   assert.ok(artifact.length > 0, '宿主 primitives 制品为空，无法核验');
   const missing = used.filter((name) => !new RegExp(`\\b${name}\\b`, 'u').test(artifact));
-  assert.deepEqual(missing, [], `以下 primitives 名字在 0.1.7 宿主里不存在（会触发 React #130）：${missing.join(', ')}`);
+  assert.deepEqual(missing, [], `以下 primitives 名字在宿主里不存在（会触发 React #130）：${missing.join(', ')}`);
 });
 
-test('核验器本身能失败：0.1.5 时代的图标名在 0.1.7 宿主里确实不存在', (t) => {
+test('核验器本身能失败：0.1.5 命名体系的图标名在宿主里确实不存在', (t) => {
   const artifact = hostArtifactOrSkip(t);
   if (artifact === undefined) return;
-  // 反面对照：这两个旧名正是崩溃元凶，必须查不到——
+  // 反面对照：这两个 0.1.5 命名体系的名正是崩溃元凶，必须查不到——
   // 若某天它们又出现了，说明断言对象变了，本用例会先红，提醒重估。
   assert.equal(/\bIconChevronDownOutline14\b/u.test(artifact), false);
   assert.equal(/\bIconQuestionOutline14\b/u.test(artifact), false);
@@ -103,5 +103,5 @@ test('client.js 图标引用收敛：设置界面帮助/警告图标走宿主基
   const iconRefs = [...source.matchAll(/primitives\.(Icon\w*)/gu)].map((match) => match[1]);
   assert.deepEqual(iconRefs, ['IconWarningOutlineRegular', 'IconInfoOutlineRegular'], `图标引用应只有警告/信息两个官方图标（按源内首现顺序），实际：${iconRefs.join(', ')}`);
   assert.equal(/const ChevronDownIcon = /u.test(source), true, '内联下箭头组件缺失');
-  assert.equal(/const QuestionIcon = /u.test(source), false, '自造问号图标应已删除');
+  assert.equal(/const QuestionIcon = /u.test(source), false, '源码不得定义自造问号图标（QuestionIcon 零定义）');
 });

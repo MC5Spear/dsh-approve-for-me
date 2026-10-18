@@ -1,5 +1,5 @@
 /**
- * rc.1 strict codec 与 invocation 契约的单一判据源（离线、纯对象检查，无外部依赖）。
+ * strict codec 与 invocation 契约的单一判据源（离线、纯对象检查，无外部依赖）。
  *
  * 依据两处宿主源：
  *   - `dsh-typert-loader/lib/index.js:153-212`（注册期校验）：codec 须 `mode:'strict'`、
@@ -14,7 +14,7 @@
  */
 
 /**
- * 该 codec 是否满足 rc.1 的 strict codec 契约。
+ * 该 codec 是否满足 strict codec 契约（mode/typeSymbol/decode/encode/create＋zod 返回值）。
  * @param {object} codec - 待检 codec。
  * @returns {string[]} 错误清单（空数组 = 合规）。
  */

@@ -318,7 +318,7 @@ test('normalizeConfig 深度解包 volatile 引用（要求 schemastery ≥3.18.
 /**
  * 构造一次「应答者逃逸异常」请求：`request.agent.session.id` 的 getter 抛错。
  * gate.js 在 `try` 之外读取该字段（`const sessionId = request?.agent?.session?.id`），
- * 异常因此穿透 I2 承接层、直达 index.js 应答者最外层 catch——即逃逸通知路径
+ * 异常因此绕过 gate 的 try 承接层（gate.js 头注不变量 I2「永不抛出」的承接范围）、直达 index.js 应答者最外层 catch——即逃逸通知路径
  * （通道故障模板＋`gate.escape.reason` 原因段，design §4.4）。
  * （不能改 `crypto.randomUUID` 造逃逸：注入消息工厂 `createUserMessage` 内部也用它。）
  * @param {object[]} injected - 收集注入消息的数组。
@@ -533,10 +533,10 @@ async function wiredEnv(options = {}) {
       // 会话事件里带与 callId 配对的 tool/call：screen 的 unknownSubject 分支需要回查到命令，
       // 否则按 unknownSubject 拒绝（degraded=command），到不了审查接线。
       session: {
-        id: 's-r48-wiring',
+        id: 's-true-wiring',
         header: { cwd: '<仓库目录>' },
         snapshotEvents: () => [
-          { type: 'tool/call', data: { callId, arguments: '{"command":"Set-Content -Path state-r48.txt -Value ok"}' } },
+          { type: 'tool/call', data: { callId, arguments: '{"command":"Set-Content -Path state-check.txt -Value ok"}' } },
         ],
       },
       inject: (message) => env.injected.push(message),
@@ -554,7 +554,7 @@ test('真接线：有机 error ×3 打开冷却，第 4 个请求零流调用并
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const previousHome = process.env.DSH_HOME;
-  const home = mkdtempSync(join(tmpdir(), 'afm-r48-a-'));
+  const home = mkdtempSync(join(tmpdir(), 'afm-breaker-open-'));
   process.env.DSH_HOME = home;
   const written = [];
   const original = process.stderr.write;
@@ -636,7 +636,7 @@ test('真接线：分叉会话人工通道在场——fallback=ask 审查失败�
         nextCalls += 1;
         return new Promise((resolve) => setTimeout(() => resolve('rejected'), 30));
       });
-      assert.equal(nextCalls, 1, `分叉会话须恰好消费一次人工通道（I1）：${JSON.stringify(forkHeader)}`);
+      assert.equal(nextCalls, 1, `分叉会话须恰好消费一次人工通道（gate.js 头注不变量 I1：next() 至多一次）：${JSON.stringify(forkHeader)}`);
       assert.equal(outcome, 'rejected');
       assert.match(written.join(''), /phase=handoff/u, '交人工须留 handoff 审计行');
       assert.match(written.join(''), /phase=decide[^\n]*source=human[^\n]*decision=rejected/u, '人工拒绝按 source=human 结算');
@@ -649,7 +649,7 @@ test('真接线：分叉会话人工通道在场——fallback=ask 审查失败�
   }
 });
 
-test('真接线 I1：resolver 模型目录延迟 100ms × 人工预算 20ms（request 起算、关卡）→ 按人工超时拒绝', async (t) => {
+test('真接线 I1（gate.js 头注不变量：next() 至多一次）：resolver 模型目录延迟 100ms × 人工预算 20ms（request 起算、关卡）→ 按人工超时拒绝', async (t) => {
   const { mkdtempSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
@@ -699,7 +699,7 @@ test('真接线：请求取消引发的中止 ×3 带 superseded 不计数，第
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const previousHome = process.env.DSH_HOME;
-  const home = mkdtempSync(join(tmpdir(), 'afm-r48-b-'));
+  const home = mkdtempSync(join(tmpdir(), 'afm-cancel-superseded-'));
   process.env.DSH_HOME = home;
   const written = [];
   const original = process.stderr.write;
@@ -744,7 +744,7 @@ test('真接线：同 (sessionId, callId) 双投递各自执行完整审查，�
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const previousHome = process.env.DSH_HOME;
-  const home = mkdtempSync(join(tmpdir(), 'afm-gap01-'));
+  const home = mkdtempSync(join(tmpdir(), 'afm-double-delivery-'));
   process.env.DSH_HOME = home;
   const written = [];
   const original = process.stderr.write;
@@ -795,7 +795,7 @@ test('真接线：装载→停用/卸载全程不解析、不改写用户 YAML�
     return;
   }
   const previousHome = process.env.DSH_HOME;
-  const home = mkdtempSync(join(tmpdir(), 'afm-gap02-'));
+  const home = mkdtempSync(join(tmpdir(), 'afm-yaml-untouched-'));
   process.env.DSH_HOME = home;
   // profile fixture：patch 带设置界面写出的 permission 覆盖行（presets＋defaultPreset: auto-approve），
   // manifest 数组不含本包（＝removeBundle 落盘后、reload 卸载中形态）。
@@ -845,7 +845,7 @@ test('真接线：装载→停用/卸载全程不解析、不改写用户 YAML�
     for (const dispose of offEnv.disposers) await dispose();
     const after = readFileSync(join(profileDir, 'cordis.patch.yml'), 'utf8');
     assert.equal(after, yamlText, '装卸全程用户 YAML 逐字节不变（不解析、不改写、不提供备用清理）');
-    assert.doesNotMatch(written.join(''), /预设残留防护/u, '不得再出现备用清理的审计动作');
+    assert.doesNotMatch(written.join(''), /预设残留防护/u, '不得出现备用清理的审计动作');
   } finally {
     process.stderr.write = original;
     if (previousHome === undefined) delete process.env.DSH_HOME;
@@ -866,7 +866,7 @@ test('§4.1 配置不可读时逃逸出口自含：不外抛、恰一条结算�
     return;
   }
   const previousHome = process.env.DSH_HOME;
-  const home = mkdtempSync(join(tmpdir(), 'afm-p05b-unit-'));
+  const home = mkdtempSync(join(tmpdir(), 'afm-config-unreadable-'));
   process.env.DSH_HOME = home;
   const written = [];
   const original = process.stderr.write;
@@ -1040,7 +1040,7 @@ test('§5.1/§4.2 同一请求对象再派发：收尾恢复原始信号，再�
     return;
   }
   const previousHome = process.env.DSH_HOME;
-  const home = mkdtempSync(join(tmpdir(), 'afm-p06e-unit-'));
+  const home = mkdtempSync(join(tmpdir(), 'afm-redispatch-'));
   process.env.DSH_HOME = home;
   try {
     const wired = await wiredEnv();

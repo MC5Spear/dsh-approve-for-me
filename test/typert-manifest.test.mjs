@@ -1,11 +1,11 @@
 /**
  * TYPERT 清单一致性测试。
  *
- * 判据单源：rc.1 契约的检查函数住在 `tools/typert-contract.mjs`，本文件与
- * `tools/check-typert-manifest.mjs` 共用同一份，避免本文件与离线检查器
- * （按 rc.6 的 `codec.schema` 字段校验）各自维护而漂移。
- * 契约依据：`dsh-typert-loader/lib/index.js:153-212`（注册期校验）与
- * `dsh-typert-registry/lib/index.js:509-518`（`create()` 返回值即 schema，须为 zod v4 实例）。
+ * 判据单源：typert 契约（strict codec 与 invocation 检查）住在 `tools/typert-contract.mjs`，本文件与
+ * `tools/check-typert-manifest.mjs` 共用同一份（清单结构＋逐条 invocation 的
+ * strict codec／invocation 契约检查），避免两处各自维护而漂移。
+ * 契约依据：`dsh-typert-loader` 的注册期校验（`lib/index.js` 的 register 路径）与
+ * `dsh-typert-registry` 的 `create()` 返回值约定（返回值即 schema，须为 zod v4 实例）。
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -20,7 +20,7 @@ test('TYPERT 清单：顶层形状合规', () => {
   assert.ok(Array.isArray(TYPERT.invocations) && TYPERT.invocations.length > 0, 'invocations 必须非空');
 });
 
-test('TYPERT 清单：每条 invocation 满足 rc.1 契约（含 create() 工厂）', () => {
+test('TYPERT 清单：每条 invocation 满足 strict codec／invocation 契约（含 create() 工厂）', () => {
   const failures = {};
   for (const invocation of TYPERT.invocations) {
     const found = checkInvocation(invocation);
@@ -66,7 +66,7 @@ function getStateDeclarations() {
   return { member, type, issue };
 }
 
-test('getState 结果 schema：modelIssues 七字段不被校验或投影丢失，byParentModel 字段已退役', () => {
+test('getState 结果 schema：modelIssues 七字段不被校验或投影丢失，结果不含 byParentModel', () => {
   const invocation = getStateInvocation();
   const schema = invocation.result.create();
   const sample = {
@@ -100,19 +100,19 @@ test('getState 结果 schema：modelIssues 七字段不被校验或投影丢失�
     assert.equal(field in parsed.modelIssues[0], true, `modelIssues.${field} 必须保留`);
   }
   assert.equal(parsed.modelIssues.length, 2);
-  // 旧结构字段已从结果 schema 退役。
+  // 结果 schema 不含 byParentModel：该键仍是配置输入（compat 读取），仅结果 schema 侧不投影。
   assert.equal('byParentModel' in parsed, false);
   assert.equal(JSON.stringify(schema).includes('byParentModel'), false);
   // 缺 modelIssues 的载荷必须被校验拒绝（必填，不是可选扩展）。
   assert.throws(() => schema.parse({ ...sample, modelIssues: undefined }));
 });
 
-test('getState 三处同步：类型声明与成员描述都含 modelIssues，不含退役字段', () => {
+test('getState 三处同步：类型声明与成员描述都含 modelIssues，不含 byParentModel', () => {
   const { member, type, issue } = getStateDeclarations();
   assert.match(type.declaration, /modelIssues: \{ scope: string; ruleProvider: string \| null; ruleModel: string; configured: string; reason: string; effectiveLayer: string; effectiveModel: string \}\[\]/u);
-  assert.doesNotMatch(type.declaration, /byParentModel/u, 'GetStateResult 类型不得再含退役字段');
+  assert.doesNotMatch(type.declaration, /byParentModel/u, 'GetStateResult 类型不含 byParentModel（结果侧不投影；配置输入仍兼容读取）');
   assert.match(issue.declaration, /scope: string; ruleProvider: string \| null; ruleModel: string; configured: string; reason: string; effectiveLayer: string; effectiveModel: string/u);
-  // 成员描述：签名改为 Promise（getState 现为异步选择），jsDoc 提及 modelIssues。
+  // 成员描述：签名为 Promise（getState 异步选择），jsDoc 提及 modelIssues。
   assert.match(member.signature, /Promise<GetStateResult>/u);
   assert.match(member.jsDoc, /modelIssues/u);
   assert.match(member.summary, /diagnostics/u);
@@ -148,7 +148,7 @@ test('traceRecord 三处同步：结果 schema、类型声明与成员描述都�
   }
   const without = schema.parse(base);
   assert.equal('capture' in without.record, false, '旧记录无 capture 应照常通过（可选字段）');
-  // ② 类型声明串：`capture?: string;` 在 tools 与 degraded 之间。
+  // ② 类型声明串：`capture?: string;` 紧随 `tools`、后接 `fieldsDefaulted`。
   assert.match(type.declaration, /tools\?: number; capture\?: string; fieldsDefaulted\?: string;/u, 'TraceRecordResult 类型声明应含 capture（tools 后）');
   // ③ 成员 jsDoc：提及写入时采集档。
   assert.match(member.jsDoc, /capture/u, 'traceRecord 成员 jsDoc 应提及 capture 采集档');

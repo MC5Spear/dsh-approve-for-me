@@ -32,7 +32,7 @@ test('H1-PowerShell：本名与六别名 × 单标志与组合全部命中', () 
   }
 });
 
-test('H1-PowerShell：仅 -Force 不命中 H1（枚举边界收窄），按目标字面性分流', () => {
+test('H1-PowerShell：仅 -Force 不命中 H1（枚举边界收窄），H2 按目标字面性分流', () => {
   // 需求 §10 H1 定稿：PS 动词仅带 -Recurse 命中 H1；仅 -Force 的字面目标交审查层，
   // 非字面目标由 H2 仅强制形态拦截。
   assert.equal(hardCmd('Remove-Item -Force C:\\probe\\sample'), undefined);
@@ -52,7 +52,8 @@ test('H1-PowerShell：大小写不敏感与无歧义缩写', () => {
   // 实测可绑定成功的更长无歧义前缀（-zzz 一类无法绑定的串不算）。Recurse 族命中 H1。
   assert.equal(hardCmd('Remove-Item -recu .\\sample').code, 'hard-h1-powershell');
   assert.equal(hardCmd('Remove-Item -recurs .\\sample').code, 'hard-h1-powershell');
-  // Force 族前缀仅构成 H2 仅强制形态的字面性分流依据，字面目标不命中 H1。
+  // Force 族前缀不构成 H1 的递归依据（H1 只认 Recurse 族，不看目标字面性）；
+  // 它构成 H2 仅强制形态，H2 在该形态下按目标字面性分流。
   assert.equal(hardCmd('Remove-Item -for .\\sample'), undefined);
   assert.equal(hardCmd('Remove-Item -for $env:TMP\\x').code, 'hard-h2-target');
 });
@@ -159,9 +160,9 @@ test('H2：仅强制形态族——目标非字面命中，字面目标交审查
   assert.equal(hardCmd('rm --force').code, 'hard-h2-target');
 });
 
-test('H2：事故形态重放——脚本内先赋值再引用的强制递归删除', () => {
-  // 需求 H2 事故实况的替身重放：$home 是只读自动变量，赋值静默失败、删除指向真实主目录。
-  // 按分号拆语句后第二句命中 H1（强制＋递归），不需要变量追踪。
+test('H2：脚本内先赋值再引用的强制递归删除——拆句后第二句命中 H1', () => {
+  // $home 是只读自动变量：赋值静默失败，后续引用仍指向真实主目录——脚本内
+  // 先赋值再引用形态的真实语义。按分号拆语句后第二句命中 H1（强制＋递归），不需要变量追踪。
   const hit = hardCmd('$home = "C:\\probe\\t"; Remove-Item -Recurse -Force $home');
   assert.equal(hit?.code, 'hard-h1-powershell');
 });
@@ -370,7 +371,8 @@ test('参数边界扫描——目标/开关/取值/未识别四类参数各自�
   assert.equal(hardCmd('Remove-Item -Force -ErrorAction Continue').code, 'hard-h2-target');
   // 未识别参数的绑定值保守按目标候选处理（宁可偏多拦）。
   assert.equal(hardCmd('Remove-Item -Force -Foo:$home').code, 'hard-h2-target');
-  // 目标参数给字面路径则不命中（H1/H2 都按目标字面性分流）。
+  // 本组均为仅 Force 形态：不命中 H1（H1 只认 Recurse 族），由 H2 在仅强制
+  // 形态下判断目标——目标参数给字面路径则不拦，交审查层。
   assert.equal(hardCmd('Remove-Item -Force -LiteralPath:C:\\x'), undefined);
   assert.equal(hardCmd('Remove-Item -Force -LiteralPath C:\\x'), undefined);
   assert.equal(hardCmd('ri -Force:$True C:\\x'), undefined);
@@ -417,10 +419,10 @@ test('簇/参数扫描/引号拆句的控制形态：既有偏多拦口径与 CM
 });
 
 // ── 动态删除目标的确定性拦截（design §12.1 按命令族分道）——回归钉住 ─────────────
-// 30 条口径与探针口径一致：14 条失败组（应确定性拒绝）＋16 条对照组（不回退）。
+// 口径共 30 条：14 条失败组（应确定性拒绝）＋16 条对照组（不回退）。
 
 test('动态删除目标失败组：确定性拒绝（deny＋source=hard＋短码，不经 LLM）', () => {
-  // [命令, 期望短码]：问题清单五条 ＋ 包装 del ＋ 近邻（顺序、混合目标、标志后置、
+  // [命令, 期望短码]：初始反例五条 ＋ 包装 del ＋ 近邻（顺序、混合目标、标志后置、
   // 嵌套表达式、含空格延迟变量名、cmd /k 包装、cmd /k 的 H1 形态、标志后置裸形态）。
   const failures = [
     ['rm -i $victim -f ./literal', 'hard-h2-target'],

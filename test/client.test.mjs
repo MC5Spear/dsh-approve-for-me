@@ -3000,11 +3000,11 @@ test('审查视图 §10.2：degraded 含 transcript 反证「未取上下文」�
   assert.match(text, /缺失或异常情况: 会话目录缺失（cwd）、上下文读取失败或截断（transcript）/, '读取失败原因由 degraded 段承载');
 });
 
-test('审查视图 §10.2：degraded 含新标记 transcript-read-failed 反证「未取上下文」，文案按新键', async () => {
+test('审查视图 §10.2：degraded 含 transcript-read-failed 反证「未取上下文」，文案按专属键', async () => {
   resetHooks();
   const client = loadClient();
   // 读取失败与总量截断各自成键：渲染链（store→bridge→视图）按各自键取词，
-  // 反证语义与旧值一致——不显示「未取上下文」，具体原因由 degraded 段承载。
+  // 反证语义保持——不显示「未取上下文」，具体原因由 degraded 段承载。
   const rows = [{ ...TRACE_ROWS[0], approvalId: 'apR', callId: 'call_R', decision: 'deny', outcome: 'rejected', source: 'llm' }];
   const detail = { ...rows[0], humanWaitMs: 0, prompt: 'PROMPT-R', output: 'OUTPUT-R', probes: 'grep: ok', degraded: 'transcript-read-failed' };
   const env = makeCtx({
@@ -3032,8 +3032,8 @@ test('审查视图 §10.2：degraded 含新标记 transcript-read-failed 反证�
   const text = JSON.stringify(render(view.component, props));
   assert.ok(!text.includes('未取上下文'), 'degraded 含 transcript-read-failed 时 evidence 缺失不得归「未取上下文」');
   assert.equal((text.match(/本次未记录此项/g) ?? []).length, 2, 'evidence 与 input 两段缺失归统一缺省');
-  assert.match(text, /缺失或异常情况: 上下文读取失败（transcript-read-failed）/, '新标记按新键取词（不混旧两义文案）');
-  assert.ok(!text.includes('上下文读取失败或截断'), '不得回落旧两义文案');
+  assert.match(text, /缺失或异常情况: 上下文读取失败（transcript-read-failed）/, '该标记按专属键取词（不用读取失败/截断两义合并的文案）');
+  assert.ok(!text.includes('上下文读取失败或截断'), '不得回落读取失败/截断两义合并的文案');
 });
 
 test('审查视图 §10.2：output 缺失且 decision=error 归「模型未提供」，无 transcript 反证时不误报（design §8.5.1）', async () => {

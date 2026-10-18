@@ -25,10 +25,11 @@ window.__ModuleLoader__.load({
 		/**
 		 * 14px 下箭头（内联 SVG）。
 		 *
-		 * 为什么不用 `primitives.IconChevronDownOutline14`：0.1.7 把图标改成尺寸变体命名
-		 * （`IconChevronDownOutline` + `Regular`/`Medium`/`Artwork` 后缀），旧名在宿主里**不存在**，
+		 * 为什么不用 `primitives.IconChevronDownOutline14`：宿主（基线 dsh 0.2.0-rc.2）的图标
+		 * 用尺寸变体命名（`IconChevronDownOutline` + `Regular`/`Medium`/`Artwork` 后缀），
+		 * `IconChevronDownOutline14` 在宿主里**不存在**，
 		 * `jsx(undefined)` 直接触发 React #130「Element type is invalid」，
-		 * 结果是槽条目整条崩溃、页面静默空白（实测：`slot entry crashed in 'plugins.row.config'`）。
+		 * 结果是槽条目整条崩溃、页面静默空白（宿主 renderer 的报错模板：`slot entry crashed in '<slotKey>'`）。
 		 * 图标名跨版本不稳定，自带两个内联 SVG 更可靠（design §7.1）。
 		 * @param {object} props - `className`。
 		 * @returns {object} SVG 元素。
