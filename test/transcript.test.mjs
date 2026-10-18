@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { collectEvidence, locate, redact, TRANSCRIPT_READ_FAILED, TRANSCRIPT_TRUNCATED } from '../lib/transcript.js';
+import { collectEvidence, locate, redact, TRANSCRIPT_READ_FAILED, TRANSCRIPT_TRUNCATED, truncateKeepEnds } from '../lib/transcript.js';
 
 /**
  * 构造一条 user/message 事件。
@@ -52,6 +52,19 @@ test('双截断标记成对：entry 与 transcript 两级都插 <truncated …/>
   assert.ok(result.text.startsWith('user: A'), '保留头部（命令与结论常在尾部，首尾都留）');
   assert.ok(result.text.includes('TAIL'), '保留尾部');
   assert.ok(result.degraded.includes('entry:user/message') && result.degraded.includes('transcript-truncated'), '两级截断都记入 degraded');
+});
+
+test('truncateKeepEnds 不切碎代理对：字节预算落在代理对中间时切点让出一码元', () => {
+  // 预算穷举（1..size+2）覆盖「预算容不下整对」的每个切点——产物不得含孤立代理项
+  //（孤立代理下游序列化为替换符 U+FFFD，即代理对被有效切碎）。
+  const loneSurrogate = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u;
+  const samples = ['ab😀cd', 'a😀b😀c😀d', '😀😀', 'x😀', '😀x😀y😀z测试文本尾部'];
+  for (const text of samples) {
+    for (let limit = 1; limit <= Buffer.byteLength(text, 'utf8') + 2; limit += 1) {
+      const { text: out } = truncateKeepEnds(text, limit);
+      assert.doesNotMatch(out, loneSurrogate, `text=${JSON.stringify(text)} limit=${limit} 产物含孤立代理项：${JSON.stringify(out)}`);
+    }
+  }
 });
 
 test('证据里的 </ 先转义：闭合标签不得被模型当成提示词结构', () => {

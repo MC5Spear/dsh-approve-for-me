@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
 		 * `IconChevronDownOutline14` 在宿主里**不存在**，
 		 * `jsx(undefined)` 直接触发 React #130「Element type is invalid」，
 		 * 结果是槽条目整条崩溃、页面静默空白（宿主 renderer 的报错模板：`slot entry crashed in '<slotKey>'`）。
-		 * 图标名跨版本不稳定，自带两个内联 SVG 更可靠（design §7.1）。
+		 * 图标名跨版本不稳定，自带内联 SVG 更可靠（design §7.1）。
 		 * @param {object} props - `className`。
 		 * @returns {object} SVG 元素。
 		 */
@@ -53,7 +53,7 @@ window.__ModuleLoader__.load({
 
 		/** 设置命名空间（＝宿主行 id）。 */
 		const NS = "approve-for-me";
-		/** 包名；Plugins 页 keyed 槽的键是 `<包名>#<行id>`）。 */
+		/** 包名；Plugins 页 keyed 槽的键＝包名（design §7.1；行级槽才是 `<包名>#<行id>`）。 */
 		const PACKAGE_NAME = "dsh-approve-for-me";
 		/** RPC 端点前缀；八项 RPC 共用同一份 TYPERT 清单（design §7.1）。 */
 		const RPC_CHANNEL = "/api";
@@ -189,7 +189,6 @@ window.__ModuleLoader__.load({
 			"time.queue": "排队 {n}",
 			"time.review": "审查 {n}",
 			"time.human": "人工 {n}",
-			"detail.title": "单次审查",
 			"detail.outcome": "最终审批结果",
 			"detail.decision": "模型结论",
 			"detail.source": "决定方式",
@@ -442,7 +441,6 @@ window.__ModuleLoader__.load({
 			"time.queue": "queue {n}",
 			"time.review": "review {n}",
 			"time.human": "human {n}",
-			"detail.title": "Review detail",
 			"detail.outcome": "Final approval",
 			"detail.decision": "Model conclusion",
 			"detail.source": "Decided by",
@@ -565,10 +563,10 @@ window.__ModuleLoader__.load({
 			"hint.denyPatterns": "One regex per line; a hit rejects outright, beyond model or human.",
 		};
 
-		/** 字段按 FIELDS 的 section 标记（trigger/advanced）分组排序；审查模型三行与「接管预设」由专用控件渲染；不渲染分区标题（requirements §6.1）。 */
+		/** 字段按 FIELDS 的 section 标记（trigger/advanced）分组排序；审查模型两行（默认模型、映射）与触发区「接管预设」共三个专用控件；不渲染分区标题（requirements §6.1）。 */
 
 		/**
-		 * 普通字段行；审查模型分区的三行与触发区的「接管预设」由专用控件渲染（design §7.2；「接管预设」是多选下拉，requirements §6.1），不在本表内。
+		 * 普通字段行；审查模型分区的两行（默认模型行＝模型/档位合一、映射行）与触发区的「接管预设」由专用控件渲染（design §7.2；「接管预设」是多选下拉，requirements §6.1），不在本表内。
 		 * path 指向命名空间分节内的路径；标签与校验文案走字典（键 `field.<path.join('.')>`），helpKey 由 path 推导；
 		 * `optionLabels` 走字典，键为 `option.<path.join('.')>.<值>`（design §7.2）。
 		 */
@@ -1204,7 +1202,8 @@ window.__ModuleLoader__.load({
 			const [error, setError] = react.useState("");
 
 			// 会话 id 来自 sessions 服务：`sessionId` 标准 prop 在本构建里可能是空值，
-			// 而 slot 的 kit 钩子在插件侧不可用（调用会抛错），所以只读 store 快照（design §7.3）。
+			// 而 slot 的 kit 钩子只能作标准 prop 在渲染期调用（client-ui-cordis:741 即此用法）；
+			// 订阅回调等非渲染时机调用违反 hook 规则会抛错，所以这里只读 store 快照（design §7.3）。
 			react.useEffect(() => {
 				const update = () => setSessionId(sessionIdOf?.(props.sessionId) ?? "");
 				update();
@@ -1704,7 +1703,7 @@ window.__ModuleLoader__.load({
 							? t("countdown.minutes").replace("{m}", String(Math.floor(remaining / 60))).replace("{s}", String(remaining % 60))
 							: t("countdown.seconds").replace("{n}", String(remaining))
 						: null;
-			// 色阶沿用旧观感的等价迁移：cause=deny 沿用拒绝警示色，其余交人工态用弱警示色（等待你行动）。
+			// 色阶取拒绝警示色与弱警示色：cause=deny 用拒绝警示色，其余交人工态用弱警示色（等待你行动）。
 			const stateClass =
 				entry.state === "waiting-human" && causeOf() === "deny"
 					? "dsafm_state dsafm_state_deny"
@@ -3434,8 +3433,8 @@ window.__ModuleLoader__.load({
 			 * 读当前会话 id。
 			 *
 			 * 以 slot 的标准 prop `sessionId` 为准（`dsh-client-ui-slots` 标准 props，如 `client-ui-cordis:741` 的会话面板）。
-			 * `sessions` 服务在 0.1.7 只提供 `retain/using/retainInfo`（`dsh-api-session-controller/lib/client.js:3194-3234`），
-			 * `list.getSnapshot().current` 取不到当前会话——取到空串时 composer 控件与审批卡片状态条静默不渲染。
+			 * `sessions` 服务快照里没有 `current` 字段（列表快照为 `{ids,byId,phase,projectionsBySession}`），
+			 * `client-ui-cordis:741` 用 `byId` + `retainedBy.mainView` 现推当前会话——取到空串时 composer 控件与审批卡片状态条静默不渲染。
 			 * @param {unknown} [explicit] - 组件拿到的标准 prop `sessionId`。
 			 * @returns {string} 会话 id；读不到时返回空串，组件因此不渲染。
 			 */

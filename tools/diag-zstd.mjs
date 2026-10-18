@@ -1,5 +1,6 @@
 /**
- * 诊断：解压多帧 zstd 会话日志（session.v4.jsonl.zstd），定位 v4 校验拒绝的行。
+ * 诊断：解压多帧 zstd 会话日志（session.v4.jsonl.zstd），统计行类型并筛出 `"kind":"plugin"`
+ * 的行（人工定位插件侧问题用）。
  * 每次 append 一个独立 zstd 帧，zstdDecompressSync 只解第一帧——按魔数 0x28B52FFD 切帧，
  * 单帧失败时与下一帧合并重试（魔数偶尔出现在压缩负载里）。
  * 用法：node tools/diag-zstd.mjs <session-log-path> <out-path>

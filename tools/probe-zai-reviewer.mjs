@@ -6,7 +6,7 @@
  * system + 两条 user、工具 schema 开启、maxTokens=512、temperature=0、stream=true。
  *
  * 用法：node tools/probe-zai-reviewer.mjs
- * 退出码：0 = 拿到非空内容；1 = 内容为空（复现空响应）。
+ * 退出码：0 = 拿到非空内容（凭据缺失按 SKIP 也退出 0）；1 = 内容为空（复现空响应）或 HTTP ≠ 200。
  * 输出不含密钥。
  */
 import { readCredentialRef, credentialsFile } from './credentials.mjs';

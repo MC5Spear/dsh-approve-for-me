@@ -16,7 +16,8 @@
  * `{"clickSelector":".dsafm_helpbtn"}`、`{"send":"文本"}`（写入 composer）、
  * `{"enter":true}`（composer 派发回车）、`{"clickSend":true}`（点发送按钮）、
  * `{"scroll":".dialog-scroll"}`（选择器最内层可滚动祖先滚到底）、
- * `{"shot":"card-collapsed"}`、`{"shotClip":"选择器"}`（元素级裁切截图）、
+ * `{"shot":"card-collapsed"}`、`{"shotClip":"选择器"}`（元素级裁切截图；也接受
+ * `{"selector":"…","name":"…"}` 对象形式）、`{"html":"name"}`（存 HTML 不截图）、
  * `{"wait":800}`、`{"dump":true}`、`{"eval":"document.title"}`。
  * 每步失败只记录不中断，最后打印一份结果表。
  */

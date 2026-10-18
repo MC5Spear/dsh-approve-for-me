@@ -16,7 +16,7 @@ const reviewsRoot = join(home, 'approve-for-me', 'reviews');
 /** 记录功能的起点：lib/trace-store.js 落盘时间（本仓库实测）。 */
 const TRACE_EPOCH = Date.parse('2026-09-11T20:15:00+08:00');
 
-/** 收集一个会话目录下的会话文件（v3 与旧命名都认）。 */
+/** 收集一个会话目录下的会话文件（版本化与旧命名都认）。 */
 function sessionFiles(dir) {
   const out = [];
   for (const name of readdirSync(dir)) {

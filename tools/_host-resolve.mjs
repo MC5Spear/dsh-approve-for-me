@@ -1,8 +1,9 @@
 /**
  * 开发期解析钩子：把宿主包名重新锚定到能真正读到 zod 的 node_modules。
  *
- * 插件部署到 profile 后，`@deepseek-ai/*` 与 `zod` 由共享 node_modules 提供；仓库本地
- * 没有 node_modules，因此离线校验要用本钩子换锚点：
+ * 插件部署到 profile 后，`@deepseek-ai/*` 与 `zod` 由共享 node_modules 提供；钩子的价值是
+ * 把宿主包锚到部署树的宿主版本（仓库本地的 node_modules 不保证与部署树一致），
+ * 离线校验要用本钩子换锚点：
  *   node --import ./tools/_host-hooks.mjs tools/check-typert-manifest.mjs
  *
  * **锚点从本机配置取，不硬编码**（见 tools/local-config.mjs 与 tools/local-config.example.mjs）：

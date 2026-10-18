@@ -1,9 +1,10 @@
 /**
  * zh 注入归属字节核对。
  *
- * 用法：node tools/probe-r33-zh-bytes.mjs <session.v4.jsonl.zstd> <审计 injectBytes>
+ * 用法：node tools/probe-r33-zh-bytes.mjs <session.v4.jsonl.zstd> <审计 injectBytes> [out]
  *
- * 判据（全部写进报告档并打印，任一不满足退出 1）：
+ * 判据（全部写进报告档并打印，任一不满足退出 1；判据 4 以审计 injectBytes > 0 为前提，
+ * ≤0 时无注入可核、静默跳过）：
  *  1) 会话日志存在 `source.kind='plugin:approve-for-me'` 的注入行（agent/inbox/spliced 与折叠 user/message）；
  *  2) 注入文本与 `allowText(fields,'zh')` 逐字节相等（head/工具/命令/理由/tail 模板结构核验）；
  *  3) 同 fields 的 en 模板与之不等（语言方向证明：不是 en 文本在凑数）；

@@ -159,11 +159,11 @@ test('任务抛错收敛为失败结果，许可仍被释放', async () => {
   assert.equal(scheduler.state().inFlight, 0);
 });
 
-// ── 去重键塌缩与失败缓存（design §5.1） ────────────────────────────────────
+// ── 任务不共享与失败不缓存（design §5.1） ────────────────────────────────────
 
 test('缺 callId 不共享：同会话两个无 callId 请求各自执行', async () => {
   let calls = 0;
-  const scheduler = createScheduler({ max: 4, dedupeTtlMs: 60000 });
+  const scheduler = createScheduler({ max: 4 });
   const task = async () => {
     calls += 1;
     return calls;
@@ -172,7 +172,7 @@ test('缺 callId 不共享：同会话两个无 callId 请求各自执行', asyn
     scheduler.run({ sessionId: 's' }, task),
     scheduler.run({ sessionId: 's' }, task),
   ]);
-  // 变异对照：键塌缩回 `会话:-` 时两请求共享同一结果（calls=1、值相等）。
+  // 变异对照：键若塌缩为 `会话:-` 时两请求会共享同一结果（calls=1、值相等）。
   assert.equal(calls, 2, '缺 callId 的并发请求必须各自执行');
   assert.notEqual(a.value, b.value);
 });
@@ -229,7 +229,7 @@ test('queueMax=0 → 满载时不排队，直接按 queue-overflow 拒绝', asyn
   const hold = deferred();
   const running = scheduler.run({ sessionId: 'a', callId: '1' }, () => hold.promise);
   const rejected = await scheduler.run({ sessionId: 'b', callId: '2' }, async () => 'never');
-  // 现行边界：每会话排队上限 0＝不设等待位，争用时立即拒绝（不是无限排队）。
+  // 现行边界：全局排队上限 0＝不设等待位，争用时立即拒绝（不是无限排队）。
   assert.deepEqual(rejected, { ok: false, reason: 'queue-overflow' });
   hold.resolve('a');
   await running;

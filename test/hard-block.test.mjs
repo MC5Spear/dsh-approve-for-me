@@ -172,6 +172,19 @@ test('H2：未赋值变量引用与命令替换作目标', () => {
   assert.equal(hardCmd('rm --recursive `pwd`').code, 'hard-h2-target');
 });
 
+test('H2：`--` 长选项的冒号绑定值按目标候选过标记检查（design §12.1）', () => {
+  // 形态族在场（--force／--recursive）时，未识别长选项的绑定值不因 `--` 前缀豁免：
+  // 含 $ 标记 → 不可字面 → H2 拒（宁可误拦）。
+  assert.equal(hardCmd('rm --force --foo:$home /etc/x').code, 'hard-h2-target');
+  assert.equal(hardCmd('rm --recursive --foo:$home /etc/x').code, 'hard-h2-target');
+  // 对照：字面绑定值不命中；裸分隔符（恰为 `--`）无绑定值、行为不变；
+  // 不属形态族的 `--` 绑定值照旧放行（H2 只作用于仅递归/仅强制形态）。
+  assert.equal(hardCmd('rm --force --foo:/etc/lit /etc/x'), undefined);
+  assert.equal(hardCmd('rm -f -- /etc/x'), undefined);
+  assert.equal(hardCmd('rm -f -- $home').code, 'hard-h2-target');
+  assert.equal(hardCmd('rm --foo:$home /etc/x'), undefined);
+});
+
 test('H3：两个硬性拦截入口正例', () => {
   assert.equal(hardCmd('mshta https://probe.example/sample').code, 'hard-h3-entry');
   assert.equal(hardCmd('mshta.exe http://probe.example').code, 'hard-h3-entry');

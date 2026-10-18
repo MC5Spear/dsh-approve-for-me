@@ -114,7 +114,7 @@ test('compilePattern 接受普通源串、字面量与非法输入', () => {
 // ── deny 锚定放宽与主体全量过检（requirements §3.4／design §3.5） ───────────
 
 test('引号/斜杠包裹的危险词仍命中（前锚＝非字母数字边界）', () => {
-  // 反面参照：锚若只认 (^|[;&|\s])，这三例的包裹字符（'、"、/）都不在锚类里 → 放行进审查；现锚统一命中。
+  // 反例参照：锚若只认 (^|[;&|\s])，这三例的包裹字符（'、"、/）都不在锚类里 → 放行进审查；现锚统一命中。
   for (const command of ["bash -c 'mkfs /dev/sda1'", 'cmd /c "format c:"', '/sbin/mkfs /dev/sda1']) {
     const verdict = screen(escalation(), located({ command }), baseConfig);
     assert.equal(verdict.action, 'deny', `应拒绝：${command}（${verdict.why}）`);

@@ -1,8 +1,9 @@
 /**
  * 一次性取证脚本：核对「同一 callId 上先出现审批请求、之后该调用仍以拒绝收场」是否存在。
  *
- * 判据：对每个 `approval/asked` 的 callId，向后找同 callId 的 `tool/result`，
- * 看它是不是 isError / 含拒绝文本。这直接回答"审批过了还被沙箱拒"这种情形有没有。
+ * 判据：对每个 `approval/asked` 的 callId，向后找同 callId 的 `tool/result`，测其输出
+ * （前 120 字符样本）含不含拒绝文本——isError 只记录进报告，不参与判定。这直接回答
+ * "审批过了还被沙箱拒"这种情形有没有。
  *
  * 用法：node tools/probe-approved-but-denied.mjs
  */

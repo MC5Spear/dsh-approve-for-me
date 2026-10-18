@@ -6,10 +6,11 @@
  * 动态插件的 `tools` 是受限门面（`dsh-cordis-host-runner/lib/index.js:582-583` 把两个方法
  * 钉死在沙箱自己的 scope 上），所以**动态探针证明不了宿主侧插件的可见性**。
  *
- * 本探针在**离线但真实**的宿主结构上回答三个问题：
+ * 本探针在**离线但真实**的宿主结构上回答四个问题：
  *   1. 不传 scope 的 `schemas()`——也就是"全局视图"——能不能看到别的行注册的工具？
  *   2. 一个 scope（行）里注册的工具，从别的 scope 能不能看到？
  *   3. 同一进程里两个不同的作用域上下文，是不是同一份注册表（服务单例）？
+ *   4. agent scope（等价于预设/会话作用域）注册的工具，全局视图读不读得到？
  *
  * 用法：node --import ./tools/_host-hooks.mjs tools/probe-tool-visibility.mjs
  */
@@ -120,7 +121,7 @@ console.log(`agent scope 内注册后，schemas(agent key)  : ${JSON.stringify(a
 console.log(`agent scope 内注册后，schemas() 无参      : ${JSON.stringify(rootViewAfter)}`);
 console.log(`agent scope 内注册后，schemas(预设 key)   : ${JSON.stringify(presetViewAfter)}`);
 
-// 结论判定：这三条决定"无会话读工具目录"是否可行（核销依据）。
+// 结论判定：以下五条（对应问题 1–4 及其分解）决定"无会话读工具目录"是否可行（核销依据）。
 const globalSeesRowTools = rootView.includes('probe_host_cmd');
 const scopeIsolation = !bView.includes('probe_host_cmd') && !rootView.includes('probe_preset_cmd');
 const agentToolsStayInScope = !rootViewAfter.includes('probe_agent_cmd');

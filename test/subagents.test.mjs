@@ -63,7 +63,7 @@ function chain(options = {}) {
 /**
  * 构造覆盖装配。
  * @param {object} [options] - 选项：config、presetsById（服务读到的预设名）、sessions。
- * @returns {object} 句柄（coverage、audits、以及传入的 list）。
+ * @returns {object} 句柄（coverage 与 audits）。
  */
 function harness(options = {}) {
   const audits = [];
@@ -113,7 +113,7 @@ test('isDelegated：按身份识别（design §2.2）——委派子会话恒 de
   assert.equal(isDelegated(undefined), false);
 });
 
-test('subagents written 容量：超 1000 会话后最旧淘汰（skip 行，design §8.3）', () => {
+test('子代理观察登记容量：超 1000 会话后最旧淘汰（skip 行，design §8.3）', () => {
   const { coverage, audits } = harness({ list: [] });
   // 1001 个互不相干的委派子会话：根不可达 → 各写一行 skip（键 sub|id|-）。
   for (let index = 0; index < 1001; index += 1) {

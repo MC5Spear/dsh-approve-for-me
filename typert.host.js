@@ -3,7 +3,8 @@
  *
  * `dsh-typert-loader` 通过包的 `exports['./typert']` 找到本文件并注册进 `ctx.typert`，
  * 网关随后把 `approveForMe/getState` 等端点路由到 `ApproveForMeService`（design §7.1）。
- * schema 必须是 zod v4 实例（loader 校验 `_zod`）。
+ * schema 必须是 zod v4 实例（本仓 tools/typert-contract.mjs 的离线判据校验 `_zod`；
+ * 宿主 loader 本身只要求 `create` 是函数）。
  * @module dsh-approve-for-me/typert
  */
 import { z } from 'zod';

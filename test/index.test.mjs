@@ -549,6 +549,108 @@ async function wiredEnv(options = {}) {
   return { host, env, state, answerer, makeRequest, config };
 }
 
+test('真接线：宿主 inject 抛错经生产 rt.inject 上抛，decide 行并入 inject-fail（design §4.4／§8.2）', async (t) => {
+  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const previousHome = process.env.DSH_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'afm-inject-fail-'));
+  process.env.DSH_HOME = home;
+  const written = [];
+  const original = process.stderr.write;
+  process.stderr.write = (chunk) => {
+    written.push(String(chunk));
+    return true;
+  };
+  try {
+    const wired = await wiredEnv();
+    if (wired === undefined) {
+      t.skip('宿主包不可解析（离线环境）');
+      return;
+    }
+    // 审查 error（provider 500）→ decide 行 rejected；注入通道故障模板发往宿主 inject——
+    // 宿主 inject 抛错必须上抛留痕，不得被生产包装吞掉（否则 inject-fail 标记不可达）。
+    const request = wired.makeRequest('c-inject-fail');
+    let hostInjectCalls = 0;
+    request.agent.inject = () => {
+      hostInjectCalls += 1;
+      throw new Error('host inject boom');
+    };
+    const outcome = await wired.answerer(request, () => new Promise(() => {}));
+    assert.equal(outcome, 'rejected');
+    assert.equal(hostInjectCalls, 1, '注入文本确实发往宿主 inject（用例前提）');
+    const decide = written.find((line) => line.includes('phase=decide'));
+    assert.ok(decide, '必须有 decide 行');
+    assert.match(decide, /inject=yes/u, 'decide 行记录注入已发生');
+    assert.match(decide, /inject-fail/u, '宿主 inject 异常必须留痕为 inject-fail 降级标记');
+  } finally {
+    process.stderr.write = original;
+    process.env.DSH_HOME = previousHome;
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('真接线：逃逸 × 宿主 inject 抛错 → rejected＋结算在场，error 行留 inject-fail（三调用点同口径）', async (t) => {
+  const { mkdtempSync, rmSync, readFileSync, readdirSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const previousHome = process.env.DSH_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'afm-escape-inject-'));
+  process.env.DSH_HOME = home;
+  const written = [];
+  const original = process.stderr.write;
+  process.stderr.write = (chunk) => {
+    written.push(String(chunk));
+    return true;
+  };
+  try {
+    const wired = await wiredEnv();
+    if (wired === undefined) {
+      t.skip('宿主包不可解析（离线环境）');
+      return;
+    }
+    // 逃逸触发：session getter 抛错（gate 的 try 之前的语句，直达 index 应答者 catch）；
+    // 同场宿主 inject 再抛——第二异常不得逃出 catch（否则无结算、无审计、不返回 rejected）。
+    let hostInjectCalls = 0;
+    const request = {
+      get agent() {
+        return {
+          get session() { throw new Error('session id boom'); },
+          inject: () => {
+            hostInjectCalls += 1;
+            throw new Error('host inject boom');
+          },
+        };
+      },
+      toolName: 'pwsh',
+      callId: 'c-escape-inject',
+      reason: 'escalate sandbox to danger-full-access: x',
+    };
+    const outcome = await wired.answerer(request, () => new Promise(() => {}));
+    assert.equal(outcome, 'rejected', '逃逸注入抛错时仍须 fail-closed 返回 rejected');
+    assert.equal(hostInjectCalls, 1, '逃逸通知确实发往宿主 inject（用例前提）');
+    const errorLine = written.find((line) => line.includes('phase=error'));
+    assert.ok(errorLine, '逃逸路径必须有 error 审计行');
+    assert.match(errorLine, /应答者逃逸异常/u);
+    assert.match(errorLine, /inject-fail/u, '逃逸注入的失败留痕 degraded=inject-fail');
+    // 结算记录在场（design §8.4）：会话取不到按缺省会话 '-' 归档（落盘异步，等待与既有
+    // 逃逸结算用例同款；目录遍历不作文件名假设）。
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const reviewDir = join(home, 'approve-for-me', 'reviews');
+    const rows = readdirSync(reviewDir).flatMap((file) =>
+      readFileSync(join(reviewDir, file), 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line)));
+    const settles = rows.filter((row) => row.kind === 'settle');
+    assert.equal(settles.length, 1, '逃逸×宿主 inject 抛错仍恰落一条结算记录');
+    assert.equal(settles[0].sessionId, '-');
+    assert.equal(settles[0].outcome, 'rejected');
+    assert.match(settles[0].reason ?? '', /应答者逃逸异常/u);
+  } finally {
+    process.stderr.write = original;
+    process.env.DSH_HOME = previousHome;
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test('真接线：有机 error ×3 打开冷却，第 4 个请求零流调用并注入通道故障＋breaker-open', async (t) => {
   const { mkdtempSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');

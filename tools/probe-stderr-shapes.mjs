@@ -10,8 +10,10 @@ import { homedir } from 'node:os';
 import { readSessionLog } from './session-log.mjs';
 
 const root = join(homedir(), '.dsh', 'sessions');
-/** 有副作用、且静态判定**没有**提权参数的工具 —— 这才是我们覆盖不到的集合。 */
-const SIDE_EFFECT_UNSUPPORTED = new Set(['async_run', 'run_code', 'str_replace_editor', 'tool-bash-persistent', 'tool-pwsh-persistent']);
+/** 有副作用、且静态判定**没有**提权参数的工具 —— 这才是我们覆盖不到的集合
+ *  （近似名单，随宿主版本漂移；run_code 的 PTC 控制参数带 `sandbox_permissions`、
+ *  async_run 经本机宿主树核实无此工具名——均不列）。 */
+const SIDE_EFFECT_UNSUPPORTED = new Set(['str_replace_editor', 'tool-bash-persistent', 'tool-pwsh-persistent']);
 
 const shapes = new Map();
 let total = 0;

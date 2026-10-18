@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { agentLangOf, allowText, errorText, guardNext, onApprovalRequest, rejectText, REVIEW_SUPERSEDED, REVIEW_TIMEOUT_ABORT_MESSAGE, timeoutText } from '../lib/gate.js';
+import { agentLangOf, allowText, guardNext, onApprovalRequest, rejectText, REVIEW_SUPERSEDED, REVIEW_TIMEOUT_ABORT_MESSAGE, timeoutText } from '../lib/gate.js';
 import { createScheduler } from '../lib/scheduler.js';
 import { DEFAULT_DENY_PATTERNS, screen } from '../lib/policy.js';
 
@@ -227,7 +227,8 @@ test('路径 1：request 冻结时降级为不可撤回，功能不受影响', a
 });
 
 test('路径 2：规则强制检查命中 → rejected + 注入，且不调用 next()', async () => {
-  // 出厂默认清单已空置（requirements §5.3）——规则命中只在显式配置清单的部署里发生，用例按显式注入清单。
+  // 配置默认不启用文本拒绝规则（requirements §5.3：denyPatterns 默认 []）——规则命中只在
+  // 显式配置清单的部署里发生；DEFAULT_DENY_PATTERNS 是非空的出厂参考清单，本用例显式注入以构造规则命中。
   const { rt, state, next } = makeRt(baseConfig({ denyPatterns: [...DEFAULT_DENY_PATTERNS] }), {
     pre: {
       action: 'deny',
@@ -686,7 +687,9 @@ test('handoff 起算＋人工零时限＋关弹卡时不弹马上消失的卡片
   assert.equal(settle.humanWaitMs, undefined, '未交人工：humanWaitMs 缺失');
 });
 
-// ── 人工 request 起算的预算覆盖装配前置等待（G1–G10） ────────────────────
+// ── 人工 request 起算的预算覆盖装配前置等待 ────────────────────
+// 组义（G1–G10 为套内自编组号）：验证 human.timeoutFrom='request' 时人工预算的起算点、
+// 装配等待对预算的消耗、耗尽语义（不弹卡/不 next）与交人工后的计时器重建、取消与迟到结算。
 
 test('G1 request 起算：configFor 延迟 100ms 耗尽 20ms 人工预算 → 不调 next，按人工超时拒绝（关卡）', async () => {
   const { rt, state, next } = makeRt(
@@ -1071,7 +1074,7 @@ test('agentLangOf：显式 zh/en 原样，缺失/非法回落 en（回落方向�
   // 该回落同时喂给 index 层逃逸注入（runEscape 未配 language 时即走本回落）。
 });
 
-test('回落谓词单源（requirements §3.2／design §3.4）：字面谓词在 lib/ 内只许住在 gate.js 的 agentLangOf', async () => {
+test('回落谓词单源（requirements §5.3／design §4.1）：字面谓词在 lib/ 内只许住在 gate.js 的 agentLangOf', async () => {
   const { readFileSync, readdirSync } = await import('node:fs');
   const { join, dirname } = await import('node:path');
   const { fileURLToPath } = await import('node:url');

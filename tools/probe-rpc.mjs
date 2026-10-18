@@ -99,7 +99,7 @@ async function main() {
   const state = unwrap(await call('approveForMe/getState', { sessionId: opts.session }));
   console.log('getState:', JSON.stringify(state));
 
-  // 新增两个只读端点：卡片状态表（无在飞审批时为空）与权限预设目录（供接管预设多选）。
+  // 两个只读端点：卡片状态表（无在飞审批时为空）与权限预设目录（供接管预设多选）。
   const presets = unwrap(await call('approveForMe/presetCatalog', {}));
   console.log('presetCatalog:', JSON.stringify(presets));
   const pending = unwrap(await call('approveForMe/pendingState', { sessionId: opts.session }));

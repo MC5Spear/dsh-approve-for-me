@@ -14,8 +14,9 @@ import { homedir } from 'node:os';
 import { readSessionLog } from './session-log.mjs';
 
 const root = join(homedir(), '.dsh', 'sessions');
-/** 已知带提权参数的工具（静态判定，名单由本文件维护）。 */
-const ESCALATION_CAPABLE = new Set(['pwsh', 'bash', 'write', 'read', 'edit', 'glob', 'grep', 'str_replace_editor']);
+/** 静态判定带提权参数的工具（近似名单，随宿主版本漂移，以宿主工具 schema 为准；
+ *  read/glob/grep/str_replace_editor 已按宿主源核验无 `sandbox_permissions`，不列）。 */
+const ESCALATION_CAPABLE = new Set(['pwsh', 'bash', 'write', 'edit']);
 const SIGS = {
   isError: (content) => content?.isError === true,
   stderr: (content, out) => out.includes('[stderr]'),

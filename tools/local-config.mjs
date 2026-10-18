@@ -14,7 +14,7 @@
  * 而不是失败：公开克隆者没有本机环境，跳过是预期形态，不是错误。
  *
  * 环境变量：`DSAFM_HOST_MODULES`、`DSAFM_BROWSER_PATH`、`DSAFM_OUTPUT_DIR`、
- * `DSAFM_INSTANCE_URL`、`DSAFM_TOKEN_FILE`，以及按实例名的
+ * `DSAFM_INSTANCE_URL`、`DSAFM_TOKEN_FILE`、`DSAFM_INSTANCE`，以及按实例名的
  * `DSAFM_<实例名大写>_URL` / `DSAFM_<实例名大写>_TOKEN_FILE`。
  */
 import { existsSync } from 'node:fs';
@@ -126,7 +126,7 @@ async function readConfig() {
       const tokenFile = env('DSAFM_TOKEN_FILE');
       return url === undefined && tokenFile === undefined ? undefined : { url, tokenFile };
     })(),
-    /** 配置文件是否真的被读到（区分「没配」与「配了但读坏」）。 */
+    /** 配置文件是否读到内容（读坏时 file 归空、同为 false；读坏本身由装载处一次性告警区分）。 */
     loaded: Object.keys(file).length > 0,
   };
   return cache;

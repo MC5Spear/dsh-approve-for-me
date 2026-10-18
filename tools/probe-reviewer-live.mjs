@@ -90,7 +90,9 @@ class DeltaAssembler {
 }
 
 /**
- * 与 `dsh-llm-deepseek/lib/index.js:1131-1144` 同构的线格式 → 宿主 FinishReason 映射。
+ * 线格式 → 宿主 FinishReason 映射。目标 kind 与宿主 `dsh-llm-deepseek` 的 `stopReason`
+ * 一致（stop/tool-calls/max-tokens）；注意词汇表不同——本表按 OpenAI 词汇
+ * （`stop`/`tool_calls`/`length`）读线，宿主现行实现用 anthropic 词汇。
  * @param {string} reason - 线格式 `finish_reason`。
  * @returns {{kind: string, failure?: object}} 宿主 FinishReason。
  */

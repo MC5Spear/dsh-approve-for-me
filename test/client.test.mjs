@@ -296,7 +296,7 @@ function findByClass(node, className) {
  * @returns {Promise<object>} 展开后的元素树。
  */
 async function expandCard(component, props) {
-  // 表单恒渲染，无折叠可展开：保留原有渲染/时钟节奏，仅去掉折叠头点击。
+  // 表单恒渲染，无折叠步骤：两次渲染＋tick 维持与时钟相关的副作用节奏。
   render(component, props);
   await tick();
   hookIndex = 0;
@@ -375,8 +375,8 @@ test('中英字典齐备：每个字段都有 help 与 hint 键，覆盖组文�
   }
   // 退役键零命中（字典侧）——分区标题、全局重置、当前生效值、已保存横幅。
   for (const key of ['card.resetAll', 'card.resolved', 'card.saved', 'card.invalid', 'card.section.trigger', 'card.section.model', 'card.section.advanced']) {
-    assert.equal(dicts.zh[key], undefined, `退役键不应再存在：${key}`);
-    assert.equal(dicts.en[key], undefined, `英文退役键不应再存在：${key}`);
+    assert.equal(dicts.zh[key], undefined, `退役键不得存在：${key}`);
+    assert.equal(dicts.en[key], undefined, `英文退役键不得存在：${key}`);
   }
 });
 
@@ -423,12 +423,12 @@ test('设置表单首屏：字段竖排、覆盖组在场、保存置灰、无�
   const form = render(card.component, { t: (key) => key, scope: env.scope });
   const serialized = JSON.stringify(form);
   // 无折叠：一次渲染即字段与保存控件全在场。
-  assert.equal(serialized.includes('dsafm_head'), false, '折叠头已移除，不应再有 dsafm_head');
-  assert.equal(serialized.includes('dsafm_card'), false, '折叠外壳已移除，不应再有 dsafm_card');
-  // 退役键在渲染树里零命中（删除重置按钮/分区标题/生效值行后这些断言把关）。
-  assert.equal(serialized.includes('card.resetAll'), false, '不应再有「重置全部覆盖」');
-  assert.equal(serialized.includes('card.section.'), false, '不应再有分区标题');
-  assert.equal(serialized.includes('card.resolved'), false, '不应再有「当前生效值」灰字行');
+  assert.equal(serialized.includes('dsafm_head'), false, '渲染树无折叠头类 dsafm_head');
+  assert.equal(serialized.includes('dsafm_card'), false, '渲染树无折叠外壳类 dsafm_card');
+  // 退役键在渲染树里零命中（重置按钮/分区标题/生效值行的防回潮断言）。
+  assert.equal(serialized.includes('card.resetAll'), false, '不得出现「重置全部覆盖」');
+  assert.equal(serialized.includes('card.section.'), false, '不得出现分区标题');
+  assert.equal(serialized.includes('card.resolved'), false, '不得出现「当前生效值」灰字行');
   // 字段竖排：20 个字段各一个 dsafm_field 壳；数字字段的输入仍走官方组件（外套标签行外置的外壳）；
   // 覆盖字段有「已单独设置」＋「恢复默认」。
   const fields = findAllByClass(form, 'dsafm_field');
@@ -650,7 +650,7 @@ test('说明入口（§10.2）：20 个字段全覆盖，图标＋可见文字�
   // 20 字段全覆盖：全部经字段外壳标签行的说明入口（design §7.2.1）。
   const buttons = findAllByClass(first, 'dsafm_helpbtn');
   assert.equal(buttons.length, 20, `说明按钮应 20 个（全部经字段外壳标签行），实际 ${buttons.length}`);
-  // 按钮挂在标签行的 dsafm_labelgroup 内（与标签同组，数字字段不再平铺在字段下方）。
+  // 按钮挂在标签行的 dsafm_labelgroup 内（与标签同组，数字字段不平铺在字段下方）。
   const groupedButtons = findAllByClass(first, 'dsafm_labelgroup').reduce(
     (sum, group) => sum + findAllByClass(group, 'dsafm_helpbtn').length,
     0,
@@ -658,7 +658,7 @@ test('说明入口（§10.2）：20 个字段全覆盖，图标＋可见文字�
   assert.equal(groupedButtons, buttons.length, `说明按钮应全部位于 dsafm_labelgroup 内，实际 ${groupedButtons}/${buttons.length}`);
   const iconNodes = findAllNodes(first, (node) => node.type === primitivesStub.IconInfoOutlineRegular);
   assert.equal(iconNodes.length, 20, '说明按钮图标统一用官方 IconInfoOutlineRegular（size=12）');
-  assert.equal(JSON.stringify(first).includes('Tooltip'), false, '设置界面不应再用 Tooltip');
+  assert.equal(JSON.stringify(first).includes('Tooltip'), false, '设置界面不用 Tooltip');
   for (const button of buttons) {
     assert.equal(button.props['aria-expanded'], false, '初始未展开');
     assert.ok(button.props['aria-controls'], '说明按钮必须带 aria-controls');
@@ -717,8 +717,8 @@ test('说明入口（§10.2）：开合不改动草稿、保存计划与常驻�
   const props = { t: (key) => key, scope: env.scope };
   const first = render(card.component, props);
   const saveBefore = findByClass(first, 'dsafm_save').props.disabled;
-  // 退役键零残留：warn.noLimit 随渲染分支退役，任何状态下都不再出现。
-  assert.equal(findAllByClass(first, 'dsafm_sec_warn').length, 0, 'timeoutMs=0 不再有常驻风险提醒（分支已退役）');
+  // 退役键零残留：warn.noLimit 属退役渲染分支的键，任何状态下都不得出现。
+  assert.equal(findAllByClass(first, 'dsafm_sec_warn').length, 0, 'timeoutMs=0 无常驻风险提醒（退役分支）');
   const marker = 'approve-for-me-help-mode';
   const buttonBefore = findAllByClass(first, 'dsafm_helpbtn').find((node) => node.props['aria-controls'] === marker);
   // 连续开合数次（不同字段、含数字字段标签旁说明按钮）。
@@ -738,7 +738,7 @@ test('说明入口（§10.2）：开合不改动草稿、保存计划与常驻�
   assert.equal(findByClass(after, 'dsafm_save').props.disabled, saveBefore, '开合说明不得触碰保存计划');
   assert.equal(env.writes.length, 0, '开合说明不得写库');
   assert.equal(findAllByClass(after, 'dsafm_helpregion').length, 1, '其他字段的展开区保持不动');
-  assert.equal(findAllByClass(after, 'dsafm_sec_warn').length, 0, '开合说明不复活退役提醒');
+  assert.equal(findAllByClass(after, 'dsafm_sec_warn').length, 0, '开合说明不得带出退役提醒');
 });
 
 test('非 loopback（不可写）时卡片显示只读提示', () => {
@@ -759,7 +759,7 @@ test('composer 下拉：缺会话 id 不渲染，有 id 且 RPC 可用时渲染 
       if (endpoint === 'approveForMe/getState') {
         return { ok: true, value: { found: true,
             active: true,
-            preset: 'auto-approve', active: true, preset: 'auto-approve', sessionModel: null, globalDefault: 'zai/glm-5.3', byParentModel: {}, effective: 'zai/glm-5.3', layer: 'global' } };
+            preset: 'auto-approve', sessionModel: null, globalDefault: 'zai/glm-5.3', byParentModel: {}, effective: 'zai/glm-5.3', layer: 'global' } };
       }
       if (endpoint === 'approveForMe/modelCatalog') {
         return { ok: true, value: { providers: [{ id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
@@ -826,7 +826,7 @@ test('设置表单不自带标题块：插件名与描述由宿主详情页渲�
   const env = makeCtx();
   client.apply(env.ctx);
   const dicts = env.dictionaries[0].dicts;
-  // 标题/描述键已随折叠头一并退役：中英两侧都不得再出现（退役名即幻觉源）。
+  // 标题/描述键属退役折叠头分支：中英两侧都不得出现（退役名即幻觉源）。
   assert.equal('card.title' in dicts.zh, false);
   assert.equal('card.title' in dicts.en, false);
   assert.equal('card.description' in dicts.zh, false);
@@ -837,9 +837,9 @@ test('设置表单不自带标题块：插件名与描述由宿主详情页渲�
   const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
   const tree = render(card.component, { t: (key) => key, scope: env.scope, rpcCall: env.rpcCall });
   const flat = JSON.stringify(tree);
-  assert.equal(flat.includes('dsafm_head_meta'), false, '折叠头元信息块已移除');
-  assert.equal(flat.includes('dsafm_title'), false, '卡片自带标题已移除');
-  assert.equal(flat.includes('dsafm_desc'), false, '卡片自带描述已移除');
+  assert.equal(flat.includes('dsafm_head_meta'), false, '渲染树无折叠头元信息块');
+  assert.equal(flat.includes('dsafm_title'), false, '渲染树无卡片自带标题');
+  assert.equal(flat.includes('dsafm_desc'), false, '渲染树无卡片自带描述');
 });
 
 test('默认审查模型行：模型与推理强度两个下拉，换模型只暂存、保存才写 scope', async () => {
@@ -952,7 +952,7 @@ test('映射表（design §7.2）：旧字典纯 id 键呈现为「任意 provid
   assert.equal(findByClass(mapRow, 'dsafm_effort').props.title, 'low', '档位下拉的 title 应当是当前档位');
   assert.match(String(findByClass(mapRow, 'dsafm_map_del').props.className), /dsafm_button/, '删除按钮沿用 dsafm_button');
   assert.match(String(findByClass(tree, 'dsafm_map_add').props.className), /dsafm_button/, '添加一行沿用 dsafm_button');
-  // 层叠顺序回归（真页曾因此漏网）：.dsafm_map_add 的边框/底色/内边距规则必须排在 .dsafm_button 之后，
+  // 层叠顺序约束：.dsafm_map_add 的边框/底色/内边距规则必须排在 .dsafm_button 之后，
   // 同为单类选择器时靠后者胜出——排在前面会被 .dsafm_button 的 border:none/background:none/padding:0
   // 覆盖回纯文本形态。
   {
@@ -1015,7 +1015,7 @@ test('接管工具名单：label 走字典键 field.tools，help.tools 中英同
   const serialized = JSON.stringify(tree);
   assert.match(serialized, /field\.tools/, '无 locale.bind 时行标签渲染字典键（与 help 键同口径）');
   assert.doesNotMatch(serialized, /工具白名单/);
-  assert.doesNotMatch(serialized, /纳入自动审批的工具/, '标签文本不得再硬编码在渲染树里');
+  assert.doesNotMatch(serialized, /纳入自动审批的工具/, '标签文本不得硬编码在渲染树里');
   // 用真字典取词渲染时，标签是 zh 现名（行为差异断言，不是存在性）。
   const treeZh = await expandCard(card.component, { t: (key) => dicts.zh[key] ?? key, scope: env.scope, rpcCall: env.rpcCall });
   assert.match(JSON.stringify(treeZh), /纳入自动审批的工具/);
@@ -2503,7 +2503,7 @@ test('审批卡片状态条：取不到会话 id 时不轮询，仅渲染命令'
   assert.equal(calls.includes('approveForMe/pendingState'), false, '没有会话 id 就不该发请求');
 });
 
-test('审批卡片状态条：审查中显示审查时限倒计时；截止缺失的回退防御不渲染无时限文案（退役分支）', async () => {
+test('审批卡片状态条：审查中显示审查时限倒计时；截止缺失的回退防御不渲染无时限文案（退役文案防回潮）', async () => {
   resetHooks();
   let clock = 1_700_000_000_000;
   const realNow = Date.now;
@@ -2522,8 +2522,8 @@ test('审批卡片状态条：审查中显示审查时限倒计时；截止缺�
     hookIndex = 0;
     const text = JSON.stringify(render(detail.component, props));
     assert.match(text, /cardstate\.reviewing/);
-    // 审查截止缺失（回退防御形态）：不渲染无时限文案（分支已退役），也不渲染倒计时。
-    assert.ok(!text.includes('countdown.unlimited'), 'countdown.unlimited 已退役，不得出现');
+    // 审查截止缺失（回退防御形态）：不渲染无时限文案（退役分支），也不渲染倒计时。
+    assert.ok(!text.includes('countdown.unlimited'), '退役文案 countdown.unlimited 不得出现');
     assert.ok(!text.includes('countdown.review'), '缺失截止不得渲染倒计时');
   } finally {
     Date.now = realNow;
@@ -2550,7 +2550,7 @@ test('审批卡片状态条：非审查状态的 null 截止不渲染任何无�
   assert.match(text, /等待你决定/);
   assert.match(text, /风险高/);
   assert.ok(!text.includes('审查无时限'), '非审查状态的 null 截止不得显示无上限文案');
-  assert.ok(!text.includes('无自动拒绝时限'), '已移除的 countdown.none 文案不得出现');
+  assert.ok(!text.includes('无自动拒绝时限'), '退役文案 countdown.none 不得出现');
   assert.ok(!text.includes('后自动拒绝'), '没有倒计时时不得渲染自动拒绝倒计时文案');
   assert.ok(!text.includes('dsafm_state_time'), '没有倒计时时不得残留时间槽位');
 });
@@ -2577,7 +2577,6 @@ const REVIEW_TEXT = {
   'time.queue': '排队 {n}',
   'time.review': '审查 {n}',
   'time.human': '人工 {n}',
-  'detail.title': '单次审查',
   'detail.outcome': '最终审批结果',
   'detail.decision': '模型结论',
   'detail.source': '决定方式',
@@ -2788,7 +2787,7 @@ test('审查视图：合并行主判定为 outcome、判定与结算并存可分
   hookIndex = 0;
   const allowText = JSON.stringify(render(view.component, props));
   assert.match(allowText, /工具总计 5\.0 s = 执行 2\.5 s \+ 审批 2\.5 s/);
-  assert.ok(!allowText.includes('未匹配到工具行'), '匹配上时不应再显示未标注');
+  assert.ok(!allowText.includes('未匹配到工具行'), '匹配上时不显示未标注');
   // A：全文段在场（prompt/output 有值）证实全文采集，反证不成立（degraded 无 transcript、tools 在场为 0），
   // 四段缺按 §8.5.1 分派链各归其类：evidence→未取上下文、probes→未调用取证工具、
   // reasoning→模型未提供、input→本次未记录此项。
@@ -3316,9 +3315,9 @@ test('审批卡片状态条 §7.4：倒计时按状态锚定，deadlineKind 与�
     const swappedKind2 = await renderEntry({ callId: 'call_1', state: 'reviewing', reason: null, startedAt: 1, deadlineAt: 1_090_000, deadlineKind: 'human', updatedAt: 1 });
     assert.match(swappedKind2, /审查时限剩余/, 'reviewing 一律按审查截止渲染审查时限');
     assert.ok(!swappedKind2.includes('后自动拒绝'), 'deadlineKind 与状态矛盾时不得串显自动拒绝倒计时');
-    // 常规组合仍按各自语义：reviewing + review + null 截止 → 回退防御（无倒计时、无已退役的无时限文案）。
+    // 常规组合仍按各自语义：reviewing + review + null 截止 → 回退防御（无倒计时、无退役的无时限文案）。
     const noDeadline = await renderEntry({ callId: 'call_1', state: 'reviewing', reason: null, startedAt: 1, deadlineAt: null, deadlineKind: 'review', updatedAt: 1 });
-    assert.ok(!noDeadline.includes('审查无时限'), 'countdown.unlimited 已退役，不得出现');
+    assert.ok(!noDeadline.includes('审查无时限'), '退役文案 countdown.unlimited 不得出现');
     assert.ok(!noDeadline.includes('审查时限剩余'), '缺失截止不得渲染倒计时');
   } finally {
     Date.now = realNow;
@@ -3339,7 +3338,7 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
   assert.equal(zh['cardstate.waiting'], '等待你决定');
   assert.equal(zh['cardstate.waiting.deny'], '自动审查结论为拒绝：{reason}');
   assert.equal(zh['cardstate.waiting.timeout'], '自动审查超时，未取得有效结论');
-  // 退役键零残留（design §7.5）：countdown.unlimited 与 warn.noLimit 随分支一并删除。
+  // 退役键零残留（design §7.5）：countdown.unlimited 与 warn.noLimit 属退役分支的键，不得在册。
   assert.equal(zh['countdown.unlimited'], undefined);
   assert.equal(en['countdown.unlimited'], undefined);
   assert.equal(zh['warn.noLimit'], undefined);
@@ -3627,19 +3626,19 @@ test('设置表单恒渲染：无折叠头、无分区标题，字段与唯一�
   const root = findNode(form, 'div');
   assert.equal(root.props.className, 'dsafm_form', '容器应为 div.dsafm_form');
   const flat = JSON.stringify(form);
-  // 折叠头已移除（下拉基元自带 aria-expanded，不在此断言）。
-  assert.equal(flat.includes('dsafm_head'), false, '折叠头已移除，不应再有 dsafm_head');
-  assert.equal(flat.includes('dsafm_card'), false, '折叠外壳已移除，不应再有 dsafm_card');
+  // 无折叠头（下拉基元自带 aria-expanded，不在此断言）。
+  assert.equal(flat.includes('dsafm_head'), false, '渲染树无折叠头类 dsafm_head');
+  assert.equal(flat.includes('dsafm_card'), false, '渲染树无折叠外壳类 dsafm_card');
   // 设置表单不渲染分区标题；唯一保存按钮首屏在场且初始置灰；全局重置不渲染。
-  assert.equal(flat.includes('card.section.'), false, '分区标题已退役');
+  assert.equal(flat.includes('card.section.'), false, '不得出现分区标题');
   assert.notEqual(flat.indexOf('card.save'), -1, '保存控件应首屏在场');
-  assert.equal(flat.includes('card.resetAll'), false, '重置控件已删除');
+  assert.equal(flat.includes('card.resetAll'), false, '不得出现重置控件');
   assert.equal(findByClass(form, 'dsafm_save').props.disabled, true, '初始无改动时保存置灰');
-  // summary 分支已删：即便宿主传入 view:'summary' 也渲完整表单，不出现一行摘要键。
+  // 无 summary 分支：即便宿主传入 view:'summary' 也渲完整表单，不出现一行摘要键。
   hookIndex = 0;
   const asSummary = render(card.component, { ...props, view: 'summary' });
   const flatSummary = JSON.stringify(asSummary);
-  assert.equal(flatSummary.indexOf('card.summary.presets'), -1, 'summary 分支已删除，不应引用 card.summary.presets');
+  assert.equal(flatSummary.indexOf('card.summary.presets'), -1, '不得引用 card.summary.presets');
   assert.notEqual(flatSummary.indexOf('card.save'), -1, 'view:summary 同样渲完整表单');
 });
 
@@ -3699,16 +3698,16 @@ test('恢复默认：只暂存回退值、保存才落 unset', async () => {
   const numberMarker = findAllNodes(tree, (node) => node.type === primitivesStub.SettingsValueField)
     .find((node) => node.props.id === 'approve-for-me-ctl-reviewer-timeoutMs');
   assert.ok(numberMarker, 'reviewer.timeoutMs 应走官方数字字段');
-  assert.equal(numberMarker.props.overridden, undefined, '官方组件不再收 overridden（覆盖组由外壳自绘）');
-  assert.equal(numberMarker.props.resetLabel, undefined, '官方组件不再收 resetLabel');
-  assert.equal(numberMarker.props.onReset, undefined, '官方组件不再收 onReset（恢复默认走外壳按钮）');
-  assert.equal(numberMarker.props.label, undefined, '官方组件不再收 label（标签行由外壳承载）');
+  assert.equal(numberMarker.props.overridden, undefined, '官方组件不收 overridden（覆盖组由外壳自绘）');
+  assert.equal(numberMarker.props.resetLabel, undefined, '官方组件不收 resetLabel');
+  assert.equal(numberMarker.props.onReset, undefined, '官方组件不收 onReset（恢复默认走外壳按钮）');
+  assert.equal(numberMarker.props.label, undefined, '官方组件不收 label（标签行由外壳承载）');
   assert.equal(numberMarker.props.text, '95000', '官方组件的显示文本就是生效值');
-  // 覆盖标记计数：胶囊 Tag 恰好 3 个（自绘覆盖组含数字字段），官方组件不再收覆盖组 props。
+  // 覆盖标记计数：胶囊 Tag 恰好 3 个（自绘覆盖组含数字字段），官方组件不收覆盖组 props。
   const tags = findAllNodes(tree, (node) => node.type === primitivesStub.Tag && node.props.children === 'card.override');
   assert.equal(tags.length, 3, '已单独设置胶囊应恰好 3 个（fallback/mode/reviewer.timeoutMs）');
   const overriddenMarkers = findAllNodes(tree, (node) => node.type === primitivesStub.SettingsValueField && node.props.overridden === true);
-  assert.equal(overriddenMarkers.length, 0, '官方数字字段不再携带覆盖状态');
+  assert.equal(overriddenMarkers.length, 0, '官方数字字段不带覆盖状态');
 
   // 点 fallback 的「恢复默认」：控件立即显示组合层默认值 reject，但没写库。
   const fields = findAllByClass(tree, 'dsafm_field');
@@ -3722,7 +3721,7 @@ test('恢复默认：只暂存回退值、保存才落 unset', async () => {
   const stagedField = findAllByClass(staged, 'dsafm_field').find((field) => JSON.stringify(field).includes('"approve-for-me-ctl-fallback"'));
   const stagedSelect = findAllByClass(stagedField, 'dsafm_input').find((node) => node.type === 'select');
   assert.equal(stagedSelect.props.value, 'reject', '恢复默认后控件应立即显示组合层默认值');
-  assert.equal(JSON.stringify(stagedField).includes('card.override'), false, '暂存 clear 后不再显示已单独设置');
+  assert.equal(JSON.stringify(stagedField).includes('card.override'), false, '暂存 clear 后不显示已单独设置');
   assert.equal(env.writes.length, 0, '恢复默认不应写库（保存才落 unset）');
 
   // 保存：写入 unset（用户层键消失才是真回退）。
@@ -3860,7 +3859,7 @@ test('毫秒字段秒数读数：生效值常驻、草稿随输入实时换算',
   const enTree = render(card.component, enProps);
   assert.equal(secSpan(enTree, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_resolved').props.children, 'Effective: 300 s', 'en 档生效值读数单位 s');
   assert.equal(secSpan(enTree, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_draft').props.children, 'Draft: 0 s', 'en 档草稿读数单位 s');
-  assert.equal(secSpan(enTree, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_warn'), undefined, 'en 档退役提醒不再渲染');
+  assert.equal(secSpan(enTree, 'approve-for-me-sec-reviewer-timeoutMs', 'dsafm_sec_warn'), undefined, 'en 档不渲染退役提醒');
 });
 
 test('生效值为 0 不渲染退役提醒（保存读回语义）；hint 随处可见「立即超时」语义', async () => {
@@ -3885,7 +3884,7 @@ test('生效值为 0 不渲染退役提醒（保存读回语义）；hint 随处
   assert.ok(line, '审查时限秒数读数行应在场');
   const resolved = findAllByClass(line, 'dsafm_sec_resolved')[0];
   assert.equal(resolved.props.children, '生效：0 秒', '生效值读数为 0 秒');
-  assert.equal(findAllByClass(line, 'dsafm_sec_warn').length, 0, '生效值为 0 无退役提醒（分支已删除）');
+  assert.equal(findAllByClass(line, 'dsafm_sec_warn').length, 0, '生效值为 0 无退役提醒（退役分支）');
   // 零值语义进入字段 hint（design §7.2.2 定稿）。
   assert.match(dicts.zh['hint.reviewer.timeoutMs'], /0 立即超时/u);
   const marker = findAllNodes(tree, (node) => node.type === primitivesStub.SettingsValueField)
@@ -3970,7 +3969,7 @@ test('秒数读数与「恢复默认」／保存：clear 后按默认值换算�
   const tree = await expandCard(card.component, props);
   const marker = findAllNodes(tree, (node) => node.type === primitivesStub.SettingsValueField)
     .find((node) => node.props.id === 'approve-for-me-ctl-reviewer-timeoutMs');
-  // 恢复默认走外壳复位按钮（官方组件不再收 onReset，design §7.2.1）：定位 reviewer.timeoutMs 字段壳触发
+  // 恢复默认走外壳复位按钮（官方组件不收 onReset，design §7.2.1）：定位 reviewer.timeoutMs 字段壳触发
   // dsafm_reset 的 onClick（与 fallback 字段同款模式）；控件显示组合层默认值 90000，草稿读数按该文本换算，
   // 生效值读数仍是快照生效值。
   const timeoutField = findAllByClass(tree, 'dsafm_field').find((field) => JSON.stringify(field).includes('"approve-for-me-ctl-reviewer-timeoutMs"'));
@@ -4062,14 +4061,14 @@ test('静态扫描：退役文案与失效令牌零命中、外壳类退役', as
   const client = loadClient();
   assert.ok(client, '模块应可加载');
   // 源码零命中：全局重置、当前生效值行、问号图标（变异验证：加回任一即红）。
-  assert.equal(SOURCE.includes('重置全部覆盖'), false, '源码不应再含「重置全部覆盖」');
-  assert.equal(SOURCE.includes('当前生效值'), false, '源码不应再含「当前生效值」');
-  assert.equal(SOURCE.includes('QuestionIcon'), false, '自造问号图标应删除');
-  assert.equal(SOURCE.includes('Tooltip'), false, '悬停 Tooltip 应退役（帮助改点击内联展开）');
-  assert.equal(SOURCE.includes('dsafm_row'), false, '横排行容器类应退役');
-  assert.equal(SOURCE.includes('dsafm_section'), false, '分区标题类应退役');
-  assert.equal(SOURCE.includes('dsafm_divider'), false, '分区线类应退役');
-  assert.equal(SOURCE.includes('dsafm_actions'), false, '旧操作区类应退役');
+  assert.equal(SOURCE.includes('重置全部覆盖'), false, '源码不得含「重置全部覆盖」');
+  assert.equal(SOURCE.includes('当前生效值'), false, '源码不得含「当前生效值」');
+  assert.equal(SOURCE.includes('QuestionIcon'), false, '自造问号图标零命中');
+  assert.equal(SOURCE.includes('Tooltip'), false, '悬停 Tooltip 零命中（帮助为点击内联展开）');
+  assert.equal(SOURCE.includes('dsafm_row'), false, '横排行容器类零命中');
+  assert.equal(SOURCE.includes('dsafm_section'), false, '分区标题类零命中');
+  assert.equal(SOURCE.includes('dsafm_divider'), false, '分区线类零命中');
+  assert.equal(SOURCE.includes('dsafm_actions'), false, '旧操作区类零命中');
   // 交付 CSS 串对 0.1.7 令牌表不存在的别名零命中（含官方笔误 bg-layer-4）。
   for (const token of ['--dsw-alias-state-warning-primary', '--dsw-alias-label-error', '--dsw-alias-bg-layer-4']) {
     assert.equal(SOURCE.includes(token), false, `失效令牌零命中：${token}`);
@@ -4079,9 +4078,9 @@ test('静态扫描：退役文案与失效令牌零命中、外壳类退役', as
   // 卡片外观（源码侧）：.dsafm_form 不声明 border/radius/底色。
   const formRule = /\.dsafm_form\{[^}]*\}/u.exec(SOURCE)?.[0] ?? '';
   assert.ok(formRule.length > 0, '应有 .dsafm_form 规则');
-  assert.equal(/border(?!-top)/u.test(formRule), false, '.dsafm_form 不应再带边框');
-  assert.equal(formRule.includes('border-radius'), false, '.dsafm_form 不应再带圆角');
-  assert.equal(formRule.includes('background'), false, '.dsafm_form 不应再带成片底色');
+  assert.equal(/border(?!-top)/u.test(formRule), false, '.dsafm_form 不带边框');
+  assert.equal(formRule.includes('border-radius'), false, '.dsafm_form 不带圆角');
+  assert.equal(formRule.includes('background'), false, '.dsafm_form 不带成片底色');
   // 官方规格落点：34px 输入、说明按钮 24×24 最小命中区（文字按钮，内容可撑大）、保存按钮实心与置灰透明度。
   assert.ok(SOURCE.includes('height:34px'), '输入应取官方 34px 规格');
   assert.ok(SOURCE.includes('min-width:24px;min-height:24px'), '说明按钮应为 24×24 最小命中区（design §7.2.1）');

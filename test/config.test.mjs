@@ -115,7 +115,8 @@ test('信封全树无 transform 节点：一次与二次序列化都不携带回
 test('decode 往返：含空分节的真实 describe 取值在一跳/两跳重组 schema 下校验通过', () => {
   const s1 = new z(JSON.parse(JSON.stringify(Config.toJSON())));
   const s2 = new z(JSON.parse(JSON.stringify(s1.toJSON())));
-  // 夹具＝真实部署的 profile patch 的 approve-for-me 用户层逐字（cordis.patch.yml :129-143）：
+  // 夹具＝真实部署 profile patch 的 approve-for-me 用户层逐字（部署 web profile 自己的
+  // cordis.patch.yml，非仓内同名文件）：
   // 含 human: {} 空分节与 ui.trace 部分分节——活体 describe 取值的真实形态。
   const realProfile = {
     reviewer: { model: { model: 'zai/glm-5.3-flash', effort: 'high' }, timeoutMs: 300000 },

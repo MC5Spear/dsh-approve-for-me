@@ -37,7 +37,8 @@ export function checkCodec(codec) {
 }
 
 /**
- * 逐条核对一份 invocation（复刻 loader 注册期校验的字段集）。
+ * 逐条核对一份 invocation（复刻 loader 注册期校验的字段集；值约束部分——「json 参数
+ * 不得声明 lookup」「lookup 参数须带 lookup 字段」两条——未复刻）。
  * @param {object} invocation - 待检 invocation。
  * @returns {object} `问题路径 -> 错误清单`（空对象 = 合规）。
  */
