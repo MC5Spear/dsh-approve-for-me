@@ -1129,6 +1129,11 @@ test('composer 下拉：两段式菜单，档位项来自 modelEfforts', async (
   assert.equal(flatText(modelSpan), '审查模型：zai/glm-5.3');
   assert.equal(flatText(effortSpan), ' · low');
   assert.match(String(anchor.props['aria-label']), /^审查模型：zai\/glm-5\.3 · low；/, '无障碍名应含完整当前选择与中文分隔符');
+  // 中文点位断言全角（design §7.5）：菜单推理强度项冒号；未单独选择形态不出回退标识段。
+  const zhItemOf = (id) => menu.props.items.find((entry) => entry.id === id);
+  assert.equal(zhItemOf('__effort__').label, '推理强度：自动选择', '中文菜单「自动选择」项用全角冒号');
+  assert.equal(zhItemOf('__effort__:low').label, '推理强度：low', '中文菜单档位项用全角冒号');
+  assert.equal(findAllByClass(anchor, 'dsafm_badge').length, 0, '未单独选择形态不得出现回退标识段');
 
   menu.props.onSelect('__effort__:high');
   await tick();
@@ -1185,7 +1190,7 @@ test('composer 下拉：没有生效模型时档位段不出现', async () => {
   assert.match(String(menu.props.anchor.props['aria-label']), /^跟随全局；/, '无模型时无障碍名以跟随全局与中文分隔符开头');
 });
 
-test('composer 下拉：未指定档位显示自动选择；英文界面用半角分隔符（design §7.3.2）', async () => {
+test('composer 下拉：未指定档位显示自动选择；英文界面标点用半角（design §7.3.2、§7.5）', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
@@ -1215,10 +1220,15 @@ test('composer 下拉：未指定档位显示自动选择；英文界面用半�
   const tree = render(dropdown.component, props);
   const menu = findNode(tree, primitivesStub.Menu);
   const anchor = menu.props.anchor;
-  assert.equal(flatText(anchor), 'Reviewer model：zai/glm-5.3 · Automatic', '未指定档位显示自动选择的英文定稿');
+  assert.equal(flatText(anchor), 'Reviewer model: zai/glm-5.3 · Automatic', '未指定档位显示自动选择；英文模型段冒号是半角冒号加空格');
   assert.equal(flatText(findByClass(anchor, 'dsafm_seat_effort')), ' · Automatic');
-  assert.match(String(anchor.props['aria-label']), /^Reviewer model：zai\/glm-5\.3 · Automatic; /, '英文界面无障碍名用半角分号加空格');
+  assert.match(String(anchor.props['aria-label']), /^Reviewer model: zai\/glm-5\.3 · Automatic; /, '英文界面无障碍名用半角冒号与半角分号加空格');
   assert.ok(!String(anchor.props['aria-label']).includes('；'), '英文界面无障碍名不得出现中文分隔符');
+  assert.ok(!flatText(anchor).includes('：'), '英文界面可见文本不得出现全角冒号');
+  // 菜单推理强度项的冒号同样随界面语言（design §7.5 封闭清单）。
+  const itemOf = (id) => menu.props.items.find((entry) => entry.id === id);
+  assert.equal(itemOf('__effort__').label, 'Effort: Automatic', '英文菜单「自动选择」项用半角冒号加空格');
+  assert.equal(itemOf('__effort__:low').label, 'Effort: low', '英文菜单档位项用半角冒号加空格');
 });
 
 test('composer 下拉：宿主不提供档位时不渲染档位段（design §7.3.2）', async () => {
@@ -1459,15 +1469,69 @@ test('composer 分置提示（§7.2.0）：session 条目渲染在选择控件�
   const warns = findAllByClass(wrap, 'dsafm_warnline');
   assert.equal(warns.length, 1, '应渲染一条 session 提示');
   const text = JSON.stringify(warns[0]);
-  assert.match(text, /本会话选择的审查模型不可用/, '用 warn.modelIssue.session 文案');
+  assert.match(text, /本会话选择的审查模型 zai\/gone-9 不可用：provider 不存在/, '用 warn.modelIssue.session 文案，且 {configured} 渲染为条目 configured 原值（design §10.2）');
   assert.match(text, /provider 不存在/, '正文包含原因');
   assert.match(text, /当前生效：全局默认未设置，使用执行助手当前模型（follow-parent）。/, '不可用键空串时以 warn.modelIssue.layer 层含义独立成句承接（§7.2.0/§8.5.1）');
+  assert.match(text, /provider 不存在。当前生效：/, '中文句间直连无空格（design §7.5）');
   assert.doesNotMatch(text, /（follow-parent）：/, '层含义句后不得拼「层含义：」悬空冒号');
   assert.doesNotMatch(text, /实际使用/, 'effectiveModel 为空串时省略「实际使用」句（design §7.2.0）');
   assert.equal(findAllNodes(wrap, (node) => node.type === primitivesStub.IconWarningOutlineRegular).length, 1, '提示行带警告图标');
 });
 
-test('composer 触发器档位段取会话所选档位（§7.3.2）：会话已选未指定档位显示自动选择，模型段仍显示回退后的生效模型', async () => {
+test('composer 分置提示（§7.2.0/§7.5）：英文空串形态以层含义句承接且句间恰一个半角空格', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    currentSession: 's1',
+    language: 'en',
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/getState') {
+        return {
+          ok: true,
+          value: {
+            found: true,
+            active: true,
+            preset: 'auto-approve',
+            sessionModel: 'zai/gone-9',
+            sessionEffort: '',
+            globalDefault: 'pb/gone',
+            globalEffort: '',
+            modelIssues: [
+              { scope: 'session', ruleProvider: null, ruleModel: '', configured: 'zai/gone-9', reason: 'unknown model', effectiveLayer: 'unavailable', effectiveModel: '' },
+            ],
+            effective: '',
+            effectiveEffort: '',
+            layer: 'unavailable',
+          },
+        };
+      }
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      return { ok: true, value: { efforts: [{ id: 'low' }] } };
+    },
+  });
+  client.apply(env.ctx);
+  const dicts = env.dictionaries[0].dicts;
+  const dropdown = env.registrations.find((entry) => entry.options.name === 'conversation.input.left');
+  const props = { t: (key) => dicts.en[key] ?? key, ...dropdown.options.inject() };
+  render(dropdown.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const tree = render(dropdown.component, props);
+  const wrap = findByClass(tree, 'dsafm_seatwrap');
+  const warns = findAllByClass(wrap, 'dsafm_warnline');
+  assert.equal(warns.length, 1, '应渲染一条 session 提示');
+  const text = flatText(warns[0]);
+  assert.equal(
+    text,
+    "This session's reviewer model zai/gone-9 is unavailable: unknown model. Currently effective: No usable reviewer model (unavailable).",
+    '剥离「Currently using」句后层含义句承接，句间恰一个半角空格（design §7.2.0/§7.5）',
+  );
+});
+
+test('composer 触发器档位随生效层（§7.3.2）：回退形态档位段取生效档位并出现回退标识段', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx({
@@ -1508,11 +1572,71 @@ test('composer 触发器档位段取会话所选档位（§7.3.2）：会话已�
   await tick();
   hookIndex = 0;
   const tree = render(dropdown.component, props);
-  const menu = findNode(tree, primitivesStub.Menu);
-  const anchor = menu.props.anchor;
-  // 模型段显示回退后的生效模型，档位段回显会话所选档位（未指定即自动选择）：两段来源不同，不得互相改写。
+  const anchor = findNode(tree, primitivesStub.Menu).props.anchor;
+  // 模型段显示回退后的生效模型，档位段取生效档位（effectiveEffort）：回退形态下座位呈现真实生效组合。
   assert.equal(flatText(findByClass(anchor, 'dsafm_seat_model')), '审查模型：zai/glm-5.3', '模型段显示回退后的生效模型');
-  assert.equal(flatText(findByClass(anchor, 'dsafm_seat_effort')), ' · 自动选择', '档位段取会话所选档位（未指定即自动选择）');
+  assert.equal(flatText(findByClass(anchor, 'dsafm_seat_effort')), ' · high', '档位段取回退后的生效档位（不取会话未指定的「自动选择」）');
+  // 回退标识段：插在档位段之后、复用 dsafm_badge 样式；无障碍名以一个半角空格承接标识文案。
+  const kids = anchor.props.children.filter((node) => node && node.props && typeof node.props.className === 'string');
+  assert.deepEqual(kids.map((node) => node.props.className), ['dsafm_seat_model', 'dsafm_seat_effort', 'dsafm_badge', 'dsafm_chevron'], '回退标识段应插在档位段之后、箭头之前');
+  assert.equal(flatText(kids[2]), '已回退', '回退标识段文本为 composer.fallbackBadge 中文取值');
+  assert.match(String(anchor.props['aria-label']), /^审查模型：zai\/glm-5\.3 · high 已回退；/, '无障碍名以两段全文加空格承接回退标识再加中文分隔符');
+  // 分置提示（同一数据源）与标识同帧在场：包裹层承载提示行；提示句含所配引用原值（design §10.2/§10.3）。
+  assert.ok(findByClass(tree, 'dsafm_seatwrap'), '回退形态应渲染包裹层（分置提示在场）');
+  const fbWarn = findByClass(tree, 'dsafm_warnline');
+  assert.ok(fbWarn, '回退形态应有会话指定不可用提示行');
+  assert.match(flatText(fbWarn), /本会话选择的审查模型 zai\/gone-9 不可用/, '提示句含退回前所配引用原值');
+  // 座位模型段引用与提示句实际使用引用逐字一致（design §10.2：条目 effectiveModel 归一，同 state.effective 口径）。
+  assert.ok(flatText(fbWarn).includes(`：zai/glm-5.3。`) && flatText(findByClass(anchor, 'dsafm_seat_model')).endsWith('zai/glm-5.3'), '座位与提示句的生效模型引用逐字一致');
+});
+
+test('composer 触发器回退标识段（§7.3.2）：英文形态标识取 Fallback、无障碍名以半角空格承接', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/getState') {
+        return {
+          ok: true,
+          value: {
+            found: true,
+            active: true,
+            preset: 'auto-approve',
+            sessionModel: 'zai/gone-9',
+            sessionEffort: '',
+            globalDefault: 'zai/glm-5.3',
+            globalEffort: 'high',
+            modelIssues: [
+              { scope: 'session', ruleProvider: null, ruleModel: '', configured: 'zai/gone-9', reason: 'provider gone', effectiveLayer: 'global', effectiveModel: 'zai/glm-5.3' },
+            ],
+            effective: 'zai/glm-5.3',
+            effectiveEffort: 'high',
+            layer: 'global',
+          },
+        };
+      }
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      return { ok: true, value: { efforts: [{ id: 'low' }, { id: 'high' }] } };
+    },
+  });
+  client.apply(env.ctx);
+  const dicts = env.dictionaries[0].dicts;
+  const dropdown = env.registrations.find((entry) => entry.options.name === 'conversation.input.left');
+  const props = { t: (key) => dicts.en[key] ?? key, ...dropdown.options.inject() };
+  render(dropdown.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const tree = render(dropdown.component, props);
+  const anchor = findNode(tree, primitivesStub.Menu).props.anchor;
+  // 扁平文本中标识段紧随档位段（间隔由样式 margin 提供；标识不参与两段相连契约）。
+  assert.equal(flatText(anchor), 'Reviewer model: zai/glm-5.3 · highFallback', '英文回退形态两段加标识的可见文本');
+  const badge = findAllByClass(anchor, 'dsafm_badge').find((node) => flatText(node) === 'Fallback');
+  assert.ok(badge, '英文回退标识段取 Fallback');
+  assert.match(String(anchor.props['aria-label']), /^Reviewer model: zai\/glm-5\.3 · high Fallback; /, '英文无障碍名以半角空格承接 Fallback 再加分号');
 });
 
 test('composer 触发器档位段取会话所选档位（§7.3.2）：会话已指定档位时显示该档位原值', async () => {
@@ -1557,6 +1681,291 @@ test('composer 触发器档位段取会话所选档位（§7.3.2）：会话已�
   const anchor = findNode(tree, primitivesStub.Menu).props.anchor;
   assert.equal(flatText(findByClass(anchor, 'dsafm_seat_model')), '审查模型：zai/glm-5.3', '模型段取会话所选模型');
   assert.equal(flatText(findByClass(anchor, 'dsafm_seat_effort')), ' · high', '档位段取会话所选档位原值（不被生效档位改写）');
+  assert.equal(findAllByClass(anchor, 'dsafm_badge').length, 0, '会话层生效形态不得出现回退标识段');
+});
+
+test('composer 档位段显隐跟随所取来源（§7.3.2）：会话层生效但会话档位缺失时不补显生效档位', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/getState') {
+        // 会话层生效（layer='session'）但宿主未提供会话档位；生效档位有值——按取源口径不补显。
+        return {
+          ok: true,
+          value: {
+            found: true,
+            active: true,
+            preset: 'auto-approve',
+            sessionModel: 'zai/glm-5.3',
+            globalDefault: 'zai/glm-5.3',
+            globalEffort: 'high',
+            modelIssues: [],
+            effective: 'zai/glm-5.3',
+            effectiveEffort: 'high',
+            layer: 'session',
+          },
+        };
+      }
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      return { ok: true, value: { efforts: [{ id: 'low' }, { id: 'high' }] } };
+    },
+  });
+  client.apply(env.ctx);
+  const dicts = env.dictionaries[0].dicts;
+  const dropdown = env.registrations.find((entry) => entry.options.name === 'conversation.input.left');
+  const props = { t: (key) => dicts.zh[key] ?? key, ...dropdown.options.inject() };
+  render(dropdown.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const tree = render(dropdown.component, props);
+  const anchor = findNode(tree, primitivesStub.Menu).props.anchor;
+  assert.equal(flatText(findByClass(anchor, 'dsafm_seat_model')), '审查模型：zai/glm-5.3', '模型段取会话所选模型');
+  assert.equal(findAllByClass(anchor, 'dsafm_seat_effort').length, 0, '所取来源（会话档位）为 undefined 时不得渲染档位段');
+  assert.equal(flatText(anchor), '审查模型：zai/glm-5.3', '另一字段（生效档位）有值不补显（design §7.3.2 显隐跟随所取来源）');
+  assert.equal(findAllByClass(anchor, 'dsafm_badge').length, 0, '无回退形态不得出现回退标识段');
+});
+
+test('composer 失败分支冒号随界面语言（design §7.5）：中文全角、英文半角加空格', async () => {
+  const round = async (lang, expected) => {
+    resetHooks();
+    const client = loadClient();
+    const env = makeCtx({
+      currentSession: 's1',
+      call: async (endpoint) => {
+        if (endpoint === 'approveForMe/getState') {
+          return { ok: true, value: { found: true, active: true, preset: 'auto-approve', sessionModel: null, sessionEffort: '', globalDefault: 'zai/glm-5.3', globalEffort: '', byParentModel: {}, effective: 'zai/glm-5.3', effectiveEffort: 'low', layer: 'global' } };
+        }
+        if (endpoint === 'approveForMe/modelCatalog') return { ok: true, value: { providers: [{ id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+        if (endpoint === 'approveForMe/modelEfforts') return { ok: true, value: { efforts: [{ id: 'low' }], defaultEffort: 'low' } };
+        if (endpoint === 'approveForMe/setSessionModel') return { ok: false, error: 'boom' };
+        return { ok: true, value: {} };
+      },
+    });
+    client.apply(env.ctx);
+    const dicts = env.dictionaries[0].dicts;
+    const dropdown = env.registrations.find((entry) => entry.options.name === 'conversation.input.left');
+    const props = { t: (key) => dicts[lang][key] ?? key, ...dropdown.options.inject() };
+    render(dropdown.component, props);
+    await tick();
+    render(dropdown.component, props);
+    await tick();
+    await tick();
+    hookIndex = 0;
+    let tree = render(dropdown.component, props);
+    findNode(tree, primitivesStub.Menu).props.onSelect('zai/glm-5.3');
+    await tick();
+    await tick();
+    hookIndex = 0;
+    tree = render(dropdown.component, props);
+    const anchor = findNode(tree, primitivesStub.Menu).props.anchor;
+    assert.ok(String(anchor.props['aria-label']).endsWith(expected), `无障碍名说明句的失败分支应为「${expected}」结尾`);
+  };
+  await round('zh', '切换失败：boom');
+  await round('en', 'Switch failed: boom');
+});
+
+test('设置页拼接标点随界面语言（design §7.5）：枚举后缀、预设并列与保存失败冒号两语言各自断言', async () => {
+  const collect = (node, pred, found) => {
+    if (node === null || node === undefined || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const child of node) collect(child, pred, found);
+      return;
+    }
+    if (pred(node)) found.push(node);
+    collect(node.props?.children, pred, found);
+  };
+  const round = async (lang, expect) => {
+    resetHooks();
+    const client = loadClient();
+    const env = makeCtx({
+      snapshot: { status: 'ready', value: { trigger: { presets: ['auto-approve', 'workspace-write'] } }, base: {}, user: {}, revision: 1, writable: true },
+      mutateRejects: true,
+      call: async (endpoint) => {
+        if (endpoint === 'approveForMe/presetCatalog') {
+          return { ok: true, value: { presets: [{ id: 'auto-approve', label: '自动审批', description: '', isDefault: true }, { id: 'workspace-write', label: 'workspace-write', description: '', isDefault: false }], configured: ['auto-approve'] } };
+        }
+        if (endpoint === 'approveForMe/modelCatalog') return { ok: true, value: { providers: [] } };
+        return { ok: true, value: {} };
+      },
+    });
+    client.apply(env.ctx);
+    const dicts = env.dictionaries[0].dicts;
+    const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
+    const props = { t: (key) => dicts[lang][key] ?? key, scope: env.scope, rpcCall: env.rpcCall };
+    const tree = await expandCard(card.component, props);
+    // 枚举后缀：mode 下拉的 rules 选项。
+    const selects = [];
+    collect(tree, (node) => node.type === 'select', selects);
+    const options = selects.flatMap((sel) => (Array.isArray(sel.props.children) ? sel.props.children : [sel.props.children]));
+    const rulesOption = options.find((opt) => opt?.props?.value === 'rules');
+    assert.ok(rulesOption, '未找到 mode 下拉的 rules 选项');
+    assert.equal(rulesOption.props.children, expect.rules, '枚举后缀的括号随界面语言');
+    // 预设并列：已选清单的连接符（拼接项是宿主预设名，判定源走同组件必经的 count 字典值）。
+    assert.equal(findByClass(tree, 'dsafm_picker_text').props.children, expect.presetJoin, '已选清单并列连接随界面语言');
+    // 保存失败冒号：改动后保存被宿主拒绝（mutate 解为 false），失败段按语言取冒号。
+    findByClass(tree, 'dsafm_picker').props.onClick();
+    await tick();
+    hookIndex = 0;
+    const open = render(card.component, props);
+    findByClass(open, 'dsafm_check').props.onChange();
+    await tick();
+    hookIndex = 0;
+    const staged = render(card.component, props);
+    const save = findByClass(staged, 'dsafm_save');
+    assert.equal(save.props.disabled, false, '有改动后保存应可点');
+    save.props.onClick();
+    await tick();
+    await tick();
+    hookIndex = 0;
+    const failed = render(card.component, props);
+    const failedLine = findAllByClass(failed, 'dsafm_failed')[0];
+    assert.ok(failedLine, '保存失败应渲染失败段');
+    assert.equal(flatText(failedLine), expect.saveFailed, '保存失败冒号随界面语言');
+  };
+  await round('zh', { rules: '规则检查 + LLM 审查（rules）', presetJoin: '自动审批、workspace-write', saveFailed: '保存失败：保存失败' });
+  await round('en', { rules: 'Rule check + LLM review (rules)', presetJoin: '自动审批, workspace-write', saveFailed: 'Save failed: Save failed' });
+});
+
+test('缺失清单并列连接随界面语言（design §7.5）：中文顿号、英文半角逗号加空格', async () => {
+  const round = async (lang, expected) => {
+    resetHooks();
+    const client = loadClient();
+    const env = makeCtx({
+      snapshot: { status: 'ready', value: { trigger: { presets: ['ghost-a', 'ghost-b'] } }, base: {}, user: {}, revision: 1, writable: true },
+      call: async (endpoint) => {
+        if (endpoint === 'approveForMe/presetCatalog') return { ok: true, value: { presets: [], configured: ['ghost-a', 'ghost-b'] } };
+        if (endpoint === 'approveForMe/modelCatalog') return { ok: true, value: { providers: [] } };
+        return { ok: true, value: {} };
+      },
+    });
+    client.apply(env.ctx);
+    const dicts = env.dictionaries[0].dicts;
+    const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
+    const tree = await expandCard(card.component, { t: (key) => dicts[lang][key] ?? key, scope: env.scope, rpcCall: env.rpcCall });
+    const hints = findAllByClass(tree, 'dsafm_hint').map(flatText);
+    assert.ok(hints.includes(expected), `缺失清单的并列连接随界面语言（实际 hints：${hints.join(' | ')}）`);
+  };
+  await round('zh', '配置中存在但当前预设表里没有：ghost-a、ghost-b');
+  await round('en', 'Configured but absent from the current preset table: ghost-a, ghost-b');
+});
+
+test('审查视图多值并列连接随界面语言（design §7.5）：英文形态半角逗号加空格', async () => {
+  resetHooks();
+  const client = loadClient();
+  const rows = [{ ...TRACE_ROWS[0], approvalId: 'apE' }];
+  const detail = { ...rows[0], humanWaitMs: 0, fieldsDefaulted: 'risk,auth', degraded: 'queue-overflow,entry:tool-call' };
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint, args) => {
+      if (endpoint === 'approveForMe/traceRecords') return { ok: true, value: { records: rows, readFailed: false } };
+      if (endpoint === 'approveForMe/traceRecord') return { ok: true, value: { record: args?.approvalId === 'apE' ? detail : null } };
+      if (endpoint === 'approveForMe/getState') return { ok: true, value: { trace: { capture: 'summary', ownView: true, turnSummary: true } } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const dicts = env.dictionaries[0].dicts;
+  const view = env.registrations.find((entry) => entry.options.name === 'conversation.view');
+  const props = { t: (key) => dicts.en[key] ?? key, ...view.options.inject() };
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  findAllByClass(render(view.component, props), 'dsafm_review_head')[0].props.onClick();
+  hookIndex = 0;
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const text = JSON.stringify(render(view.component, props));
+  assert.match(text, /Auto-filled fields: Risk level \(risk\), Authorization level \(auth\)/, 'fieldsDefaulted 多值在英文形态用半角逗号加空格');
+  assert.match(text, /Missing or degraded conditions: Queue full \(queue-overflow\), Single evidence entry truncated \(entry:tool-call\)/, 'degraded 多值（含 entry 前缀族）在英文形态用半角逗号加空格');
+});
+
+test('composer 回退且无生效模型（§7.3.2:580）：跟随全局承载模型段、无档位段、标识段仍在场', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/getState') {
+        return {
+          ok: true,
+          value: {
+            found: true,
+            active: true,
+            preset: 'auto-approve',
+            sessionModel: 'zai/gone-9',
+            sessionEffort: '',
+            globalDefault: '',
+            globalEffort: '',
+            modelIssues: [
+              { scope: 'session', ruleProvider: null, ruleModel: '', configured: 'zai/gone-9', reason: 'provider 不存在', effectiveLayer: 'global', effectiveModel: '' },
+            ],
+            effective: '',
+            effectiveEffort: '',
+            layer: 'global',
+          },
+        };
+      }
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      return { ok: true, value: { efforts: [{ id: 'low' }, { id: 'high' }] } };
+    },
+  });
+  client.apply(env.ctx);
+  const dicts = env.dictionaries[0].dicts;
+  const dropdown = env.registrations.find((entry) => entry.options.name === 'conversation.input.left');
+  const props = { t: (key) => dicts.zh[key] ?? key, ...dropdown.options.inject() };
+  render(dropdown.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const tree = render(dropdown.component, props);
+  const anchor = findNode(tree, primitivesStub.Menu).props.anchor;
+  // 无生效模型：模型段只显「跟随全局」，无档位段（不补造档位取值）。
+  assert.equal(flatText(findByClass(anchor, 'dsafm_seat_model')), '跟随全局', '无生效模型时模型段由 followGlobalShort 承载');
+  assert.equal(findAllByClass(anchor, 'dsafm_seat_effort').length, 0, '无生效模型时不得渲染档位段');
+  // 回退形态标识段仍在场（「跟随全局」本身即回退结果）。
+  const badge = findAllByClass(anchor, 'dsafm_badge').find((node) => flatText(node) === '已回退');
+  assert.ok(badge, '回退且无生效模型时回退标识段仍应在场');
+  assert.match(String(anchor.props['aria-label']), /^跟随全局 已回退；/, '无障碍名以空格承接标识再加分隔符');
+});
+
+test('拼接标点封闭白名单（design §7.5）：英文字典零全角、client.js 全角扫描命中只在白名单内', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({});
+  client.apply(env.ctx);
+  // 字典层：英文字典全部键值对全角字符类零命中（静态断言）。
+  const en = env.dictionaries[0].dicts.en;
+  const badKeys = Object.entries(en).filter(([, value]) => /[\u3000-\u303F\uFF01-\uFF60]/u.test(value)).map(([key]) => key);
+  assert.deepEqual(badKeys, [], '英文字典不得含全角字符');
+  // 扫描层：client.js 的字符串值、模板字符串与正则式按 7.5 封闭白名单断言——
+  // ①中文字典条目 ②代码注释 ③两语言双形剥离正则 ④语言判定分支的中文侧取值 ⑤中文内容判定式。
+  const violations = [];
+  SOURCE.split('\n').forEach((line, index) => {
+    if (!/[\u3000-\u303F\uFF01-\uFF60]/u.test(line)) return;
+    if (/^\s*\*/u.test(line) || /^\s*\/\*/u.test(line)) return; // ②块注释（含续行）
+    const code = line.replace(/\/\/.*$/u, '');
+    if (!/[\u3000-\u303F\uFF01-\uFF60]/u.test(code)) return; // ②行注释
+    const inWhitelist =
+      /^\s*"[A-Za-z0-9_.\-]+":\s*"[^"]*[\u3000-\u303F\uFF01-\uFF60][^"]*",?\s*$/u.test(line) || // ①（英文侧零全角由字典层保证）
+      /\?\s*"[：、；（]"\s*:/u.test(code) || /\?\s*`（\$\{[^}]*\}）`\s*:/u.test(code) || // ④
+      /（\\?\{v\\?\}）|\[:：\]|实际使用：\|Currently using:/u.test(code) || // ③
+      /startsWith\("审查未执行："\)|\^审查未执行：/u.test(code) || /^const NOT_RUN_PREFIX/u.test(code); // ⑤（判定式常量实名；ATTEMPT_PREFIX 是纯 ASCII 正则，不涉全角）
+    if (!inWhitelist) violations.push(`${index + 1}: ${line.trim().slice(0, 90)}`);
+  });
+  // 已知边界：`//` 剥离按行注释处理——字符串值内位于 `//` 之后的全角会被当注释剥掉（静默漏报，
+  // 不会被扫出）；位于 `//` 之前的仍会命中。当前 client.js 的字符串值无 `//` 形态，属可接受边界；
+  // 如需收严须先剥字符串再剥注释。
+  assert.deepEqual(violations, [], `client.js 全角字符出现在封闭白名单之外（design §7.5，新增拼接点须同步清单与断言）：\n${violations.join('\n')}`);
 });
 
 test('composer 分置提示（§7.2.0）：无 modelIssues 字段（旧宿主）或求值失败时不渲染', async () => {
@@ -1709,6 +2118,59 @@ test('composer 空全局默认提示（§7.2.0）：effectiveModel 空串时省�
   assert.doesNotMatch(text, /全局默认未设置，使用执行助手当前模型（follow-parent）/u, '空默认键不补层含义句——首句已承载层含义（design §7.2.0）');
 });
 
+test('composer 空全局默认提示（§7.2.0/§7.5）：遮蔽键空串形态层含义句承接且中文句间直连', async () => {
+  // 空全局默认条目直退终点 unavailable（父引用校验失败）→ globalUnsetShadowed 键＋空串省略
+  // 「实际使用」句后以层含义句承接（该键在 WARN_LAYER_SENTENCE_KEYS 集内，design §7.2.0/§7.5）。
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/getState') {
+        return {
+          ok: true,
+          value: {
+            found: true,
+            active: true,
+            preset: 'auto-approve',
+            sessionModel: null,
+            sessionEffort: '',
+            globalDefault: '',
+            globalEffort: '',
+            modelIssues: [
+              { scope: 'global', ruleProvider: null, ruleModel: '', configured: '', reason: '全局默认审查模型未设置', effectiveLayer: 'unavailable', effectiveModel: '' },
+            ],
+            effective: '',
+            effectiveEffort: '',
+            layer: 'unavailable',
+          },
+        };
+      }
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      return { ok: true, value: { efforts: [{ id: 'low' }] } };
+    },
+  });
+  client.apply(env.ctx);
+  const dicts = env.dictionaries[0].dicts;
+  const dropdown = env.registrations.find((entry) => entry.options.name === 'conversation.input.left');
+  const props = { t: (key) => dicts.zh[key] ?? key, ...dropdown.options.inject() };
+  render(dropdown.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const tree = render(dropdown.component, props);
+  const wrap = findByClass(tree, 'dsafm_seatwrap');
+  const warns = findAllByClass(wrap, 'dsafm_warnline');
+  assert.equal(warns.length, 1, '控件附近至多一条');
+  assert.equal(
+    flatText(warns[0]),
+    '默认审查模型未设置：仅当解析落到全局默认层时，审查才跟随执行助手的当前模型并独立发起审查调用。当前生效：无可用审查模型（unavailable）。',
+    '遮蔽键空串形态：省略「实际使用」句后层含义句承接，中文句间直连无空格（design §7.2.0/§7.5）',
+  );
+});
+
 test('composer 空全局默认提示（§7.2.0）：被有效映射截住（shadowed）时用 globalUnsetShadowed 键渲染', async () => {
   resetHooks();
   const client = loadClient();
@@ -1812,7 +2274,7 @@ test('composer 提示互斥（§7.2.0）：会话已选择且不可用时只渲�
   const warns = findAllByClass(wrap, 'dsafm_warnline');
   assert.equal(warns.length, 1, '互斥：控件附近至多一条（design §7.2.0）');
   const text = JSON.stringify(warns[0]);
-  assert.match(text, /本会话选择的审查模型不可用/, '渲染的是 session 不可用条目');
+  assert.match(text, /本会话选择的审查模型 zai\/gone-9 不可用：provider 不存在/, '渲染的是 session 不可用条目，含所配引用原值（design §10.2）');
   assert.match(text, /实际使用：全局默认未设置，使用执行助手当前模型（follow-parent）：zai\/glm-5\.3/, '跟随状态由该条目的回退结果承载');
   assert.doesNotMatch(text, /本会话未单独选择审查模型/, '不得另渲染空全局默认行（warn.modelIssue.followParent）');
 });
@@ -3606,7 +4068,7 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['option.scope.named', '指定 provider', "Specific provider"],
     ['warn.modelIssue.global', '默认审查模型不可用：{reason}。实际使用：{effective}。', "The default reviewer model is unavailable: {reason}. Currently using: {effective}."],
     ['warn.modelIssue.rule', '此规则选择的审查模型不可用：{reason}。实际使用：{effective}。', "The reviewer model picked by this rule is unavailable: {reason}. Currently using: {effective}."],
-    ['warn.modelIssue.session', '本会话选择的审查模型不可用：{reason}。实际使用：{effective}。', "This session's reviewer model is unavailable: {reason}. Currently using: {effective}."],
+    ['warn.modelIssue.session', '本会话选择的审查模型 {configured} 不可用：{reason}。实际使用：{effective}。', "This session's reviewer model {configured} is unavailable: {reason}. Currently using: {effective}."],
     ['warn.modelIssue.globalUnset', '默认审查模型未设置：仅当解析实际落到全局默认层（无有效会话选择且无有效映射）时，审查跟随执行助手的当前模型，独立发起审查调用——是「使用相同模型」，不是由执行助手自己审批。', "The default reviewer model is not set: only when resolution actually falls through to the global default (no effective session choice and no effective rule) do reviews follow the agent's current model as an independent call — the same model, never the agent approving itself."],
     ['warn.modelIssue.followParent', '本会话未单独选择审查模型，按未设置的全局默认跟随执行助手的当前模型：独立发起审查调用——是「使用相同模型」，不是由执行助手自己审批。实际使用：{effective}。', "This session has no reviewer of its own and the global default is unset, so reviews follow the agent's current model as an independent call — the same model, never the agent approving itself. Currently using: {effective}."],
     ['warn.modelIssue.globalUnsetShadowed', '默认审查模型未设置：仅当解析落到全局默认层时，审查才跟随执行助手的当前模型并独立发起审查调用。实际使用：{effective}。', "The default reviewer model is not set: reviews follow the agent's current model, as an independent call, only when resolution falls through to the global default. Currently using: {effective}."],
@@ -3633,6 +4095,7 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['field.denyPatterns', '文本拒绝规则（每行一条正则表达式）', "Text deny rules (one regex per line)"],
     ['card.override', '已单独设置', "Set individually"],
     ['effort.default', '自动选择', "Automatic"],
+    ['composer.fallbackBadge', '已回退', "Fallback"],
     // —— §7.2.2 常驻短句表 ——
     ['hint.trigger.presets', '会话使用清单内权限预设时，由本插件接管升权审批。', "Sessions on a listed permission preset hand escalations to this plugin."],
     ['hint.trigger.unknown', '读不到会话权限预设时的处置。', "What happens when the session preset cannot be read."],
@@ -3677,6 +4140,7 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['help.mode', '总开关：规则检查＋LLM 审查＝正常接管；完全不接管＝等同未安装，宿主审批流程不受影响。', 'Master switch: rule check plus LLM review takes over as configured; off behaves as if uninstalled, leaving host approvals untouched.'],
     // —— §7.2.2 预设多选提示表 ——
     ['card.presets.none', '清单为空时，已知预设都不会接管审批；无法识别的预设按「无法识别权限预设时」的设置处置。', 'With an empty list no known preset is taken over; presets that cannot be identified follow "When the preset cannot be identified".'],
+    ['card.presets.missing', '配置中存在但当前预设表里没有：', "Configured but absent from the current preset table: "],
     ['card.presets.missing.remedy', '该预设不在宿主当前预设表中。可依次检查：插件是否已停用、宿主版本是否兼容、预设是否为自定义。重新启用插件或重启宿主可能恢复，不保证一定恢复；插件已卸载且配置仍选择该预设时，可改选标准权限档。插件不解析、不改写用户 YAML，不建议手工清理。', "The preset is absent from the host's current table. Check in turn: a disabled plugin, an incompatible host version, or a custom preset. Re-enabling or restarting may restore it, with no guarantee; if the plugin is uninstalled while the config still selects it, pick a standard tier. The plugin never parses or rewrites user YAML, and manual cleanup is not recommended."],
     ['card.presets.unavailable', '读不到预设目录。可能原因：服务缺失、读取失败或没有可用预设信息；可确认权限预设服务可用后重试。', 'The preset catalog is unavailable. Possible causes: a missing service, a read failure, or no preset information; check the permission preset service and retry.'],
     // —— §7.3.1 会话控件表 ——
@@ -3745,6 +4209,10 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
   for (const [key, zhText, enText] of DESIGN_FINAL) {
     assert.equal(zh[key], zhText, `${key} 的中文应等于设计定稿（转抄自 docs/design.md 对应表）`);
     assert.equal(en[key], enText, `${key} 的英文应等于设计定稿（转抄自 docs/design.md 对应表）`);
+  }
+  // design §7.2.2：仅 session 键携带所配引用占位符；global/rule 键不得含。
+  for (const key of ['warn.modelIssue.global', 'warn.modelIssue.rule']) {
+    assert.ok(!zh[key].includes('{configured}') && !en[key].includes('{configured}'), `${key} 不得含 {configured} 占位符`);
   }
 });
 
@@ -4599,6 +5067,7 @@ test('触发器样式 §7.3.2：两段规则在场、固定宽度上限与旧类
   assert.ok(source.includes('.dsafm_seat_pending{flex:0 1 auto;min-width:0;font-size:11px;color:var(--dsw-alias-state-warn-primary);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'), '待生效提示段缺收缩规则或既有属性');
   assert.ok(source.includes('.dsafm_badge{flex:none;font-size:11px;color:var(--dsw-alias-state-warn-primary);margin-left:6px}'), '失败徽标缺 flex:none、字号或间距');
   assert.ok(source.includes('.dsafm_seatwrap>*{min-width:0;max-width:100%}'), '分置提示包裹层的直接子元素缺收缩规则');
+  assert.ok(source.includes('@media (max-width:1279.98px){.dsafm_seatwrap .dsafm_warnline{margin-left:78px}}'), '窄视口避让媒体查询缺定稿规则（design §7.3.2 避让条）');
   assert.ok(source.includes('.dsafm_seatwrap{display:inline-flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0}'), '分置提示包裹层缺定稿规则（纵向排列与可收缩）');
   assert.ok(source.includes('.dsafm_state{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);font-weight:500;word-break:normal;overflow-wrap:break-word}'), '状态行缺按词换行规则');
   assert.ok(source.includes('cursor:pointer;min-width:0;max-width:min(100%, calc(100vw - 156px))}'), '触发器缺宽度上限（窄视口收缩）');

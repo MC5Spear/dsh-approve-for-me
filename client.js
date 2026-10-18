@@ -128,7 +128,7 @@ window.__ModuleLoader__.load({
 			"option.scope.named": "指定 provider",
 			"warn.modelIssue.global": "默认审查模型不可用：{reason}。实际使用：{effective}。",
 			"warn.modelIssue.rule": "此规则选择的审查模型不可用：{reason}。实际使用：{effective}。",
-			"warn.modelIssue.session": "本会话选择的审查模型不可用：{reason}。实际使用：{effective}。",
+			"warn.modelIssue.session": "本会话选择的审查模型 {configured} 不可用：{reason}。实际使用：{effective}。",
 			"warn.modelIssue.globalUnset": "默认审查模型未设置：仅当解析实际落到全局默认层（无有效会话选择且无有效映射）时，审查跟随执行助手的当前模型，独立发起审查调用——是「使用相同模型」，不是由执行助手自己审批。",
 			"warn.modelIssue.followParent": "本会话未单独选择审查模型，按未设置的全局默认跟随执行助手的当前模型：独立发起审查调用——是「使用相同模型」，不是由执行助手自己审批。实际使用：{effective}。",
 			"warn.modelIssue.globalUnsetShadowed": "默认审查模型未设置：仅当解析落到全局默认层时，审查才跟随执行助手的当前模型并独立发起审查调用。实际使用：{effective}。",
@@ -172,6 +172,7 @@ window.__ModuleLoader__.load({
 			"composer.title": "本会话的审查模型；独立于执行助手调用，点开可只给这个会话指定",
 			"composer.empty": "没有可选模型",
 			"composer.failed": "切换失败",
+			"composer.fallbackBadge": "已回退",
 			"composer.pendingSession": "会话尚未开始；现在设置的值会在会话开始后生效",
 			"composer.section.model": "模型",
 			"composer.section.effort": "推理强度",
@@ -384,7 +385,7 @@ window.__ModuleLoader__.load({
 			"option.scope.named": "Specific provider",
 			"warn.modelIssue.global": "The default reviewer model is unavailable: {reason}. Currently using: {effective}.",
 			"warn.modelIssue.rule": "The reviewer model picked by this rule is unavailable: {reason}. Currently using: {effective}.",
-			"warn.modelIssue.session": "This session's reviewer model is unavailable: {reason}. Currently using: {effective}.",
+			"warn.modelIssue.session": "This session's reviewer model {configured} is unavailable: {reason}. Currently using: {effective}.",
 			"warn.modelIssue.globalUnset": "The default reviewer model is not set: only when resolution actually falls through to the global default (no effective session choice and no effective rule) do reviews follow the agent's current model as an independent call — the same model, never the agent approving itself.",
 			"warn.modelIssue.followParent": "This session has no reviewer of its own and the global default is unset, so reviews follow the agent's current model as an independent call — the same model, never the agent approving itself. Currently using: {effective}.",
 			"warn.modelIssue.globalUnsetShadowed": "The default reviewer model is not set: reviews follow the agent's current model, as an independent call, only when resolution falls through to the global default. Currently using: {effective}.",
@@ -428,6 +429,7 @@ window.__ModuleLoader__.load({
 			"composer.title": "This session's reviewer model — called independently of the agent; pick one to override it for this session only",
 			"composer.empty": "No selectable model",
 			"composer.failed": "Switch failed",
+			"composer.fallbackBadge": "Fallback",
 			"composer.pendingSession": "This session has not started yet; the value applies once it does",
 			"composer.section.model": "Model",
 			"composer.section.effort": "Effort",
@@ -436,7 +438,7 @@ window.__ModuleLoader__.load({
 			"card.presets.count": "{n} selected",
 			"card.presets.default": "default",
 			"card.presets.none": "With an empty list no known preset is taken over; presets that cannot be identified follow \"When the preset cannot be identified\".",
-			"card.presets.missing": "Configured but absent from the current preset table:",
+			"card.presets.missing": "Configured but absent from the current preset table: ",
 			"card.presets.missing.remedy": "The preset is absent from the host's current table. Check in turn: a disabled plugin, an incompatible host version, or a custom preset. Re-enabling or restarting may restore it, with no guarantee; if the plugin is uninstalled while the config still selects it, pick a standard tier. The plugin never parses or rewrites user YAML, and manual cleanup is not recommended.",
 			"card.presets.unavailable": "The preset catalog is unavailable. Possible causes: a missing service, a read failure, or no preset information; check the permission preset service and retry.",
 			"card.bool.on": "On (true)",
@@ -744,6 +746,11 @@ window.__ModuleLoader__.load({
 			// 允许包裹层的直接子元素收缩，座位才按包裹层宽度收窄（否则 375 下座位会越过宿主容器右缘）。
 			// 按位置命中宿主锚点根，不依赖宿主类名；包裹层之外的元素不受影响。
 			".dsafm_seatwrap>*{min-width:0;max-width:100%}",
+			// 窄视口避让（design §7.3.2 避让条）：宿主把模式行压缩后其预设触发器向右溢出、叠在提示行上
+			// （375 带提示帧实测触发器盒右缘 198、提示行左缘 140.44）。78＝74（198−最左座位左缘 124）＋4px
+			// 间隙；门槛取 1280 之下——宽带唯一实测帧 1280 未盖字，375–1280 之间无实测一律避让。
+			// 只加插件自身左边距：不提升层级、不改宿主布局；提示行收窄后按 anywhere 断行吸收。
+			"@media (max-width:1279.98px){.dsafm_seatwrap .dsafm_warnline{margin-left:78px}}",
 			".dsafm_stack{display:flex;flex-direction:column;gap:6px;min-width:0}",
 			".dsafm_picker{display:flex;align-items:center;gap:8px;width:100%;text-align:left;cursor:pointer}",
 			".dsafm_picker_text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
@@ -1084,12 +1091,20 @@ window.__ModuleLoader__.load({
 			const rawLayer = t(layerKey);
 			const layerText = rawLayer === layerKey ? t("enum.unknown").replace("{v}", String(issue?.effectiveLayer)) : rawLayer;
 			const model = typeof issue?.effectiveModel === "string" ? issue.effectiveModel : "";
-			const template = t(key).replace("{reason}", String(issue?.reason ?? ""));
+			// 所配引用占位符（design §7.2.2 定稿）：仅 session 键携带——该提示渲染在 composer 会话
+			// 控件附近、无相邻控件显示所配模型；global/rule 键的提示在设置页对应控件旁，所配值已是
+			// 相邻控件显示内容，键值不含该占位符（替换为无占位符时的空操作）。
+			const template = t(key)
+				.replace("{configured}", String(issue?.configured ?? ""))
+				.replace("{reason}", String(issue?.reason ?? ""));
 			const stripped = template.replace(/\s*(?:实际使用：|Currently using:)\s*\{effective\}[。.]\s*$/u, "");
+			// 空串形态以层含义句承接（design §7.2.0）；句间连接随界面语言（design §7.5）：
+			// 中文句号分隔不加空格，英文句点后补一个半角空格——判定源取层含义句字典值（同 :1103 取局部判据）。
+			const layerSentence = WARN_LAYER_SENTENCE_KEYS.has(key) ? t("warn.modelIssue.layer").replace("{layer}", layerText) : "";
 			const text =
 				model.length > 0
 					? template.replace("{effective}", `${layerText}${/[\u3400-\u9fff]/u.test(layerText) ? "：" : ": "}${model}`)
-					: `${stripped}${WARN_LAYER_SENTENCE_KEYS.has(key) ? t("warn.modelIssue.layer").replace("{layer}", layerText) : ""}`;
+					: layerSentence === "" ? stripped : `${stripped}${/[\u3400-\u9fff]/u.test(layerSentence) ? "" : " "}${layerSentence}`;
 			return jsxRuntime.jsxs("div", {
 				className: "dsafm_warnline",
 				children: [
@@ -1404,13 +1419,21 @@ window.__ModuleLoader__.load({
 			// 会话开始后生效（requirements §6.2）。
 			const pendingSession = state.found === false;
 			const model = typeof state.effective === "string" ? state.effective : "";
-			const currentEffort = state.sessionModel !== null && state.sessionModel !== undefined ? state.sessionEffort : state.effectiveEffort;
-			const effort = typeof currentEffort === "string" ? currentEffort : undefined;
+			// 档位随生效层取值（design §7.3.2）：会话层生效（`layer === 'session'`，即会话选择被实际采用）
+			// 取会话档位原值——未指定即「自动选择」，显式不被支持仍显示所选原值；回退与未单独选择形态
+			// 取生效档位原值（解析器实际采用的档位：未指定且模型支持 low 即 low，空串即「自动选择」）。
+			// 档位段显隐跟随所取来源：所取来源为 undefined 即不显示档位段（另一字段有值不补显）；
+			// 旧宿主无 `layer` 字段按生效档位。
+			const effortSource = state.layer === "session" ? state.sessionEffort : state.effectiveEffort;
+			const effort = typeof effortSource === "string" ? effortSource : undefined;
 			// 触发器两段（design §7.3.2）：模型段承载 `composer.label` 与模型引用，档位段承载
 			// 分隔符与档位文案。两段文本直接相连必须与单段写法逐字相同；没有生效模型时只有
 			// 模型段（跟随全局），不显示档位段。模型引用不改写取值，只由样式省略。
+			// 拼接冒号随界面语言（design §7.5）：按同源本地化片段的汉字字符类判定，不新增字典键。
 			const labelModel =
-				model.length === 0 ? t("composer.followGlobalShort") : `${t("composer.label")}：${model}`;
+				model.length === 0
+					? t("composer.followGlobalShort")
+					: `${t("composer.label")}${/[\u3400-\u9fff]/u.test(t("composer.label")) ? "：" : ": "}${model}`;
 			const labelEffort =
 				model.length === 0 || effort === undefined
 					? null
@@ -1419,11 +1442,12 @@ window.__ModuleLoader__.load({
 			// 分隔符随界面语言取中文「；」或英文「; 」（design §7.3.2 无障碍）：不新增字典键，
 			// 按渲染语言的标签文本判定——中文标签含汉字，英文标签不含。
 			const labelSeparator = /[\u3400-\u9fff]/u.test(t("composer.label")) ? "；" : "; ";
+			const failedColon = /[\u3400-\u9fff]/u.test(t("composer.failed")) ? "：" : ": ";
 			const seatDescription = pendingSession
 				? t("composer.pendingSession")
 				: error === ""
 					? t("composer.title")
-					: `${t("composer.failed")}：${error}`;
+					: `${t("composer.failed")}${failedColon}${error}`;
 
 			const modelItems = [];
 			for (const provider of catalog?.providers ?? []) {
@@ -1441,14 +1465,15 @@ window.__ModuleLoader__.load({
 					});
 				}
 			}
+			const effortItemColon = /[\u3400-\u9fff]/u.test(t("composer.section.effort")) ? "：" : ": ";
 			const effortItems =
 				model.length === 0
 					? []
 					: [
-						{ id: "__effort__", label: `${t("composer.section.effort")}：${t("effort.default")}` },
+						{ id: "__effort__", label: `${t("composer.section.effort")}${effortItemColon}${t("effort.default")}` },
 						...(effortTable?.ref === model ? effortTable.efforts : []).map((item) => ({
 							id: `__effort__:${item.id}`,
-							label: `${t("composer.section.effort")}：${item.id}`,
+							label: `${t("composer.section.effort")}${effortItemColon}${item.id}`,
 						})),
 					];
 
@@ -1488,20 +1513,28 @@ window.__ModuleLoader__.load({
 				});
 			};
 
-			// 触发器（design §7.3.2）：无障碍名＝完整当前选择＋分号＋现行说明句，视觉可见文案只承担
-			// 模型段与档位段；`title` 保持现行说明句，不追加当前值。
+			// 回退形态（design §7.3.2）：会话已单独选择且 `modelIssues` 含 `scope='session'` 条目
+			// （与 §7.2.0 会话指定不可用提示同一数据源，外加 `sessionModel` 非空的条件）。座位在档位段
+			// 之后追加回退标识段；会话层生效与未单独选择两种形态都不得出现，不常挂「已回退」。
+			const sessionModelRef = typeof state?.sessionModel === "string" ? state.sessionModel : "";
+			const sessionIssues = issuesOf(state?.modelIssues, "session");
+			const fallback = sessionModelRef.length > 0 && sessionIssues.length > 0;
+			// 触发器（design §7.3.2）：无障碍名＝完整当前选择＋（回退形态时）空格与回退标识＋分号＋现行说明句，
+			// 视觉可见文案只承担模型段与档位段（回退标识段只表达「当前显示的是回退结果」）；
+			// `title` 保持现行说明句，不追加当前值。
 			const seat = jsxRuntime.jsxs("button", {
 				type: "button",
 				className: "dsafm_seat",
 				"aria-haspopup": "menu",
 				"aria-expanded": open,
-				"aria-label": `${visibleLabel}${labelSeparator}${seatDescription}`,
+				"aria-label": `${visibleLabel}${fallback ? ` ${t("composer.fallbackBadge")}` : ""}${labelSeparator}${seatDescription}`,
 				title: seatDescription,
 				disabled: busy || modelItems.length === 0,
 				onClick: () => setOpen((value) => !value),
 				children: [
 					jsxRuntime.jsx("span", { className: "dsafm_seat_model", children: labelModel }),
 					labelEffort === null ? null : jsxRuntime.jsx("span", { className: "dsafm_seat_effort", children: labelEffort }),
+					fallback ? jsxRuntime.jsx("span", { className: "dsafm_badge", children: t("composer.fallbackBadge") }) : null,
 					pendingSession ? jsxRuntime.jsx("span", { className: "dsafm_seat_pending", children: t("composer.pendingSession") }) : null,
 					error === "" ? null : jsxRuntime.jsx("span", { className: "dsafm_badge", children: t("composer.failed") }),
 					jsxRuntime.jsx(ChevronDownIcon, { className: "dsafm_chevron" }),
@@ -1514,8 +1547,6 @@ window.__ModuleLoader__.load({
 			// 用 globalUnsetShadowed 键，实际生效按真实解析呈现，不声称当前跟随。它与 session 不可用
 			// 条目条件互斥（选择空 vs 已选择且不可用），控件附近至多一条；求值失败或旧宿主无
 			// modelIssues 字段时不产生条目。
-			const sessionModelRef = typeof state?.sessionModel === "string" ? state.sessionModel : "";
-			const sessionIssues = issuesOf(state?.modelIssues, "session");
 			const unsetIssue = issuesOf(state?.modelIssues, "global").find(isGlobalUnsetIssue) ?? null;
 			const followParentIssue =
 				sessionModelRef.length === 0 && sessionIssues.length === 0 && unsetIssue !== null ? unsetIssue : null;
@@ -1600,12 +1631,14 @@ window.__ModuleLoader__.load({
 			const rows = catalog?.presets ?? [];
 			const configured = catalog?.configured ?? [];
 			const missing = configured.filter((id) => !rows.some((row) => row.id === id));
+			// 并列连接随界面语言（design §7.5）：拼接项是宿主预设名/原值 id、无同源本地化片段，
+			// 判定源取同组件渲染必经的 `card.presets.count` 字典值（中文顿号、英文半角逗号加空格）。
 			const summary =
 				selected.length === 0
 					? t("card.presets.empty")
 					: selected
 						.map((id) => rows.find((row) => row.id === id)?.label ?? id)
-						.join("、");
+						.join(/[\u3400-\u9fff]/u.test(t("card.presets.count")) ? "、" : ", ");
 
 			return jsxRuntime.jsxs("div", {
 				className: "dsafm_stack",
@@ -1673,7 +1706,7 @@ window.__ModuleLoader__.load({
 					rows.length === 0 ? jsxRuntime.jsx("div", { className: "dsafm_hint", children: t("card.presets.unavailable") }) : null,
 					missing.length === 0
 						? null
-						: jsxRuntime.jsx("div", { className: "dsafm_hint", children: `${t("card.presets.missing")}${missing.join("、")}` }),
+						: jsxRuntime.jsx("div", { className: "dsafm_hint", children: `${t("card.presets.missing")}${missing.join(/[\u3400-\u9fff]/u.test(t("card.presets.missing")) ? "、" : ", ")}` }),
 					// 缺失态附补救指引（requirements §6.1／design §9.2）——指引服务于缺失态，不是常驻文案。
 					missing.length === 0 ? null : jsxRuntime.jsx("div", { className: "dsafm_hint", children: t("card.presets.missing.remedy") }),
 				],
@@ -2133,11 +2166,12 @@ window.__ModuleLoader__.load({
 				 */
 				const multiEnumText = (prefix, value) => {
 					if (typeof value !== "string" || value.length === 0) return null;
-					return value
+					const parts = value
 						.split(/[,+]/u)
 						.filter((item) => item.length > 0)
-						.map((item) => (item.startsWith("entry:") ? t("degraded.entry").replace("entry:…", item) : enumText(prefix, item)))
-						.join("、");
+						.map((item) => (item.startsWith("entry:") ? t("degraded.entry").replace("entry:…", item) : enumText(prefix, item)));
+					// 并列连接随界面语言（design §7.5）：判定源取经枚举映射后的字典值拼接。
+					return parts.join(/[\u3400-\u9fff]/u.test(parts.join("")) ? "、" : ", ");
 				};
 				/**
 				 * 记录视图的理由行（design §7.4.1）：判定次序固定，先排除、再归类。
@@ -3092,7 +3126,8 @@ window.__ModuleLoader__.load({
 				 */
 				const label = (option) => {
 					const text = t(`option.${key}.${option}`);
-					return text === `option.${key}.${option}` ? option : `${text}（${option}）`;
+					// 后缀括号随界面语言（design §7.5）：中文全角括号、英文半角括号加前导空格；原值不改写。
+					return text === `option.${key}.${option}` ? option : `${text}${/[\u3400-\u9fff]/u.test(text) ? `（${option}）` : ` (${option})`}`;
 				};
 				return fieldShell({
 					label: t(field.labelKey),
@@ -3458,7 +3493,7 @@ window.__ModuleLoader__.load({
 								? jsxRuntime.jsx("p", {
 										className: "dsafm_failed",
 										role: "status",
-										children: error === "" ? t("card.failed") : `${t("card.failed")}：${error}`,
+										children: error === "" ? t("card.failed") : `${t("card.failed")}${/[\u3400-\u9fff]/u.test(t("card.failed")) ? "：" : ": "}${error}`,
 									})
 								: null,
 							// 唯一「保存」：无改动/有非法值/保存中置灰（requirements §6.1；置灰条件与官方 blocked 字段同款）。

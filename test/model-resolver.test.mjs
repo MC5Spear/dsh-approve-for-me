@@ -799,6 +799,37 @@ test('空默认条目会话不可用：不查映射、直退终点（含映射�
   assert.equal(empty.effectiveModel, 'zai/glm-5.3', '填执行助手当前模型引用');
 });
 
+test('条目 effectiveModel 归一（design §7.2.0）：裸 id 全局默认＋会话不可用→回退引用为完整 provider/model', async () => {
+  // 裸模型名全局默认可解析（回退 provider 首个已注册）：回退条目的 effectiveModel 须归一为
+  // 解析后的完整引用（与 selectReviewerModel 的 effective 同口径）；裸名原文只在 configured 承载。
+  const issues = await collectModelIssues({
+    llm: issuesLlm(),
+    reviewer: { model: 'glm-5.3' },
+    sessionChoice: { kind: 'set', model: 'ghost/nope', effort: '' },
+    parent: { provider: 'zai', model: 'glm-5.3' },
+  });
+  const sessionIssue = issues.find((issue) => issue.scope === 'session');
+  assert.ok(sessionIssue !== undefined, '会话不可用条目应在场');
+  assert.equal(sessionIssue.effectiveLayer, 'global', '会话不可用直退全局默认层');
+  assert.equal(sessionIssue.effectiveModel, 'zai/glm-5.3', '回退引用归一为完整 provider/model（不取配置裸名原文）');
+  assert.equal(sessionIssue.configured, 'ghost/nope', '所配原文只在 configured 承载');
+});
+
+test('条目 effectiveModel 归一（design §7.2.0）：裸 id 映射目标命中空默认截住→parent-map 引用为完整 provider/model', async () => {
+  // 手输裸 id 映射目标可解析（回退 provider 取执行助手 provider）：空默认条目的
+  // effectiveModel 同样归一，避免座位与提示句出现两种写法。
+  const issues = await collectModelIssues({
+    llm: issuesLlm(),
+    reviewer: { byParentModel: { 'v4-flash': 'deepseek-v4-pro' } },
+    sessionChoice: undefined,
+    parent: { provider: 'deepseek-official', model: 'v4-flash' },
+  });
+  const empty = issues.find((issue) => issue.scope === 'global' && issue.configured === '');
+  assert.ok(empty !== undefined, '空默认条目应在场');
+  assert.equal(empty.effectiveLayer, 'parent-map', '映射命中即被截住');
+  assert.equal(empty.effectiveModel, 'deepseek-official/deepseek-v4-pro', '映射目标引用归一为完整 provider/model（不取裸名原文）');
+});
+
 test('空默认条目映射目标不可用：级联直退终点，不取 parent-map', async () => {
   const issues = await collectModelIssues({
     llm: issuesLlm(),
