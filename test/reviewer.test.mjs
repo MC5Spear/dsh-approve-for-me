@@ -203,7 +203,7 @@ test('review：多个工具调用逐个配对，非法 JSON 参数仍回喂 isEr
       { blocks: [call('c1', 'read_file', '{"path":"a"}'), call('c2', 'grep', 'not-json')] },
       { blocks: [text('{"outcome":"deny","rationale":"nope"}')] },
     ],
-    // 回喂文案断言按 zh 档写（zh 字节与字典化前一致）：显式声明语言，不依赖回落方向。
+    // 回喂文案断言按 zh 档写（zh 档文案为静态字典值，字节稳定）：显式声明语言，不依赖回落方向。
     { cfg: { language: { agent: 'zh' } } },
   );
   const verdict = await h.review();
