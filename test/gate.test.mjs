@@ -34,7 +34,8 @@ function makeRt(cfg, options = {}) {
     cfg: () => cfg,
     async configFor() {
       // 装配延迟测试缝（与 reviewDelayMs 同款）：把等待注入装配阶段——人工 request 起算的预算从
-      // 请求进入应答者就开始消耗，configFor 的耗时必须吃掉该预算（反例：装配耗时挤占人工预算）。
+      // 请求进入应答者就开始消耗，configFor 的耗时必须吃掉该预算（用于构造预算被装配前置等待
+      // 耗尽的场景，供 G1–G4 验证耗尽语义与起算点）。
       if (options.configForDelayMs !== undefined) await delay(options.configForDelayMs);
       // 装配挂死测试缝：永不 resolve，装配备用计时器是唯一出口。
       if (options.configForNever === true) await new Promise(() => {});
@@ -194,10 +195,10 @@ function makeRt(cfg, options = {}) {
 
 /** 让微任务与已排定的定时器先跑一轮。 */
 const tick = () => new Promise((resolve) => setImmediate(resolve));
-/** 延时。 */
+/** 真实定时等待（与 tick 的 setImmediate 排空微任务不同：本函数跨真实定时器）。 */
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** 构造一次请求。 */
+/** 构造一次 pwsh 升权审批请求（callId=call_1、理由为 escalate sandbox；传入 signal 时附带中止信号）。 */
 const request = (signal) => ({ agent: { session: { id: 's1' }, inject: () => {} }, toolName: 'pwsh', callId: 'call_1', reason: 'escalate sandbox to danger-full-access: x', ...(signal === undefined ? {} : { signal }) });
 
 test('路径 1：审查 allow → allowed-once，撤回卡片，按 ui.inject=all 注入放行留痕', async () => {
@@ -1071,7 +1072,7 @@ test('agentLangOf：显式 zh/en 原样，缺失/非法回落 en（回落方向�
   assert.equal(agentLangOf(undefined), 'en');
   assert.equal(agentLangOf({ language: { agent: 'fr' } }), 'en', '非法值回落 en');
   // 变红判据：若 gate 回落改回 zh，缺失与非法两档断言红；
-  // 该回落同时喂给 index 层逃逸注入（runEscape 未配 language 时即走本回落）。
+  // 该回落同时喂给 index.js 应答者 catch 的逃逸注入（未配 language 时即走本回落）；test/index.test.mjs 的 runEscape 用例覆盖该形态。
 });
 
 test('回落谓词单源（requirements §5.3／design §4.1）：字面谓词在 lib/ 内只许住在 gate.js 的 agentLangOf', async () => {

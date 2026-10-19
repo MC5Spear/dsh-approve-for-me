@@ -157,11 +157,14 @@ export async function outputDir() {
 }
 
 /**
- * 取具名实例的接入信息。
+ * 取实例的接入信息。
  *
- * 顺序：按名取（`DSAFM_<名>_*` 环境变量 → `instances.<名>`）→ 配置的 `defaultInstance`
- * → 全局回退（`DSAFM_INSTANCE_URL` / `DSAFM_TOKEN_FILE`）。
- * @param {string} [name] - 实例名；省略时取配置的默认实例。
+ * 给了名称：只取该名称的实例，找不到返回 `undefined`——不回落默认实例，避免探针悄然
+ * 连错目标。具名实例须在配置文件 `instances` 里声明，`DSAFM_<名>_*` 环境变量只覆盖
+ * 已声明条目的取值。
+ * 未给名称：先取 `defaultInstance` 指向的名称；该名称不存在时才用匿名回退
+ * （`DSAFM_INSTANCE_URL` / `DSAFM_TOKEN_FILE`）。
+ * @param {string} [name] - 实例名；省略时按默认实例与匿名回退解析。
  * @returns {Promise<{url: string|undefined, tokenFile: string|undefined}|undefined>} 接入信息。
  */
 export async function instance(name) {

@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import { instance, missingNotice } from './local-config.mjs';
 
 /**
- * 解析命令行参数。
+ * 解析命令行参数；--url/--token-file 省略时回落 local-config 默认实例，--session 无默认。
  * @returns {Promise<{url: string, tokenFile: string, session: string}>} 选项。
  */
 async function options() {
@@ -30,7 +30,7 @@ async function options() {
 }
 
 /**
- * 从 token 文件里取出 URL 行。
+ * 从 token 文件（内容为 `?token=` 行）中提取启动 token。
  * @param {string} file - token 文件路径。
  * @returns {string} token。
  */
@@ -69,10 +69,6 @@ async function connect(base, token) {
   };
 }
 
-/**
- * 主流程。
- * @returns {Promise<void>} 无返回。
- */
 async function main() {
   const opts = await options();
   if (opts.url === '' || opts.tokenFile === '') {

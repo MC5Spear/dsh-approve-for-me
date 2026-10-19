@@ -29,7 +29,7 @@ async function fixture() {
   return root;
 }
 
-/** 收集审计与脱敏调用。 */
+/** 收集 audit 回调的调用记录。 */
 function spy() {
   const audits = [];
   return { audits, audit: (fields) => audits.push(fields) };
@@ -395,7 +395,7 @@ test('setter 现读生效、非法值不改变现值', async () => {
   const still = await tools.run('read_file', { path: 'x' });
   assert.equal(still.isError, true, '非法超时不得改写现值：仍按 15ms 生效');
 
-  // 单工具超时零值＝字面立即超时（不是不限时）——挂起任务与同步快任务
+  // 单工具超时零值＝立即超时（不是不限时）——挂起任务与同步快任务
   // 都不得赢得竞速：不发起调用、直接按超时返回失败说明。
   delayMs = 0;
   tools.setToolTimeoutMs(0);

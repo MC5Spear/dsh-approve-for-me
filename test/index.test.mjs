@@ -475,13 +475,13 @@ test('装配接线：rt.review 按请求构造工具上下文快照并随任务�
 
 // ── 冷却计数接线（真 seam；requirements §4.4／design §5.3）─────────────────
 // apply 注册真应答者 → 真 gate → 真 reviewer（llm.stream 替身）→ 真 scheduler → record。
-// 三个测试共用一套装配：流替身可切「延迟后抛 provider 500」（有机故障，重试一次后 error）
+// 本文件真接线用例共用这套装配：流替身可切「延迟后抛 provider 500」（有机故障，重试一次后 error）
 // 或「挂起到 signal 中止」（中止型，模拟宿主流对 abort 的传播）。
 
 /**
  * 装配一套完整接线的插件环境（真 gate/reviewer/scheduler，仅 llm 与服务为替身）。
  * `DSH_HOME` 指到临时目录：审查记录 JSONL 不落真 home。
- * @param {{behavior?: {delay?: number, hang?: boolean}, config?: object}} [options] - 覆盖项。
+ * @param {{behavior?: {delay?: number, hang?: boolean, errorText?: string}, resolveDelayMs?: number, config?: object}} [options] - 覆盖项。
  * @returns {Promise<object | undefined>} 环境句柄；宿主包不可解析时 `undefined`。
  */
 async function wiredEnv(options = {}) {

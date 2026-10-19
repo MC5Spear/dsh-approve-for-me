@@ -67,7 +67,6 @@ function launchToken(file) {
   return match === null ? '' : match[1];
 }
 
-/** 等待若干毫秒。 */
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
 /** 轮询 `GET /json/version` 直到 CDP 端口可用。 */
@@ -178,7 +177,7 @@ class Session {
     return result.result?.value;
   }
 
-  /** 关闭连接。 */
+  /** 关闭连接；异常吞掉——主流程已结束，关闭失败无处理价值。 */
   close() {
     try {
       this.socket.close();
@@ -219,10 +218,7 @@ globalThis.__dsafm = {
 "ok";
 `;
 
-/**
- * 主流程。
- * @returns {Promise<void>} 无返回。
- */
+/** 主流程：拉起或附加无头浏览器 → 认证 → 逐步执行取景脚本 → 清理。 */
 async function run() {
   const opts = await options();
   // --cdp <port>：附加模式——沙箱会拦 node 直接 spawn Edge，

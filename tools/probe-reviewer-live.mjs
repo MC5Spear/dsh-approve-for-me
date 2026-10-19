@@ -18,7 +18,8 @@ const BASE_URL = (process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com').r
 const TIMEOUT_MS = 180000;
 
 /**
- * 解析命令行参数；默认复现现网配置（默认审查模型 + 不设输出上限）。
+ * 解析命令行参数；默认不设输出上限（与 lib/config.js 的 reviewer.maxTokens 缺省 0 一致）。
+ * 模型与档位缺省取 deepseek-flash/max，是本探针的手动诊断缺省，非插件 schema 缺省。
  * @returns {{model: string, effort: string, maxTokens: number, maxToolSteps: number}} 选项。
  */
 function options() {
@@ -103,7 +104,7 @@ function mapFinishReason(reason) {
   return { kind: 'error', failure: { message: `model stopped: ${reason}`, code: reason.toUpperCase() } };
 }
 
-/** 假消息构造器：字段形状与 `@deepseek-ai/dsh-llm` 一致。 */
+/** 假消息构造器：输入签名与 `@deepseek-ai/dsh-llm` 一致；user/assistant 输出同形，tool-result 为探针私有形状（由 toWireMessages 翻译成线格式）。 */
 const messages = {
   createUserMessage: (input) => ({ role: 'user', content: input.content, source: input.source }),
   createAssistantMessage: (input) => ({ role: 'assistant', content: input.content, source: { kind: 'model', ...input.source } }),

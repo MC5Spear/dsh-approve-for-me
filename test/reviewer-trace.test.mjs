@@ -11,7 +11,7 @@ import { REVIEW_TIMEOUT_ABORT_MESSAGE } from '../lib/gate.js';
  *
  * 覆盖两层：`lib/reviewer.js` 的 onReview 契约（成功路径的字段一致性、采集档开关、fire-and-forget），
  * 以及 `lib/index.js` 的端到端接线（gate 补的审批上下文 → reviewer → onReview → JSONL 落盘、
- * 配置签名变化重建实例不丢数据）。后者依赖宿主包，离线环境按 `index.test.mjs` 的惯例整体跳过。
+ * 配置签名变化时同一实例原地重配、在途读写仍走同一实例不丢数据）。后者依赖宿主包，离线环境按 `index.test.mjs` 的惯例整体跳过。
  */
 
 /** 假组装器：只模拟审查循环真正消费的行为（blocks/finish/usage）。 */
@@ -498,8 +498,9 @@ test('index 接线：record 收到 sessionId/callId/toolName，配置签名变�
 
 /**
  * 跑一次完整审批并捕获送审证据段与落盘审查记录（真 gate→screen→reviewer→record 链）。
- * @param {object} options - `snapshotEvents`（缺省＝会话无该接口）、`sessionHeader`、`context`（context 配置覆盖）、
- *   `lang`（language.agent）、`events`（正常事件流快捷方式，含接管预设与 tool/call）。
+ * @param {object} options - `snapshotEvents`（缺省＝会话带 () => events 正常事件流；传 `noSnapshot: true`
+ *   时会话无该接口）、`noSnapshot`（布尔特例开关）、`callId`（覆盖默认 callId）、`sessionHeader`、
+ *   `context`（context 配置覆盖）、`lang`（language.agent）、`events`（正常事件流快捷方式，含接管预设与 tool/call）。
  * @returns {Promise<object | undefined>} `{ evidenceText, reviewRow, stderr }`；宿主包不可解析时 `undefined`。
  */
 async function contextChain(options = {}) {

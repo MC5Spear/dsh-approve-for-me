@@ -16,7 +16,7 @@ function session(options = {}) {
 /**
  * 构造判定器。
  * @param {object} [options] - 选项。
- * @returns {{mode: Function, audits: object[]}} 句柄。
+ * @returns {{mode: Function, gateSkip: Function, audits: object[]}} 句柄。
  */
 function harness(options = {}) {
   const audits = [];

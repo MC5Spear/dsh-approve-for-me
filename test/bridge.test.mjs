@@ -35,7 +35,9 @@ const testHost = bridge === undefined ? test.skip : test;
  * 这样单测覆盖的是端点逻辑本身（`getState` / `setSessionModel` / `pendingState` / `presetCatalog`），
  * 不依赖宿主的 Service 基类与网关。
  * `getState` 与审批共用模型选择（design §6.2）：替身注入同一份 llm 目录；`options.resolver`
- * 传入真实 `createResolver` 产物以验证缓存复用，缺省时走无缓存的直接选择。
+ * 传入真实 `createResolver` 产物以验证缓存复用，替身缺省同样创建真实 `createResolver`
+ * （有缓存，与 lib/index.js 装配同型）；bridge 侧 `deps.resolver` 缺省时才退化为无缓存的
+ * `selectReviewerModel` 直接选择。
  * @param {object} [options] - 选项。
  * @returns {object} 服务实例替身。
  */
@@ -665,7 +667,8 @@ testHost('traceRecords：readFailed=true 透传（design §8.3）；traceRecord 
   assert.equal(record.approvalId, 'ap1');
   assert.equal(record.decision, 'error');
   assert.equal(record.outcome, 'rejected');
-  // 结算侧独有字段（stage/preset/degraded）从结算记录补入；审查侧（attempts/layer/取证）保留。
+  // 补充字段一律审查优先、缺失回落结算记录（design §8.2）；本用例的 stage/preset/degraded 恰只
+  // 在结算行在场，经回落补入；审查侧（attempts/layer/取证）保留。
   assert.equal(record.stage, 'queue');
   assert.equal(record.preset, 'auto-approve');
   assert.equal(record.degraded, 'queue-overflow');

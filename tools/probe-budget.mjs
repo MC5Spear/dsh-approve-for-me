@@ -6,7 +6,7 @@
  * 记录 `finish_reason`、正文长度、思考长度与用量。不打印任何凭据。
  *
  * 用法：node tools/probe-budget.mjs [--model deepseek-flash] [--max 512,2048,none] [--effort max,low]
- * 退出码：0 = 至少一组组合验证通过（含部分失败）；2 = 无凭据或网络不可达（未验证）。
+ * 退出码：0 = 至少一组组合验证通过（含部分失败）；2 = 无凭据或全部组合失败（未验证）。
  */
 import { readCredentialRef, credentialsFile } from './credentials.mjs';
 

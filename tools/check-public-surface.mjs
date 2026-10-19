@@ -148,7 +148,6 @@ function walk(root, dir = root, out = []) {
   return out;
 }
 
-/** 遍历时跳过的目录名。 */
 const SKIP_DIRS = new Set(['.git', 'node_modules', '.tmp']);
 
 /**
@@ -205,7 +204,8 @@ export function scanText(text, options = {}) {
 }
 
 /**
- * 结构判据。与内容无关，只看仓库形状。
+ * 结构判据：查 .gitignore 的 `.local/` 例外、跟踪文件不落本机侧，并扫源码里的 `.local/`
+ * 字面使用；不做指纹/引用扫描。
  * @param {string} root - 仓库根。
  * @param {string[]} files - 跟踪文件列表。
  * @returns {Array<{rule: string, label: string, file: string, line: number, column: number, match: string}>} 违规列表。
@@ -246,7 +246,7 @@ export function checkStructure(root, files) {
 /**
  * 全量检查。
  * @param {string} [root] - 仓库根。
- * @returns {{files: number, scanned: number, violations: object[]}} 结果。
+ * @returns {{files: number, scanned: number, violations: object[], source: string}} 结果。
  */
 export function runCheck(root = ROOT) {
   const { files, source } = enumerateTracked(root);

@@ -13,7 +13,7 @@ const home = join(homedir(), '.dsh');
 const sessionsRoot = join(home, 'sessions');
 const reviewsRoot = join(home, 'approve-for-me', 'reviews');
 
-/** 枚举 workspace/session 目录。 */
+/** sessions 根下第一层为 workspace、第二层为 session，仅收集含 session.jsonl.zstd 的会话目录。 */
 function walk(root) {
   const out = [];
   for (const ws of readdirSync(root)) {

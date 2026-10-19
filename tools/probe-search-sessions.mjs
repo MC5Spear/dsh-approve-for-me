@@ -18,7 +18,7 @@ const ctxIndex = process.argv.indexOf('--context');
 const ctx = ctxIndex >= 0 ? Number(process.argv[ctxIndex + 1]) : 160;
 const root = join(homedir(), '.dsh', 'sessions');
 
-/** 收集一个会话目录下的会话文件。 */
+/** 只认 session.jsonl.zstd 与 session.v<N>.jsonl.zstd 两种命名，其余文件忽略。 */
 function sessionFiles(dir) {
   return readdirSync(dir)
     .filter((name) => name === 'session.jsonl.zstd' || /^session\.v\d+\.jsonl\.zstd$/u.test(name))

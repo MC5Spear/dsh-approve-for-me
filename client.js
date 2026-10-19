@@ -155,7 +155,7 @@ window.__ModuleLoader__.load({
 			"help.reviewer.parentModelRules": "按执行助手的模型选择审查模型：每条规则含作用范围（任意 provider，或指定 provider 下的完整模型 id）与审查模型、推理强度。会话选择更优先；命中时先于全局默认；未命中按其余层解析。同一作用范围与执行助手模型只能有一条规则，重复的行不能保存。旧字典继续参与匹配：纯模型 id 键按任意 provider 读取；含斜杠的旧键会在表中请求确认原意，确认前按原值读取，不自动改写。",
 			"help.reviewer.model": "全局默认的审查模型与推理强度。模型引用形如 provider/model；推理强度留空表示自动选择：模型支持 `low` 就使用 `low`，否则不指定、由模型默认值决定，不承诺所有模型都支持或采用相同强度。解析顺序为会话选择 → 按执行助手的模型映射 → 全局默认；全局默认未设置时使用执行助手的当前模型——插件仍独立发起一次审查调用，是「使用相同模型」，不是由执行助手自己审批。",
 			"help.reviewer.timeoutMs": "自动审查的等待上限（毫秒），涵盖装配与等待本次审查结论的全过程，内部重试不另计时。超时按拒绝处理并说明发生环节，不是危险判定。0 立即超时；需要较长等待时设较大的值。",
-			"help.reviewer.maxTokens": "token 是模型计量文本的单位。审查输出上限（token）。0 表示不向模型传输出上限，由模型或供应商默认值决定。推理模型可能先把额度用于推理：上限过小可能导致没有有效结论（正文为空，按审查故障处理）；具体数值因模型与推理强度而异，不以个别模型的测量结果作通用保证。",
+			"help.reviewer.maxTokens": "token 是模型计量文本的单位。审查输出上限（token）。0 表示不向模型传输出上限，由模型或供应商默认值决定。推理模型可能先把额度用于推理，上限过小可能导致没有有效结论（正文为空，按审查故障处理）；具体数值因模型与推理强度而异，不以个别模型的测量结果作通用保证。",
 			"help.human.timeoutMs": "人工作答等待上限（毫秒），仅在「自动审查未允许时＝交给人工决定」时使用。0 表示立即拒绝，不是无限等待。到点按拒绝结算，原因写明人工作答超时。",
 			"help.human.timeoutFrom": "人工作答计时的起点：从审批请求起算＝交人工只使用剩余时间；从交人工起算＝交人工时重新开始计时。",
 			"help.mode": "总开关：规则检查＋LLM 审查＝正常接管；完全不接管＝等同未安装，宿主审批流程不受影响。",
@@ -350,7 +350,7 @@ window.__ModuleLoader__.load({
 			"hint.language.ui": "插件界面文案的语言。",
 			"hint.language.agent": "发给审查模型的文本与给执行助手的通知，两者使用的语言。",
 			"hint.reviewer.timeoutMs": "自动审查的等待上限（毫秒）；0 立即超时。",
-			"hint.reviewer.maxTokens": "审查输出的 token 上限；0 不向模型传输出上限，仍受供应商默认限制。",
+			"hint.reviewer.maxTokens": "审查输出的 token 上限（token 是模型计量文本的单位）；0 不向模型传输出上限，仍受供应商默认限制；推理模型可能先把额度用于推理，上限过小可能导致没有有效结论。",
 			"hint.ui.humanCardDuringReview": "审查期间是否提前显示人工审批卡片。",
 			"hint.human.timeoutMs": "人工作答的等待上限（毫秒）；0 立即拒绝。",
 			"hint.human.timeoutFrom": "人工作答从何时开始计时：审批请求发出时，或交人工时。",
@@ -412,7 +412,7 @@ window.__ModuleLoader__.load({
 			"help.reviewer.parentModelRules": "Picks the reviewer by the model the acting agent uses: each rule carries a scope (any provider, or a specific one) plus the agent's full model id, mapped to a reviewer model and effort. A session choice outranks a hit; a hit outranks the global default; misses fall through to the remaining layers. One rule per scope and agent model — duplicates cannot be saved. The legacy dictionary still matches: plain-id keys read as any-provider; slash-containing keys ask you to confirm their meaning, are read as-is until confirmed, and are never rewritten automatically.",
 			"help.reviewer.model": "Global default reviewer model and effort. The reference reads provider/model; an empty effort is automatic: use `low` when the model supports it, otherwise let the model default decide — no promise that every model supports it or matches the same intensity. Resolution: session choice, by the agent's model, global default; an unset default reviews on the agent's current model — an independent call, the same model, never the agent approving itself.",
 			"help.reviewer.timeoutMs": "Auto-review wait limit (ms), covering assembly and the whole wait for this review's conclusion; internal retries get no fresh budget. A timeout rejects with its stage named — not a danger verdict. 0 times out immediately; set a larger value for longer waits.",
-			"help.reviewer.maxTokens": "A token is the unit models use to measure text. Review output cap (tokens). 0 sends no cap, leaving the model or provider default. Reasoning models may spend the budget on reasoning first: too small a cap can leave no usable conclusion (empty body, treated as a review failure); the threshold varies by model and effort, so no single measurement is a general promise.",
+			"help.reviewer.maxTokens": "A token is the unit models use to measure text. Review output cap (tokens). 0 sends no cap, leaving the model or provider default. Reasoning models may spend the budget on reasoning first — too small a cap can leave no usable conclusion (empty body, treated as a review failure); the threshold varies by model and effort, so no single measurement is a general promise.",
 			"help.human.timeoutMs": "Human-answer wait limit (ms), used only when the fallback is Ask. 0 rejects immediately, not an endless wait. Expiry settles as a rejection citing the human timeout.",
 			"help.human.timeoutFrom": "Where the human timer starts: from the approval request (the handoff only gets the remainder), or from the handoff itself.",
 			"help.mode": "Master switch: rule check plus LLM review takes over as configured; off behaves as if uninstalled, leaving host approvals untouched.",
@@ -607,7 +607,7 @@ window.__ModuleLoader__.load({
 			"hint.language.ui": "Language of the plugin's UI copy.",
 			"hint.language.agent": "Language shared by the texts sent to the reviewer and the notices sent to the agent.",
 			"hint.reviewer.timeoutMs": "Auto-review wait limit (ms); 0 times out immediately.",
-			"hint.reviewer.maxTokens": "Review output cap in tokens; 0 sends no cap to the model, provider defaults still apply.",
+			"hint.reviewer.maxTokens": "Review output cap in tokens (a token is the unit models use to measure text); 0 sends no cap to the model, provider defaults still apply; reasoning models may spend the budget on reasoning first — too small a cap can leave no usable conclusion.",
 			"hint.ui.humanCardDuringReview": "Whether the human card appears early during review.",
 			"hint.human.timeoutMs": "Human-answer wait limit (ms); 0 rejects immediately.",
 			"hint.human.timeoutFrom": "Where the human-answer timing starts: at the approval request, or at the handoff.",
@@ -808,7 +808,7 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 读取路径值。
+		 * 读取路径值；中途当前值非对象（含 null/undefined）时返回 undefined。
 		 * @param {object} root - 根对象。
 		 * @param {readonly string[]} path - 路径。
 		 * @returns {unknown} 值。
@@ -1017,7 +1017,7 @@ window.__ModuleLoader__.load({
 		/**
 		 * 执行助手模型列的候选：按完整纯模型 id 去重，附匹配 provider 信息（design §7.2）。
 		 * @param {object | null} catalog - 模型目录。
-		 * @returns {{id: string, providers: string[], ref: string}[]} 候选（ref＝该 provider 下的拼接值）。
+		 * @returns {{id: string, providers: string[], refs: string[]}[]} 候选（refs＝该模型在各匹配 provider 下的拼接值清单）。
 		 */
 		function parentModelOptionsOf(catalog) {
 			const byId = new Map();
@@ -1194,7 +1194,8 @@ window.__ModuleLoader__.load({
 
 		/**
 		 * 判定文案的字典键：兼容 verdict 词汇（allow/deny/error，现行 host 落盘值）与
-		 * 结局词汇（allowed-once/rejected/timed-out，design §8.2 的字段口径）；其余原样返回 null。
+		 * 结局词汇（allowed-once/rejected/cancelled，design §8.2/§8.4 的字段口径；timed-out
+		 * 为防御性兼容显示）；其余原样返回 null。
 		 * @param {unknown} decision - 判定值。
 		 * @returns {string | null} 字典键。
 		 */
@@ -1297,9 +1298,8 @@ window.__ModuleLoader__.load({
 				};
 			}, []);
 
-			// 显隐与展示只依赖这几个字段；值没变就不 setState。
-			// 这既是"避免无意义重渲染"，也是**自激保护**：下面的预设订阅效果在每次渲染都会跑，
-			// 没有这个守卫就会 setState → 渲染 → 再拉 → 再 setState。
+			// 显隐与展示只依赖这几个字段；值没变就不 setState——10 s 回退轮询与预设变化后的
+			// 刷新路径都靠它避免无意义重渲染。
 			const signatureOf = (value) =>
 				value === undefined || value === null
 					? ""
@@ -2131,7 +2131,7 @@ window.__ModuleLoader__.load({
 						return "absent.unknown";
 					}
 					if ((segment === "prompt" || segment === "input" || segment === "output" || segment === "reasoning") && hasDecision) {
-						// 记录级 capture 标记（design §8.5.1 修订）是「未开启全文采集」的唯一可靠依据：
+						// 记录级 capture 标记（design §8.5.1）是「未开启全文采集」的唯一可靠依据：
 						// 从全文缺失反推配置会把 full 早退/抛错与旧记录误报为未开启，故仅 summary/off 判定。
 						return captureOfDetail === "summary" || captureOfDetail === "off" ? "absent.notFullCapture" : "absent.unknown";
 					}
@@ -3510,11 +3510,11 @@ window.__ModuleLoader__.load({
 			});
 		}
 
-		/** 需要的客户端服务：slot 注册表、字典、RPC 载体、设置表单（0.1.7 的 configForms）。 */
+		/** 需要的客户端服务：slot 注册表、字典、RPC 载体、设置表单（0.1.7 的 configForms）、会话列表。 */
 		const inject = ["slots", "locale", "connection", "configForms", "sessions"];
 
 		/**
-		 * 注册挂点：设置卡、composer 下拉、审批卡片状态条。
+		 * 注册挂点：设置卡、composer 下拉、审批卡片状态条、审查记录视图；另按需注册记录表近似行（默认关）。
 		 * @param {object} ctx - 客户端根上下文。
 		 * @returns {void}
 		 */

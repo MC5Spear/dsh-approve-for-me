@@ -153,7 +153,7 @@ test('说明入口（§7.2.1）：20 个按钮带可见文字，aria 成对，�
 
 test('交付 CSS 串失效令牌零命中（收窄到本包 style 元素）；长度与规则数对账实算', () => {
   assert.match(dump, /`--dsw-alias-state-warning-primary`×0、`--dsw-alias-label-error`×0、`--dsw-alias-bg-layer-4`×0/u, '三个失效令牌应零命中');
-  // 数字不自证：fixture 声称的字符数与规则数必须与 client.js CSS 块实算一致——
+  // 数字不自证：夹具声称的字符数与规则数必须与 client.js CSS 块实算一致——
   // 同一口径＝取 `const CSS = [...]` 数组、`join("")` 后的注入串长度与数组元素数（含 @media 整条计 1）。
   const clientSource = readFileSync(join(import.meta.dirname, '..', 'client.js'), 'utf8');
   const cssAt = clientSource.indexOf('const CSS = [');
@@ -269,13 +269,12 @@ test('毫秒字段换算读数常驻（生效值＝控件值、样式与分隔�
   ]) {
     assert.ok(dump.includes(row), `换算读数行缺失或漂移：${row}`);
   }
-  // 行样式与官方 .hint 同规格：12px／二级色（4ef238c 可访问性修复由 tertiary 升 secondary，浅色对比度 3.71→5.8）；负 margin 抵 numhost 与读数行之间的外壳 gap（贴住官方校验文案行）。
+  // 行样式与官方 .hint 同规格：12px／二级色（浅色对比度 5.8；取值见 commit 4ef238c）；负 margin 抵 numhost 与读数行之间的外壳 gap（贴住官方校验文案行）。
   // 现行结构（design §7.2.1）：外壳 gap＝6px，负边距定值按真页实测同步（-6px）。
   assert.match(dump, /fontSize=`12px`、color=`rgb\(97, 102, 107\)`、marginTop=`-6px`/u, '读数行应为 12px 二级色＋-6px 负边距（贴住官方校验文案行）');
   // 现行结构（design §7.2.1）：数字字段进字段外壳后，秒数行的后继是展开说明区（展开时）或下一字段的
   // .dsafm_field；字段间分隔线统一 .dsafm_field + .dsafm_field（规则原文在档见 §6，client.test 静态断言
-  // 同锚）。基线版断言曾对后继节点的 computed borderTopWidth 逐字段取证（官方后继 1px／自绘 0px）；
-  // §7.2.1 后全部字段统一自绘外壳，该二分不再有对应物，本档按现行夹具实际承载的样式值逐字段精确断言。
+  // 同锚）。本档按现行夹具实际承载的样式值逐字段精确断言。
   // 两条各锚定一个 ms 字段：行样式（12px／二级色／-6px 负边距）与后继 class 全套锁定，防整行漂移。
   assert.match(
     dump,
@@ -287,7 +286,6 @@ test('毫秒字段换算读数常驻（生效值＝控件值、样式与分隔�
     /`approve-for-me-sec-human-timeoutMs`：[^\n]*fontSize=`12px`、color=`rgb\(97, 102, 107\)`、marginTop=`-6px`；后继节点 class=`dsafm_field`/u,
     'human 秒数行样式与后继应逐字在档（12px 二级色、-6px 负边距、后继＝下一字段外壳）',
   );
-  // 实时行为边界声明在档。
   assert.match(dump, /实时行为（键入即换算、占位、非法、保存重开、en 档单位）的验证不在本档范围/u, '实时行为边界声明应在档');
 });
 

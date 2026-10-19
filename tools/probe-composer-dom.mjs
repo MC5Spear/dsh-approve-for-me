@@ -2,7 +2,8 @@
  * 真实浏览器取证：headless Edge + CDP 打开一个 DSH 实例，进会话、点「轨迹」页签，
  * 读宿主自己的 DOM 判定 composer 与页签正文区的结构关系。
  *
- * 只查宿主 DOM（`[data-composer-seat]` / `.wSkVaW_viewArea`），不依赖插件是否存在。
+ * 结构判定只读宿主 DOM（`[data-composer-seat]` / `.wSkVaW_viewArea`），不依赖插件是否存在；
+ * 另记录插件座位与「审查记录」页签是否在场作对照。
  * 用法：node tools/probe-composer-dom.mjs [url] [token-file]（省略时取本机配置的默认实例）
  */
 import { spawn } from 'node:child_process';

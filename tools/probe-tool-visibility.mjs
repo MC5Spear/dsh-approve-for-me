@@ -108,8 +108,8 @@ try {
 console.log(`第二个 Context 的读数   : ${JSON.stringify(singleton)}`);
 
 // 问题 4（决定"无会话读工具目录"要不要依赖活 agent）：模拟工具包的行挂在 **agent 的 scope** 上，
-// 看无参全剧视图与其它 scope 能否看到它。工具包在真机上是 profile/预设的行，
-// 而 agent 加入预设时会父到预设的 standing scope，因此这一问等价于
+// 看无参全局视图与其它 scope 能否看到它。工具包在真机上是 profile/预设的行，
+// 而 agent 加入预设时会以预设的 standing scope 为父，因此这一问等价于
 // "预设/会话作用域注册的工具，全局视图读不读得到"。
 const agentScope = createScope(context, { agent: 'session-probe-1' }, { parent: scopeOf(planeB.ctx) });
 const disposerAgent = agentScope.ctx.tools.register(tool('probe_agent_cmd', true));

@@ -9,7 +9,7 @@
  */
 import { z } from 'zod';
 
-/** `getState` 参数：会话 id。 */
+/** `getState` 参数：会话 id——宿主会话键，服务按它定位该会话的插件状态。 */
 export const getStateArgsSchema = z.object({ sessionId: z.string() });
 
 /** `getState` 结果的审查模型不可用诊断条目（design §7.2.0）：按 `scope` 分置提示位置与回退结果。 */

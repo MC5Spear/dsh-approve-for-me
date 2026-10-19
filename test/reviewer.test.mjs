@@ -56,16 +56,16 @@ const prompt = {
   buildUserTexts: (input) => ({ evidenceText: `EV:${input.evidence}`, actionText: 'ACTION' }),
 };
 
-/** 文本块。 */
+/** 文本块替身：最终正文由审查循环按此拼接。 */
 const text = (value) => ({ type: 'text', text: value });
-/** 工具调用块。 */
+/** 工具调用块替身（id/name/arguments 与宿主块同形）。 */
 const call = (id, name, args) => ({ type: 'tool-call', id, name, arguments: args });
 
 /**
  * 构造一次审查调用的全部依赖。
  * @param {Array<{blocks: object[], finish?: object, usage?: object, throws?: string}>} turns - 每次 `llm.stream`
  *   返回的块序列（可选流末原因与用量）；`throws` 让该次流一开始迭代就抛错（网络错替身，design §5.2）。
- * @param {object} [options] - 覆盖项：工具实现、配置、onReview 回调。
+ * @param {object} [options] - 覆盖项：工具实现、配置、onReview 回调、pre（screen 前置结果：fields/evidence/evidenceDegraded/locatedDegraded）。
  * @returns {{review: Function, requests: object[], audits: object[], toolRuns: object[]}} 测试句柄。
  */
 function harness(turns, options = {}) {

@@ -29,7 +29,7 @@ import {
 
 /** 反斜杠——拼装本机路径样本用，避免在源码里写出完整路径字面。 */
 const BS = String.fromCharCode(92);
-/** 把片段拼成一个字符串。 */
+/** 片段拼接——与 BS/LOCAL_LINE 同因：避免本文件字面写出禁用形态。 */
 const j = (...parts) => parts.join('');
 /** 本机例外那一行（拼装，免得本文件自己被「源码直写本机侧字面」判据判红）。 */
 const LOCAL_LINE = j('.', 'local/');

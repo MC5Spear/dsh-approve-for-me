@@ -161,7 +161,7 @@ test('H2：仅强制形态族——目标非字面命中，字面目标交审查
 });
 
 test('H2：脚本内先赋值再引用的强制递归删除——拆句后第二句命中 H1', () => {
-  // $home 是只读自动变量：赋值静默失败，后续引用仍指向真实主目录——脚本内
+  // $home 是只读自动变量：赋值报错但不终止脚本，变量保持真实值——脚本内
   // 先赋值再引用形态的真实语义。按分号拆语句后第二句命中 H1（强制＋递归），不需要变量追踪。
   const hit = hardCmd('$home = "C:\\probe\\t"; Remove-Item -Recurse -Force $home');
   assert.equal(hit?.code, 'hard-h1-powershell');

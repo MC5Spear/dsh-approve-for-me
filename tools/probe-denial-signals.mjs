@@ -3,7 +3,8 @@
  * 用实测数据判断哪个信号既覆盖全、又噪声低。
  *
  * 对每个 [stderr] 或 isError 的调用，统计它命中了哪些候选信号：
- *   isError / content 里含 "[stderr]" / 含 "failed to run" / 含 "Access is denied"
+ *   isError / content 里含 "[stderr]" / 含 "failed to run"
+ *   / deniedText 三支：含 "Access is denied"、裸 "is denied"、EPERM
  *   / 含 "[sandbox: " / 该工具 schema 是否带提权参数（静态，见 escalation-capable 列表）
  *
  * 用法：node tools/probe-denial-signals.mjs

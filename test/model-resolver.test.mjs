@@ -800,7 +800,7 @@ test('空默认条目会话不可用：不查映射、直退终点（含映射�
 });
 
 test('条目 effectiveModel 归一（design §7.2.0）：裸 id 全局默认＋会话不可用→回退引用为完整 provider/model', async () => {
-  // 裸模型名全局默认可解析（回退 provider 首个已注册）：回退条目的 effectiveModel 须归一为
+  // 裸模型名全局默认可解析（回退 provider 取执行助手 provider）：回退条目的 effectiveModel 须归一为
   // 解析后的完整引用（与 selectReviewerModel 的 effective 同口径）；裸名原文只在 configured 承载。
   const issues = await collectModelIssues({
     llm: issuesLlm(),

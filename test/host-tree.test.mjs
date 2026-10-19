@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
  * `node_modules` 的同版实体，锁文件与锁定版本不一致同样会红。
  */
 
-/** 从解析出的实体 URL 提取包根下的 package.json 内容。 */
+/** 从解析出的实体 URL 定位包根，读取其 package.json，返回 version 字段与解析 URL。 */
 function resolvedPackageVersion(specifier) {
   const resolved = import.meta.resolve(specifier);
   const marker = /(?:^|[\\/])node_modules[\\/]@deepseek-ai[\\/]dsh-llm[\\/]/u.exec(resolved);
@@ -23,7 +23,7 @@ function resolvedPackageVersion(specifier) {
   };
 }
 
-test('守卫：dsh-llm 宿主解析版本的与 package.json 锁定版本一致（锚点退回 0.1.7 树即红）', () => {
+test('守卫：dsh-llm 宿主解析版本与 package.json 锁定版本一致（锚点退回 0.1.7 树即红）', () => {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   const pinned = pkg.dependencies['@deepseek-ai/dsh-llm'];
   const { resolved, version } = resolvedPackageVersion('@deepseek-ai/dsh-llm');

@@ -132,7 +132,7 @@ test('主体全量过检：毒在后位键或嵌套键同样 deny 且 reason 写
   assert.equal(nested.action, 'deny', '嵌套对象里的字符串也要过检');
   assert.match(nested.reason, /env\.PAYLOAD/);
 
-  // 规则层真实产物 reason 也须含「命中模式」（design §3.5 与 §8.4）——不只在 gate 侧 stub 与真机实测。
+  // 规则层真实产物 reason 也须含「命中模式」（design §3.5 与 §8.4）——不只在 gate 侧替身与真机实测。
   assert.match(back.reason, /命中模式/, '规则层 reason 应含模式命中原语');
   assert.match(nested.reason, /命中模式/, '规则层 reason 应含模式命中原语');
 });

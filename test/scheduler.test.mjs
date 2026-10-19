@@ -336,7 +336,7 @@ test('入队时信号已中止：不占队列名额，直接 queue-aborted', asy
   await tick();
   const controller = new AbortController();
   controller.abort('cancelled');
-  // 队列已满（queueMax=1 且本请求若入队会占最后名额）——已中止的请求根本不占名额。
+  // 执行位已满、队列仅剩一个名额（queueMax=1）：本请求若入队即占满——已中止的请求根本不占名额。
   const first = await scheduler.run({ sessionId: 'b', callId: '2' }, async () => 'b', { signal: controller.signal });
   assert.deepEqual(first, { ok: false, reason: 'queue-aborted', aborted: true });
   const stillQueued = scheduler.run({ sessionId: 'c', callId: '3' }, async () => 'c');

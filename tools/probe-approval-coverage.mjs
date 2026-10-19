@@ -1,16 +1,18 @@
 /**
- * 一次性取证脚本：全量扫描 `~/.dsh/sessions`（两种会话文件布局都要认），
+ * 一次性取证脚本：全量扫描会话目录（两种会话文件布局都要认），
  * 把「有 approval/asked 的会话」与「插件 reviews 目录里的行数」逐项核对，
  * 并按审批时间分类，判断空记录是「历史盲区」还是「记录没落上」。
  *
  * 用法：node tools/probe-approval-coverage.mjs
+ * 目标 home：优先 `DSH_HOME` 环境变量（现行实例 home 已迁离 `~/.dsh`），
+ * 未设置时回落 `~/.dsh`（历史布局）。
  */
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { readSessionLog } from './session-log.mjs';
 
-const home = join(homedir(), '.dsh');
+const home = process.env.DSH_HOME ?? join(homedir(), '.dsh');
 const sessionsRoot = join(home, 'sessions');
 const reviewsRoot = join(home, 'approve-for-me', 'reviews');
 /** 记录功能的起点：lib/trace-store.js 落盘时间（本仓库实测）。 */

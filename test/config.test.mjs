@@ -124,7 +124,7 @@ test('decode 往返：含空分节的真实 describe 取值在一跳/两跳重�
     ui: { trace: { capture: 'full' } },
     language: { ui: 'zh', agent: 'en' },
   };
-  // 宿主 dsh-client-ui-settings 的 validate() 语义＝不抛即有效（client.js:942-949）。
+  // 宿主 dsh-client-ui-settings 的 validate()：不抛即有效（无独立布尔返回）。
   for (const [hop, schema] of [['one-hop', s1], ['two-hop', s2]]) {
     for (const [label, value] of [
       ['真实取值（含空分节）', realProfile],

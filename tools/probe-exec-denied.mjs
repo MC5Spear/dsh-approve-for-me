@@ -35,7 +35,7 @@ for (const ws of readdirSync(root)) {
     }
     if (!text.includes('failed to run')) continue;
 
-    /** 事件流里与该会话有关的状态。 */
+    /** 事件流里与该会话有关的状态；preset/mode 取该会话最后一条事件的值（非失败时刻）。 */
     let preset = '-';
     let mode = '-';
     const calls = new Map();
