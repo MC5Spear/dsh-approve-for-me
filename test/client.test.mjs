@@ -158,7 +158,8 @@ function makeCtx(options = {}) {
   const scope = {
     getSnapshot: () => snapshot,
     subscribe: () => () => {},
-    // 0.1.7 ConfigFormController 语义：宿主拒绝时解为 false 而不抛错。
+    // ConfigFormController 语义（0.1.7 已如此，0.2.0-rc.2 复核维持）：
+    // 宿主拒绝时解为 false 而不抛错。
     // options.mutateRejects=true 模拟拒绝（快照不变化——recovery 已把宿主状态回读一致）。
     mutate: async (ops) => {
       if (options.mutateRejects === true) return false;
@@ -4745,7 +4746,8 @@ test('静态扫描：退役文案与失效令牌零命中、外壳类退役', as
   assert.equal(SOURCE.includes('dsafm_section'), false, '分区标题类零命中');
   assert.equal(SOURCE.includes('dsafm_divider'), false, '分区线类零命中');
   assert.equal(SOURCE.includes('dsafm_actions'), false, '旧操作区类零命中');
-  // 交付 CSS 串对 0.1.7 令牌表不存在的别名零命中（含官方笔误 bg-layer-4）。
+  // 交付 CSS 串对宿主令牌表不存在的别名零命中（含官方笔误 bg-layer-4；
+  // 0.1.7 与 0.2.0-rc.2 两树定义集合一致）。
   for (const token of ['--dsw-alias-state-warning-primary', '--dsw-alias-label-error', '--dsw-alias-bg-layer-4']) {
     assert.equal(SOURCE.includes(token), false, `失效令牌零命中：${token}`);
   }

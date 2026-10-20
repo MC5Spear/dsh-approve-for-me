@@ -53,7 +53,7 @@
 
 按需求第 2 章先判断接管，再解析审查模型。权限预设优先读取 `permissionPresets.current(session)`，服务不可用时折叠最近的 `permission/preset` 事件，仍未知则使用 `trigger.unknown`。已知预设用名单成员判断，空预设名单不匹配任何已知预设；未知分支不因空名单被改写。
 
-`mode=off` 请求期直接跳过，不能只在装载期判断。工具过滤及非升权请求同样跳过；跳过不调用 LLM，不通知执行 Agent。`getState.active` 与审批路径共用判定原语（预设匹配与 `trigger.unknown` 折算）；`mode=off` 短路与 coverage 分支只在审批入口生效，`getState.active` 不含 `mode=off`——该档下审批流程等同未安装（宿主原审批卡在场、插件的状态条与审查记录零介入），座位这类会话模型选择控件按预设匹配口径照常显隐，重新启用后会话模型数据仍有效；客户端只消费结论，不重新推断权限组合。
+`mode=off` 请求期直接跳过，不能只在装载期判断。工具过滤及非升权请求同样跳过；跳过不调用 LLM，不通知执行 Agent。`getState.active` 与审批路径共用判定原语（预设匹配与 `trigger.unknown` 折算）；`mode=off` 短路与 coverage 分支只在审批入口生效，`getState.active` 不含 `mode=off`——该档下审批流程等同未安装（宿主原审批卡在场、插件的状态条与审查记录零介入），座位这类会话模型选择控件（座位即 7.3 的会话级下拉触发器，结构见 7.3.2）按预设匹配口径照常显隐，重新启用后会话模型数据仍有效；客户端只消费结论，不重新推断权限组合。
 
 升权理由按 `escalate sandbox to <mode>: <justification>` 解析。未知目标比任何上限都宽，拒绝；已知目标按 `read-only`、`workspace-write`、`danger-full-access` 的宽度排序检查。
 
@@ -98,13 +98,15 @@ seed 边界标记（`session/end-seed`）就地追加事件、不改会话头；
 默认脱敏源如下，按顺序替换为 `[redacted]`。普通源默认 `i`，`/source/flags` 使用显式标志，替换补 `g`；不可编译单项跳过，其他项继续。清单整体替换与空表语义见需求。
 
 ```text
-sk-[A-Za-z0-9_\-]{8,}
+(?<![A-Za-z0-9_\-])sk-[A-Za-z0-9_\-]{8,}
 \bBearer\s+[A-Za-z0-9._\-]{8,}
 \b(password|passwd|token|api_key|apikey|secret)\s*[=:]\s*[^\s"'`]+
 -----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----
 Authorization:\s*[^\r\n]+
 ://[^/\s:@]+:[^/\s:@]+@
 ```
+
+首项用 lookbehind 限定左边界，排除 `sk-` 前紧贴标识符字符的词内命中：`task-specific` 中的 `sk-specific` 一类普通复合词片段不整体替换为 `[redacted]`，避免证据内容受损。凭据 `sk-` 前若是行首或空白、引号、括号等非标识符字符，照常命中。
 
 模型输入使用请求快照清单，工具结果使用同请求快照；审计、通知与记录出口在消费时读取生效清单。每条路径先脱敏后裁剪，不要求在途与后续出口用同一时间版本，不改原始会话日志。
 

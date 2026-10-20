@@ -1,9 +1,9 @@
 /**
- * 回归测试：注入消息的源形状必须通过 0.1.7 会话格式 v4 的真准入校验。
+ * 回归测试：注入消息的源形状必须通过宿主会话格式 v4 的真准入校验。
  *
  * 0.1.7 会话格式 v4 退役了 v3 的插件源包装：`agent.inject()` 若用旧包装构造消息，
  * `session.append` 的行准入抛 `format v4 message requires a producer-owned source kind`，
- * 当轮中断、会话卡死。本文件用 0.1.7 树导出的真校验器 `assertV4RowAdmission`
+ * 当轮中断、会话卡死。本文件用宿主锚点树导出的真校验器 `assertV4RowAdmission`
  * （经 `tools/_host-resolve.mjs` 锚定）守住 `lib/source.js` 的形状：
  * 生产与测试共用 `injectionMessage` 工厂，测试校验的就是生产构造的那份消息。
  *
@@ -17,7 +17,8 @@ import { join } from 'node:path';
 import { PLUGIN_MESSAGE_SOURCE, injectionMessage } from '../lib/source.js';
 
 /**
- * 懒加载 0.1.7 树导出的真校验器（经 `tools/_host-resolve.mjs` / `_host-hooks.mjs` 锚定）。
+ * 懒加载宿主锚点树导出的真校验器（经 `tools/_host-resolve.mjs` / `_host-hooks.mjs`
+ * 锚定；锚点树版本由 `test/host-tree.test.mjs` 的守卫钉住，不在此写死版本号）。
  *
  * 离线跑 `node --test test/` 时宿主包解析不到——与 `index.test.mjs` 同一纪律：只吞
  * 「宿主包解析不到」这一种失败并整体跳过（跳过不等于通过），语法错等其余失败照常红。

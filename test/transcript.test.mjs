@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { collectEvidence, locate, redact, TRANSCRIPT_READ_FAILED, TRANSCRIPT_TRUNCATED, truncateKeepEnds } from '../lib/transcript.js';
+import { DEFAULT_REDACT_PATTERNS } from '../lib/policy.js';
 
 /**
  * 构造一条 user/message 事件。
@@ -23,6 +24,12 @@ test('redact：命中替换为 [redacted]，未命中/空清单/非法模式原�
   assert.equal(redact('plain text', []), 'plain text');
   assert.equal(redact('plain text', ['(not-present)']), 'plain text');
   assert.equal(redact('x', ['[']), 'x', '非法模式跳过不抛');
+});
+
+test('redact：默认清单首项带左边界——独立凭据命中，词内普通词不误伤', () => {
+  assert.equal(redact('token sk-abc12345678 end', [...DEFAULT_REDACT_PATTERNS]), 'token [redacted] end', '空格后的独立凭据照常遮蔽');
+  assert.equal(redact('sk-abc12345678', [...DEFAULT_REDACT_PATTERNS]), '[redacted]', '行首凭据同样命中（lookbehind 不挡起始位置）');
+  assert.equal(redact('echo task-specific checks', [...DEFAULT_REDACT_PATTERNS]), 'echo task-specific checks', '词内 sk- 不误伤普通复合词（收窄前此处会输出 ta[redacted]）');
 });
 
 test('证据脱敏先于截断：跨界秘密整段替换后才进字节裁剪', () => {

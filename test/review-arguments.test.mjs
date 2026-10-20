@@ -389,11 +389,11 @@ test('动作段命令按本请求清单遮蔽：秘密在全部送模请求零�
 });
 
 test('普通无秘密命令不受遮蔽影响：原样送审、无多余遮蔽、结算不变', async () => {
-  const args = { command: 'echo plain-audit-command', metadata: { operation: 'audit' } };
+  const args = { command: 'echo task-specific plain-audit-command', metadata: { operation: 'audit' } };
   const w = wired({ config: { context: { maxEntries: 0, maxEntryBytes: 0, redactPatterns: [...DEFAULT_REDACT_PATTERNS] } } });
   const outcome = await w.request(req('arg-redact-plain', 'call-arg-redact-plain', args, w.injections, undefined, 'pwsh'), () => new Promise(() => {}));
   const actionText = w.options[0].messages[1].content[0].text;
-  assert.ok(actionText.includes('"command": "echo plain-audit-command"'), '无秘密命令原样进入动作 JSON');
+  assert.ok(actionText.includes('"command": "echo task-specific plain-audit-command"'), '无秘密命令原样进入动作 JSON（task-specific 词内形态不被默认首项误伤）');
   assert.ok(!actionText.includes('[redacted]'), '不产生多余遮蔽');
   assert.equal(outcome, 'allowed-once', '普通命令结算回归不变');
 });
