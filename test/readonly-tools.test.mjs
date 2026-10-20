@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, realpath, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { assertSafePattern, createReadonlyTools, globToRegExp, isDeniedPath } from '../lib/readonly-tools.js';
 
 /**
@@ -356,6 +356,73 @@ test('对照：注入根独立生效、工作区同名目录不误伤', async ()
   // 注入根里的路径即使文件不存在也拒止（敏感范围按路径判定，不要求文件在场）。
   const inEnv = await tools.run('read_file', { path: join(home, 'current-url.txt') });
   assert.equal(inEnv.denied, true);
+});
+
+test('home 根为别名拼写时围栏仍拒止（8.3 短名；不自证别名则明示跳过）', async (t) => {
+  const home = await mkdtemp(join(tmpdir(), 'dsafm-sn-'));
+  await mkdir(join(home, 'sessions'), { recursive: true });
+  await writeFile(join(home, 'sessions', 'session-1.jsonl'), 'transcript\n');
+  const canonical = await realpath(home);
+  let alias = null;
+  if (home.toLowerCase() !== canonical.toLowerCase()) {
+    // 临时目录本身就是别名拼写——CI runner 的 TEMP 含 8.3 短名前缀（与 CI 失败同构）；
+    // macOS /var→/private/var 同属 home 侧别名，同样接受。
+    alias = home;
+  } else {
+    // NTFS 短名生成规则给候选：大写、滤非法字符、取前 6 字符＋~n；realpath 等值即自证，零子进程。
+    const parent = dirname(canonical);
+    const stem = basename(canonical).toUpperCase().replace(/[^A-Z0-9_-]/gu, '').slice(0, 6);
+    for (let n = 1; n <= 99; n += 1) {
+      const candidate = join(parent, `${stem}~${n}`);
+      try {
+        if ((await realpath(candidate)).toLowerCase() === canonical.toLowerCase()) {
+          alias = candidate;
+          break;
+        }
+      } catch { /* 候选不存在，试下一个 */ }
+    }
+  }
+  if (alias === null) {
+    // 跳过原因写实：顺序后缀形态（~1..~4）被既有目录占尽后，NTFS 转为哈希形态短名，无法按规则构造；
+    // CI 上第一分支必然命中（TEMP 自带别名前缀），此处跳过可见、由 T2 覆盖同一代码路径。
+    t.skip('未取得可自证的 8.3 别名：临时目录无别名前缀，且短名后缀形态不可构造');
+    return;
+  }
+  assert.notEqual(alias.toLowerCase(), canonical.toLowerCase(), '别名拼写须与真实路径不同（防恒真）');
+  const tools = createReadonlyTools({ rootDir: tmpdir(), dshHomeOf: () => alias });
+  // 变红判据：根按字面、目标经 realpath 的实现里，别名根对展开后的目标前缀失配 → p1/p2 变红。
+  const p1 = await tools.run('read_file', { path: join(canonical, 'sessions', 'session-1.jsonl') });
+  assert.equal(p1.denied, true, '长名拼写的目标应拒止');
+  assert.equal(p1.isError, true);
+  assert.match(p1.text, /DSH 数据目录/);
+  const p2 = await tools.run('read_file', { path: join(alias, 'sessions', 'session-1.jsonl') });
+  assert.equal(p2.denied, true, '别名拼写的目标应拒止');
+  // 并集哨兵：别名根下不存在的路径按字面命中——「两侧只比较 realpath」的朴素实现在此失效打开。
+  const p3 = await tools.run('read_file', { path: join(alias, 'current-url.txt') });
+  assert.equal(p3.denied, true, '别名根下不存在的路径同样拒止（并集哨兵）');
+});
+
+test('home 根为联结点拼写时围栏仍拒止，别名根下不存在路径同样拒止', async () => {
+  const homeReal = await mkdtemp(join(tmpdir(), 'dsafm-jh-'));
+  await mkdir(join(homeReal, 'sessions'), { recursive: true });
+  await writeFile(join(homeReal, 'sessions', 'session-1.jsonl'), 'transcript\n');
+  const canonical = await realpath(homeReal);
+  // Windows 联结点无需特权；POSIX 忽略 type 实参建为普通符号链接，用例同样有效。建链失败即抛错变红。
+  const junctionPath = join(tmpdir(), `dsafm-jl-${process.pid}-${Date.now()}`);
+  await symlink(canonical, junctionPath, 'junction');
+  const tools = createReadonlyTools({ rootDir: tmpdir(), dshHomeOf: () => junctionPath });
+  // 变红判据：联结点拼写的根对 realpath 展开后的目标前缀失配 → p1/p2 在旧实现变红。
+  const p1 = await tools.run('read_file', { path: join(canonical, 'sessions', 'session-1.jsonl') });
+  assert.equal(p1.denied, true, '真实路径目标应拒止');
+  const p2 = await tools.run('read_file', { path: join(junctionPath, 'sessions', 'session-1.jsonl') });
+  assert.equal(p2.denied, true, '联结点拼写目标应拒止');
+  // 并集哨兵：别名根下不存在的路径按字面命中——「两侧只比较 realpath」的朴素实现在此失效打开。
+  const p3 = await tools.run('read_file', { path: join(junctionPath, 'current-url.txt') });
+  assert.equal(p3.denied, true, '联结点根下不存在的路径同样拒止（并集哨兵）');
+  // 对照：home 为真实根、目标经联结点拼写——目标侧归一化在岗，修复前后都绿。
+  const control = createReadonlyTools({ rootDir: tmpdir(), dshHomeOf: () => canonical });
+  const p4 = await control.run('read_file', { path: join(junctionPath, 'sessions', 'session-1.jsonl') });
+  assert.equal(p4.denied, true, '对照：真实根下经联结点拼写的目标仍拒止');
 });
 
 // ── 热改接线与真实超时（requirements §5.3／design §3.4） ────────────────────
