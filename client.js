@@ -73,7 +73,7 @@ window.__ModuleLoader__.load({
 		/**
 		 * 14px 下箭头（内联 SVG）。
 		 *
-		 * 为什么不用 `primitives.IconChevronDownOutline14`：宿主（基线 dsh 0.2.0-rc.2）的图标
+		 * 为什么不用 `primitives.IconChevronDownOutline14`：宿主（基线 dsh 0.2.1-rc.2）的图标
 		 * 用尺寸变体命名（`IconChevronDownOutline` + `Regular`/`Medium`/`Artwork` 后缀），
 		 * `IconChevronDownOutline14` 在宿主里**不存在**，
 		 * `jsx(undefined)` 直接触发 React #130「Element type is invalid」，
@@ -2775,7 +2775,7 @@ window.__ModuleLoader__.load({
 			/**
 			 * 保存：一次 `mutate` 写入全部暂存；成功清空暂存（显示值回落到新快照），
 			 * 失败保留暂存供修改（官方语义）。宿主控制器对「宿主拒绝」解析 false 而不抛错
-			 * （0.1.7 已如此，0.2.0-rc.2 复核维持）。
+			 * （0.1.7 已如此，0.2.1-rc.2 复核维持）。
 			 * @returns {void}
 			 */
 			const save = () => {

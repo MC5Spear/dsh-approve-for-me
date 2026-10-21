@@ -1,7 +1,7 @@
 /**
  * 客户端半边对宿主 `@deepseek-ai/dsh-client-ui-primitives` 的引用核验。
  *
- * 存在的理由：宿主（基线 dsh 0.2.0-rc.2，requirements §1.3）的图标用尺寸变体命名
+ * 存在的理由：宿主（基线 dsh 0.2.1-rc.2，requirements §1.3）的图标用尺寸变体命名
  * （`IconXxxOutline` + `Regular`/`Medium`/`Artwork`），`IconXxxOutline14` 一类 0.1.5
  * 命名体系的名字在宿主里不存在；`jsx(undefined)` 触发 React #130「Element type is invalid」，
  * 槽条目**整条崩溃且页面静默空白**（宿主 renderer 的报错模板：`slot entry crashed in '<slotKey>'`），

@@ -168,6 +168,22 @@ function readText(full) {
 }
 
 /**
+ * 归一化锁文件的 integrity 哈希值：把 `"integrity": "sha512-…"` 的值替换为固定占位。
+ *
+ * integrity 值是 npm 按包内容算出的 base64 生成数据，不是人写的引用文本；其中完全可能
+ * 撞出判据形态（实测 `sha512-R75r+…` 因连字符制造词边界而命中退役需求编号锚，五位数
+ * 端口形态同理可撞）。这类命中是噪声——不归一的话，公开范围检查会随依赖重锁撞上
+ * 不可预知的哈希形态而变红，红了也没法处置（哈希改不了）。归一化只动 integrity 值
+ * 本身（限定同行，不跨换行），同文件其余内容照常受检，「integrity 行之外照报」由
+ * 变异用例钉住。
+ * @param {string} text - 原始文本。
+ * @returns {string} 归一化后的文本（合法输入下行数与行号不变；值内换行的病态输入不承诺）。
+ */
+function normalizeIntegrity(text) {
+  return text.replace(/("integrity"[^\S\r\n]*:[^\S\r\n]*")[^"\r\n]*(")/gu, '$1sha512-<normalized>$2');
+}
+
+/**
  * 扫描一段文本，返回命中的违规。
  *
  * 导出以便变异用例直接调用（见 test/public-surface.test.mjs）：种下指纹或内部引用，
@@ -257,7 +273,7 @@ export function runCheck(root = ROOT) {
     const text = readText(join(root, file));
     if (text === undefined) continue;
     scanned++;
-    violations.push(...scanText(text, { file }));
+    violations.push(...scanText(normalizeIntegrity(text), { file }));
   }
   return { files: files.length, scanned, source, violations };
 }
@@ -277,7 +293,7 @@ export function auditExempt(root = ROOT) {
     if (entry.audit !== true) continue;
     const text = readText(join(root, file));
     if (text === undefined) continue;
-    const hits = scanText(text, { file }).length;
+    const hits = scanText(normalizeIntegrity(text), { file }).length;
     if (hits > 0) pending.push({ file, reason: entry.reason, hits });
   }
   return pending;

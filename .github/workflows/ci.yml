@@ -26,8 +26,8 @@ jobs:
           cache: npm
       - name: 安装本包依赖
         run: npm ci --omit=dev --no-audit --no-fund
-      - name: 安装宿主锚点包（与 peer 钉版同版，不写回 lockfile）
-        run: npm install --no-save --no-package-lock --no-audit --no-fund @deepseek-ai/cordis@4.0.4 @deepseek-ai/dsh-llm@0.2.0-rc.2 @deepseek-ai/dsh-typert-protocol@0.2.0-rc.2 @deepseek-ai/schemastery@3.18.4
+      - name: 安装宿主锚点包（与 peer 钉版同版；primitives 与 session-format-v3-to-v4 是套件实际 import 的宿主包、0.2.1 安装树不再有实体目录；不写回 lockfile）
+        run: npm install --no-save --no-package-lock --no-audit --no-fund @deepseek-ai/cordis@4.0.5 @deepseek-ai/dsh-llm@0.2.1-rc.2 @deepseek-ai/dsh-typert-protocol@0.2.1-rc.2 @deepseek-ai/schemastery@3.18.5 @deepseek-ai/dsh-client-ui-primitives@0.2.1-rc.2 @deepseek-ai/dsh-session-format-v3-to-v4@0.2.1-rc.2
       - name: 语法自检
         run: npm run check
       - name: typert 清单校验
@@ -42,7 +42,7 @@ jobs:
           # 注意：不能指向「不存在的树」——那样钩子会回退到本地 node_modules（CI 里装的正是钉版），
           # 守卫照样绿，负向对照就成了恒真断言。必须造一棵「能解析但版本不对」的树。
           $wrong = Join-Path $env:RUNNER_TEMP 'wrong-host-tree'
-          npm install --prefix $wrong --no-audit --no-fund --no-package-lock zod @deepseek-ai/schemastery@3.18.4 @deepseek-ai/dsh-llm@0.2.0-rc.1 @deepseek-ai/dsh-typert-protocol@0.2.0-rc.1
+          npm install --prefix $wrong --no-audit --no-fund --no-package-lock zod @deepseek-ai/schemastery@3.18.4 @deepseek-ai/dsh-llm@0.2.1-rc.1 @deepseek-ai/dsh-typert-protocol@0.2.1-rc.1
           if ($LASTEXITCODE -ne 0) { throw '负向对照准备失败：装不出错误版本的锚点树' }
           $env:DSAFM_HOST_MODULES = Join-Path $wrong 'node_modules'
           node --import ./tools/_host-hooks.mjs --test test/host-tree.test.mjs

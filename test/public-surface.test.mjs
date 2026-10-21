@@ -215,3 +215,43 @@ test('反例：临时工单归档后不得再被豁免（重新放回公开层�
     rmTree(root);
   }
 });
+
+test('反例：锁文件 integrity 哈希值里的判据形态不报（生成数据，不是人写引用）', () => {
+  // 哈希值按片段拼装：R 锚形态（含连字母，靠 base64 后的加号制造词边界）与五位数端口
+  // 形态都藏在 integrity 值里。不归一化的话这两条都会命中——公开范围检查将随依赖重锁
+  // 撞上不可预知的哈希形态而变红，且无法处置（哈希由包内容决定，改不了）。
+  const root = mkdtempSync(join(tmpdir(), 'dsafm-surface-'));
+  try {
+    writeFileSync(join(root, '.gitignore'), `${LOCAL_LINE}\n`, 'utf8');
+    const lock = [
+      '{',
+      '  "name": "x",',
+      j('  "integrity": "sha512-R', '75r+GkYP+x', '381', '14ab=="'),
+      '}',
+    ].join('\n');
+    writeFileSync(join(root, 'package-lock.json'), lock, 'utf8');
+    const violations = runCheck(root).violations;
+    assert.deepEqual(violations, [], `integrity 值内的生成形态被误报：${JSON.stringify(violations)}`);
+  } finally {
+    rmTree(root);
+  }
+});
+
+test('变异：同一文件里 integrity 行之外的 R 锚照报（归一化不缩小判据范围）', () => {
+  const root = mkdtempSync(join(tmpdir(), 'dsafm-surface-'));
+  try {
+    writeFileSync(join(root, '.gitignore'), `${LOCAL_LINE}\n`, 'utf8');
+    const lock = [
+      '{',
+      j('  "//note": "判据见 R', '29，人写的引用必须照报"'),
+      j('  "integrity": "sha512-R', '75r+GkYP=="'),
+      '}',
+    ].join('\n');
+    writeFileSync(join(root, 'package-lock.json'), lock, 'utf8');
+    const hits = runCheck(root).violations.filter((v) => v.rule === 'retired-req-id');
+    assert.equal(hits.length, 1, `integrity 归一化后人写的 R 锚也不报了：${JSON.stringify(hits)}`);
+    assert.equal(hits[0].line, 2, '行号应指向 integrity 行之外的那一行');
+  } finally {
+    rmTree(root);
+  }
+});
