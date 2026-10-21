@@ -41,9 +41,9 @@ lines.push('## 4. 说明入口点击展开（aria 成对；design §7.2.1）', '
 lines.push(`说明按钮 ${dumpA.value.helpButtons.length} 个（全部位于字段外壳标签行的 \`.dsafm_labelgroup\` 内，标签旁），按钮带可见文字「说明／收起说明」（\`.dsafm_helpbtn_text\`）、图标 \`IconInfoOutlineRegular\` size=12、\`aria-label\`＝「字段名：说明」、Enter/Space 键盘可达；全部带 aria-controls，初始 aria-expanded=false；点击 mode 字段后：aria-expanded=\`${dumpHelp.expanded}\`、展开区在场=\`${dumpHelp.regionPresent}\`、同屏展开区数量=${dumpHelp.openRegions}、展开文本首段＝「${dumpHelp.regionText}」；开合不触碰草稿/保存计划（纯展示状态）。`, '');
 lines.push('## 5. 暂存语义：保存按钮三态与「只有保存才写」', '');
 lines.push(`初始（无改动）：保存 disabled=\`${dumpA.value.save.disabled}\`。`);
-lines.push(`点 language.ui「恢复默认」（只暂存）：控件值 \`${dumpStaged.value}\`、保存 disabled=\`${dumpStaged.saveDisabled}\`、该字段覆盖组消失（剩 ${dumpStaged.overrideTags.length} 组）。`);
-lines.push(`重开页面（不保存）：控件值回到 \`${dumpReopened.value}\`、覆盖组回 ${dumpReopened.overrideTags.length} 组、保存 disabled=\`${dumpReopened.saveDisabled}\`——暂存丢弃、写库没发生。`);
-lines.push(`再暂存＋点保存：控件值 \`${dumpSaved.value}\`、覆盖组 ${dumpSaved.overrideTags.length} 组、保存 disabled=\`${dumpSaved.saveDisabled}\`——unset 落库、覆盖消失。`);
+lines.push(`点 language.ui「恢复默认」（只暂存）：控件值 \`${dumpStaged.value}\`、保存 disabled=\`${dumpStaged.saveDisabled}\`、该字段胶囊仍在（覆盖组仍 ${dumpStaged.overrideTags.length} 组——用户层键未移除，保存 unset 落库后才消失）。`);
+lines.push(`重开页面（不保存）：控件值回到 \`${dumpReopened.value}\`、覆盖组仍 ${dumpReopened.overrideTags.length} 组、保存 disabled=\`${dumpReopened.saveDisabled}\`——暂存丢弃、写库没发生（胶囊全程未离开）。`);
+lines.push(`再暂存＋点保存：控件值 \`${dumpSaved.value}\`、覆盖组 ${dumpSaved.overrideTags.length} 组、保存 disabled=\`${dumpSaved.saveDisabled}\`——unset 落库、该字段覆盖消失（胶囊此时才撤下）。`);
 lines.push(`取证后复原（设回 zh＋保存）：控件值 \`${dumpRestored.value}\`、覆盖组 ${dumpRestored.overrideTags.length} 组——现场回到采集前（profile patch \`language: {agent: en, ui: zh}\` 复核过）。`, '');
 lines.push('## 6. 交付 CSS 串失效令牌零命中（收窄到本包 style 元素）', '');
 const numhostNote =

@@ -37,12 +37,12 @@ test('temperature：0 与 2 通过、-0.1 与 2.1 拒绝（schema 界限）；�
     assert.equal(normalizeConfig(Config({ reviewer: { temperature: good } })).reviewer.temperature, good, `${good} 应通过`);
   }
   // 双层防线（design §6.1）：schema 层区间边界＋退化步长拒非有限数（调用即拒，见下一条用例）；
-  // 读取路径 normalizeConfig 的有限性检查保留——volatile 写路径原地更新引用、不过 schema 校验，
-  // 程序化写入的非法值仍由读取检查拒绝。
+  // 读取路径 normalizeConfig 对温度查全值域（非有限数与 0–2 区间外的有限数都拒）——volatile 写路径
+  // 原地更新引用、不过 schema 校验，程序化写入的非法值仍由读取检查拒绝。
   for (const bound of [-0.1, 2.1]) {
     assert.throws(() => Config({ reviewer: { temperature: bound } }), `${bound} 必须被 schema 界限拒绝`);
   }
-  for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+  for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 5, -1]) {
     assert.throws(() => Config({ reviewer: { temperature: bad } }), `${bad} 必须在 schema 调用即拒`);
     assert.throws(() => normalizeConfig({ reviewer: { temperature: bad } }), `${bad} 必须在装载时拒绝`);
   }
@@ -271,6 +271,26 @@ test('normalizeConfig 读取路径复查毫秒上限：五个毫秒字段超限�
   }
   // 合法边界值不误拒：0 与上限本身都通过。
   assert.doesNotThrow(() => normalizeConfig({ reviewer: { timeoutMs: 0 }, human: { timeoutMs: 2_147_483_647 } }));
+});
+
+test('normalizeConfig 读取路径复查 volatile 数值字段：maxTokens／maxToolSteps／injectMaxBytes 非负整数（design §6.1）', () => {
+  const fields = [
+    ['reviewer', 'maxTokens'],
+    ['reviewer', 'maxToolSteps'],
+    ['ui', 'injectMaxBytes'],
+  ];
+  for (const [group, key] of fields) {
+    // 直接组对象绕开 schema（模拟 volatile 写路径原地更新引用后的读取形态），逐字段验证读取层复查。
+    for (const bad of [-1, -1.5, 1.5]) {
+      assert.throws(
+        () => normalizeConfig({ [group]: { [key]: bad } }),
+        new RegExp(`${group}\\.${key}`),
+        `${group}.${key}=${bad} 必须在读取路径可见拒绝`,
+      );
+    }
+  }
+  // 合法值不误拒：0 与常见正整数都通过。
+  assert.doesNotThrow(() => normalizeConfig({ reviewer: { maxTokens: 0, maxToolSteps: 4 }, ui: { injectMaxBytes: 4096 } }));
 });
 
 test('normalizeRuleProvider 与 parentModelRuleKey：归一空值与去首尾空白组键的单一实现', () => {

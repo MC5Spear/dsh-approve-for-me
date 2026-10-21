@@ -26,7 +26,7 @@ jobs:
           cache: npm
       - name: 安装本包依赖
         run: npm ci --omit=dev --no-audit --no-fund
-      - name: 安装宿主锚点包（与 peer 钉版同版；primitives 与 session-format-v3-to-v4 是套件实际 import 的宿主包、0.2.1 安装树不再有实体目录；不写回 lockfile）
+      - name: 安装宿主锚点包（与 peer 钉版同版；client-ui-primitives 与 session-format-v3-to-v4 是套件实际 import 的宿主包、不在本包依赖图内，由此步补装：0.2.1 宿主安装树已无 client-ui-primitives 实体目录（内联进 web-frontend 发行物），session-format-v3-to-v4 的实体目录仍在；不写回 lockfile）
         run: npm install --no-save --no-package-lock --no-audit --no-fund @deepseek-ai/cordis@4.0.5 @deepseek-ai/dsh-llm@0.2.1-rc.2 @deepseek-ai/dsh-typert-protocol@0.2.1-rc.2 @deepseek-ai/schemastery@3.18.5 @deepseek-ai/dsh-client-ui-primitives@0.2.1-rc.2 @deepseek-ai/dsh-session-format-v3-to-v4@0.2.1-rc.2
       - name: 语法自检
         run: npm run check

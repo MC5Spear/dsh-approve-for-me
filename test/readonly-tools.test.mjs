@@ -17,6 +17,8 @@ async function fixture() {
   await writeFile(join(root, 'src', 'code.js'), 'const answer = 42;\n');
   await writeFile(join(root, '.credentials.yaml'), 'DEEPSEEK_API_KEY: sk-should-never-be-read\n');
   await writeFile(join(root, 'id_rsa'), 'PRIVATE\n');
+  // 裸点形态（基名即扩展名，无主干名）必须真实落在磁盘上验证端到端拒止。
+  await writeFile(join(root, '.pem'), 'BARE-PEM-PRIVATE\n');
   await writeFile(join(root, 'settings.yaml'), 'approve-for-me: {}\n');
   // 大写名必须落在独立目录：NTFS 上同目录写 settings.yaml 与 SETTINGS.YAML 是同一个文件，
   // 磁盘名会保持先写的小写，用例就无法区分大小写敏感与否。
@@ -66,6 +68,15 @@ test('isDeniedPath 覆盖凭据类文件与目录', () => {
   assert.equal(isDeniedPath('C:/x/.aws/config').denied, false);
 });
 
+test('isDeniedPath 拒止基名即扩展名的裸点文件，不影响普通隐藏文件', () => {
+  for (const path of ['C:/x/.pem', 'C:/x/.key', 'C:/x/.pfx', 'C:/x/.kdbx', 'C:/x/.PEM']) {
+    assert.equal(isDeniedPath(path).denied, true, `应拒止：${path}`);
+  }
+  // 无主干隐藏文件的「后缀」不在清单内，不因放宽扩展名提取而误伤。
+  assert.equal(isDeniedPath('C:/x/.gitignore').denied, false);
+  assert.equal(isDeniedPath('C:/x/.vscode').denied, false);
+});
+
 test('read_file 读取内容、支持 offset/limit 并对超限留截断标记', async () => {
   const root = await fixture();
   const { audit } = spy();
@@ -87,7 +98,7 @@ test('read_file 读取内容、支持 offset/limit 并对超限留截断标记',
 test('read_file 拒止凭据类文件且不回显内容', async () => {
   const root = await fixture();
   const tools = createReadonlyTools({ rootDir: root });
-  for (const path of ['.credentials.yaml', 'id_rsa', 'settings.yaml', '.ssh/config']) {
+  for (const path of ['.credentials.yaml', 'id_rsa', 'settings.yaml', '.ssh/config', '.pem']) {
     const result = await tools.run('read_file', { path });
     assert.equal(result.isError, true, `应拒止：${path}`);
     assert.equal(result.denied, true);

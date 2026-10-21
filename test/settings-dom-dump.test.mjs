@@ -127,9 +127,9 @@ test('覆盖组「已单独设置＋恢复默认」与用户层键一一对应',
 
 test('暂存语义：保存按钮三态与「只有保存才写」的行为差异', () => {
   assert.match(dump, /初始（无改动）：保存 disabled=`true`/u, '初始应置灰');
-  assert.match(dump, /点 language\.ui「恢复默认」（只暂存）：控件值 `auto`、保存 disabled=`false`/u, '暂存后应可点');
-  assert.match(dump, /重开页面（不保存）：控件值回到 `zh`、覆盖组回 4 组、保存 disabled=`true`——暂存丢弃、写库没发生/u, '重开读旧值＝没写库');
-  assert.match(dump, /再暂存＋点保存：控件值 `auto`、覆盖组 3 组、保存 disabled=`true`——unset 落库、覆盖消失/u, '保存才落库');
+  assert.match(dump, /点 language\.ui「恢复默认」（只暂存）：控件值 `auto`、保存 disabled=`false`、该字段胶囊仍在（覆盖组仍 4 组——用户层键未移除/u, '暂存后应可点且胶囊不撤（拆分显隐）');
+  assert.match(dump, /重开页面（不保存）：控件值回到 `zh`、覆盖组仍 4 组、保存 disabled=`true`——暂存丢弃、写库没发生（胶囊全程未离开）/u, '重开读旧值＝没写库');
+  assert.match(dump, /再暂存＋点保存：控件值 `auto`、覆盖组 3 组、保存 disabled=`true`——unset 落库、该字段覆盖消失（胶囊此时才撤下）/u, '保存才落库、胶囊随 unset 撤下');
   assert.match(dump, /取证后复原（设回 zh＋保存）：控件值 `zh`、覆盖组 4 组/u, '取证后现场应复原');
 });
 
@@ -188,7 +188,7 @@ test('控件清单：生效值就在控件里，id 挂在控件上', () => {
     '| 4 | select | select-one | approve-for-me-ctl-language-ui | zh |',
     '| 5 | select | select-one | approve-for-me-ctl-language-agent | en |',
     '| 2 | select | select-one | approve-for-me-ctl-reviewer-model | zai/glm-5.3-flash |',
-    '| 6 | input | text | approve-for-me-ctl-reviewer-timeoutMs | 300000 |',
+    '| 6 | input | text | approve-for-me-ctl-reviewer-timeoutMs | 90000 |',
     '| 9 | input | text | approve-for-me-ctl-human-timeoutMs | 300000 |',
     '| 11 | select | select-one | approve-for-me-ctl-mode | rules |',
   ]) {
@@ -201,9 +201,7 @@ test('控件清单：生效值就在控件里，id 挂在控件上', () => {
 // ── 取值逐项等于生效值（结构断言抓不到整片为空） ─────────────────────────────
 // 夹具＝真实部署的 profile patch 的 approve-for-me 用户层逐字（宿主 profile 目录下部署侧的 cordis.patch.yml）。
 const REAL_PROFILE = {
-  reviewer: { model: { model: 'zai/glm-5.3-flash', effort: 'high' }, timeoutMs: 300000 },
-  human: {},
-  ui: { trace: { capture: 'full' } },
+  reviewer: { model: { model: 'zai/glm-5.3-flash', effort: 'high' }, timeoutMs: 90000 },
   language: { ui: 'zh', agent: 'en' },
 };
 /** 控件 id 尾段 → 生效值路径（与 client.js 的 ctl id 命名一一对应；followParent 字段不在 20 字段清单）。 */
@@ -261,10 +259,10 @@ test('失败登录计数未读时如实留档', () => {
 });
 
 test('毫秒字段换算读数常驻（生效值＝控件值、样式与分隔线恢复）', () => {
-  // 读数行恰两行，且生效值读数＝毫秒控件值换算（300000→300 秒 ×2：reviewer 与 human 的 timeoutMs）。
+  // 读数行恰两行，且生效值读数＝毫秒控件值换算（reviewer 90000→90 秒（用户层键）、human 300000→300 秒（默认值））。
   assert.match(dump, /读数行 2 行（恰两个 ms 字段各一行；字节\/令牌字段不做换算）/u, '读数行应恰 2 行');
   for (const row of [
-    '`approve-for-me-sec-reviewer-timeoutMs`：`生效：300 秒 · 草稿：300 秒`（生效＝`生效：300 秒`、草稿＝`草稿：300 秒`、draftInvalid=false）',
+    '`approve-for-me-sec-reviewer-timeoutMs`：`生效：90 秒 · 草稿：90 秒`（生效＝`生效：90 秒`、草稿＝`草稿：90 秒`、draftInvalid=false）',
     '`approve-for-me-sec-human-timeoutMs`：`生效：300 秒 · 草稿：300 秒`（生效＝`生效：300 秒`、草稿＝`草稿：300 秒`、draftInvalid=false）',
   ]) {
     assert.ok(dump.includes(row), `换算读数行缺失或漂移：${row}`);
@@ -272,19 +270,20 @@ test('毫秒字段换算读数常驻（生效值＝控件值、样式与分隔�
   // 行样式与官方 .hint 同规格：12px／二级色（浅色对比度 5.8；取值见 commit 4ef238c）；负 margin 抵 numhost 与读数行之间的外壳 gap（贴住官方校验文案行）。
   // 现行结构（design §7.2.1）：外壳 gap＝6px，负边距定值按真页实测同步（-6px）。
   assert.match(dump, /fontSize=`12px`、color=`rgb\(97, 102, 107\)`、marginTop=`-6px`/u, '读数行应为 12px 二级色＋-6px 负边距（贴住官方校验文案行）');
-  // 现行结构（design §7.2.1）：数字字段进字段外壳后，秒数行的后继是展开说明区（展开时）或下一字段的
-  // .dsafm_field；字段间分隔线统一 .dsafm_field + .dsafm_field（规则原文在档见 §6，client.test 静态断言
-  // 同锚）。本档按现行夹具实际承载的样式值逐字段精确断言。
-  // 两条各锚定一个 ms 字段：行样式（12px／二级色／-6px 负边距）与后继 class 全套锁定，防整行漂移。
+  // 现行结构（design §7.2.1）：数字字段进字段外壳后，收起态秒数行是字段外壳最后一个子节点（无后继；
+  // 展开说明时后继为展开区、跨字段才是下一字段的 `.dsafm_field`）；字段间分隔线统一
+  // .dsafm_field + .dsafm_field（规则原文在档见 §6，client.test 静态断言同锚）。本档按现行夹具
+  // 实际承载的样式值逐字段精确断言。
+  // 两条各锚定一个 ms 字段：行样式（12px／二级色／-6px 负边距）与「无后继」事实全套锁定，防整行漂移。
   assert.match(
     dump,
-    /`approve-for-me-sec-reviewer-timeoutMs`：[^\n]*fontSize=`12px`、color=`rgb\(97, 102, 107\)`、marginTop=`-6px`；后继节点 class=`dsafm_field`/u,
-    'reviewer 秒数行样式与后继应逐字在档（12px 二级色、-6px 负边距、后继＝下一字段外壳）',
+    /`approve-for-me-sec-reviewer-timeoutMs`：[^\n]*fontSize=`12px`、color=`rgb\(97, 102, 107\)`、marginTop=`-6px`；后继节点 class=`（无——收起态行末即字段外壳末尾）`/u,
+    'reviewer 秒数行样式与「无后继」应逐字在档（12px 二级色、-6px 负边距、收起态行末即外壳末尾）',
   );
   assert.match(
     dump,
-    /`approve-for-me-sec-human-timeoutMs`：[^\n]*fontSize=`12px`、color=`rgb\(97, 102, 107\)`、marginTop=`-6px`；后继节点 class=`dsafm_field`/u,
-    'human 秒数行样式与后继应逐字在档（12px 二级色、-6px 负边距、后继＝下一字段外壳）',
+    /`approve-for-me-sec-human-timeoutMs`：[^\n]*fontSize=`12px`、color=`rgb\(97, 102, 107\)`、marginTop=`-6px`；后继节点 class=`（无——收起态行末即字段外壳末尾）`/u,
+    'human 秒数行样式与「无后继」应逐字在档（12px 二级色、-6px 负边距、收起态行末即外壳末尾）',
   );
   assert.match(dump, /实时行为（键入即换算、占位、非法、保存重开、en 档单位）的验证不在本档范围/u, '实时行为边界声明应在档');
 });

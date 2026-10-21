@@ -255,7 +255,7 @@ LLM 判断不是确定性安全保证：提示注入、误判、模型及档位�
 | `trigger.presets` / `trigger.unknown` | `['auto-approve']` / `skip` | 指定预设接管；未知默认不接管 |
 | `trigger.subagents` / `trigger.auditEverySkip` | `review` / `false` | 根会话命中才覆盖；跳过记录默认降噪，开启后逐次记录 |
 | `reviewer.model` / `reviewer.parentModelRules` / `reviewer.byParentModel`（兼容输入） | `''` / `[]` / `{}` | 未设置全局默认时按 5.1 零值语义使用执行助手当前模型；结构化规则定义父模型映射；旧字典仅作兼容读取 |
-| `reviewer.timeoutMs` / `reviewer.maxTokens` | `90000` / `0` | `0` 分别为立即超时、不向模型传输出上限；后者仍受供应商默认限制 |
+| `reviewer.timeoutMs` / `reviewer.maxTokens` | `90000` / `0` | `0` 分别为立即超时、不向模型传输出上限；后者由模型或供应商默认值决定 |
 | `reviewer.temperature` / `reviewer.maxToolSteps` / `reviewer.toolTimeoutMs` | `0` / `4` / `5000` | 轮次用尽后要求直接回答，不再提供工具；单工具时限 `0` 立即超时 |
 | `human.timeoutMs` / `human.timeoutFrom` | `300000` / `request` | 人工时限 `0` 立即拒；起算点见 4.2 |
 | `context.maxTranscriptBytes` / `context.maxEntryBytes` / `context.maxEntries` / `context.includeToolResults` | `24576` / `4096` / `40` / `true` | UTF-8 字节预算；两个字节值 `0` 不裁剪，条数 `0` 不取上下文；单条预算也用于独立参数段 |

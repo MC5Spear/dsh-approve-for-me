@@ -1,16 +1,16 @@
 # 设置表单 DOM 证据档（结构判据＋毫秒字段秒数读数；机器可核留档）
 
-- 采集：2026-10-19，真实部署实例（loopback）。采集工具链随仓发布（`tools/browser-shot.mjs` 驱动取证、`tools/build-dom-dump.mjs` 汇编成档），本次采集的采集步骤脚本属开发期工件、不随仓发布。主取证步骤含暂存往返（暂存不保存→重开读旧值→保存 unset→复原）；换算读数（seconds 段）与 CSS 收窄扫描（scoped 段，只读本包注入的 `style[data-plugin-css="dsh-approve-for-me"]`）并入同一脚本。
+- 采集：2026-10-21，真实部署实例（loopback）。采集工具链随仓发布（`tools/browser-shot.mjs` 驱动取证、`tools/build-dom-dump.mjs` 汇编成档），本次采集的采集步骤脚本属开发期工件、不随仓发布。主取证步骤含暂存往返（暂存不保存→重开读旧值→保存 unset→复原）；来源信息行的本机安装路径以占位符替换（机器事实不入公开层），其余文本逐字；换算读数（seconds 段）与 CSS 收窄扫描（scoped 段，只读本包注入的 `style[data-plugin-css="dsh-approve-for-me"]`）并入同一脚本。
 - 入口路径：侧栏「插件」→ `dsh-approve-for-me` → 本包详情页；页面身份 `[data-plugin-detail="dsh-approve-for-me"]`。
 - 常驻断言：`test/settings-dom-dump.test.mjs` 读本文件逐项核对（变异验证：篡改本文件对应断言变红）。
 
 ## 1. 详情页 DOM 文本（innerText，逐字；零命中「重置全部覆盖」「当前生效值」「跟随模型默认」）
 
 ```text
-插件列表
+插件
 卸载
 dsh-approve-for-me
-v0.2.1+dsh.0.2.0-rc.2
+v0.2.2+dsh.0.2.1-rc.2
 
 dsh-approve-for-me
 
@@ -46,9 +46,6 @@ Automatic approval answerer for the DSH approval seam — the codex `--approve-f
 未设置
 zai/glm-5.3
 zai/glm-5.3-flash
-moonshotai/kimi-k3
-deepseek-official/deepseek-flash
-deepseek-official/deepseek-v4-pro
 自动选择
 low
 high
@@ -95,12 +92,12 @@ max
 
 自动审查的等待上限（毫秒）；0 立即超时。
 
-生效：300 秒 · 草稿：300 秒
+生效：90 秒 · 草稿：90 秒
 
 审查输出上限（token）
 说明
 
-审查输出的 token 上限（token 是模型计量文本的单位）；0 不向模型传输出上限，仍受供应商默认限制；推理模型可能先把额度用于推理，上限过小可能导致没有有效结论。
+审查输出的 token 上限（token 是模型计量文本的单位）；0 不向模型传输出上限，由模型或供应商默认值决定；推理模型可能先把额度用于推理，上限过小可能导致没⁠有⁠有⁠效⁠结⁠论。
 
 审查期间显示人工审批卡片
 说明
@@ -188,6 +185,11 @@ dsh-approve-for-me
 Automatic approval answerer for the DSH approval seam — the codex `--approve-for-me` equivalent: a read-only LLM reviewer decides each sandbox escalation, risky ones are rejected with the reason injected for the main model.
 approve-for-me
 运行中
+来源信息
+代码来源
+file:<本机临时打包路径>/dsh-approve-for-me-0.2.2+dsh.0.2.1-rc.2.tgz
+当前版本
+0.2.2+dsh.0.2.1-rc.2
 ```
 
 ## 2. 配置区容器计算样式（无自绘卡片外壳）
@@ -206,14 +208,14 @@ approve-for-me
 ## 5. 暂存语义：保存按钮三态与「只有保存才写」
 
 初始（无改动）：保存 disabled=`true`。
-点 language.ui「恢复默认」（只暂存）：控件值 `auto`、保存 disabled=`false`、该字段覆盖组消失（剩 3 组）。
-重开页面（不保存）：控件值回到 `zh`、覆盖组回 4 组、保存 disabled=`true`——暂存丢弃、写库没发生。
-再暂存＋点保存：控件值 `auto`、覆盖组 3 组、保存 disabled=`true`——unset 落库、覆盖消失。
+点 language.ui「恢复默认」（只暂存）：控件值 `auto`、保存 disabled=`false`、该字段胶囊仍在（覆盖组仍 4 组——用户层键未移除，保存 unset 落库后才消失）。
+重开页面（不保存）：控件值回到 `zh`、覆盖组仍 4 组、保存 disabled=`true`——暂存丢弃、写库没发生（胶囊全程未离开）。
+再暂存＋点保存：控件值 `auto`、覆盖组 3 组、保存 disabled=`true`——unset 落库、该字段覆盖消失（胶囊此时才撤下）。
 取证后复原（设回 zh＋保存）：控件值 `zh`、覆盖组 4 组——现场回到采集前（profile patch `language: {agent: en, ui: zh}` 复核过）。
 
 ## 6. 交付 CSS 串失效令牌零命中（收窄到本包 style 元素）
 
-本包注入样式 10760 字符（104 条规则）：`--dsw-alias-state-warning-primary`×0、`--dsw-alias-label-error`×0、`--dsw-alias-bg-layer-4`×0（页面级命中来自宿主/其它包样式，不属本包交付串）。
+本包注入样式 10886 字符（105 条规则）：`--dsw-alias-state-warning-primary`×0、`--dsw-alias-label-error`×0、`--dsw-alias-bg-layer-4`×0（页面级命中来自宿主/其它包样式，不属本包交付串）。
 关键规则原文：`.dsafm_form{display:flex;flex-direction:column;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary)}`；`.dsafm_save{appearance:none;border:1px solid transparent;border-radius:8px;padding:5px 14px;font-family:inherit;font-size:13px;line-height:1.5;cursor:pointer;background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3)}`；`.dsafm_helpbtn{display:inline-flex;align-items:center;gap:4px;justify-content:center;flex:none;min-width:24px;min-height:24px;padding:0 8px;border:0;border-radius:6px;background:none;color:var(--dsw-alias-label-secondary);cursor:pointer;font-family:inherit;font-size:12px;line-height:1.5}`；`.dsafm_input{flex:1;min-width:0;width:100%;height:34px;padding:0 12px;border:.5px solid var(--dsw-alias-border-l4);border-radius:8px;background:var(--dsw-alias-bg-layer-3);font-family:inherit;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-primary)}`。
 数字字段承载规则（design §7.2.1）：`.dsafm_numhost > div{padding:0}` 与 `.dsafm_numhost > div > div:first-child{display:none}`；退役规则（旧分隔线选择器组与 `.dsafm_f_help`）零残留=`true`；字段间分隔线统一 `.dsafm_field + .dsafm_field` 在场=`.dsafm_field + .dsafm_field{border-top:.5px solid var(--dsw-alias-border-l2)}`。
 
@@ -227,7 +229,7 @@ approve-for-me
 | 3 | select | select-one | （无） | high |
 | 4 | select | select-one | approve-for-me-ctl-language-ui | zh |
 | 5 | select | select-one | approve-for-me-ctl-language-agent | en |
-| 6 | input | text | approve-for-me-ctl-reviewer-timeoutMs | 300000 |
+| 6 | input | text | approve-for-me-ctl-reviewer-timeoutMs | 90000 |
 | 7 | input | text | approve-for-me-ctl-reviewer-maxTokens | 0 |
 | 8 | select | select-one | approve-for-me-ctl-ui-humanCardDuringReview | true |
 | 9 | input | text | approve-for-me-ctl-human-timeoutMs | 300000 |
@@ -245,7 +247,7 @@ approve-for-me
 
 ## 8. dsafm 类清单（容器内去重；退役类零残留）
 
-dsafm_form / dsafm_area / dsafm_badges / dsafm_button / dsafm_chevron / dsafm_ctl / dsafm_effort / dsafm_f_head / dsafm_f_hint / dsafm_f_label / dsafm_f_sec / dsafm_field / dsafm_footer / dsafm_helpbtn / dsafm_helpbtn_text / dsafm_input / dsafm_labelgroup / dsafm_map / dsafm_map_add / dsafm_map_head / dsafm_model / dsafm_numhost / dsafm_picker / dsafm_picker_meta / dsafm_picker_text / dsafm_reset / dsafm_save / dsafm_sec_draft / dsafm_sec_resolved / dsafm_stack
+dsafm_form / dsafm_field / dsafm_f_head / dsafm_labelgroup / dsafm_f_label / dsafm_helpbtn / dsafm_helpbtn_text / dsafm_stack / dsafm_input / dsafm_picker / dsafm_picker_text / dsafm_picker_meta / dsafm_f_hint / dsafm_badges / dsafm_reset / dsafm_ctl / dsafm_model / dsafm_effort / dsafm_map / dsafm_map_head / dsafm_button / dsafm_map_add / dsafm_numhost / dsafm_f_sec / dsafm_sec_resolved / dsafm_sec_draft / dsafm_area / dsafm_footer / dsafm_save
 
 退役类零残留：无 dsafm_row、dsafm_label、dsafm_section、dsafm_divider、dsafm_actions、dsafm_help、dsafm_map_block、dsafm_f_help（数字字段进字段外壳后旧式说明行退役）。`dsafm_chevron` 在场属下拉 picker 箭头；`dsafm_helpbtn_text` 为说明按钮的可见文字 span；`dsafm_numhost` 为数字字段承载官方输入组件的外壳容器（design §7.2.1）。
 
@@ -257,8 +259,8 @@ dsafm_form / dsafm_area / dsafm_badges / dsafm_button / dsafm_chevron / dsafm_ct
 
 读数行 2 行（恰两个 ms 字段各一行；字节/令牌字段不做换算）：
 
-- `approve-for-me-sec-reviewer-timeoutMs`：`生效：300 秒 · 草稿：300 秒`（生效＝`生效：300 秒`、草稿＝`草稿：300 秒`、draftInvalid=false）；行样式 fontSize=`12px`、color=`rgb(97, 102, 107)`、marginTop=`-6px`；后继节点 class=`dsafm_field`（design §7.2.1 新结构：秒数行的后继是展开说明区（展开时）或下一字段的 `.dsafm_field`；字段间分隔线统一 `.dsafm_field + .dsafm_field`）。
-- `approve-for-me-sec-human-timeoutMs`：`生效：300 秒 · 草稿：300 秒`（生效＝`生效：300 秒`、草稿＝`草稿：300 秒`、draftInvalid=false）；行样式 fontSize=`12px`、color=`rgb(97, 102, 107)`、marginTop=`-6px`；后继节点 class=`dsafm_field`（design §7.2.1 新结构：秒数行的后继是展开说明区（展开时）或下一字段的 `.dsafm_field`；字段间分隔线统一 `.dsafm_field + .dsafm_field`）。
+- `approve-for-me-sec-reviewer-timeoutMs`：`生效：90 秒 · 草稿：90 秒`（生效＝`生效：90 秒`、草稿＝`草稿：90 秒`、draftInvalid=false）；行样式 fontSize=`12px`、color=`rgb(97, 102, 107)`、marginTop=`-6px`；后继节点 class=`（无——收起态行末即字段外壳末尾）`（design §7.2.1 新结构：秒数行的后继是展开说明区（展开时）或下一字段的 `.dsafm_field`；字段间分隔线统一 `.dsafm_field + .dsafm_field`）。
+- `approve-for-me-sec-human-timeoutMs`：`生效：300 秒 · 草稿：300 秒`（生效＝`生效：300 秒`、草稿＝`草稿：300 秒`、draftInvalid=false）；行样式 fontSize=`12px`、color=`rgb(97, 102, 107)`、marginTop=`-6px`；后继节点 class=`（无——收起态行末即字段外壳末尾）`（design §7.2.1 新结构：秒数行的后继是展开说明区（展开时）或下一字段的 `.dsafm_field`；字段间分隔线统一 `.dsafm_field + .dsafm_field`）。
 
 生效值读数与控件值一致（本档 §7 控件表同 id 行）；初始草稿＝生效值文本。实时行为（键入即换算、占位、非法、保存重开、en 档单位）的验证不在本档范围，由开发期工件承载、不随仓发布。
 

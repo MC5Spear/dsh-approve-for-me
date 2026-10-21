@@ -120,6 +120,7 @@ window.__ModuleLoader__.load({
 			"card.map.placeholder.parent": "执行助手模型 id",
 			"card.map.placeholder.provider": "provider id",
 			"card.map.duplicate": "匹配条件重复：同一作用范围与执行助手模型只能有一条规则。",
+			"card.map.incomplete": "本行未选执行助手模型，保存时不保留该行。",
 			"card.map.legacy.title": "旧键含斜杠，请确认原意。",
 			"option.legacy.any": "任意 provider，模型 id 为 {id}",
 			"option.legacy.named": "指定 provider {provider}，模型 id 为 {id}",
@@ -155,7 +156,9 @@ window.__ModuleLoader__.load({
 			"help.reviewer.parentModelRules": "按执行助手的模型选择审查模型：每条规则含作用范围（任意 provider，或指定 provider 下的完整模型 id）与审查模型、推理强度。会话选择更优先；命中时先于全局默认；未命中按其余层解析。同一作用范围与执行助手模型只能有一条规则，重复的行不能保存。旧字典继续参与匹配：纯模型 id 键按任意 provider 读取；含斜杠的旧键会在表中请求确认原意，确认前按原值读取，不自动改写。",
 			"help.reviewer.model": "全局默认的审查模型与推理强度。模型引用形如 provider/model；推理强度留空表示自动选择：模型支持 `low` 就使用 `low`，否则不指定、由模型默认值决定，不承诺所有模型都支持或采用相同强度。解析顺序为会话选择 → 按执行助手的模型映射 → 全局默认；全局默认未设置时使用执行助手的当前模型——插件仍独立发起一次审查调用，是「使用相同模型」，不是由执行助手自己审批。",
 			"help.reviewer.timeoutMs": "自动审查的等待上限（毫秒），涵盖装配与等待本次审查结论的全过程，内部重试不另计时。超时按拒绝处理并说明发生环节，不是危险判定。0 立即超时；需要较长等待时设较大的值。",
-			"help.reviewer.maxTokens": "token 是模型计量文本的单位。审查输出上限（token）。0 表示不向模型传输出上限，由模型或供应商默认值决定。推理模型可能先把额度用于推理，上限过小可能导致没有有效结论（正文为空，按审查故障处理）；具体数值因模型与推理强度而异，不以个别模型的测量结果作通用保证。",
+			// 「没有有效结论」内嵌 \u2060 词连接符：中文逐字换行会把「有效」拆开（如「没有有／效结论」），
+			// 连接符把该短语钉成不可断整体；此处是转义写法，运行时等价于不可见连接符，词义不变。
+			"help.reviewer.maxTokens": "token 是模型计量文本的单位。本项设置审查输出的 token 上限。0 不向模型传输出上限，由模型或供应商默认值决定。推理模型可能先把额度用于推理，上限过小可能导致没\u2060有\u2060有\u2060效\u2060结\u2060论（正文为空，按审查故障处理）；具体数值因模型与推理强度而异，不以个别模型的测量结果作通用保证。",
 			"help.human.timeoutMs": "人工作答等待上限（毫秒），仅在「自动审查未允许时＝交给人工决定」时使用。0 表示立即拒绝，不是无限等待。到点按拒绝结算，原因写明人工作答超时。",
 			"help.human.timeoutFrom": "人工作答计时的起点：从审批请求起算＝交人工只使用剩余时间；从交人工起算＝交人工时重新开始计时。",
 			"help.mode": "总开关：规则检查＋LLM 审查＝正常接管；完全不接管＝等同未安装，宿主审批流程不受影响。",
@@ -350,7 +353,8 @@ window.__ModuleLoader__.load({
 			"hint.language.ui": "插件界面文案的语言。",
 			"hint.language.agent": "发给审查模型的文本与给执行助手的通知，两者使用的语言。",
 			"hint.reviewer.timeoutMs": "自动审查的等待上限（毫秒）；0 立即超时。",
-			"hint.reviewer.maxTokens": "审查输出的 token 上限（token 是模型计量文本的单位）；0 不向模型传输出上限，仍受供应商默认限制；推理模型可能先把额度用于推理，上限过小可能导致没有有效结论。",
+			// 同 help.reviewer.maxTokens：「没有有效结论」内嵌 \u2060 词连接符防中文逐字换行拆词。
+			"hint.reviewer.maxTokens": "审查输出的 token 上限（token 是模型计量文本的单位）；0 不向模型传输出上限，由模型或供应商默认值决定；推理模型可能先把额度用于推理，上限过小可能导致没\u2060有\u2060有\u2060效\u2060结\u2060论。",
 			"hint.ui.humanCardDuringReview": "审查期间是否提前显示人工审批卡片。",
 			"hint.human.timeoutMs": "人工作答的等待上限（毫秒）；0 立即拒绝。",
 			"hint.human.timeoutFrom": "人工作答从何时开始计时：审批请求发出时，或交人工时。",
@@ -377,6 +381,7 @@ window.__ModuleLoader__.load({
 			"card.map.placeholder.parent": "Agent model id",
 			"card.map.placeholder.provider": "Provider id",
 			"card.map.duplicate": "Duplicate match condition: one rule per scope and agent model.",
+			"card.map.incomplete": "No agent model chosen on this row; it is not kept when saving.",
 			"card.map.legacy.title": "This legacy key contains a slash; confirm its original meaning.",
 			"option.legacy.any": "Any provider, model id {id}",
 			"option.legacy.named": "Provider {provider}, model id {id}",
@@ -412,7 +417,7 @@ window.__ModuleLoader__.load({
 			"help.reviewer.parentModelRules": "Picks the reviewer by the model the acting agent uses: each rule carries a scope (any provider, or a specific one) plus the agent's full model id, mapped to a reviewer model and effort. A session choice outranks a hit; a hit outranks the global default; misses fall through to the remaining layers. One rule per scope and agent model — duplicates cannot be saved. The legacy dictionary still matches: plain-id keys read as any-provider; slash-containing keys ask you to confirm their meaning, are read as-is until confirmed, and are never rewritten automatically.",
 			"help.reviewer.model": "Global default reviewer model and effort. The reference reads provider/model; an empty effort is automatic: use `low` when the model supports it, otherwise let the model default decide — no promise that every model supports it or matches the same intensity. Resolution: session choice, by the agent's model, global default; an unset default reviews on the agent's current model — an independent call, the same model, never the agent approving itself.",
 			"help.reviewer.timeoutMs": "Auto-review wait limit (ms), covering assembly and the whole wait for this review's conclusion; internal retries get no fresh budget. A timeout rejects with its stage named — not a danger verdict. 0 times out immediately; set a larger value for longer waits.",
-			"help.reviewer.maxTokens": "A token is the unit models use to measure text. Review output cap (tokens). 0 sends no cap, leaving the model or provider default. Reasoning models may spend the budget on reasoning first — too small a cap can leave no usable conclusion (empty body, treated as a review failure); the threshold varies by model and effort, so no single measurement is a general promise.",
+			"help.reviewer.maxTokens": "A token is the unit models use to measure text. This sets the review output cap in tokens. 0 sends no cap, leaving the model or provider default. Reasoning models may spend the budget on reasoning first — too small a cap can leave no usable conclusion (empty body, treated as a review failure); the threshold varies by model and effort, so no single measurement is a general promise.",
 			"help.human.timeoutMs": "Human-answer wait limit (ms), used only when the fallback is Ask. 0 rejects immediately, not an endless wait. Expiry settles as a rejection citing the human timeout.",
 			"help.human.timeoutFrom": "Where the human timer starts: from the approval request (the handoff only gets the remainder), or from the handoff itself.",
 			"help.mode": "Master switch: rule check plus LLM review takes over as configured; off behaves as if uninstalled, leaving host approvals untouched.",
@@ -607,7 +612,7 @@ window.__ModuleLoader__.load({
 			"hint.language.ui": "Language of the plugin's UI copy.",
 			"hint.language.agent": "Language shared by the texts sent to the reviewer and the notices sent to the agent.",
 			"hint.reviewer.timeoutMs": "Auto-review wait limit (ms); 0 times out immediately.",
-			"hint.reviewer.maxTokens": "Review output cap in tokens (a token is the unit models use to measure text); 0 sends no cap to the model, provider defaults still apply; reasoning models may spend the budget on reasoning first — too small a cap can leave no usable conclusion.",
+			"hint.reviewer.maxTokens": "Review output cap in tokens (a token is the unit models use to measure text); 0 sends no cap, leaving the model or provider default; reasoning models may spend the budget on reasoning first — too small a cap can leave no usable conclusion.",
 			"hint.ui.humanCardDuringReview": "Whether the human card appears early during review.",
 			"hint.human.timeoutMs": "Human-answer wait limit (ms); 0 rejects immediately.",
 			"hint.human.timeoutFrom": "Where the human-answer timing starts: at the approval request, or at the handoff.",
@@ -709,24 +714,28 @@ window.__ModuleLoader__.load({
 			".dsafm_warnline{display:flex;align-items:flex-start;gap:6px;padding:6px 10px;border-radius:8px;background:var(--dsw-alias-state-warn-tertiary);color:#92400e;font-size:12px;line-height:1.5;overflow-wrap:anywhere}",
 			".dsafm_warnline svg{flex:none;color:#92400e}",
 			"body[data-ds-dark-theme] .dsafm_warnline,body[data-ds-dark-theme] .dsafm_warnline svg{color:var(--dsw-alias-state-warn-label)}",
-			// 结构化规则表（design §7.2）：作用范围／执行助手模型／审查模型／推理强度／操作五列。
+			// 结构化规则表（design §7.2）：作用范围／执行助手模型／审查模型／推理强度／操作五列；
+			// 操作列 56px 下限——auto 收缩时删除按钮会紧贴字段右缘。
 			".dsafm_map{display:flex;flex-direction:column;gap:6px}",
-			".dsafm_map_head,.dsafm_map_row{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1.5fr) minmax(0,1.5fr) minmax(96px,.8fr) auto;gap:8px;align-items:center;min-width:0}",
+			".dsafm_map_head,.dsafm_map_row{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1.5fr) minmax(0,1.5fr) minmax(96px,.8fr) minmax(56px,auto);gap:8px;align-items:center;min-width:0}",
 			".dsafm_map_head{font-size:12px;color:var(--dsw-alias-label-tertiary)}",
 			".dsafm_map_row select{width:100%;min-width:0}",
 			".dsafm_map_rowwrap{display:flex;flex-direction:column;gap:4px;min-width:0}",
 			".dsafm_map_scope{display:flex;flex-direction:column;gap:4px;min-width:0}",
 			".dsafm_map_del{justify-self:start;padding:0 10px}",
 			".dsafm_map_dup{font-size:12px;line-height:1.5;color:var(--dsw-alias-state-error-primary);overflow-wrap:anywhere}",
+			// 空条件行的「保存时不保留」说明：非错误（行为是设计内丢弃），用 secondary 正文色。
+			".dsafm_map_note{font-size:12px;line-height:1.5;color:var(--dsw-alias-label-secondary);overflow-wrap:anywhere}",
 			".dsafm_map_pending_title{font-size:12px;line-height:1.5;color:var(--dsw-alias-label-primary);overflow-wrap:anywhere}",
 			".dsafm_map_pending{font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary);overflow-wrap:anywhere}",
 			".dsafm_button{border:none;background:none;padding:0;font:inherit;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-secondary);cursor:pointer}",
 			".dsafm_button:hover:not(:disabled){color:var(--dsw-alias-label-primary)}",
 			".dsafm_button:disabled{cursor:default}",
-			// 空态「添加一行」做成可见的边框按钮（纯文本居中可点性弱，窄窗无表头时更难识别为可点）。
+			// 空态「添加一行」做成可见的边框按钮（纯文本居中可点性弱，窄窗无表头时更难识别为可点）；
+			// 与表头左缘对齐——居中悬空不像表格动作。
 			// 层叠顺序：必须排在 .dsafm_button 之后——同为单类选择器，靠后的规则胜出，
 			// 排在前面会被 .dsafm_button 的 border:none/background:none/padding:0 覆盖回纯文本形态。
-			".dsafm_map_add{align-self:center;display:inline-flex;align-items:center;padding:4px 14px;border:.5px solid var(--dsw-alias-border-l4);border-radius:8px;background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-secondary)}",
+			".dsafm_map_add{align-self:flex-start;display:inline-flex;align-items:center;padding:4px 14px;border:.5px solid var(--dsw-alias-border-l4);border-radius:8px;background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-secondary)}",
 			".dsafm_map_add:hover:not(:disabled){color:var(--dsw-alias-label-primary)}",
 			".dsafm_badge{flex:none;font-size:11px;color:var(--dsw-alias-state-warn-primary);margin-left:6px}",
 			".dsafm_hint{color:var(--dsw-alias-label-tertiary);font-size:12px;overflow-wrap:anywhere}",
@@ -2664,16 +2673,14 @@ window.__ModuleLoader__.load({
 			};
 
 			/**
-			 * 覆盖标记：暂存 clear → 无；暂存写 → 有（保存将留下覆盖，与基线同值也算）；
-			 * 无暂存 → 用户层有该键（键在场，不是值比较）。
+			 * 覆盖标记（requirements §6.1）：只读用户层在场（键存在，不做值比较）——「已单独设置」
+			 * 陈述用户配置层的持久状态，与暂存无关：未保存的改动不产生胶囊，保存落库后才出现；
+			 * 暂存「恢复默认」在保存 unset 生效前胶囊仍在场。「恢复默认」按钮的在场另含暂存条目
+			 * （见 fieldShell 覆盖组），与本函数无关。
 			 * @param {readonly string[]} path - 字段路径。
 			 * @returns {boolean} 是否显示「已单独设置」。
 			 */
-			const overriddenOf = (path) => {
-				const entry = staged[path.join(".")];
-				if (entry === undefined) return getPath(user, path) !== undefined;
-				return entry.clear !== true;
-			};
+			const overriddenOf = (path) => getPath(user, path) !== undefined;
 
 			/**
 			 * 结构化字段的显示值与暂存入口（模型选择、行表、预设数组）。
@@ -2872,11 +2879,13 @@ window.__ModuleLoader__.load({
 										helpButton,
 									],
 								}),
-								overriddenOf(path)
+								overriddenOf(path) || staged[path.join(".")] !== undefined
 									? jsxRuntime.jsxs("span", {
 										className: "dsafm_badges",
 										children: [
-											jsxRuntime.jsx(primitives.Tag, { tone: "neutral", children: t("card.override") }),
+											overriddenOf(path)
+												? jsxRuntime.jsx(primitives.Tag, { tone: "neutral", children: t("card.override") })
+												: null,
 											jsxRuntime.jsx("button", {
 												type: "button",
 												className: "dsafm_reset",
@@ -3388,6 +3397,11 @@ window.__ModuleLoader__.load({
 							}),
 							duplicateRow(row)
 								? jsxRuntime.jsx("div", { className: "dsafm_map_dup", children: t("card.map.duplicate") })
+								: null,
+								// 空条件行在保存计划里丢弃（persistableOf，设计内行为）——把「保存禁用/不落库」的原因亮在行上，
+								// 与重复错误同位置渲染、非错误色。
+								row.kind === "rule" && (typeof row.model !== "string" || row.model.trim().length === 0)
+								? jsxRuntime.jsx("div", { className: "dsafm_map_note", children: t("card.map.incomplete") })
 								: null,
 							...rowIssuesOf(row).map((issue, position) => modelIssueLine(t, "warn.modelIssue.rule", issue)),
 						],

@@ -21,12 +21,12 @@ cd dsh-approve-for-me
 npm install --omit=dev
 ```
 
-**宿主解析锚点**：宿主接线用例需要解析 `@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-typert-protocol`、`@deepseek-ai/cordis` 等同版包（本包按 peer 版本锁定）。两种给法：
+**宿主解析锚点**：宿主接线用例需要解析六份同版包——`@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-typert-protocol`、`@deepseek-ai/cordis`、`@deepseek-ai/schemastery`，加上套件实际 import 的 `@deepseek-ai/dsh-client-ui-primitives` 与 `@deepseek-ai/dsh-session-format-v3-to-v4`（后两包不在本包依赖图内；六包齐备时 `test/client-primitives.test.mjs` 与 `test/v4-source.test.mjs` 才不按「不可解析」自跳过）。两种给法：
 
 1. 在克隆目录里显式安装同版宿主包。宿主和 cordis 版本取[当前兼容基准](<docs/requirements.md#13-当前兼容基准>)，其他依赖取项目已声明的约束；将下列占位符替换为满足约束的实际版本，不直接执行占位命令：
 
    ```powershell
-   npm install --no-save @deepseek-ai/cordis@<cordis版本> @deepseek-ai/dsh-llm@<宿主版本> @deepseek-ai/dsh-typert-protocol@<宿主版本> @deepseek-ai/schemastery@<项目依赖版本>
+   npm install --no-save @deepseek-ai/cordis@<cordis版本> @deepseek-ai/dsh-llm@<宿主版本> @deepseek-ai/dsh-typert-protocol@<宿主版本> @deepseek-ai/schemastery@<项目依赖版本> @deepseek-ai/dsh-client-ui-primitives@<宿主版本> @deepseek-ai/dsh-session-format-v3-to-v4@<宿主版本>
    ```
 2. 指向一份已存在的宿主安装树：环境变量 `DSAFM_HOST_MODULES=<宿主安装目录>\node_modules`（取值顺序与配置文件形状见 `tools/local-config.mjs` 与 `tools/local-config.example.mjs`）。
 

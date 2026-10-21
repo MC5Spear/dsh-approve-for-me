@@ -289,6 +289,21 @@ test('包装剥层：内层命中并记层数', () => {
   assert.equal(nested?.wrapDepth, 2);
 });
 
+test('包装剥层：POSIX 短旗标簇同按执行标志剥层', () => {
+  // 簇形态正例（design §12.1）：单横线＋小写字母且簇内含 c，命令文本取自标志 token 之后。
+  assert.equal(hardCmd("bash -lc 'rm -rf /probe'")?.code, 'hard-h1-posix');
+  assert.equal(hardCmd("sh -ic 'rm -fr /probe'")?.code, 'hard-h1-posix');
+  assert.equal(hardCmd('zsh -euc rm -rf /probe')?.code, 'hard-h1-posix');
+  // 簇内 c 前后皆可：剥的仍是标志 token 之后的文本。
+  assert.equal(hardCmd("dash -cl 'rm -rf /probe'")?.code, 'hard-h1-posix');
+  // 含 o 的簇不认（o 取实参，c 被吃成实参值或 o 抢走后随 token）：无法归一，回落审查层。
+  assert.equal(hardCmd("bash -oc 'rm -rf /probe'"), undefined);
+  assert.equal(hardCmd("bash -co 'rm -rf /probe'"), undefined);
+  // 大写不属簇（-C/-L 是别的选项或无效）；pwsh 非 POSIX 首词，簇规则不适用（其 -c 是 -Command 缩写）。
+  assert.equal(hardCmd("bash -LC 'rm -rf /probe'"), undefined);
+  assert.equal(hardCmd('pwsh -lc Remove-Item -Recurse C:\\probe'), undefined);
+});
+
 test('包装剥层：深度上限与无法提取的回落', () => {
   // 四层包装超过三层上限：按无法归一处理，不命中、回落审查层。
   assert.equal(hardCmd('powershell -Command powershell -Command powershell -Command powershell -Command rm -rf /probe'), undefined);

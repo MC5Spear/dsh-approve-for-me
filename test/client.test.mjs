@@ -978,6 +978,11 @@ test('映射表（design §7.2）：旧字典纯 id 键呈现为「任意 provid
     assert.ok(addButton !== -1 && addMap !== -1, '两条规则都应在 CSS 串中');
     assert.ok(addMap > addButton, '空态按钮规则必须排在 .dsafm_button 之后（层叠顺序）');
     assert.match(rules.slice(addMap, addMap + 200), /border:\.5px solid/, '空态按钮应带边框形态');
+    // 映射表视觉定稿（design §7.2／§10.2）：添加一行与表头左缘对齐、操作列 56px 下限、
+    // 空条件行说明用 secondary 正文色。
+    assert.match(rules.slice(addMap, addMap + 220), /align-self:flex-start/, '「添加一行」应与表头左缘对齐（align-self:flex-start）');
+    assert.match(rules, /\.dsafm_map_head,\.dsafm_map_row\{[^}]*minmax\(56px,auto\)/u, '「操作」列应有 56px 下限');
+    assert.match(rules, /\.dsafm_map_note\{[^}]*font-size:12px[^}]*label-secondary/u, '空条件行说明应为 12px、secondary 正文色');
   }
   // 任意 provider 列的选项按纯 id 去重并附 provider 信息（design §7.2）。
   const optionTexts = findByClass(mapRow, 'dsafm_map_parent').props.children.filter(Boolean).map((option) => option.props.children);
@@ -2367,6 +2372,49 @@ test('结构化规则行：目录选择全 id 往返不变形，两种作用范�
     [{ parent: { provider: null, model: 'deepseek-chat' }, choice: { model: 'zai/glm-5.3', effort: '' } }],
     '切回任意 provider 保存应写 provider:null',
   );
+});
+
+test('映射表空条件行：行级说明在场、选模型后消失（design §7.2）', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    snapshot: {
+      status: 'ready',
+      value: { reviewer: {} },
+      base: {},
+      user: {},
+      revision: 1,
+      writable: true,
+    },
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'deepseek', models: [{ id: 'deepseek-chat' }] }] } };
+      }
+      if (endpoint === 'approveForMe/modelEfforts') return { ok: true, value: { efforts: [{ id: 'low' }], defaultEffort: 'low' } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
+  const props = { t: (key) => key, scope: env.scope, rpcCall: env.rpcCall };
+  const tree = await expandCard(card.component, props);
+  assert.equal(findAllByClass(tree, 'dsafm_map_note').length, 0, '初始无空条件行说明');
+  // 新增空行：行级说明在场（保存计划丢弃该行＝无有效改动，保存置灰的原因亮在行上）。
+  findByClass(tree, 'dsafm_map_add').props.onClick();
+  hookIndex = 0;
+  let current = render(card.component, props);
+  const notes = findAllByClass(current, 'dsafm_map_note');
+  assert.equal(notes.length, 1, '空条件行应出现行级说明');
+  assert.equal(notes[0].props.children, 'card.map.incomplete', '说明文案走字典键 card.map.incomplete');
+  assert.equal(findByClass(current, 'dsafm_save').props.disabled, true, '空行被丢弃＝无有效改动，保存置灰');
+  // 选定执行助手模型：说明消失、保存恢复可用。
+  const row = findAllByClass(current, 'dsafm_map_row')[0];
+  findByClass(row, 'dsafm_map_parent').props.onChange({ target: { value: 'deepseek/deepseek-chat' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  assert.equal(findAllByClass(current, 'dsafm_map_note').length, 0, '选定模型后行级说明消失');
+  assert.equal(findByClass(current, 'dsafm_save').props.disabled, false, '有可保存的规则改动');
 });
 
 test('映射行重复条件：行级错误并阻止保存，含旧字典行同条件（design §7.2）', async () => {
@@ -4061,6 +4109,7 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['card.map.placeholder.parent', '执行助手模型 id', "Agent model id"],
     ['card.map.placeholder.provider', 'provider id', "Provider id"],
     ['card.map.duplicate', '匹配条件重复：同一作用范围与执行助手模型只能有一条规则。', "Duplicate match condition: one rule per scope and agent model."],
+    ['card.map.incomplete', '本行未选执行助手模型，保存时不保留该行。', "No agent model chosen on this row; it is not kept when saving."],
     ['card.map.legacy.title', '旧键含斜杠，请确认原意。', "This legacy key contains a slash; confirm its original meaning."],
     ['option.legacy.any', '任意 provider，模型 id 为 {id}', "Any provider, model id {id}"],
     ['option.legacy.named', '指定 provider {provider}，模型 id 为 {id}', "Provider {provider}, model id {id}"],
@@ -4106,7 +4155,7 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['hint.language.ui', '插件界面文案的语言。', "Language of the plugin's UI copy."],
     ['hint.language.agent', '发给审查模型的文本与给执行助手的通知，两者使用的语言。', "Language shared by the texts sent to the reviewer and the notices sent to the agent."],
     ['hint.reviewer.timeoutMs', '自动审查的等待上限（毫秒）；0 立即超时。', "Auto-review wait limit (ms); 0 times out immediately."],
-    ['hint.reviewer.maxTokens', '审查输出的 token 上限（token 是模型计量文本的单位）；0 不向模型传输出上限，仍受供应商默认限制；推理模型可能先把额度用于推理，上限过小可能导致没有有效结论。', "Review output cap in tokens (a token is the unit models use to measure text); 0 sends no cap to the model, provider defaults still apply; reasoning models may spend the budget on reasoning first — too small a cap can leave no usable conclusion."],
+    ['hint.reviewer.maxTokens', '审查输出的 token 上限（token 是模型计量文本的单位）；0 不向模型传输出上限，由模型或供应商默认值决定；推理模型可能先把额度用于推理，上限过小可能导致没\u2060有\u2060有\u2060效\u2060结\u2060论。', "Review output cap in tokens (a token is the unit models use to measure text); 0 sends no cap, leaving the model or provider default; reasoning models may spend the budget on reasoning first — too small a cap can leave no usable conclusion."],
     ['hint.ui.humanCardDuringReview', '审查期间是否提前显示人工审批卡片。', "Whether the human card appears early during review."],
     ['hint.human.timeoutMs', '人工作答的等待上限（毫秒）；0 立即拒绝。', "Human-answer wait limit (ms); 0 rejects immediately."],
     ['hint.human.timeoutFrom', '人工作答从何时开始计时：审批请求发出时，或交人工时。', "Where the human-answer timing starts: at the approval request, or at the handoff."],
@@ -4125,7 +4174,7 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['help.reviewer.model', '全局默认的审查模型与推理强度。模型引用形如 provider/model；推理强度留空表示自动选择：模型支持 `low` 就使用 `low`，否则不指定、由模型默认值决定，不承诺所有模型都支持或采用相同强度。解析顺序为会话选择 → 按执行助手的模型映射 → 全局默认；全局默认未设置时使用执行助手的当前模型——插件仍独立发起一次审查调用，是「使用相同模型」，不是由执行助手自己审批。', 'Global default reviewer model and effort. The reference reads provider/model; an empty effort is automatic: use `low` when the model supports it, otherwise let the model default decide — no promise that every model supports it or matches the same intensity. Resolution: session choice, by the agent\'s model, global default; an unset default reviews on the agent\'s current model — an independent call, the same model, never the agent approving itself.'],
     ['help.reviewer.parentModelRules', '按执行助手的模型选择审查模型：每条规则含作用范围（任意 provider，或指定 provider 下的完整模型 id）与审查模型、推理强度。会话选择更优先；命中时先于全局默认；未命中按其余层解析。同一作用范围与执行助手模型只能有一条规则，重复的行不能保存。旧字典继续参与匹配：纯模型 id 键按任意 provider 读取；含斜杠的旧键会在表中请求确认原意，确认前按原值读取，不自动改写。', "Picks the reviewer by the model the acting agent uses: each rule carries a scope (any provider, or a specific one) plus the agent's full model id, mapped to a reviewer model and effort. A session choice outranks a hit; a hit outranks the global default; misses fall through to the remaining layers. One rule per scope and agent model — duplicates cannot be saved. The legacy dictionary still matches: plain-id keys read as any-provider; slash-containing keys ask you to confirm their meaning, are read as-is until confirmed, and are never rewritten automatically."],
     ['help.reviewer.timeoutMs', '自动审查的等待上限（毫秒），涵盖装配与等待本次审查结论的全过程，内部重试不另计时。超时按拒绝处理并说明发生环节，不是危险判定。0 立即超时；需要较长等待时设较大的值。', "Auto-review wait limit (ms), covering assembly and the whole wait for this review's conclusion; internal retries get no fresh budget. A timeout rejects with its stage named — not a danger verdict. 0 times out immediately; set a larger value for longer waits."],
-    ['help.reviewer.maxTokens', 'token 是模型计量文本的单位。审查输出上限（token）。0 表示不向模型传输出上限，由模型或供应商默认值决定。推理模型可能先把额度用于推理，上限过小可能导致没有有效结论（正文为空，按审查故障处理）；具体数值因模型与推理强度而异，不以个别模型的测量结果作通用保证。', 'A token is the unit models use to measure text. Review output cap (tokens). 0 sends no cap, leaving the model or provider default. Reasoning models may spend the budget on reasoning first — too small a cap can leave no usable conclusion (empty body, treated as a review failure); the threshold varies by model and effort, so no single measurement is a general promise.'],
+    ['help.reviewer.maxTokens', 'token 是模型计量文本的单位。本项设置审查输出的 token 上限。0 不向模型传输出上限，由模型或供应商默认值决定。推理模型可能先把额度用于推理，上限过小可能导致没\u2060有\u2060有\u2060效\u2060结\u2060论（正文为空，按审查故障处理）；具体数值因模型与推理强度而异，不以个别模型的测量结果作通用保证。', 'A token is the unit models use to measure text. This sets the review output cap in tokens. 0 sends no cap, leaving the model or provider default. Reasoning models may spend the budget on reasoning first — too small a cap can leave no usable conclusion (empty body, treated as a review failure); the threshold varies by model and effort, so no single measurement is a general promise.'],
     ['help.human.timeoutMs', '人工作答等待上限（毫秒），仅在「自动审查未允许时＝交给人工决定」时使用。0 表示立即拒绝，不是无限等待。到点按拒绝结算，原因写明人工作答超时。', 'Human-answer wait limit (ms), used only when the fallback is Ask. 0 rejects immediately, not an endless wait. Expiry settles as a rejection citing the human timeout.'],
     ['help.human.timeoutFrom', '人工作答计时的起点：从审批请求起算＝交人工只使用剩余时间；从交人工起算＝交人工时重新开始计时。', 'Where the human timer starts: from the approval request (the handoff only gets the remainder), or from the handoff itself.'],
     ['help.allowEscalationTo', '可自动批准的最高权限，只限制可送审或允许的升权范围；范围内仍须通过规则检查与模型审查，不等于自动批准全部操作。完全访问（默认）＝最宽；工作区内修改＝超出工作区写入的升权不放行。', "The widest permission auto-approval may grant. It bounds what may be reviewed or allowed; everything in range still passes the rule checks and the review — it is not a blanket approval. Full access (default) is widest; workspace write rejects wider escalations."],
@@ -4217,7 +4266,9 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
   }
   // requirements §6.4/§6.5：必要单位说明与过小额度风险必须常驻在 hint（不展开详细说明也可见），
   // 不得只出现在折叠的 help 里——以下断言锁该退化形态：任一短语被挪回 help-only 即变红。
-  assert.ok(zh['hint.reviewer.maxTokens'].includes('计量文本的单位') && zh['hint.reviewer.maxTokens'].includes('推理') && zh['hint.reviewer.maxTokens'].includes('没有有效结论'), 'hint.reviewer.maxTokens 中文须常驻单位说明与过小额度风险');
+  // 「没有有效结论」在字典原文内嵌 U+2060 词连接符（防中文逐字换行拆词），断言按同一形态拼出。
+  const noConclusion = '没有有效结论'.split('').join('\u2060');
+  assert.ok(zh['hint.reviewer.maxTokens'].includes('计量文本的单位') && zh['hint.reviewer.maxTokens'].includes('推理') && zh['hint.reviewer.maxTokens'].includes(noConclusion), 'hint.reviewer.maxTokens 中文须常驻单位说明与过小额度风险');
   assert.ok(en['hint.reviewer.maxTokens'].includes('measure text') && en['hint.reviewer.maxTokens'].includes('reasoning') && en['hint.reviewer.maxTokens'].includes('no usable conclusion'), 'hint.reviewer.maxTokens 英文须常驻单位说明与过小额度风险');
 });
 
@@ -4398,7 +4449,7 @@ test('恢复默认：只暂存回退值、保存才落 unset', async () => {
   const stagedField = findAllByClass(staged, 'dsafm_field').find((field) => JSON.stringify(field).includes('"approve-for-me-ctl-fallback"'));
   const stagedSelect = findAllByClass(stagedField, 'dsafm_input').find((node) => node.type === 'select');
   assert.equal(stagedSelect.props.value, 'reject', '恢复默认后控件应立即显示组合层默认值');
-  assert.equal(JSON.stringify(stagedField).includes('card.override'), false, '暂存 clear 后不显示已单独设置');
+  assert.equal(JSON.stringify(stagedField).includes('card.override'), true, '暂存 clear 未落库、用户层键仍在——胶囊保留，保存 unset 后才消失（requirements §6.1）');
   assert.equal(env.writes.length, 0, '恢复默认不应写库（保存才落 unset）');
 
   // 保存：写入 unset（用户层键消失才是真回退）。
@@ -4467,6 +4518,9 @@ test('恢复默认的无操作路径：无用户层键时 clear 不产生写入�
   const stagedField = findAllByClass(stagedTree, 'dsafm_field').find((field) => JSON.stringify(field).includes('"approve-for-me-ctl-mode"'));
   const stagedReset = findByClass(stagedField, 'dsafm_reset');
   assert.ok(stagedReset, '暂存写入的字段应出现恢复默认');
+  // 胶囊只随用户层在场（requirements §6.1）：暂存写入不产生「已单独设置」；
+  // 「恢复默认」按钮因暂存条目在场（丢弃草稿的通路），二者不再同进退。
+  assert.equal(JSON.stringify(stagedField).includes('card.override'), false, '暂存写入但用户层无键——不显示已单独设置');
   // 点「恢复默认」：用户层本无键 → clear 是无操作 → 保存回到置灰，零写入。
   stagedReset.props.onClick();
   await tick();
