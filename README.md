@@ -6,13 +6,11 @@
 
 为无人值守长任务和缺乏技术判断能力的用户提供沙箱升权审查。独立 LLM 审查器可以只读取证，安全则允许本次操作，危险则拒绝并说明原因；系统故障与危险判断分别说明。
 
-**English summary.** This third-party DSH plugin reviews sandbox-escalation approval requests with an independent LLM and read-only local tools. Safe requests are allowed once; unsafe requests are denied. Review failures are fail-closed and distinguished from safety denials. The permission tier is supplied by the package declaration. Host settings may persist the tier in user overrides, so uninstall does not guarantee a clean user configuration. The target contract does not provide plugin-side YAML cleanup. The implementation has outstanding requirements and verification work; the current backlog is defined in the design document.
+**English summary.** This third-party DSH plugin reviews sandbox-escalation approval requests with an independent LLM and read-only local tools. Safe requests are allowed once; unsafe requests are denied. Review failures are fail-closed and distinguished from safety denials. The permission tier is supplied by the package declaration. Host settings may persist the tier in user overrides, so uninstall does not guarantee a clean user configuration. The target contract does not provide plugin-side YAML cleanup. Outstanding verification work is tracked in the design document's backlog.
 
 ## 实现与验收边界
 
-当前实现尚未满足或完成验证的事项，以[设计中的当前实施与验证待办](<docs/design.md#11-当前实施与验证待办>)为准。部署前尤其要核对独立审批、停用卸载时的用户配置写入、默认摘要完整性和时限零值语义；不能将目标要求当作已经交付的保证。
-
-核对所用提交及验收结果后再部署，不能把目标描述当作已发布保证。
+当前实现尚未满足或完成验证的事项，以[设计中的当前实施与验证待办](<docs/design.md#11-当前实施与验证待办>)为准。部署前尤其要核对独立审批、停用卸载时的用户配置写入、默认摘要完整性和时限零值语义。
 
 ## 先了解风险与保护范围
 
@@ -27,7 +25,7 @@
 
 ## 兼容性
 
-支持的宿主版本和依赖约束统一见[当前兼容基准](<docs/requirements.md#13-当前兼容基准>)，版本中携带宿主信息的格式和下一发布目标见[插件版本与发布标识](<docs/requirements.md#14-插件版本与发布标识>)。不要将某个目标版本推广为整个版本系列兼容，也不要靠 npm 标签推测依赖是否匹配。
+支持的宿主版本和依赖约束统一见[当前兼容基准](<docs/requirements.md#13-当前兼容基准>)，版本中携带宿主信息的格式和下一发布目标见[插件版本与发布标识](<docs/requirements.md#14-插件版本与发布标识>)。
 
 宿主不兼容时可能跳过 bundle，并记录 `skipping profile bundle "dsh-approve-for-me"`。安装宿主依赖显式指定版本，不靠 npm 标签推测。宿主升级后重新验证应答者、模型目录、设置页面、卡片和记录视图；安装成功不等于完整可用。
 
@@ -39,11 +37,11 @@
 dsh plugin --profile web add github:MC5Spear/dsh-approve-for-me
 ```
 
-也可在宿主“插件”安装对话框填写同一包 spec。宿主负责依赖与启用列表；插件的包声明提供“自动审批”预设，不要求手工向 profile YAML 补预设，不使用安装或卸载生命周期脚本。
+也可在宿主“插件”安装对话框填写同一包 spec。宿主负责依赖与启用列表；插件的包声明提供“自动审批”预设，预设随包声明出现，无需手工配置。
 
-安装后重启宿主并重新加载页面，检查“自动审批”选项与插件设置表单。重启须从服务进程树外执行，不能把正在工作的任务一起终止。预设的相对顺序不是用户功能要求，三个标准权限的行为应保持不变。
+安装后重启宿主并重新加载页面，检查“自动审批”选项与插件设置表单。重启须从服务进程树外执行，不能把正在工作的任务一起终止。
 
-宿主通道需要 pnpm；未安装时可先确认 `corepack pnpm --version`。固定包版本时使用实际已验证的完整 Git 标签，包括版本中的宿主信息；普通语义化版本范围不能凭构建元数据区分兼容宿主。需求中的下一发布目标不是已存在标签，不把未验收工作树当稳定发布。
+宿主通道需要 pnpm；未安装时可先确认 `corepack pnpm --version`。固定包版本时使用实际已验证的完整 Git 标签，包括版本中的宿主信息；普通语义化版本范围不能凭构建元数据区分兼容宿主。
 
 ### 本地克隆与链接
 
@@ -54,7 +52,7 @@ npm install --omit=dev
 dsh plugin --profile web add <克隆目录的绝对路径>
 ```
 
-链接模式按真实路径解析依赖，克隆目录必须能自己解析依赖；schemastery 至少 `3.18.4` 才支持设置字段的 volatile 声明。包声明同样随装载组合，不需额外部署命令。
+链接模式按真实路径解析依赖，克隆目录必须能自己解析依赖；schemastery 至少 `3.18.4` 才支持设置字段的 volatile 声明。
 
 ## 配置与使用
 
@@ -62,7 +60,7 @@ dsh plugin --profile web add <克隆目录的绝对路径>
 
 配置命名空间为 `approve-for-me`。设置页及宿主 profile 配置作用于同一行；插件不读独立的 `settings.yaml` 分节。
 
-默认值统一见[配置默认值](<docs/requirements.md#53-配置默认值>)；下表只说明设置用途，不维护第二份默认表。
+默认值统一见[配置默认值](<docs/requirements.md#53-配置默认值>)。
 
 | 设置 | 使用要点 |
 | --- | --- |
@@ -83,7 +81,7 @@ dsh plugin --profile web add <克隆目录的绝对路径>
 
 ### 模型选择与配置更新
 
-会话选择 → 按执行助手的模型映射 → 全局默认；全局默认未设置时使用执行助手的当前模型独立审查（跟随语义由空全局默认承载，不提供独立开关；不在声明内的旧配置键不读取、不迁移）。不可用候选直接回退全局默认并记录实际层级，设置页与会话控件按位置分置醒目提示；全部不可用按故障拒绝。模型引用为 `provider/model`，推理强度与模型绑定，未指定时支持 low 则用 low，否则自动选择。
+会话选择 → 按执行助手的模型映射 → 全局默认；全局默认未设置时使用执行助手的当前模型独立审查（跟随语义由空全局默认承载；不在声明内的旧配置键不读取、不迁移）。不可用候选直接回退全局默认并记录实际层级，设置页与会话控件按位置分置醒目提示；全部不可用按故障拒绝。模型引用为 `provider/model`，推理强度与模型绑定，未指定时支持 low 则用 low，否则自动选择。
 
 `reviewer.parentModelRules` 是结构化规则表，每条规则含作用范围与执行助手模型（完整纯模型 id，不切斜杠）：
 
@@ -125,7 +123,7 @@ dsh plugin --profile web add <克隆目录的绝对路径>
 
 ## 审计与轨迹集成
 
-stderr 记录操作、接管原因、模型和决策、理由、风险授权、耗时、故障及缺失情况，一次审批可有多条可关联记录。日志裁剪或写失败必须承认不完整，不能将默认补全伪装成模型实际分析。
+stderr 记录操作、接管原因、模型和决策、理由、风险授权、耗时、故障及缺失情况，一次审批可有多条可关联记录。记录被裁剪或写失败时标注不完整，默认补全的字段在记录中可辨认。
 
 默认 summary 保留可复盘摘要，不要求保存提示词、推理文本或原始输出全文；full 主动开启才采详情，全部先脱敏后裁剪。模型返回的推理不是判断正确的证明。摘要完整性的实施与验证状态见[当前实施与验证待办](<docs/design.md#11-当前实施与验证待办>)。
 
@@ -143,8 +141,7 @@ dsh plugin --profile web remove dsh-approve-for-me
 
 - 宿主设置可能把含“自动审批”的预设表写入用户 profile 配置，即使默认选择的是标准档也可能保留插件条目。
 - 卸载后残留条目可能继续显示；默认选择失效还可能使权限服务加载失败并影响会话。
-- 当前目标不由插件解析、改写或自动清理用户 YAML，避免损坏用户自定义内容。不提供自动清理命令，也不宣称宿主已有完整恢复支持；等待宿主后续兼容处理并重新核验。
-- 装卸全程不解析、不改写用户 YAML；插件不含配置清理模块，发布清单亦无对应条目。真实用户配置下的残留表现属上述已接受风险。
+- 插件不解析、改写或清理用户 YAML，避免损坏用户自定义内容。真实用户配置下的残留表现属上述已接受风险。
 
 插件数据在 `$DSH_HOME/approve-for-me/`：会话模型选择及审查记录默认保留，不随卸载删除。它们是运行数据，不等同于部署副作用。
 
@@ -179,7 +176,5 @@ npm run check:public-surface
 | 当前机制、验证方案与待实施事项 | [设计](<docs/design.md>) |
 | 开发与公开内容边界 | [参与指南](<CONTRIBUTING.md>) |
 | 发布历史 | [变更记录](<CHANGELOG.md>) |
-
-需求与设计可以彼此引用，必要正文不依赖其他文档或外部资料补齐。公开交付不附带开发过程记录或本机运行产物。
 
 MIT，见 [LICENSE](<LICENSE>)。部分英文 Guardian 模板、拒绝指令及策略源自 [OpenAI Codex](https://github.com/openai/codex)（Apache-2.0），归属与许可见 [NOTICE](<NOTICE>)。
