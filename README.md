@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/MC5Spear/dsh-approve-for-me/actions/workflows/ci.yml/badge.svg)](https://github.com/MC5Spear/dsh-approve-for-me/actions/workflows/ci.yml)
 
-> 第三方社区插件，与 DeepSeek Harness 官方无关。个人维护，接受 issue，不接受外部 PR；不保证响应和修复时间。安全问题同样通过 issue 提交，请先脱敏。
+> 第三方社区插件，与 DeepSeek Harness 官方无关。个人维护，接受 issue，不接受外部 PR；响应与修复时间视维护者可用时间而定。安全问题同样通过 issue 提交，请先脱敏。
 
 为无人值守长任务和缺乏技术判断能力的用户提供沙箱升权审查。独立 LLM 审查器可以只读取证，安全则允许本次操作，危险则拒绝并说明原因；系统故障与危险判断分别说明。
 
