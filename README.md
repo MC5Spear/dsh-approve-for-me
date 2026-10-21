@@ -6,7 +6,7 @@
 
 为无人值守长任务和缺乏技术判断能力的用户提供沙箱升权审查。独立 LLM 审查器可以只读取证，安全则允许本次操作，危险则拒绝并说明原因；系统故障与危险判断分别说明。
 
-**English summary.** This third-party DSH plugin reviews sandbox-escalation approval requests with an independent LLM and read-only local tools. Safe requests are allowed once; unsafe requests are denied. Review failures are fail-closed and distinguished from safety denials. The permission tier is supplied by the package declaration. Host settings may persist the tier in user overrides, so uninstall does not guarantee a clean user configuration. The target contract does not provide plugin-side YAML cleanup. Outstanding verification work is tracked in the design document's backlog.
+**English summary.** This third-party DSH plugin reviews sandbox-escalation approval requests with an independent LLM and read-only local tools. Safe requests are allowed once; unsafe requests are denied. Review failures are fail-closed and distinguished from safety denials. The permission tier is supplied by the package declaration. Host settings may persist the tier in user overrides, and the preset entry may remain in the user configuration after uninstall; see the uninstall section for how to detect and clean up the residue. Outstanding verification work is tracked in the design document's backlog.
 
 ## 实现与验收边界
 
