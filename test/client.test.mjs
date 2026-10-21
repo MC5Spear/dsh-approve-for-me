@@ -617,7 +617,7 @@ test('设置页空全局默认提示（§7.2.0）：globalUnset 键渲染在表�
   const text = JSON.stringify(topLevel[0]);
   assert.match(text, /默认审查模型未设置/, '用 warn.modelIssue.globalUnset 文案（按 configured 空串选键）');
   assert.match(text, /独立发起审查调用/, '文案说明独立发起审查调用');
-  assert.match(text, /「使用相同模型」，不是由执行助手自己审批/, '文案区分「使用相同模型」与自审');
+  assert.match(text, /使用相同模型，不由执行助手自己审批/, '文案区分「使用相同模型」与自审');
   assert.doesNotMatch(text, /不可用|故障/, '状态语义：空默认提示不含「不可用」「故障」措辞（design §7.2.0）');
   assert.doesNotMatch(text, /实际使用/, 'effectiveModel 为空串时省略「实际使用」句');
   assert.doesNotMatch(text, /全局默认未设置，使用执行助手当前模型（follow-parent）/u, '空默认键不补层含义句——首句已承载层含义（design §7.2.0）');
@@ -2068,7 +2068,7 @@ test('composer 空全局默认提示（§7.2.0）：会话未选择且全局默�
   const text = JSON.stringify(warns[0]);
   assert.match(text, /本会话未单独选择审查模型/, '用 warn.modelIssue.followParent 文案');
   assert.match(text, /按未设置的全局默认跟随执行助手的当前模型/, '文案说明跟随语义');
-  assert.match(text, /「使用相同模型」，不是由执行助手自己审批/, '文案区分「使用相同模型」与自审');
+  assert.match(text, /独立发起审查调用/, '文案说明独立发起审查调用');
   assert.match(text, /实际使用：全局默认未设置，使用执行助手当前模型（follow-parent）：zai\/glm-5\.3/, '有生效引用时按「实际使用：层含义：引用」呈现');
   assert.doesNotMatch(text, /不可用|故障/, '状态语义：不含「不可用」「故障」措辞');
 });
@@ -3265,7 +3265,7 @@ const REVIEW_TEXT = {
   'view.empty': '本会话还没有自动审批记录',
   'view.count': '共 {n} 条',
   'view.readFailed': '记录读取失败或不完整，列表可能缺少条目',
-  'view.retention': '记录跟随产生它的会话；每会话回读最近一个窗口（默认 200 条，随 ui.trace.maxRecords 可配置），磁盘最多保留 50 个会话文件（固定上限），超限删除最旧；减少采集不删除已有记录。',
+  'view.retention': '记录跟随产生它的会话。界面每次回读最近一个窗口（默认 200 条，随 ui.trace.maxRecords 可配置）；单会话文件超过窗口四倍时轮转，只保留最近一个窗口，更早记录此时删除；会话文件数超上限时删除最旧。需长期留存请在轮转前备份；减少采集不删除已有记录。',
   'list.outcome': '最终审批：{v}',
   'list.decision': '模型结论：{v}',
   'view.noOutcome': '未记录最终审批结果',
@@ -4089,9 +4089,13 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
   assert.equal(zh['detail.tokens'], '推理 token 用量');
   assert.ok(zh['view.retention'].length > 0, '保留范围文案应在场');
 
-  // 全表逐键断言：期望值逐键转抄自设计定稿表——§7.2.2（字段名称与选项文案／常驻短句／
-  // 展开说明／预设多选提示）、§7.3.1（会话控件）、§7.4（状态行）、§8.5.1（详情字段名／列表双标注／
-  // 缺段说明／枚举文案）。中英两列都是权威：字典与设计表任何一侧漂移，这里变红。
+  // 文案断言分两层（design §10.2 B2 分层口径）：
+  // ① DESIGN_FINAL 逐键精确断言——短文案：字段名、选项、枚举、模板句、占位符键、常驻短句（hint.*）；
+  // ② LONG_COPY_FACTS 关键事实断言——长帮助与提示：help.*、长 warn.*（空全局默认三键）、
+  //    view.retention、card.presets.missing.remedy。长文案不整段逐字冻结：等义精简（含删除
+  //    冗余尾句）不应使本测试变红；删除必要事实、条件或占位符的改动由下列子串检出。
+  // 两张清单都是手工转抄，不是设计文件解析校验；设计定稿表修订时须同步本清单。
+  // 中英两列都是权威：字典与设计表任何一侧漂移，这里变红。
   const DESIGN_FINAL = [
     // —— §7.2.2 字段名称与选项文案表 ——
     ['card.presets.label', '启用自动审批的权限预设', "Presets that enable auto-approval"],
@@ -4119,9 +4123,6 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['warn.modelIssue.global', '默认审查模型不可用：{reason}。实际使用：{effective}。', "The default reviewer model is unavailable: {reason}. Currently using: {effective}."],
     ['warn.modelIssue.rule', '此规则选择的审查模型不可用：{reason}。实际使用：{effective}。', "The reviewer model picked by this rule is unavailable: {reason}. Currently using: {effective}."],
     ['warn.modelIssue.session', '本会话选择的审查模型 {configured} 不可用：{reason}。实际使用：{effective}。', "This session's reviewer model {configured} is unavailable: {reason}. Currently using: {effective}."],
-    ['warn.modelIssue.globalUnset', '默认审查模型未设置：仅当解析实际落到全局默认层（无有效会话选择且无有效映射）时，审查跟随执行助手的当前模型，独立发起审查调用——是「使用相同模型」，不是由执行助手自己审批。', "The default reviewer model is not set: only when resolution actually falls through to the global default (no effective session choice and no effective rule) do reviews follow the agent's current model as an independent call — the same model, never the agent approving itself."],
-    ['warn.modelIssue.followParent', '本会话未单独选择审查模型，按未设置的全局默认跟随执行助手的当前模型：独立发起审查调用——是「使用相同模型」，不是由执行助手自己审批。实际使用：{effective}。', "This session has no reviewer of its own and the global default is unset, so reviews follow the agent's current model as an independent call — the same model, never the agent approving itself. Currently using: {effective}."],
-    ['warn.modelIssue.globalUnsetShadowed', '默认审查模型未设置：仅当解析落到全局默认层时，审查才跟随执行助手的当前模型并独立发起审查调用。实际使用：{effective}。', "The default reviewer model is not set: reviews follow the agent's current model, as an independent call, only when resolution falls through to the global default. Currently using: {effective}."],
     ['warn.modelIssue.layer', '当前生效：{layer}。', "Currently effective: {layer}."],
     ['field.language.ui', '插件界面语言', "Plugin UI language"],
     ['field.language.agent', '发送给模型的文本语言', "Language of model-facing texts"],
@@ -4167,31 +4168,9 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['hint.ui.injectMaxBytes', '单条通知的字节上限；0 不裁剪。', "Byte cap per notice; 0 does not trim."],
     ['hint.tools', '纳入自动审批的工具，每行一个；空清单覆盖全部工具。', "Tools under auto-approval, one per line; empty covers all."],
     ['hint.denyPatterns', '每行一条正则表达式；命中即直接拒绝，模型与人工都不能推翻。', "One regex per line; a hit rejects outright, beyond model or human."],
-    // —— §7.2.2 展开说明表 ——
-    ['help.trigger.presets', '会话使用清单内权限预设时，插件按接管规则处理升权审批；其他预设保持宿主原审批流程。清单为空时，任何已知预设都不接管；无法识别的预设按「无法识别权限预设时」的设置处置。选择接管范围不等于授予任意权限。', 'Sessions on a listed preset hand escalation approvals to this plugin; other presets keep the host flow. An empty list takes over no known preset; unidentifiable presets follow "When the preset cannot be identified". Choosing the take-over range grants no extra permissions.'],
-    ['help.trigger.unknown', '读不到会话权限预设时的处置。保持宿主原审批流程＝不接管；继续自动审查＝视为命中接管范围。可能原因包括服务缺失、读取失败或没有可用预设信息。', 'What to do when the session preset cannot be read: keep the host flow means no take-over; continue means treat it as covered. Causes include a missing service, a read failure, or no preset information.'],
-    ['help.trigger.auditEverySkip', '开启后，每次因预设不匹配而跳过的审批都逐条记录；关闭时同一会话同一原因只记录一条。只改变跳过记录的数量，不影响接管与审批本身，也不表示所有审批都被审查。', 'On: every preset-mismatch skip is logged; off: one line per session and reason. This only changes the number of skip lines, never the take-over itself, and does not imply every approval is reviewed.'],
-    ['help.reviewer.model', '全局默认的审查模型与推理强度。模型引用形如 provider/model；推理强度留空表示自动选择：模型支持 `low` 就使用 `low`，否则不指定、由模型默认值决定；各模型是否支持 `low`、默认强度以所用模型为准。解析顺序为会话选择 → 按执行助手的模型映射 → 全局默认；全局默认未设置时使用执行助手的当前模型——插件仍独立发起一次审查调用，是「使用相同模型」，不是由执行助手自己审批。', 'Global default reviewer model and effort. The reference reads provider/model; an empty effort is automatic: use `low` when the model supports it, otherwise let the model default decide; whether a model supports `low` and what default effort applies depend on the model in use. Resolution: session choice, by the agent\'s model, global default; an unset default reviews on the agent\'s current model — an independent call, the same model, never the agent approving itself.'],
-    ['help.reviewer.parentModelRules', '按执行助手的模型选择审查模型：每条规则含作用范围（任意 provider，或指定 provider 下的完整模型 id）与审查模型、推理强度。会话选择更优先；命中时先于全局默认；未命中按其余层解析。同一作用范围与执行助手模型只能有一条规则，重复的行不能保存。旧字典继续参与匹配：纯模型 id 键按任意 provider 读取；含斜杠的旧键会在表中请求确认原意，确认前按原值读取，不自动改写。', "Picks the reviewer by the model the acting agent uses: each rule carries a scope (any provider, or a specific one) plus the agent's full model id, mapped to a reviewer model and effort. A session choice outranks a hit; a hit outranks the global default; misses fall through to the remaining layers. One rule per scope and agent model — duplicates cannot be saved. The legacy dictionary still matches: plain-id keys read as any-provider; slash-containing keys ask you to confirm their meaning, are read as-is until confirmed, and are never rewritten automatically."],
-    ['help.reviewer.timeoutMs', '自动审查的等待上限（毫秒），涵盖装配与等待本次审查结论的全过程，内部重试不另计时。超时按拒绝处理并说明发生环节，不是危险判定。0 立即超时；需要较长等待时设较大的值。', "Auto-review wait limit (ms), covering assembly and the whole wait for this review's conclusion; internal retries get no fresh budget. A timeout rejects with its stage named — not a danger verdict. 0 times out immediately; set a larger value for longer waits."],
-    ['help.reviewer.maxTokens', 'token 是模型计量文本的单位。本项设置审查输出的 token 上限。0 不向模型传输出上限，由模型或供应商默认值决定。推理模型可能先把额度用于推理，上限过小可能导致没\u2060有\u2060有\u2060效\u2060结\u2060论（正文为空，按审查故障处理）；具体数值因模型与推理强度而异，不以个别模型的测量结果作通用保证。', 'A token is the unit models use to measure text. This sets the review output cap in tokens. 0 sends no cap, leaving the model or provider default. Reasoning models may spend the budget on reasoning first — too small a cap can leave no usable conclusion (empty body, treated as a review failure); the threshold varies by model and effort, so no single measurement is a general promise.'],
-    ['help.human.timeoutMs', '人工作答等待上限（毫秒），仅在「自动审查未允许时＝交给人工决定」时使用。0 表示立即拒绝，不是无限等待。到点按拒绝结算，原因写明人工作答超时。', 'Human-answer wait limit (ms), used only when the fallback is Ask. 0 rejects immediately, not an endless wait. Expiry settles as a rejection citing the human timeout.'],
-    ['help.human.timeoutFrom', '人工作答计时的起点：从审批请求起算＝交人工只使用剩余时间；从交人工起算＝交人工时重新开始计时。', 'Where the human timer starts: from the approval request (the handoff only gets the remainder), or from the handoff itself.'],
-    ['help.allowEscalationTo', '可自动批准的最高权限，只限制可送审或允许的升权范围；范围内仍须通过规则检查与模型审查，不等于自动批准全部操作。完全访问（默认）＝最宽；工作区内修改＝超出工作区写入的升权不放行。', "The widest permission auto-approval may grant. It bounds what may be reviewed or allowed; everything in range still passes the rule checks and the review — it is not a blanket approval. Full access (default) is widest; workspace write rejects wider escalations."],
-    ['help.unknownSubject', '无法辨认本次实际操作（如回查不到命令或参数）时的处置。直接拒绝＝不调用模型、立即拒绝；带缺失说明继续审查＝携带已取得的参数与上下文继续审查，缺失明确标记，不把缺失当作安全。', 'When the actual action cannot be identified (say, no command or arguments could be recovered): reject refuses at once without the model; keep reviewing submits what was recovered with explicit missing-action marks — missing never counts as safe.'],
-    ['help.fallback', '自动审查未允许（拒绝、超时或故障）时的处置。直接拒绝＝按拒绝结算；通知按「给执行助手的审批通知」的设置发送，选择「不发送」时不发任何通知。交给人工决定＝显示人工审批卡片等待你作答，人工作答等待上限到点按拒绝结算。委派子代理没有人工通道：未允许一律拒绝；分叉会话按主会话对待，人工通道在场。', "What happens when the review does not approve (deny, timeout or failure): reject settles as a rejection; notices follow the \"Approval notices to the agent\" setting — send none sends nothing. Ask shows the human card until you answer or the human limit rejects. Delegated subagents have no human channel — not allowed always means rejected; forked sessions are treated as main sessions and keep the human channel."],
-    ['help.ui.humanCardDuringReview', '开启时，自动审查进行中即显示人工审批卡片：你可以在审批未完成时抢先作答，人工结果优先；已完成的结果不能由迟到点击推翻。关闭时，仅在确实交给人工后显示卡片。', 'On: the human card shows while the review runs — you may answer first and the human answer wins; a settled result cannot be overturned by a late click. Off: the card appears only once the request is truly handed over.'],
-    ['help.ui.inject', '发给执行助手（发起工具操作的 Agent）的审批通知范围：允许、拒绝、超时和故障＝四类都发送；仅拒绝、超时和故障＝允许不发送；选择「不发送」＝一条都不发送。审查记录视图的显示不受本开关影响。', 'Which approval notices reach the acting agent: allow, deny, timeout and failures sends all four; deny, timeout and failures skips allow notices; send none sends no notices. The review-log view is unaffected by this switch.'],
-    ['help.ui.injectMaxBytes', '发给执行助手的单条通知的字节上限，超出截断并附截断标记；0 不裁剪。限制对象只是通知，审查记录按会话独立保留，与该上限无关。', 'Byte cap for one notice to the agent; longer text is trimmed with a marker, 0 does not trim. Only notices are capped — review records are kept per session and ignore this limit.'],
-    ['help.tools', '纳入自动审批的工具名单，每行一个工具名。空清单覆盖所有工具的升权审批；填写后只处理名单内工具的升权请求，其余工具保持宿主原流程。', "Tools under auto-approval, one name per line. Empty covers every tool's escalations; once filled, only listed tools are handled and the rest keep the host flow."],
-    ['help.denyPatterns', '文本拒绝规则，每行一条正则表达式（正则表达式是文本匹配规则，不是完整命令语义分析）。匹配对象是受支持深度内的全部字符串参数值，不只命令字段；包含危险词的说明文本也可能命中。普通正则默认忽略大小写；写成 /source/flags 形式时按所填标志匹配，未写标志时与普通正则一样忽略大小写。命中即直接拒绝：不调用模型、不交人工，模型和人工都不能推翻。空清单只关闭这层文本匹配，可自动批准的最高权限、无法识别操作等其他检查不受影响；不可编译的行跳过，不构成有效保护。', 'Text deny rules, one regex per line (a regex is a text-matching rule, not command semantics). Every string argument within the supported depth is matched, not just the command; harmless prose containing a dangerous word can hit too. Plain patterns are case-insensitive by default; in /source/flags form the given flags apply, and with no flags given it stays case-insensitive like a plain pattern. A hit rejects outright — no model, no human, no override. An empty list disables only this text check; the escalation ceiling and unknown-action handling stay. Uncompilable lines are skipped and protect nothing.'],
-    ['help.language.ui', '插件界面文案的语言：跟随宿主界面（auto）或强制中文／英文。保存后下一次渲染生效，不改变发送给模型的文本语言。', "Language of the plugin's own UI copy: follow the host (auto) or force zh/en. Takes effect on the next render and never touches model-facing texts."],
-    ['help.language.agent', '发给模型的全部文本的语言（系统提示、策略、工具说明、轮次指引）与给执行助手的通知语言。默认英文。判定与授权规则不随语言改变；与插件界面语言互不影响。', 'Language of every model-facing text (system prompt, policy, tool descriptions, round instructions) and of the notices to the agent. Defaults to English. Rules and authorization never change with the language; the plugin UI language is independent.'],
-    ['help.mode', '总开关：规则检查＋LLM 审查＝正常接管；完全不接管＝等同未安装，宿主审批流程不受影响。', 'Master switch: rule check plus LLM review takes over as configured; off behaves as if uninstalled, leaving host approvals untouched.'],
-    // —— §7.2.2 预设多选提示表 ——
+    // —— §7.2.2 预设多选提示表 ——（missing.remedy 为长文案，按 LONG_COPY_FACTS 口径断言）
     ['card.presets.none', '清单为空时，已知预设都不会接管审批；无法识别的预设按「无法识别权限预设时」的设置处置。', 'With an empty list no known preset is taken over; presets that cannot be identified follow "When the preset cannot be identified".'],
     ['card.presets.missing', '配置中存在但当前预设表里没有：', "Configured but absent from the current preset table: "],
-    ['card.presets.missing.remedy', '该预设不在宿主当前预设表中。可依次检查：插件是否已停用、宿主版本是否兼容、预设是否为自定义。重新启用插件或重启宿主可能恢复；仍未恢复时按上述原因逐项排查。插件已卸载且配置仍选择该预设时，可改选标准权限档。插件不解析、不改写用户 YAML，不建议手工清理。', "The preset is absent from the host's current table. Check in turn: a disabled plugin, an incompatible host version, or a custom preset. Re-enabling or restarting may restore it; if it is still absent, work through the checks above one by one. If the plugin is uninstalled while the config still selects it, pick a standard tier. The plugin never parses or rewrites user YAML, and manual cleanup is not recommended."],
     ['card.presets.unavailable', '读不到预设目录。可能原因：服务缺失、读取失败或没有可用预设信息；可确认权限预设服务可用后重试。', 'The preset catalog is unavailable. Possible causes: a missing service, a read failure, or no preset information; check the permission preset service and retry.'],
     // —— §7.3.1 会话控件表 ——
     ['composer.label', '审查模型', "Reviewer model"],
@@ -4220,7 +4199,6 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['list.decision', '模型结论：{v}', "Model conclusion: {v}"],
     ['view.noOutcome', '未记录最终审批结果', "No final outcome recorded"],
     ['view.reasonDefaulted', '审查器未提供理由', "No rationale provided by the reviewer."],
-    ['view.retention', '记录跟随产生它的会话；每会话回读最近一个窗口（默认 200 条，随 ui.trace.maxRecords 可配置），磁盘最多保留 50 个会话文件（固定上限），超限删除最旧；减少采集不删除已有记录。', 'Records follow the session that produced them. Each session reads back the most recent window (200 entries by default, configurable via ui.trace.maxRecords); at most 50 session files are kept on disk (a fixed cap), the oldest deleted first. Reducing capture never deletes existing records.'],
     // —— §8.5.1 缺段说明表 ——
     ['absent.noContext', '未取上下文', "No context collected"],
     ['absent.noProbes', '未调用取证工具', "No evidence tools called"],
@@ -4260,14 +4238,104 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     assert.equal(zh[key], zhText, `${key} 的中文应等于设计定稿（转抄自 docs/design.md 对应表）`);
     assert.equal(en[key], enText, `${key} 的英文应等于设计定稿（转抄自 docs/design.md 对应表）`);
   }
+  // 长文案关键事实断言（design §10.2 B2 分层口径的第二层）：每条列出该说明位承载必要事实、
+  // 条件与占位符的子串（中英各一份），取自 requirements §5.1/§6.1/§6.4 的内容要求与设计定稿。
+  // 子串清单为手工转抄，不是设计文件解析校验——设计定稿表修订时须同步本清单。
+  // 「没有有效结论」在字典原文内嵌 U+2060 词连接符（防中文逐字换行拆词），断言按同一形态拼出。
+  const noConclusion = '没有有效结论'.split('').join('\u2060');
+  const LONG_COPY_FACTS = [
+    ['warn.modelIssue.globalUnset',
+      ['仅当解析实际落到全局默认层（无有效会话选择且无有效映射）', '独立发起审查调用', '使用相同模型', '不由执行助手自己审批'],
+      ['falls through to the global default', 'independent call', 'the same model', 'not the agent approving itself']],
+    ['warn.modelIssue.followParent',
+      ['独立发起审查调用', '实际使用：{effective}。'],
+      ['independent call', 'Currently using: {effective}.']],
+    ['warn.modelIssue.globalUnsetShadowed',
+      ['仅当解析落到全局默认层', '独立发起审查调用', '实际使用：{effective}。'],
+      ['falls through to the global default', 'independent call', 'Currently using: {effective}.']],
+    ['help.trigger.presets',
+      ['按接管规则处理升权审批', '其他预设保持宿主原审批流程', '清单为空时', '无法识别的预设按「无法识别权限预设时」', '不等于授予任意权限'],
+      ['escalation approvals', 'keep the host flow', 'empty list', '"When the preset cannot be identified"', 'grants no extra permissions']],
+    ['help.trigger.unknown',
+      ['保持宿主原审批流程＝不接管', '继续自动审查＝视为命中接管范围'],
+      ['no take-over', 'treat it as covered']],
+    ['help.trigger.auditEverySkip',
+      ['逐条记录', '同一会话同一原因只记录一条', '不影响接管与审批本身'],
+      ['skip is logged', 'one line per session and reason', 'never the take-over itself']],
+    ['help.reviewer.model',
+      ['provider/model', '推理强度留空表示自动选择', '会话选择', '全局默认', '独立发起一次审查调用', '「使用相同模型」'],
+      ['provider/model', 'automatic', 'session choice', 'global default', 'independent call', 'the same model']],
+    ['help.reviewer.parentModelRules',
+      ['任意 provider，或指定 provider 下的完整模型 id', '会话选择更优先', '命中时先于全局默认', '只能有一条规则', '纯模型 id 键按任意 provider 读取', '含斜杠的旧键', '不自动改写'],
+      ['any provider', 'full model id', 'outranks', 'the global default', 'One rule per', 'slash-containing keys', 'rewritten automatically']],
+    ['help.reviewer.timeoutMs',
+      ['涵盖装配与等待本次审查结论的全过程', '内部重试不另计时', '超时按拒绝处理并说明发生环节', '不是危险判定', '0 立即超时'],
+      ['covering assembly', 'no fresh budget', 'not a danger verdict', '0 times out immediately']],
+    ['help.reviewer.maxTokens',
+      ['token 是模型计量文本的单位', '由模型或供应商默认值决定', '推理', noConclusion, '具体数值因模型与推理强度而异'],
+      ['measure text', 'model or provider default', 'reasoning', 'no usable conclusion', 'varies by model and effort']],
+    ['help.human.timeoutMs',
+      ['仅在「自动审查未允许时＝交给人工决定」时使用', '0 表示立即拒绝', '到点按拒绝结算'],
+      ['only when the fallback is Ask', '0 rejects immediately', 'settles as a rejection']],
+    ['help.human.timeoutFrom',
+      ['从审批请求起算＝交人工只使用剩余时间', '从交人工起算＝交人工时重新开始计时'],
+      ['from the approval request', 'from the handoff']],
+    ['help.mode',
+      ['规则检查＋LLM 审查＝正常接管', '完全不接管＝等同未安装'],
+      ['takes over', 'as if uninstalled']],
+    ['help.allowEscalationTo',
+      ['只限制可送审或允许的升权范围', '仍须通过规则检查与模型审查', '不等于自动批准全部操作'],
+      ['bounds what may be reviewed', 'rule checks and the review', 'not a blanket approval']],
+    ['help.unknownSubject',
+      ['直接拒绝＝不调用模型、立即拒绝', '缺失明确标记'],
+      ['refuses at once without the model', 'missing-action marks']],
+    ['help.fallback',
+      ['直接拒绝＝按拒绝结算', '交给人工决定＝显示人工审批卡片', '到点按拒绝结算', '委派子代理没有人工通道', '分叉会话按主会话对待'],
+      ['settles as a rejection', 'shows the human card', 'reject', 'no human channel', 'main sessions']],
+    ['help.ui.humanCardDuringReview',
+      ['抢先作答', '人工结果优先', '不能由迟到点击推翻'],
+      ['answer first', 'human answer wins', 'late click']],
+    ['help.ui.inject',
+      ['四类都发送', '允许不发送', '一条都不发送', '审查记录视图的显示不受本开关影响'],
+      ['sends all four', 'skips allow notices', 'sends no notices', 'unaffected by this switch']],
+    ['help.ui.injectMaxBytes',
+      ['字节上限', '截断标记', '0 不裁剪', '审查记录按会话独立保留'],
+      ['Byte cap', 'trimmed with a marker', '0 does not trim', 'per session']],
+    ['help.tools',
+      ['每行一个工具名', '空清单覆盖所有工具的升权审批', '其余工具保持宿主原流程'],
+      ['one name per line', 'Empty covers', 'keep the host flow']],
+    ['help.denyPatterns',
+      ['每行一条正则表达式', '全部字符串参数值', '不只命令字段', '/source/flags', '命中即直接拒绝：不调用模型、不交人工', '空清单只关闭这层文本匹配', '不可编译的行跳过'],
+      ['one regex per line', 'string argument', 'not just the command', '/source/flags', 'rejects outright', 'disables only this text check', 'Uncompilable lines are skipped']],
+    ['help.language.ui',
+      ['跟随宿主界面', '保存后下一次渲染生效', '不改变发送给模型的文本语言'],
+      ['follow the host', 'next render', 'never touches model-facing texts']],
+    ['help.language.agent',
+      ['默认英文', '与插件界面语言互不影响'],
+      ['Defaults to English', 'independent']],
+    ['view.retention',
+      ['回读最近一个窗口', '默认 200 条', 'ui.trace.maxRecords', '超过窗口四倍时轮转', '更早记录此时删除', '会话文件数超上限时删除最旧', '轮转前备份', '减少采集不删除已有记录'],
+      ['most recent window', '200 entries by default', 'ui.trace.maxRecords', 'four times the window', 'deleting older entries', 'file cap is exceeded', 'Back up before rotation', 'never deletes existing records']],
+    ['card.presets.missing.remedy',
+      ['插件是否已停用', '重新启用插件或重启宿主可能恢复', '可改选标准权限档', '彻底清理按使用说明的卸载一节', '不解析、不改写用户 YAML'],
+      ['disabled plugin', 'Re-enabling or restarting', 'pick a standard tier', 'uninstall section of the manual', 'never parses or rewrites user YAML']],
+  ];
+  for (const [key, zhFacts, enFacts] of LONG_COPY_FACTS) {
+    assert.ok(typeof zh[key] === 'string' && zh[key].length > 0, `${key} 的中文应在场`);
+    assert.ok(typeof en[key] === 'string' && en[key].length > 0, `${key} 的英文应在场`);
+    for (const fact of zhFacts) {
+      assert.ok(zh[key].includes(fact), `${key} 的中文须含关键事实「${fact}」`);
+    }
+    for (const fact of enFacts) {
+      assert.ok(en[key].includes(fact), `${key} 的英文须含关键事实「${fact}」`);
+    }
+  }
   // design §7.2.2：仅 session 键携带所配引用占位符；global/rule 键不得含。
   for (const key of ['warn.modelIssue.global', 'warn.modelIssue.rule']) {
     assert.ok(!zh[key].includes('{configured}') && !en[key].includes('{configured}'), `${key} 不得含 {configured} 占位符`);
   }
   // requirements §6.4/§6.5：必要单位说明与过小额度风险必须常驻在 hint（不展开详细说明也可见），
   // 不得只出现在折叠的 help 里——以下断言锁该退化形态：任一短语被挪回 help-only 即变红。
-  // 「没有有效结论」在字典原文内嵌 U+2060 词连接符（防中文逐字换行拆词），断言按同一形态拼出。
-  const noConclusion = '没有有效结论'.split('').join('\u2060');
   assert.ok(zh['hint.reviewer.maxTokens'].includes('计量文本的单位') && zh['hint.reviewer.maxTokens'].includes('推理') && zh['hint.reviewer.maxTokens'].includes(noConclusion), 'hint.reviewer.maxTokens 中文须常驻单位说明与过小额度风险');
   assert.ok(en['hint.reviewer.maxTokens'].includes('measure text') && en['hint.reviewer.maxTokens'].includes('reasoning') && en['hint.reviewer.maxTokens'].includes('no usable conclusion'), 'hint.reviewer.maxTokens 英文须常驻单位说明与过小额度风险');
 });

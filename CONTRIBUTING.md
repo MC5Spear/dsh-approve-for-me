@@ -7,7 +7,7 @@
 - 给出最小可复现信息：宿主版本、本插件版本（或提交）、权限预设与相关配置片段——**先抹掉凭据与本机路径**。
 - 审计行（`[approve-for-me]` 写宿主 stderr 的单行）是最有用的证据，贴涉事那几行即可，`decision` / `reason` 字段足以定位大多数行为问题。
 - 安全相关的发现同样按普通 issue 提（本仓不设漏洞管理流程）；不要贴真实凭据、真实会话内容或他人部署的地址。
-- 响应与修复时间视维护者可用时间而定；提之前可先核对[使用说明](<README.md>)中的已知边界，以及[设计的当前实施与验证待办](<docs/design.md#11-当前实施与验证待办>)，避免把尚未完成的目标当成已交付行为。
+- 提交前可先核对[使用说明](<README.md>)中的已知边界与[常见问题](<README.md#常见问题与反馈>)，避免把已记录的边界当成新问题。
 
 ## 环境准备（fork / 复现用）
 
@@ -73,7 +73,7 @@ npm run check:public-surface     # 结构 / 本机指纹 / 内部引用，三类
 
 **代码约定**：
 
-- 不随意新增运行时依赖；当前声明以 `package.json` 的 dependencies 与 peerDependencies 为准（运行依赖含 `zod`、`@deepseek-ai/schemastery`、`@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-typert-protocol`；peer：`@deepseek-ai/cordis`、`@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-typert-protocol`）。实现调整后按实际用途核对依赖，不因某个包存在就保留不需要的功能。
+- 不随意新增运行时依赖；当前声明以 `package.json` 的 dependencies 与 peerDependencies 为准，宿主版本约束见[当前兼容基准](<docs/requirements.md#13-当前兼容基准>)。实现调整后按实际用途核对依赖，不因某个包存在就保留不需要的功能。
 - 不修改宿主源码、不打源码补丁。当前产品合同不提供插件侧用户 YAML 解析或自动清理；卸载残留风险须如实说明，不能降低用户配置保全要求。
 - `client.js` 是宿主加载器用的工厂式 CJS（`window.__ModuleLoader__.load({ id, factory })`，`factory(require)`，`require('react')` 由加载器提供），**没有 JSX、没有构建步骤**；改它时保持这个形态。
 - 新增配置字段：在 `lib/config.js` 的 `Config` 里声明，需要热改就加 `.volatile()`（`@deepseek-ai/schemastery` ≥ 3.18.4），并在 `test/config.test.mjs` 补解析用例。界面文案分两处维护：设置卡、composer 等客户端界面文案进 `client.js` 内的中英字典（`test/client.test.mjs` 守字典齐备与双语同步）；面向模型的文案见下一条的 `lib/agent-texts.js`（缺键即抛错，不静默回退，`test/agent-texts.test.mjs` 补用例）。
