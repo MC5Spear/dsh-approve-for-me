@@ -52,7 +52,7 @@
 宿主加载准入检查按插件 `package.json` 声明判定（宿主 `dsh-app-boot` 的 `unmetRequirements`／`evaluatePluginCompatibility`）：`engines.dsh` 存在时单独判定该字段、不再读 peerDependencies；无该字段时才检查名为 `@deepseek-ai/dsh` 与 `@deepseek-ai/dsh-*` 的 peer（cordis peer 不参与检查）；声明范围与运行时版本按 `semver.satisfies` 比对、预发布版本参与。声明不满足时插件被拒载；宿主的精确版本豁免（`allow-version`，精确 `name@version` 对照精确 dsh 版本列表）只作调研手段，不作常规安装路径（需求 1.3）。
 
 - `engines.dsh` 取精确版本 `"0.2.1-rc.2"`：精确值让目标宿主的准入检查直接通过，不依赖豁免。范围声明（如 `^0.2.1-rc.2`）在预发布参与比对时会放宽到未核验的未来版本，与需求 1.3「不据此宣称支持全部 `0.2.x`」冲突，不采用。宿主对 `engines.dsh` 中的 `workspace:` 协议按未满足处理，该字段只能写版本范围。宿主升级按 1.3 完成核验后同步改写该值。
-- `@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-typert-protocol` 的 peerDependencies 条目保留，同步精确 `"0.2.1-rc.2"`，与 `engines.dsh` 同值、不矛盾（需求 1.3）。peer 承载包管理器视角的宿主共存声明；宿主准入检查优先 `engines.dsh`、不读这两条 peer，删去只省两行声明，却使 CI 锚点注释「本包按 peer 精确钉版」与锚点步骤「与 peer 钉版同版」（`.github/workflows/ci.yml`）失去依据、须连带改写。保留则锚点步骤只改版本值，注释语义不变；宿主锚点守卫（`test/host-tree.test.mjs`）按 dependencies 声明断言，不受 peer 去留影响。
+- `@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-typert-protocol` 的 peerDependencies 条目保留，同步精确 `"0.2.1-rc.2"`，与 `engines.dsh` 同值、不矛盾（需求 1.3）。peer 承载包管理器视角的宿主共存声明；宿主准入检查优先 `engines.dsh`、不读这两条 peer。CI 锚点步骤（`.github/workflows/ci.yml`）按「与 peer 钉版同版」核对版本值；宿主锚点守卫（`test/host-tree.test.mjs`）按 dependencies 声明断言。
 - `@deepseek-ai/cordis` peer 维持 `~4.0.4`：0.2.1 宿主树实装 4.0.5，`~4.0.4` 已覆盖；宿主准入检查不检查 cordis peer；收紧到 `~4.0.5` 会反向排除 0.2.0 宿主树的 4.0.4，无必要。`@deepseek-ai/schemastery` 依赖维持 `^3.18.4`：0.2.1 宿主树实装 3.18.5，`^3.18.4` 已覆盖；配置默认值的 volatile 断言前提不变。`zod` 依赖维持 `^4.4.3` 浮动区间：`zod` 不是宿主对接包、不涉及宿主版本，顶层副本随重锁在区间内浮动（现行解析 4.6.5）；宿主对接包 `dsh-llm` 以精确 `4.4.3` 声明自身的 zod 依赖，npm 按各依赖声明分别解析，顶层解析不满足精确声明时在 `dsh-llm` 之下嵌套钉住该版本（现行 4.4.3）。两副本并存是 npm 解析的正常形态，不是需要消除的漂移；重锁后核验顶层仍在区间内、嵌套仍与 `dsh-llm` 声明一致即可。
 - dependencies 中 `@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-typert-protocol` 两条运行依赖同步精确 `"0.2.1-rc.2"`。精确钉版（不用范围）是现行策略：插件只消费两个宿主对接包的主入口导出、无子路径导入，而对接包的导出面随宿主版本变化，范围声明会在未核验的宿主版本上放宽这一前提；锚点守卫以 dependencies 声明为唯一真值断言解析实体版本，范围声明会使守卫失去唯一真值。
 
@@ -309,7 +309,7 @@ DSH 敏感范围按 home 根判断：环境变量优先、缺省 `~/.dsh`，环�
 
 匹配条件不依赖字符串形态或目录猜测。设置页映射行的行状态保存四个独立字段：作用范围 provider（空值或指定 id）、完整纯模型 id、目标模型引用、推理强度。执行助手模型下拉选中一项只把该项的完整模型 id 写入 `parent.model`；选择、暂存、保存各环节都不对模型 id 做斜杠切分或前缀剥离，保存函数无需识别输入是否已经是纯 id。回显由作用范围字段决定：任意 provider 显示纯模型 id；指定 provider 显示 provider 与 id 的拼接。不按有无斜杠推断作用范围，不按目录首命中为通用规则补 provider。
 
-解析信息可使用有界查找表；键包含设置快照修订号（承载 `parentModelRules` 规则清单与兼容字典的一切变化）、会话选择引用和档位、父 provider/model。父模型、适配器目录、volatile 更新或会话写入使旧解析失效。这里保存的是模型路由信息，不是审批结论。使用执行助手当前模型作为审查模型时仍独立发起审查调用（需求 5.1）；设置页与会话控件的说明文案按 7.2.2、7.3.1 定稿区分「使用相同模型」与「由执行助手自己审批」。
+解析信息可使用有界查找表；键包含设置快照修订号（承载 `parentModelRules` 规则清单与兼容字典的一切变化）、会话选择引用和档位、父 provider/model。父模型、适配器目录、volatile 更新或会话写入使旧解析失效。这里保存的是模型路由信息，不是审批结论。使用执行助手当前模型作为审查模型时，审查调用独立于执行助手会话发起（需求 5.1）；设置页与会话控件的说明文案按 7.2.2、7.3.1 定稿表述这一事实。
 
 ### 6.3 会话级选择的文件载体
 
@@ -477,9 +477,9 @@ aria 语义：`aria-expanded` 表开合；`aria-controls` 关联展开区域 `he
 | `warn.modelIssue.global` | 默认审查模型不可用：{reason}。实际使用：{effective}。 | The default reviewer model is unavailable: {reason}. Currently using: {effective}. |
 | `warn.modelIssue.rule` | 此规则选择的审查模型不可用：{reason}。实际使用：{effective}。 | The reviewer model picked by this rule is unavailable: {reason}. Currently using: {effective}. |
 | `warn.modelIssue.session` | 本会话选择的审查模型 {configured} 不可用：{reason}。实际使用：{effective}。 | This session's reviewer model {configured} is unavailable: {reason}. Currently using: {effective}. |
-| `warn.modelIssue.globalUnset` | 默认审查模型未设置：仅当解析实际落到全局默认层（无有效会话选择且无有效映射）时，审查跟随执行助手的当前模型，独立发起审查调用——使用相同模型，不由执行助手自己审批。 | The default reviewer model is not set: only when resolution actually falls through to the global default (no effective session choice and no effective rule) do reviews follow the agent's current model as an independent call — the same model, not the agent approving itself. |
-| `warn.modelIssue.followParent` | 本会话未单独选择审查模型，按未设置的全局默认跟随执行助手的当前模型，独立发起审查调用。实际使用：{effective}。 | This session has no reviewer of its own and the global default is unset, so reviews follow the agent's current model as an independent call. Currently using: {effective}. |
-| `warn.modelIssue.globalUnsetShadowed` | 默认审查模型未设置：仅当解析落到全局默认层时，审查才跟随执行助手的当前模型并独立发起审查调用。实际使用：{effective}。 | The default reviewer model is not set: reviews follow the agent's current model, as an independent call, only when resolution falls through to the global default. Currently using: {effective}. |
+| `warn.modelIssue.globalUnset` | 默认审查模型未设置：仅当解析实际落到全局默认层（无有效会话选择且无有效映射）时，审查跟随执行助手的当前模型，独立于执行助手会话发起审查调用。 | The default reviewer model is not set: only when resolution actually falls through to the global default (no effective session choice and no effective rule) do reviews follow the agent's current model as an independent call, separate from the agent's session. |
+| `warn.modelIssue.followParent` | 本会话未单独选择审查模型，按未设置的全局默认跟随执行助手的当前模型，独立于执行助手会话发起审查调用。实际使用：{effective}。 | This session has no reviewer of its own and the global default is unset, so reviews follow the agent's current model in an independent call, separate from the agent's session. Currently using: {effective}. |
+| `warn.modelIssue.globalUnsetShadowed` | 默认审查模型未设置：仅当解析落到全局默认层时，审查才跟随执行助手的当前模型，独立于执行助手会话发起审查调用。实际使用：{effective}。 | The default reviewer model is not set: only when resolution falls through to the global default do reviews follow the agent's current model in an independent call, separate from the agent's session. Currently using: {effective}. |
 | `warn.modelIssue.layer` | 当前生效：{layer}。 | Currently effective: {layer}. |
 | `card.map.col.reviewer` | 审查模型 | Reviewer model |
 | `card.map.col.effort` | 推理强度 | Effort |
@@ -539,7 +539,7 @@ aria 语义：`aria-expanded` 表开合；`aria-controls` 关联展开区域 `he
 | `help.trigger.presets` | 会话使用清单内权限预设时，插件按接管规则处理升权审批；其他预设保持宿主原审批流程。清单为空时，任何已知预设都不接管；无法识别的预设按「无法识别权限预设时」的设置处置。选择接管范围不等于授予任意权限。 | Sessions on a listed preset hand escalation approvals to this plugin; other presets keep the host flow. An empty list takes over no known preset; unidentifiable presets follow "When the preset cannot be identified". Choosing the take-over range grants no extra permissions. |
 | `help.trigger.unknown` | 读不到会话权限预设时的处置。保持宿主原审批流程＝不接管；继续自动审查＝视为命中接管范围。可能原因包括服务缺失、读取失败或没有可用预设信息。 | What to do when the session preset cannot be read: keep the host flow means no take-over; continue means treat it as covered. Causes include a missing service, a read failure, or no preset information. |
 | `help.trigger.auditEverySkip` | 开启后，每次因预设不匹配而跳过的审批都逐条记录；关闭时同一会话同一原因只记录一条。只改变跳过记录的数量，不影响接管与审批本身。 | On: every preset-mismatch skip is logged; off: one line per session and reason. This only changes the number of skip lines, never the take-over itself. |
-| `help.reviewer.model` | 全局默认的审查模型与推理强度。模型引用形如 provider/model；推理强度留空表示自动选择：模型支持 `low` 就使用 `low`，否则不指定、由模型默认值决定；各模型是否支持 `low`、默认强度以所用模型为准。解析顺序为会话选择 → 按执行助手的模型映射 → 全局默认；全局默认未设置时使用执行助手的当前模型——插件仍独立发起一次审查调用，是「使用相同模型」，不是由执行助手自己审批。 | Global default reviewer model and effort. The reference reads provider/model; an empty effort is automatic: use `low` when the model supports it, otherwise let the model default decide; whether a model supports `low` and what default effort applies depend on the model in use. Resolution: session choice, by the agent's model, global default; an unset default reviews on the agent's current model — an independent call, the same model, never the agent approving itself. |
+| `help.reviewer.model` | 全局默认的审查模型与推理强度。模型引用形如 provider/model；推理强度留空表示自动选择：模型支持 `low` 就使用 `low`，否则不指定、由模型默认值决定；各模型是否支持 `low`、默认强度以所用模型为准。解析顺序为会话选择 → 按执行助手的模型映射 → 全局默认；全局默认未设置时使用执行助手的当前模型，独立于执行助手会话发起一次审查调用。 | Global default reviewer model and effort. The reference reads provider/model; an empty effort is automatic: use `low` when the model supports it, otherwise let the model default decide; whether a model supports `low` and what default effort applies depend on the model in use. Resolution: session choice, by the agent's model, global default; an unset default reviews on the agent's current model in an independent call, separate from the agent's session. |
 | `help.reviewer.parentModelRules` | 按执行助手的模型选择审查模型：每条规则含作用范围（任意 provider，或指定 provider 下的完整模型 id）与审查模型、推理强度。会话选择更优先；命中时先于全局默认；未命中按其余层解析。同一作用范围与执行助手模型只能有一条规则，重复的行不能保存。旧字典继续参与匹配：纯模型 id 键按任意 provider 读取；含斜杠的旧键会在表中请求确认原意，确认前按原值读取，不自动改写。 | Picks the reviewer by the model the acting agent uses: each rule carries a scope (any provider, or a specific one) plus the agent's full model id, mapped to a reviewer model and effort. A session choice outranks a hit; a hit outranks the global default; misses fall through to the remaining layers. One rule per scope and agent model — duplicates cannot be saved. The legacy dictionary still matches: plain-id keys read as any-provider; slash-containing keys ask you to confirm their meaning, are read as-is until confirmed, and are never rewritten automatically. |
 | `help.reviewer.timeoutMs` | 自动审查的等待上限（毫秒），涵盖装配与等待本次审查结论的全过程，内部重试不另计时。超时按拒绝处理并说明发生环节，不是危险判定。0 立即超时；需要较长等待时设较大的值。 | Auto-review wait limit (ms), covering assembly and the whole wait for this review's conclusion; internal retries get no fresh budget. A timeout rejects with its stage named — not a danger verdict. 0 times out immediately; set a larger value for longer waits. |
 | `help.reviewer.maxTokens` | token 是模型计量文本的单位。本项设置审查输出的 token 上限。0 不向模型传输出上限，由模型或供应商默认值决定。推理模型可能先把额度用于推理，上限过小可能导致没有有效结论（正文为空，按审查故障处理）；具体数值因模型与推理强度而异。 | A token is the unit models use to measure text. This sets the review output cap in tokens. 0 sends no cap, leaving the model or provider default. Reasoning models may spend the budget on reasoning first — too small a cap can leave no usable conclusion (empty body, treated as a review failure); the threshold varies by model and effort. |
@@ -570,7 +570,7 @@ aria 语义：`aria-expanded` 表开合；`aria-controls` 关联展开区域 `he
 
 `card.presets.missing` 是缺失清单的标签前缀，拼接并列清单：英文值冒号后接一个半角空格再接清单（7.5 的拼接习惯），中文值全角冒号后不接空格；该键同时用作缺失清单并列连接的语言判定源（7.5）。
 
-依据：字段名与选项名取自 requirements §6.4 名称表各行；覆盖胶囊的名称与预设缺失指引按 requirements §6.1；空清单语义按 requirements §2.1；`denyPatterns` 说明与 requirements §3.4 及 `lib/policy.js` 的 `compilePattern` 现行编译口径一致（普通源串默认加 `i`；`/source/flags` 按所填标志，未填标志同普通源串回退 `i`）；`parentModelRules` 与默认模型的空值说明按 requirements §6.4 名称表及 §5.1 的三层序与零值语义，区分「使用相同模型」与「由执行助手自己审批」；时限零值按 requirements §4.2；通知范围与记录的区分按 requirements §6.4 `ui.inject` 行。`help.reviewer.maxTokens` 不含具体测量数字，只作定性表述。机制叙述中的「执行 Agent」与「父模型」即界面文案的「执行助手」与「执行助手模型」，机制叙述中的「档位」（模型的 `effort` 取值）即界面的「推理强度」（requirements §6.4 定名，未指定显示「自动选择」），同一概念，用户可见名称以本表为准。
+依据：字段名与选项名取自 requirements §6.4 名称表各行；覆盖胶囊的名称与预设缺失指引按 requirements §6.1；空清单语义按 requirements §2.1；`denyPatterns` 说明与 requirements §3.4 及 `lib/policy.js` 的 `compilePattern` 现行编译口径一致（普通源串默认加 `i`；`/source/flags` 按所填标志，未填标志同普通源串回退 `i`）；`parentModelRules` 与默认模型的空值说明按 requirements §6.4 名称表及 §5.1 的三层序与零值语义，说明全局默认未设置时审查跟随执行助手的当前模型、审查调用独立于执行助手会话发起；时限零值按 requirements §4.2；通知范围与记录的区分按 requirements §6.4 `ui.inject` 行。`help.reviewer.maxTokens` 不含具体测量数字，只作定性表述。机制叙述中的「执行 Agent」与「父模型」即界面文案的「执行助手」与「执行助手模型」，机制叙述中的「档位」（模型的 `effort` 取值）即界面的「推理强度」（requirements §6.4 定名，未指定显示「自动选择」），同一概念，用户可见名称以本表为准。
 
 ### 7.3 会话级下拉与更新
 
@@ -965,7 +965,7 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
 
 随包 bundle patch（`cordis.patch.yml` 的权限预设安装声明）保留，是需求第 8 章要求的随包安装声明，必须保留；README 的卸载风险陈述保留。
 
-验证口径：使用隔离的配置副本（profile 与用户层 YAML 复制到临时环境），走主会话启用、停用、卸载与普通关闭路径，核对装卸全程不解析、不改写用户 YAML——副本文件内容逐字节不变；三个标准权限行为不变。不触碰真实用户配置。卸载残留两形态与手工恢复步骤按宿主 0.2.1-rc.2 隔离实例核验定稿，宿主行为变化时重新核验。
+验证口径：经宿主正式通道、使用隔离的配置副本（profile 与用户层 YAML 复制到临时环境）验证，按操作前后有无宿主配置写入分两类核对。无宿主配置写入的装载、关闭等路径，核对副本字节不变；经宿主设置或插件管理修改默认权限预设、启停状态时，对照操作前后内容，只接受宿主预期的字段变化，其余配置不损失。单独核验插件本身不直接解析、改写用户 YAML。三个标准权限行为不变。不触碰真实用户配置。卸载残留两形态与手工恢复步骤按使用说明（README 卸载一节）在兼容宿主隔离实例上核对；宿主行为变化时重新核验。
 
 正常停用卸载只移除包贡献和审批接管，不能承诺用户配置全部回到原样。使用说明必须同时说明风险和保护范围，不能以干净环境卸载成功掩盖用户设置情形。
 
@@ -1080,7 +1080,7 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
   6. 截图：七类字段（数字、下拉、多行文本、多选、布尔、模型选择、映射表）各抽至少一个代表截图（收起与展开两态）。
 - 名称一致性巡检（执行者：人工，比对截图与定稿表）：
   1. 设置页、会话模型控件、审批卡片与审查记录四处截图，按 7.2.2/7.3.1/7.4.1/8.5.1 定稿逐名核对。
-  2. 审查使用相同模型的说明、推理强度「自动选择」、空预设清单与未知预设处置、通知范围与记录开关、文本拒绝规则与其他检查的区分各自可见。
+  2. 审查跟随执行助手当前模型时说明审查调用独立于执行助手会话、推理强度「自动选择」、空预设清单与未知预设处置、通知范围与记录开关、文本拒绝规则与其他检查的区分各自可见。
   3. 保存前后用设置快照核对配置键、枚举值与默认值不变。
 - 会话模型触发器巡检（执行者：巡检脚本，截图与读数留证于输出目录）：
   1. 夹具与取帧：同一接管会话在 1280 与 375 两种视口各取一帧，两帧用同一模型引用——取测试实例目录中长度足以在 375 溢出的长引用（如 `zai/glm-5.3-flash`）作夹具；并在 375 视口对带分置提示（`.dsafm_seatwrap` 包裹）与不带提示两种形态各取一帧。中文与英文界面各做一轮。
@@ -1107,7 +1107,7 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
   1. 构造全局默认、映射规则、会话选择各自不可用的配置，核对三类提示按 7.2.0 位置出现、内容含可核实原因与实际回退结果（session 条目并含所配引用）。
   2. 级联情形（规则与全局默认同时不可用）两处提示同屏保留；目标恢复可用后提示消失；提示不改变回退语义。
   3. 空全局默认（零值语义生效）时设置页顶部与 composer 提示出现、视觉与不可用提示同规格、设置默认后提示消失。
-  4. 解析落到零值语义的 composer 文案含跟随与「使用相同模型」区分句式，被有效映射截住的 composer 文案用 `globalUnsetShadowed`、不出现「按未设置的全局默认跟随」句式。
+  4. 解析落到零值语义的 composer 文案说明审查跟随执行助手的当前模型、审查调用独立于执行助手会话发起，被有效映射截住的 composer 文案用 `globalUnsetShadowed`、不出现「按未设置的全局默认跟随」句式。
   5. 空全局默认两形态（零值语义与有效映射命中）在真实页面保存并重开设置页后各自成立、提示与配置一致。
   6. 空串成句规则——不可用键与 `globalUnsetShadowed` 键空串时「实际使用」句省略且层含义句（`warn.modelIssue.layer`）在场，`globalUnset`／`followParent` 键无冗余层句。
   7. 浅色与深色主题下分别用计算样式读取提示文字与背景取值，按 WCAG 相对亮度公式断言对比度 ≥4.5:1（与说明按钮巡检同法；浅色主题断言文字取插件声明的 `#92400e` 而非 warn-label 令牌值，深色主题断言 warn-label 令牌值）。

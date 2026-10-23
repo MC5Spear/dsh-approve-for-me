@@ -616,8 +616,8 @@ test('设置页空全局默认提示（§7.2.0）：globalUnset 键渲染在表�
   assert.equal(topLevel[0].props.className, 'dsafm_warnline', '空默认提示与不可用提示同位：表单顶部、第一个字段之前');
   const text = JSON.stringify(topLevel[0]);
   assert.match(text, /默认审查模型未设置/, '用 warn.modelIssue.globalUnset 文案（按 configured 空串选键）');
-  assert.match(text, /独立发起审查调用/, '文案说明独立发起审查调用');
-  assert.match(text, /使用相同模型，不由执行助手自己审批/, '文案区分「使用相同模型」与自审');
+  assert.match(text, /审查跟随执行助手的当前模型/, '文案说明所用审查模型');
+  assert.match(text, /独立于执行助手会话.*审查调用/u, '文案说明审查调用与执行助手会话独立');
   assert.doesNotMatch(text, /不可用|故障/, '状态语义：空默认提示不含「不可用」「故障」措辞（design §7.2.0）');
   assert.doesNotMatch(text, /实际使用/, 'effectiveModel 为空串时省略「实际使用」句');
   assert.doesNotMatch(text, /全局默认未设置，使用执行助手当前模型（follow-parent）/u, '空默认键不补层含义句——首句已承载层含义（design §7.2.0）');
@@ -2068,7 +2068,7 @@ test('composer 空全局默认提示（§7.2.0）：会话未选择且全局默�
   const text = JSON.stringify(warns[0]);
   assert.match(text, /本会话未单独选择审查模型/, '用 warn.modelIssue.followParent 文案');
   assert.match(text, /按未设置的全局默认跟随执行助手的当前模型/, '文案说明跟随语义');
-  assert.match(text, /独立发起审查调用/, '文案说明独立发起审查调用');
+  assert.match(text, /独立于执行助手会话.*审查调用/u, '文案说明审查调用与执行助手会话独立');
   assert.match(text, /实际使用：全局默认未设置，使用执行助手当前模型（follow-parent）：zai\/glm-5\.3/, '有生效引用时按「实际使用：层含义：引用」呈现');
   assert.doesNotMatch(text, /不可用|故障/, '状态语义：不含「不可用」「故障」措辞');
 });
@@ -2170,11 +2170,11 @@ test('composer 空全局默认提示（§7.2.0/§7.5）：遮蔽键空串形态�
   const wrap = findByClass(tree, 'dsafm_seatwrap');
   const warns = findAllByClass(wrap, 'dsafm_warnline');
   assert.equal(warns.length, 1, '控件附近至多一条');
-  assert.equal(
-    flatText(warns[0]),
-    '默认审查模型未设置：仅当解析落到全局默认层时，审查才跟随执行助手的当前模型并独立发起审查调用。当前生效：无可用审查模型（unavailable）。',
-    '遮蔽键空串形态：省略「实际使用」句后层含义句承接，中文句间直连无空格（design §7.2.0/§7.5）',
-  );
+  const warningText = flatText(warns[0]);
+  assert.match(warningText, /仅当解析落到全局默认层/u, '保留跟随执行助手模型的生效条件');
+  assert.match(warningText, /独立于执行助手会话.*审查调用/u, '说明审查调用与执行助手会话独立');
+  assert.match(warningText, /。当前生效：无可用审查模型（unavailable）。$/u, '层含义句承接，中文句间直连无空格');
+  assert.doesNotMatch(warningText, /实际使用/u, '生效模型为空时不显示实际使用句');
 });
 
 test('composer 空全局默认提示（§7.2.0）：被有效映射截住（shadowed）时用 globalUnsetShadowed 键渲染', async () => {
@@ -4095,7 +4095,7 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
   //    view.retention、card.presets.missing.remedy。长文案不整段逐字冻结：等义精简（含删除
   //    冗余尾句）不应使本测试变红；删除必要事实、条件或占位符的改动由下列子串检出。
   // 两张清单都是手工转抄，不是设计文件解析校验；设计定稿表修订时须同步本清单。
-  // 中英两列都是权威：字典与设计表任何一侧漂移，这里变红。
+  // 短文案与本地期望值不符时失败；长文案仅检查下列事实片段，设计表需另行人工核对。
   const DESIGN_FINAL = [
     // —— §7.2.2 字段名称与选项文案表 ——
     ['card.presets.label', '启用自动审批的权限预设', "Presets that enable auto-approval"],
@@ -4245,14 +4245,14 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
   const noConclusion = '没有有效结论'.split('').join('\u2060');
   const LONG_COPY_FACTS = [
     ['warn.modelIssue.globalUnset',
-      ['仅当解析实际落到全局默认层（无有效会话选择且无有效映射）', '独立发起审查调用', '使用相同模型', '不由执行助手自己审批'],
-      ['falls through to the global default', 'independent call', 'the same model', 'not the agent approving itself']],
+      ['仅当解析实际落到全局默认层（无有效会话选择且无有效映射）', '跟随执行助手的当前模型', '独立于执行助手会话', '审查调用'],
+      ['falls through to the global default', 'no effective session choice and no effective rule', "follow the agent's current model", 'independent call', "separate from the agent's session"]],
     ['warn.modelIssue.followParent',
-      ['独立发起审查调用', '实际使用：{effective}。'],
-      ['independent call', 'Currently using: {effective}.']],
+      ['本会话未单独选择审查模型', '按未设置的全局默认跟随执行助手的当前模型', '独立于执行助手会话', '审查调用', '实际使用：{effective}。'],
+      ['This session has no reviewer of its own and the global default is unset', "follow the agent's current model", 'independent call', "separate from the agent's session", 'Currently using: {effective}.']],
     ['warn.modelIssue.globalUnsetShadowed',
-      ['仅当解析落到全局默认层', '独立发起审查调用', '实际使用：{effective}。'],
-      ['falls through to the global default', 'independent call', 'Currently using: {effective}.']],
+      ['仅当解析落到全局默认层', '跟随执行助手的当前模型', '独立于执行助手会话', '审查调用', '实际使用：{effective}。'],
+      ['only when resolution falls through to the global default', "follow the agent's current model", 'independent call', "separate from the agent's session", 'Currently using: {effective}.']],
     ['help.trigger.presets',
       ['按接管规则处理升权审批', '其他预设保持宿主原审批流程', '清单为空时', '无法识别的预设按「无法识别权限预设时」', '不等于授予任意权限'],
       ['escalation approvals', 'keep the host flow', 'empty list', '"When the preset cannot be identified"', 'grants no extra permissions']],
@@ -4263,14 +4263,14 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
       ['逐条记录', '同一会话同一原因只记录一条', '不影响接管与审批本身'],
       ['skip is logged', 'one line per session and reason', 'never the take-over itself']],
     ['help.reviewer.model',
-      ['provider/model', '推理强度留空表示自动选择', '会话选择', '全局默认', '独立发起一次审查调用', '「使用相同模型」'],
-      ['provider/model', 'automatic', 'session choice', 'global default', 'independent call', 'the same model']],
+      ['provider/model', '推理强度留空表示自动选择', '支持 `low` 就使用 `low`', '由模型默认值决定', '会话选择 → 按执行助手的模型映射 → 全局默认', '全局默认未设置时使用执行助手的当前模型', '独立于执行助手会话', '审查调用'],
+      ['provider/model', 'automatic', 'use `low` when the model supports it', 'otherwise let the model default decide', "session choice, by the agent's model, global default", "an unset default reviews on the agent's current model", 'independent call', "separate from the agent's session"]],
     ['help.reviewer.parentModelRules',
       ['任意 provider，或指定 provider 下的完整模型 id', '会话选择更优先', '命中时先于全局默认', '只能有一条规则', '纯模型 id 键按任意 provider 读取', '含斜杠的旧键', '不自动改写'],
       ['any provider', 'full model id', 'outranks', 'the global default', 'One rule per', 'slash-containing keys', 'rewritten automatically']],
     ['help.reviewer.timeoutMs',
       ['涵盖装配与等待本次审查结论的全过程', '内部重试不另计时', '超时按拒绝处理并说明发生环节', '不是危险判定', '0 立即超时'],
-      ['covering assembly', 'no fresh budget', 'not a danger verdict', '0 times out immediately']],
+      ['covering assembly', 'no fresh budget', 'rejects with its stage named', 'not a danger verdict', '0 times out immediately']],
     ['help.reviewer.maxTokens',
       ['token 是模型计量文本的单位', '由模型或供应商默认值决定', '推理', noConclusion, '具体数值因模型与推理强度而异'],
       ['measure text', 'model or provider default', 'reasoning', 'no usable conclusion', 'varies by model and effort']],
