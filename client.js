@@ -125,6 +125,7 @@ window.__ModuleLoader__.load({
 			"option.legacy.any": "任意 provider，模型 id 为 {id}",
 			"option.legacy.named": "指定 provider {provider}，模型 id 为 {id}",
 			"card.map.legacy.pending": "确认前按兼容规则读取，原值保留。",
+			"card.map.backToList": "返回列表选择",
 			"option.scope.any": "任意 provider",
 			"option.scope.named": "指定 provider",
 			"warn.modelIssue.global": "默认审查模型不可用：{reason}。实际使用：{effective}。",
@@ -386,6 +387,7 @@ window.__ModuleLoader__.load({
 			"option.legacy.any": "Any provider, model id {id}",
 			"option.legacy.named": "Provider {provider}, model id {id}",
 			"card.map.legacy.pending": "Until confirmed, the key keeps its value and is read per the compatibility rules.",
+			"card.map.backToList": "Back to list",
 			"option.scope.any": "Any provider",
 			"option.scope.named": "Specific provider",
 			"warn.modelIssue.global": "The default reviewer model is unavailable: {reason}. Currently using: {effective}.",
@@ -692,7 +694,9 @@ window.__ModuleLoader__.load({
 			".dsafm_sec_invalid{color:var(--dsw-alias-state-error-primary)}",
 			".dsafm_sec_warn{display:block;margin-top:2px;color:var(--dsw-alias-state-warn-primary,#b8860b)}",
 			// 控件本体：官方输入规格（34px/0 12px/0.5px border-l4/8px/bg-layer-3；聚焦与非法边框）。
-			".dsafm_input{flex:1;min-width:0;width:100%;height:34px;padding:0 12px;border:.5px solid var(--dsw-alias-border-l4);border-radius:8px;background:var(--dsw-alias-bg-layer-3);font-family:inherit;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-primary)}",
+			// 盒模型统一 border-box（design §7.2）：下拉与文本框共用本类，两者的浏览器默认计宽口径不同
+			//（文本框 content-box、下拉 border-box），不归一时文本框的 width:100%＋左右内边距＋边框必超列轨道。
+			".dsafm_input{box-sizing:border-box;flex:1;min-width:0;width:100%;height:34px;padding:0 12px;border:.5px solid var(--dsw-alias-border-l4);border-radius:8px;background:var(--dsw-alias-bg-layer-3);font-family:inherit;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-primary)}",
 			".dsafm_input:focus-visible{outline:none;border-color:var(--dsw-alias-brand-primary)}",
 			".dsafm_input[aria-invalid='true']{border-color:var(--dsw-alias-state-error-primary)}",
 			".dsafm_input:disabled{color:var(--dsw-alias-label-tertiary);cursor:default}",
@@ -721,7 +725,13 @@ window.__ModuleLoader__.load({
 			".dsafm_map_head{font-size:12px;color:var(--dsw-alias-label-tertiary)}",
 			".dsafm_map_row select{width:100%;min-width:0}",
 			".dsafm_map_rowwrap{display:flex;flex-direction:column;gap:4px;min-width:0}",
-			".dsafm_map_scope{display:flex;flex-direction:column;gap:4px;min-width:0}",
+			// 作用范围列与自定义输入单元格用单列 grid 纵向堆叠（design §7.2）：`.dsafm_input` 带 flex:1，
+			// 在纵向 flex 容器里 flex-basis:0% 会顶掉 height:34px（控件塌到自身内容高）；grid 行不参与
+			// flex 主轴计算，控件保持官方高度，堆叠间距同为 4px。自定义单元格内是文本框＋「返回列表选择」
+			// 按钮；按钮左对齐，宽度上限为本列文本框（max-width:100%），极窄列下文字换行收缩，不裁切。
+			".dsafm_map_scope{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;min-width:0}",
+			".dsafm_map_custom{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;min-width:0}",
+			".dsafm_map_back{justify-self:start;max-width:100%;white-space:normal;padding:0 10px}",
 			".dsafm_map_del{justify-self:start;padding:0 10px}",
 			".dsafm_map_dup{font-size:12px;line-height:1.5;color:var(--dsw-alias-state-error-primary);overflow-wrap:anywhere}",
 			// 空条件行的「保存时不保留」说明：非错误（行为是设计内丢弃），用 secondary 正文色。
@@ -2508,6 +2518,16 @@ window.__ModuleLoader__.load({
 			// 值＝{text}（FIELDS 文本）| {value}（结构化：presets/model/行表/布尔）| {clear}（恢复默认）。
 			// 控件显示值＝暂存值 ?? 快照种子；暂存是组件本地 state，卸载即弃（离开页面丢弃，官方语义）。
 			const [staged, setStaged] = react.useState({});
+			// 映射表行工作副本（design §7.2）：承载行草稿与页面保持的编辑形态标记（modelCustom/providerCustom），
+			// 不进字段暂存表；null＝未触碰（由快照种子现算）。只有四字段条件与选择的差异（含 clear）才写映射暂存条目。
+			const [tableState, setTableState] = react.useState(null);
+			// 「返回列表」后的下拉聚焦标记（design §7.2）：控件替换丢焦点，点按钮时按行号标记、下拉挂载时消费。
+			const parentBackRef = react.useRef(-1);
+			const providerBackRef = react.useRef(-1);
+			// 进入自定义后的文本框聚焦标记（design §7.2）：同样按行号标记、文本框挂载时消费——
+			// ref 回调随渲染更新身份会被反复调用，标记消费保证只在进入时聚焦一次，不在键入时挪动插入点。
+			const parentEnterRef = react.useRef(-1);
+			const providerEnterRef = react.useRef(-1);
 			const [phase, setPhase] = react.useState("idle");
 			const [error, setError] = react.useState("");
 			const [catalog, setCatalog] = react.useState(null);
@@ -2580,15 +2600,11 @@ window.__ModuleLoader__.load({
 			const legacyBaseRaw = getPath(base, LEGACY_PATH);
 			const legacyBase = legacyBaseRaw !== null && typeof legacyBaseRaw === "object" && !Array.isArray(legacyBaseRaw) ? legacyBaseRaw : {};
 			const mapStaged = staged[MAP_KEY];
-			/** 映射表的显示行状态：暂存 ?? 组合层默认（clear）?? 快照种子。 */
+			/** 映射表的显示行状态：clear 回落组合层默认；其余取页面工作副本（未触碰时由快照种子现算）。 */
 			const displayTable =
-				mapStaged === undefined
-					? tableOf(rulesSeed, legacySeed)
-					: mapStaged.clear === true
-						? tableOf(rulesBase, legacyBase)
-						: Array.isArray(mapStaged.value)
-							? mapStaged.value
-							: tableOf(rulesSeed, legacySeed);
+				mapStaged !== undefined && mapStaged.clear === true
+					? tableOf(rulesBase, legacyBase)
+					: tableState ?? tableOf(rulesSeed, legacySeed);
 			// 重复条件防线（design §7.2）：按行条件键计数，涉事行显示行级错误并阻止保存。
 			const conditionCounts = new Map();
 			for (const row of displayTable) {
@@ -2704,6 +2720,49 @@ window.__ModuleLoader__.load({
 			];
 
 			/**
+			 * 行表的持久化差异（design §7.2）：经 `persistableOf` 投影后与快照种子比较两路写入值。
+			 * @param {object[]} rows - 行状态表。
+			 * @returns {{rules: object[], legacy: object, changed: boolean}} 两路写入值与是否产生差异。
+			 */
+			const mapOpsFor = (rows) => {
+				const { rules, legacyKeys } = persistableOf(rows);
+				const legacy = {};
+				for (const key of legacyKeys) if (Object.prototype.hasOwnProperty.call(legacySeed, key)) legacy[key] = legacySeed[key];
+				return {
+					rules,
+					legacy,
+					changed:
+						JSON.stringify(rules) !== JSON.stringify(rulesSeed) || JSON.stringify(legacy) !== JSON.stringify(legacySeed),
+				};
+			};
+			/**
+			 * 行表统一写入口（design §7.2）：行草稿进页面工作副本；四字段条件与选择有差异才写映射暂存条目，
+			 * 差异消失时移除该条目——纯切换编辑形态、增删空行不构成「无改动」意义上的暂存，
+			 * 「恢复默认」按钮不因此在场。行删除或映射字段「恢复默认」时工作副本随行集合重建、标记随原行销毁。
+			 * @param {object[]} next - 新行状态表。
+			 * @returns {void}
+			 */
+			const updateRows = (next) => {
+				setTableState(next);
+				if (mapOpsFor(next).changed) {
+					stageRows(next);
+					return;
+				}
+				setStaged((previous) => {
+					if (previous[MAP_KEY] === undefined) return previous;
+					const nextStaged = { ...previous };
+					delete nextStaged[MAP_KEY];
+					return nextStaged;
+				});
+			};
+			/**
+			 * 暂存映射表的行状态（不即时写库）；持久化形状在保存计划里由 `persistableOf` 生成。
+			 * @param {object[]} next - 新行状态表。
+			 * @returns {void}
+			 */
+			const stageRows = (next) => stageValue(RULES_PATH, next);
+
+			/**
 			 * 保存计划：逐暂存条目解析——非法值阻塞（invalid）；与快照现值相同的条目跳过；
 			 * clear 在用户层无键时也无操作（官方 SettingsFormModel.plan 同款语义）。
 			 * 映射表（design §7.2）单独处理：一条暂存同时驱动 `reviewer.parentModelRules` 与
@@ -2762,14 +2821,12 @@ window.__ModuleLoader__.load({
 						if (getPath(user, RULES_PATH) !== undefined) ops.push({ op: "unset", path: RULES_PATH });
 						if (getPath(user, LEGACY_PATH) !== undefined) ops.push({ op: "unset", path: LEGACY_PATH });
 					} else if (invalid !== true) {
-						const { rules, legacyKeys } = persistableOf(mapEntry.value);
-						const legacy = {};
-						for (const key of legacyKeys) if (Object.prototype.hasOwnProperty.call(legacySeed, key)) legacy[key] = legacySeed[key];
-						if (JSON.stringify(rulesSeed) !== JSON.stringify(rules)) {
-							ops.push({ op: "set", path: RULES_PATH, value: rules });
+						const projection = mapOpsFor(mapEntry.value);
+						if (JSON.stringify(rulesSeed) !== JSON.stringify(projection.rules)) {
+							ops.push({ op: "set", path: RULES_PATH, value: projection.rules });
 						}
-						if (JSON.stringify(legacySeed) !== JSON.stringify(legacy)) {
-							ops.push({ op: "set", path: LEGACY_PATH, value: legacy });
+						if (JSON.stringify(legacySeed) !== JSON.stringify(projection.legacy)) {
+							ops.push({ op: "set", path: LEGACY_PATH, value: projection.legacy });
 						}
 					}
 				}
@@ -2798,6 +2855,8 @@ window.__ModuleLoader__.load({
 						} else {
 							setPhase("idle");
 							setStaged({});
+							// 行状态由新快照重建（design §7.2）：工作副本清空，编辑形态标记随之不在、回到列表形态。
+							setTableState(null);
 						}
 					},
 					(failure) => {
@@ -3070,20 +3129,13 @@ window.__ModuleLoader__.load({
 			};
 
 			/**
-			 * 暂存映射表的行状态（不即时写库）；持久化形状在保存计划里由 `persistableOf` 生成。
-			 * @param {object[]} next - 新行状态表。
-			 * @returns {void}
-			 */
-			const stageRows = (next) => stageValue(RULES_PATH, next);
-
-			/**
 			 * 行内编辑：旧字典行（纯 id 键）一经编辑即转为结构化行，保存时从旧字典移除（design §7.2）。
 			 * @param {number} index - 行号。
 			 * @param {object} patch - 行字段补丁。
 			 * @returns {void}
 			 */
 			const patchRow = (index, patch) =>
-				stageRows(
+				updateRows(
 					displayTable.map((row, position) => {
 						if (position !== index) return row;
 						if (row.kind === "legacy") {
@@ -3104,6 +3156,35 @@ window.__ModuleLoader__.load({
 				pickEffort(ref, current).then((effort) => patchRow(index, { ref, effort }));
 			};
 			/**
+			 * 进入自定义后的文本框聚焦（design §7.2）：选「自定义…」时按行号标记，文本框挂载时消费——
+			 * 聚焦并把插入点置于文本末尾；ref 回调随渲染重复触发时不重复聚焦。
+			 * @param {{current: number}} markRef - 行号标记（useRef 保持）。
+			 * @param {number} index - 行号。
+			 * @returns {(node: HTMLInputElement | null) => void} 文本框挂载回调。
+			 */
+			const focusCustomInput = (markRef, index) => (node) => {
+				if (!node || markRef.current !== index) return;
+				markRef.current = -1;
+				node.focus();
+				const end = typeof node.value === "string" ? node.value.length : 0;
+				try {
+					node.setSelectionRange(end, end);
+				} catch {
+					// 不支持选区定位的控件只聚焦。
+				}
+			};
+			/**
+			 * 「返回列表」后的下拉聚焦（design §7.2）：控件替换丢焦点，点返回按钮时按行号标记，下拉挂载时消费标记并聚焦。
+			 * @param {{current: number}} markRef - 行号标记（useRef 保持）。
+			 * @param {number} index - 行号。
+			 * @returns {(node: HTMLElement | null) => void} 下拉挂载回调。
+			 */
+			const focusBackSelect = (markRef, index) => (node) => {
+				if (!node || markRef.current !== index) return;
+				markRef.current = -1;
+				node.focus();
+			};
+			/**
 			 * 待确认含斜杠旧键：用户选定一种原意后转为对应结构化行（design §7.2）——
 			 * 任意 provider＝整键为完整纯模型 id；指定 provider＝首段为 provider、余下段为 id。
 			 * @param {number} index - 行号。
@@ -3118,7 +3199,7 @@ window.__ModuleLoader__.load({
 					intent === "named"
 						? { kind: "rule", provider: row.key.slice(0, at), model: row.key.slice(at + 1), ref: row.ref, effort: row.effort }
 						: { kind: "rule", provider: null, model: row.key, ref: row.ref, effort: row.effort };
-				stageRows(displayTable.map((entry, position) => (position === index ? next : entry)));
+				updateRows(displayTable.map((entry, position) => (position === index ? next : entry)));
 			};
 
 			/**
@@ -3192,13 +3273,14 @@ window.__ModuleLoader__.load({
 
 				/**
 			 * 作用范围列（design §7.2）：下拉两选项（任意 provider 默认／指定 provider）；选「指定」时
-			 * 行内出现 provider 选择——选项来自目录 providers，目录不可读或选「自定义…」时手输。
+			 * 行内出现 provider 选择——选项来自目录 providers，目录不可读或选「自定义…」时手输；
+			 * 目录可读时手输形态带「返回列表选择」按钮，目录不可读时无返回按钮（下拉无可列项）。
 			 * 待确认含斜杠旧键行在此列呈现两种原意，选定后转为结构化行；确认前值不可编辑（design §7.2）。
 			 */
 			const providerDefault = () => (catalog?.providers ?? [])[0]?.id ?? "";
 			const providerCell = (row, index) => {
 				if (row.providerCustom === true || catalog === null) {
-					return jsxRuntime.jsx("input", {
+					const manualInput = jsxRuntime.jsx("input", {
 						className: "dsafm_input dsafm_map_provider",
 						type: "text",
 						value: typeof row.provider === "string" ? row.provider : "",
@@ -3206,6 +3288,24 @@ window.__ModuleLoader__.load({
 						placeholder: t("card.map.placeholder.provider"),
 						disabled: !writable,
 						onChange: (event) => patchRow(index, { provider: event.target.value }),
+						ref: catalog !== null && row.providerCustom === true ? focusCustomInput(providerEnterRef, index) : undefined,
+					});
+					if (catalog === null) return manualInput;
+					return jsxRuntime.jsxs("div", {
+						className: "dsafm_map_custom",
+						children: [
+							manualInput,
+							jsxRuntime.jsx("button", {
+								type: "button",
+								className: "dsafm_button dsafm_map_back",
+								disabled: !writable,
+								onClick: () => {
+									providerBackRef.current = index;
+									patchRow(index, { providerCustom: false });
+								},
+								children: t("card.map.backToList"),
+							}),
+						],
 					});
 				}
 				const ids = catalog.providers.map((provider) => provider.id);
@@ -3215,9 +3315,11 @@ window.__ModuleLoader__.load({
 					value: current === "" || ids.includes(current) ? current : "__keep__",
 					title: current,
 					disabled: !writable,
+					ref: focusBackSelect(providerBackRef, index),
 					onChange: (event) => {
 						const next = event.target.value;
 						if (next === "__custom__") {
+							providerEnterRef.current = index;
 							patchRow(index, { providerCustom: true });
 							return;
 						}
@@ -3275,7 +3377,7 @@ window.__ModuleLoader__.load({
 							disabled: !writable,
 							onChange: (event) =>
 								event.target.value === "named"
-									? patchRow(index, { provider: providerDefault() })
+									? patchRow(index, { provider: providerDefault(), providerCustom: false })
 									: patchRow(index, { provider: null, providerCustom: false }),
 							children: [
 								jsxRuntime.jsx("option", { value: "any", children: t("option.scope.any") }, "any"),
@@ -3290,7 +3392,8 @@ window.__ModuleLoader__.load({
 			 * 执行助手模型列：回显由作用范围决定——任意 provider 显示纯模型 id；指定 provider 显示
 			 * provider 与 id 的拼接（design §6.2）。指定 provider 时只列该 provider 的模型，选项值＝拼接值，
 			 * 选择经目录键查回纯 id，不对选择文本做斜杠切分；任意 provider 时按完整纯 id 去重并附 provider
-			 * 信息。目录不可读保留原值，「自定义…」与目录缺项走手输（完整纯 id 原样入行，不切不剥）。
+			 * 信息。目录不可读保留原值，「自定义…」与目录缺项值走手输（完整纯 id 原样入行，不切不剥）；
+			 * 手输形态带「返回列表选择」按钮双向切换，进入聚焦文本框、返回聚焦下拉（design §7.2）。
 			 */
 			const agentModelCell = (row, index) => {
 				if (row.kind === "pending") {
@@ -3304,14 +3407,30 @@ window.__ModuleLoader__.load({
 					});
 				}
 				if (row.modelCustom === true) {
-					return jsxRuntime.jsx("input", {
-						className: "dsafm_input dsafm_map_parent",
-						type: "text",
-						value: row.model,
-						title: row.model,
-						placeholder: t("card.map.placeholder.parent"),
-						disabled: !writable,
-						onChange: (event) => typeRow(index, event.target.value),
+					return jsxRuntime.jsxs("div", {
+						className: "dsafm_map_custom",
+						children: [
+							jsxRuntime.jsx("input", {
+								className: "dsafm_input dsafm_map_parent",
+								type: "text",
+								value: row.model,
+								title: row.model,
+								placeholder: t("card.map.placeholder.parent"),
+								disabled: !writable,
+								onChange: (event) => typeRow(index, event.target.value),
+								ref: focusCustomInput(parentEnterRef, index),
+							}),
+							jsxRuntime.jsx("button", {
+								type: "button",
+								className: "dsafm_button dsafm_map_back",
+								disabled: !writable,
+								onClick: () => {
+									parentBackRef.current = index;
+									patchRow(index, { modelCustom: false });
+								},
+								children: t("card.map.backToList"),
+							}),
+						],
 					});
 				}
 				const named = row.provider !== null && typeof row.provider === "string" && row.provider.length > 0;
@@ -3324,9 +3443,11 @@ window.__ModuleLoader__.load({
 						value: echo,
 						title: echo,
 						disabled: !writable,
+						ref: focusBackSelect(parentBackRef, index),
 						onChange: (event) => {
 							const next = event.target.value;
 							if (next === "__custom__") {
+								parentEnterRef.current = index;
 								patchRow(index, { modelCustom: true });
 								return;
 							}
@@ -3347,9 +3468,11 @@ window.__ModuleLoader__.load({
 					value: row.model,
 					title: row.model,
 					disabled: !writable,
+					ref: focusBackSelect(parentBackRef, index),
 					onChange: (event) => {
 						const next = event.target.value;
 						if (next === "__custom__") {
+							parentEnterRef.current = index;
 							patchRow(index, { modelCustom: true });
 							return;
 						}
@@ -3390,7 +3513,7 @@ window.__ModuleLoader__.load({
 										type: "button",
 										className: "dsafm_button dsafm_map_del",
 										disabled: !writable,
-										onClick: () => stageRows(displayTable.filter((entry, position) => position !== index)),
+										onClick: () => updateRows(displayTable.filter((entry, position) => position !== index)),
 										children: t("card.map.remove"),
 									}),
 								],
@@ -3435,7 +3558,11 @@ window.__ModuleLoader__.load({
 					path: RULES_PATH,
 					hint: t("hint.reviewer.parentModelRules"),
 					helpText: t("help.reviewer.parentModelRules"),
-					onReset: () => stageClear(RULES_PATH),
+					// 恢复默认：丢弃工作副本（编辑形态标记随行销毁）并暂存整表 clear（design §7.2）。
+					onReset: () => {
+						setTableState(null);
+						stageClear(RULES_PATH);
+					},
 					control: (controlId, describedby) =>
 						jsxRuntime.jsxs("div", {
 							className: "dsafm_map",
@@ -3457,7 +3584,7 @@ window.__ModuleLoader__.load({
 									type: "button",
 									className: "dsafm_button dsafm_map_add",
 									disabled: !writable,
-									onClick: () => stageRows([...displayTable, { kind: "rule", provider: null, model: "", ref: "", effort: "" }]),
+									onClick: () => updateRows([...displayTable, { kind: "rule", provider: null, model: "", ref: "", effort: "" }]),
 									children: t("card.map.add"),
 								}),
 							],

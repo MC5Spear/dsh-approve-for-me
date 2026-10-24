@@ -2809,6 +2809,471 @@ test('映射表保存失败保留草稿；目录不可读时行值保留、provi
   assert.equal(failedSave.props.disabled, false, '暂存仍在，保存应仍可点');
 });
 
+test('映射表模型列双向切换（design §7.2）：列表⇄自定义、草稿保留、返回带入三形态', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    snapshot: {
+      status: 'ready',
+      value: { reviewer: { parentModelRules: [{ parent: { provider: null, model: 'glm-5.3' }, choice: { model: 'zai/glm-5.3', effort: '' } }] } },
+      base: {},
+      user: {},
+      revision: 1,
+      writable: true,
+    },
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'deepseek', models: [{ id: 'deepseek-chat' }] }, { id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      if (endpoint === 'approveForMe/modelEfforts') return { ok: true, value: { efforts: [{ id: 'low' }], defaultEffort: 'low' } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
+  const props = { t: (key) => key, scope: env.scope, rpcCall: env.rpcCall };
+  const tree = await expandCard(card.component, props);
+  // 列表形态：模型列是下拉，值为纯 id。
+  assert.equal(findByClass(findAllByClass(tree, 'dsafm_map_row')[0], 'dsafm_map_parent').props.value, 'glm-5.3');
+  // 进入自定义：文本框＋「返回列表选择」按钮，下拉退场；纯切换不构成改动（保存仍置灰）。
+  findByClass(findAllByClass(tree, 'dsafm_map_row')[0], 'dsafm_map_parent').props.onChange({ target: { value: '__custom__' } });
+  await tick();
+  hookIndex = 0;
+  let current = render(card.component, props);
+  let row = findAllByClass(current, 'dsafm_map_row')[0];
+  const customWrap = findByClass(row, 'dsafm_map_custom');
+  const customInput = findAllByClass(customWrap, 'dsafm_map_parent').find((node) => node.type === 'input');
+  assert.ok(customInput, '自定义形态应是文本框');
+  assert.equal(customInput.props.value, 'glm-5.3', '进入自定义时当前值带入文本框');
+  assert.equal(findByClass(customWrap, 'dsafm_map_back').props.children, 'card.map.backToList', '返回按钮文案走字典键 card.map.backToList');
+  assert.equal(findByClass(current, 'dsafm_save').props.disabled, true, '纯切换形态不构成改动，保存仍置灰');
+  // 手输目录外完整 id，改动成立；返回列表把草稿带回下拉（目录缺项值走保留项）。
+  customInput.props.onChange({ target: { value: 'future/model' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  row = findAllByClass(current, 'dsafm_map_row')[0];
+  assert.equal(findByClass(current, 'dsafm_save').props.disabled, false, '改模型 id 后保存可点');
+  findByClass(row, 'dsafm_map_back').props.onClick();
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  row = findAllByClass(current, 'dsafm_map_row')[0];
+  assert.equal(findByClass(row, 'dsafm_map_parent').props.value, 'future/model', '返回列表应带回草稿（目录缺项值走保留项）');
+  // 再进自定义：草稿仍在文本框；改选目录项后返回＝选中该目录项。
+  findByClass(row, 'dsafm_map_parent').props.onChange({ target: { value: '__custom__' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  row = findAllByClass(current, 'dsafm_map_row')[0];
+  assert.equal(
+    findAllByClass(findByClass(row, 'dsafm_map_custom'), 'dsafm_map_parent').find((node) => node.type === 'input').props.value,
+    'future/model',
+    '再次进入自定义时草稿保留',
+  );
+  findByClass(findByClass(row, 'dsafm_map_custom'), 'dsafm_map_back').props.onClick();
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  row = findAllByClass(current, 'dsafm_map_row')[0];
+  findByClass(row, 'dsafm_map_parent').props.onChange({ target: { value: 'glm-5.3' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  row = findAllByClass(current, 'dsafm_map_row')[0];
+  assert.equal(findByClass(row, 'dsafm_map_parent').props.value, 'glm-5.3', '选目录项后回到选中形态');
+  findByClass(row, 'dsafm_map_parent').props.onChange({ target: { value: '__custom__' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  row = findAllByClass(current, 'dsafm_map_row')[0];
+  assert.equal(
+    findAllByClass(findByClass(row, 'dsafm_map_custom'), 'dsafm_map_parent').find((node) => node.type === 'input').props.value,
+    'glm-5.3',
+    '选中目录项进入自定义带入纯 id（回显口径不拼接）',
+  );
+  // 空值形态：新增行未选模型时进入自定义，返回列表回到占位项。
+  findByClass(findByClass(row, 'dsafm_map_custom'), 'dsafm_map_back').props.onClick();
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  findByClass(current, 'dsafm_map_add').props.onClick();
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  const newRow = findAllByClass(current, 'dsafm_map_row')[1];
+  findByClass(newRow, 'dsafm_map_parent').props.onChange({ target: { value: '__custom__' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  const emptyRow = findAllByClass(current, 'dsafm_map_row')[1];
+  assert.equal(
+    findAllByClass(findByClass(emptyRow, 'dsafm_map_custom'), 'dsafm_map_parent').find((node) => node.type === 'input').props.value,
+    '',
+    '空值行进入自定义带入空串',
+  );
+  findByClass(findByClass(emptyRow, 'dsafm_map_custom'), 'dsafm_map_back').props.onClick();
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  assert.equal(findByClass(findAllByClass(current, 'dsafm_map_row')[1], 'dsafm_map_parent').props.value, '', '空值返回列表回到占位项');
+  // 往返全程零写入：切换与草稿都不写配置。
+  assert.equal(env.writes.length, 0, '双向切换全程不得写配置');
+});
+
+test('映射表切换不变量（design §7.2）：纯切换与增删空行不产生映射暂存条目', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    snapshot: {
+      status: 'ready',
+      value: { reviewer: { parentModelRules: [{ parent: { provider: 'zai', model: 'glm-5.3' }, choice: { model: 'zai/glm-5.3', effort: '' } }] } },
+      base: {},
+      user: {},
+      revision: 1,
+      writable: true,
+    },
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'deepseek', models: [{ id: 'deepseek-chat' }] }, { id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      if (endpoint === 'approveForMe/modelEfforts') return { ok: true, value: { efforts: [{ id: 'low' }], defaultEffort: 'low' } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
+  const props = { t: (key) => key, scope: env.scope, rpcCall: env.rpcCall };
+  const tree = await expandCard(card.component, props);
+  const mapFieldOf = (node) =>
+    findAllByClass(node, 'dsafm_field').find((entry) => JSON.stringify(entry).includes('card.field.parentModelRules'));
+  // 种子即指定 provider 行：provider 列与模型列都在列表形态。
+  const seedRow = findAllByClass(tree, 'dsafm_map_row')[0];
+  assert.equal(findByClass(seedRow, 'dsafm_map_provider').props.value, 'zai');
+  assert.equal(findByClass(seedRow, 'dsafm_map_parent').props.value, 'zai/glm-5.3');
+  // provider 列纯切换（自定义→返回）：值原样、保存置灰、「恢复默认」不在场。
+  findByClass(seedRow, 'dsafm_map_provider').props.onChange({ target: { value: '__custom__' } });
+  await tick();
+  hookIndex = 0;
+  let current = render(card.component, props);
+  let row = findAllByClass(current, 'dsafm_map_row')[0];
+  const providerWrap = findByClass(row, 'dsafm_map_custom');
+  assert.equal(
+    findAllByClass(providerWrap, 'dsafm_map_provider').find((node) => node.type === 'input').props.value,
+    'zai',
+    'provider 进入自定义带入当前值',
+  );
+  assert.equal(findByClass(current, 'dsafm_save').props.disabled, true, 'provider 纯切换不构成改动');
+  assert.ok(!JSON.stringify(mapFieldOf(current)).includes('card.resetField'), '纯切换不得产生映射暂存条目（恢复默认按钮不在场）');
+  findByClass(providerWrap, 'dsafm_map_back').props.onClick();
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  row = findAllByClass(current, 'dsafm_map_row')[0];
+  assert.equal(findByClass(row, 'dsafm_map_provider').props.value, 'zai', 'provider 返回列表回到原选项');
+  // 手输改动后改回种子等价值：暂存条目应被移除（保存回到置灰、按钮退场）。
+  findByClass(row, 'dsafm_map_provider').props.onChange({ target: { value: '__custom__' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  row = findAllByClass(current, 'dsafm_map_row')[0];
+  findAllByClass(findByClass(row, 'dsafm_map_custom'), 'dsafm_map_provider')
+    .find((node) => node.type === 'input')
+    .props.onChange({ target: { value: 'z-ai' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  assert.equal(findByClass(current, 'dsafm_save').props.disabled, false, 'provider 改动成立后保存可点');
+  row = findAllByClass(current, 'dsafm_map_row')[0];
+  findByClass(findByClass(row, 'dsafm_map_custom'), 'dsafm_map_back').props.onClick();
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  row = findAllByClass(current, 'dsafm_map_row')[0];
+  assert.equal(findByClass(row, 'dsafm_map_provider').props.value, '__keep__', '目录缺项的 provider 值走保留项回显');
+  findByClass(row, 'dsafm_map_provider').props.onChange({ target: { value: 'zai' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  assert.equal(findByClass(current, 'dsafm_save').props.disabled, true, '改回与种子等价的取值后暂存条目应移除');
+  assert.ok(!JSON.stringify(mapFieldOf(current)).includes('card.resetField'), '差异消失后恢复默认按钮应退场');
+  // 增删空行同样不构成暂存：保存置灰、按钮不在场。
+  findByClass(current, 'dsafm_map_add').props.onClick();
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  assert.equal(findByClass(current, 'dsafm_save').props.disabled, true, '纯增空行不构成改动');
+  assert.ok(!JSON.stringify(mapFieldOf(current)).includes('card.resetField'), '纯增空行不产生映射暂存条目');
+  const removeButtons = findAllByClass(current, 'dsafm_map_del');
+  removeButtons[removeButtons.length - 1].props.onClick();
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  assert.equal(findByClass(current, 'dsafm_save').props.disabled, true, '删掉空行后仍无改动');
+  assert.equal(env.writes.length, 0, '切换与增删空行全程零写入');
+});
+
+test('映射表作用范围切换与自定义形态（design §7.2）：modelCustom 不受范围切换影响', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    snapshot: {
+      status: 'ready',
+      value: { reviewer: { parentModelRules: [{ parent: { provider: null, model: 'glm-5.3' }, choice: { model: 'zai/glm-5.3', effort: '' } }] } },
+      base: {},
+      user: {},
+      revision: 1,
+      writable: true,
+    },
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'deepseek', models: [{ id: 'deepseek-chat' }] }, { id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      if (endpoint === 'approveForMe/modelEfforts') return { ok: true, value: { efforts: [{ id: 'low' }], defaultEffort: 'low' } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
+  const props = { t: (key) => key, scope: env.scope, rpcCall: env.rpcCall };
+  const tree = await expandCard(card.component, props);
+  // 任意 provider 行进入自定义（文本框形态）。
+  findByClass(findAllByClass(tree, 'dsafm_map_row')[0], 'dsafm_map_parent').props.onChange({ target: { value: '__custom__' } });
+  await tick();
+  hookIndex = 0;
+  let current = render(card.component, props);
+  let row = findAllByClass(current, 'dsafm_map_row')[0];
+  assert.ok(findByClass(row, 'dsafm_map_custom'), '任意 provider 行进入自定义后是文本框形态');
+  // 切到指定 provider：provider 列取目录首项进列表形态，模型列仍是文本框（modelCustom 不受影响）。
+  findByClass(row, 'dsafm_map_scope_mode').props.onChange({ target: { value: 'named' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  row = findAllByClass(current, 'dsafm_map_row')[0];
+  assert.equal(findByClass(row, 'dsafm_map_provider').props.value, 'deepseek', '切指定 provider 后 provider 列取目录首项');
+  assert.equal(
+    findAllByClass(findByClass(row, 'dsafm_map_custom'), 'dsafm_map_parent').find((node) => node.type === 'input').props.value,
+    'glm-5.3',
+    '范围切换后模型列保持文本框形态且值不丢',
+  );
+  // 切回任意 provider：provider 列退场，模型列仍是文本框；条件与种子等价后暂存条目移除。
+  findByClass(row, 'dsafm_map_scope_mode').props.onChange({ target: { value: 'any' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  row = findAllByClass(current, 'dsafm_map_row')[0];
+  assert.equal(findAllByClass(row, 'dsafm_map_provider').length, 0, '任意 provider 行没有 provider 控件');
+  assert.ok(findByClass(row, 'dsafm_map_custom'), '切回任意 provider 后模型列仍是文本框形态');
+  assert.equal(findByClass(current, 'dsafm_save').props.disabled, true, '回到与种子等价的行后保存置灰');
+  assert.equal(env.writes.length, 0, '全程零写入');
+});
+
+test('目录不可读时的双向切换（design §7.2）：provider 恒手输无返回，模型列仍可往返', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    snapshot: {
+      status: 'ready',
+      value: { reviewer: { byParentModel: { 'deepseek-chat': { model: 'zai/glm-5.3', effort: '' } } } },
+      base: {},
+      user: {},
+      revision: 1,
+      writable: true,
+    },
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/modelCatalog') return { ok: false };
+      if (endpoint === 'approveForMe/modelEfforts') return { ok: true, value: { efforts: [], defaultEffort: '' } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
+  const props = { t: (key) => key, scope: env.scope, rpcCall: env.rpcCall };
+  const tree = await expandCard(card.component, props);
+  // 切指定 provider：目录不可读时 provider 列是文本框且没有返回按钮（下拉无可列项）。
+  const seedRow = findAllByClass(tree, 'dsafm_map_row')[0];
+  findByClass(seedRow, 'dsafm_map_scope_mode').props.onChange({ target: { value: 'named' } });
+  await tick();
+  hookIndex = 0;
+  let current = render(card.component, props);
+  let row = findAllByClass(current, 'dsafm_map_row')[0];
+  const providerInput = findAllByClass(row, 'dsafm_map_provider').find((node) => node.type === 'input');
+  assert.ok(providerInput, '目录不可读时 provider 列恒为文本框');
+  assert.equal(findAllByClass(row, 'dsafm_map_back').length, 0, '目录不可读时 provider 列无返回按钮');
+  // 手输 provider 后模型列按指定 provider 口径：占位＋保留（拼接值）＋自定义三项。
+  providerInput.props.onChange({ target: { value: 'deepseek' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  row = findAllByClass(current, 'dsafm_map_row')[0];
+  const agentSelect = findByClass(row, 'dsafm_map_parent');
+  assert.equal(agentSelect.type, 'select', '目录不可读时模型列仍是下拉');
+  assert.deepEqual(
+    agentSelect.props.children.filter(Boolean).map((option) => option.props.value),
+    ['', 'deepseek/deepseek-chat', '__custom__'],
+    '目录不可读时模型下拉＝占位＋保留＋自定义',
+  );
+  // 模型列进入自定义：文本框（纯 id 口径）＋返回按钮；返回带回保留项。
+  agentSelect.props.onChange({ target: { value: '__custom__' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  row = findAllByClass(current, 'dsafm_map_row')[0];
+  const wrap = findByClass(row, 'dsafm_map_custom');
+  assert.equal(
+    findAllByClass(wrap, 'dsafm_map_parent').find((node) => node.type === 'input').props.value,
+    'deepseek-chat',
+    '目录不可读时进入自定义带入纯 id（不拼接 provider）',
+  );
+  assert.equal(findByClass(wrap, 'dsafm_map_back').props.children, 'card.map.backToList', '模型列手输形态有返回按钮');
+  findByClass(wrap, 'dsafm_map_back').props.onClick();
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  row = findAllByClass(current, 'dsafm_map_row')[0];
+  assert.equal(findByClass(row, 'dsafm_map_parent').props.value, 'deepseek/deepseek-chat', '返回列表带回保留项（拼接口径）');
+  assert.equal(env.writes.length, 0, '纯切换零写入');
+});
+
+test('映射表保存成功后回列表形态（design §7.2）：暂存与工作副本一并清空', async () => {
+  resetHooks();
+  const client = loadClient();
+  const env = makeCtx({
+    snapshot: {
+      status: 'ready',
+      value: { reviewer: { parentModelRules: [{ parent: { provider: null, model: 'glm-5.3' }, choice: { model: 'zai/glm-5.3', effort: '' } }] } },
+      base: {},
+      user: {},
+      revision: 1,
+      writable: true,
+    },
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'deepseek', models: [{ id: 'deepseek-chat' }] }, { id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      if (endpoint === 'approveForMe/modelEfforts') return { ok: true, value: { efforts: [{ id: 'low' }], defaultEffort: 'low' } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
+  const props = { t: (key) => key, scope: env.scope, rpcCall: env.rpcCall };
+  const tree = await expandCard(card.component, props);
+  // 进入自定义并手输新 id，保存成功。
+  findByClass(findAllByClass(tree, 'dsafm_map_row')[0], 'dsafm_map_parent').props.onChange({ target: { value: '__custom__' } });
+  await tick();
+  hookIndex = 0;
+  let current = render(card.component, props);
+  let row = findAllByClass(current, 'dsafm_map_row')[0];
+  findAllByClass(findByClass(row, 'dsafm_map_custom'), 'dsafm_map_parent')
+    .find((node) => node.type === 'input')
+    .props.onChange({ target: { value: 'future/model' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  findByClass(current, 'dsafm_save').props.onClick();
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  // 保存成功：行由快照重建回列表形态（下拉、无返回按钮），保存回到置灰。
+  row = findAllByClass(current, 'dsafm_map_row')[0];
+  const after = findByClass(row, 'dsafm_map_parent');
+  assert.equal(after.type, 'select', '保存成功后模型列应回到列表形态');
+  assert.equal(findAllByClass(row, 'dsafm_map_back').length, 0, '保存成功后无返回按钮');
+  assert.equal(findByClass(current, 'dsafm_save').props.disabled, true, '暂存清空后保存应置灰');
+  const rulesOps = env.writes.filter((op) => op.path.join('.') === 'reviewer.parentModelRules');
+  assert.equal(rulesOps[rulesOps.length - 1].value[0].parent.model, 'future/model', '手输 id 按纯 id 写入规则');
+});
+
+test('映射表 clear 后行编辑以最终清单为准（design §7.2 定稿句）：值条目取代 clear、保存落 set', async () => {
+  resetHooks();
+  const client = loadClient();
+  const seedRules = [{ parent: { provider: 'zai', model: 'glm-5.3' }, choice: { model: 'zai/glm-5.3', effort: '' } }];
+  const env = makeCtx({
+    snapshot: {
+      status: 'ready',
+      value: { reviewer: { parentModelRules: seedRules } },
+      base: {},
+      user: { reviewer: { parentModelRules: seedRules } },
+      revision: 1,
+      writable: true,
+    },
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/modelCatalog') {
+        return { ok: true, value: { providers: [{ id: 'deepseek', models: [{ id: 'deepseek-chat' }] }, { id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+      }
+      if (endpoint === 'approveForMe/modelEfforts') return { ok: true, value: { efforts: [{ id: 'low' }], defaultEffort: 'low' } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
+  const props = { t: (key) => key, scope: env.scope, rpcCall: env.rpcCall };
+  const tree = await expandCard(card.component, props);
+  const mapFieldOf = (node) => findAllByClass(node, 'dsafm_field').find((entry) => JSON.stringify(entry).includes('card.field.parentModelRules'));
+  // 用户层带映射键：覆盖组在场、初始无改动。
+  assert.ok(findByClass(mapFieldOf(tree), 'dsafm_reset'), '用户层带映射键时字段应带恢复默认按钮');
+  assert.equal(findByClass(tree, 'dsafm_save').props.disabled, true, '初始无改动保存置灰');
+  // 点「恢复默认」：暂存 clear（未落库），工作副本回到组合层默认的空表。
+  findByClass(mapFieldOf(tree), 'dsafm_reset').props.onClick();
+  await tick();
+  hookIndex = 0;
+  let current = render(card.component, props);
+  assert.equal(findAllByClass(current, 'dsafm_map_row').length, 0, 'clear 暂存后工作副本回到空表');
+  assert.equal(findByClass(current, 'dsafm_save').props.disabled, false, 'clear 是有效改动');
+  assert.equal(env.writes.length, 0, '恢复默认只暂存不写库');
+  // clear 之后再编辑行（添加一行并选模型）：值条目应取代 clear 条目。
+  findByClass(current, 'dsafm_map_add').props.onClick();
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  let newRow = findAllByClass(current, 'dsafm_map_row')[0];
+  findByClass(newRow, 'dsafm_map_parent').props.onChange({ target: { value: 'glm-5.3' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  newRow = findAllByClass(current, 'dsafm_map_row')[0];
+  findByClass(newRow, 'dsafm_model').props.onChange({ target: { value: 'zai/glm-5.3' } });
+  await tick();
+  hookIndex = 0;
+  current = render(card.component, props);
+  assert.equal(findByClass(current, 'dsafm_save').props.disabled, false, '行编辑后仍是有效改动');
+  // 保存：落 set（新结构全量），不落 unset；用户层键在场——「已单独设置」胶囊如实反映显式覆盖。
+  findByClass(current, 'dsafm_save').props.onClick();
+  await tick();
+  const rulesOps = env.writes.filter((op) => op.path.join('.') === 'reviewer.parentModelRules');
+  assert.equal(rulesOps.length, 1, '保存应恰好产生一条映射写入');
+  assert.equal(rulesOps[0].op, 'set', 'clear 后的行编辑以值条目为准，保存应落 set 而非 unset（design §7.2 定稿句）');
+  assert.deepEqual(
+    rulesOps[0].value,
+    [{ parent: { provider: null, model: 'glm-5.3' }, choice: { model: 'zai/glm-5.3', effort: '' } }],
+    'set 写入编辑后的新结构全量',
+  );
+  hookIndex = 0;
+  current = render(card.component, props);
+  assert.ok(JSON.stringify(mapFieldOf(current)).includes('card.resetField'), '保存 set 后用户层键在场，覆盖组（已单独设置）应保留');
+});
+
+test('映射表样式（design §7.2）：输入盒模型归一与自定义单元格堆叠、返回按钮防越界', () => {
+  const source = readFileSync(new URL('../client.js', import.meta.url), 'utf8');
+  const inputRule = source.match(/\.dsafm_input\{[^}]*\}/u)?.[0] ?? '';
+  for (const fragment of ['box-sizing:border-box', 'height:34px', 'border-radius:8px', 'width:100%', 'min-width:0']) {
+    assert.ok(inputRule.includes(fragment), `.dsafm_input 规则应含 ${fragment}（design §7.2 盒模型归一）`);
+  }
+  const customRule = source.match(/\.dsafm_map_custom\{[^}]*\}/u)?.[0] ?? '';
+  for (const fragment of ['display:grid', 'grid-template-columns:minmax(0,1fr)', 'gap:4px', 'min-width:0']) {
+    assert.ok(customRule.includes(fragment), `.dsafm_map_custom 规则应含 ${fragment}（文本框与返回按钮纵向堆叠，且不吃 flex 主轴塌高度）`);
+  }
+  const scopeRule = source.match(/\.dsafm_map_scope\{[^}]*\}/u)?.[0] ?? '';
+  for (const fragment of ['display:grid', 'grid-template-columns:minmax(0,1fr)', 'gap:4px', 'min-width:0']) {
+    assert.ok(scopeRule.includes(fragment), `.dsafm_map_scope 规则应含 ${fragment}（作用范围列堆叠同款，控件保持官方高度）`);
+  }
+  const backRule = source.match(/\.dsafm_map_back\{[^}]*\}/u)?.[0] ?? '';
+  for (const fragment of ['justify-self:start', 'max-width:100%', 'white-space:normal']) {
+    assert.ok(backRule.includes(fragment), `.dsafm_map_back 规则应含 ${fragment}（左对齐、宽度上限、正常换行不裁切）`);
+  }
+});
+
 test('接管预设：多选下拉的选项来自宿主目录，勾选暂存、保存写 trigger.presets（requirements §6.1）', async () => {
   resetHooks();
   const client = loadClient();
@@ -4118,6 +4583,7 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['option.legacy.any', '任意 provider，模型 id 为 {id}', "Any provider, model id {id}"],
     ['option.legacy.named', '指定 provider {provider}，模型 id 为 {id}', "Provider {provider}, model id {id}"],
     ['card.map.legacy.pending', '确认前按兼容规则读取，原值保留。', "Until confirmed, the key keeps its value and is read per the compatibility rules."],
+    ['card.map.backToList', '返回列表选择', "Back to list"],
     ['option.scope.any', '任意 provider', "Any provider"],
     ['option.scope.named', '指定 provider', "Specific provider"],
     ['warn.modelIssue.global', '默认审查模型不可用：{reason}。实际使用：{effective}。', "The default reviewer model is unavailable: {reason}. Currently using: {effective}."],

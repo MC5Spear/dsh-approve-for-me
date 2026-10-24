@@ -349,7 +349,33 @@ RPC 共八项，其中 `presetCatalog` 提供宿主预设目录；统一在 `typ
 - 行状态按 6.2 保存四个独立字段；保存写入规则清单全量，不对模型 id 做字符串切分。
 - 「添加一行」按钮与表头左缘对齐；「操作」列宽不小于 56px，为行内删除按钮与字段右缘留出间隙。
 
-旧 `byParentModel` 字典条目在映射表中呈现：不含斜杠的纯 id 键显示为「任意 provider＋该 id」的规则行；含斜杠旧键显示为待确认行——呈现两种原意（任意 provider 下模型 id 为整键；指定 provider 为首段、模型 id 为余下段），用户选择其一后转为对应结构化规则。确认前按 6.2 兼容链读取、原值保留。保存计划按暂存差异生成：映射表无改动不写映射路径；有改动时写入新结构全量——新结构只收新建行与由旧键确认、编辑转来的行，未编辑的旧键（纯 id 键与未确认的含斜杠键）保留在 `byParentModel`、不写入新结构，不产生同条件双写；已确认或已编辑的旧键从 `byParentModel` 移除。旧字典只减不增；新结构与旧字典并存时，同条件命中按 6.2 兼容链次序（新结构在前）确定性取值。
+执行助手模型列与 provider 列各自支持「目录下拉」与「自定义文本框」两种编辑形态，由页面保持的编辑形态标记（`modelCustom`／`providerCustom`）决定本列渲染哪种控件；标记由页面另行保持，不进入字段暂存表：
+
+- 进入自定义：下拉选中「自定义…」（`card.map.custom`）后本列换为文本框，当前草稿原样带入（空值显示占位符），焦点移入文本框、插入点置于文本末尾。鼠标路径为下拉点选；键盘路径为下拉内方向键选中该项（原生 select 行为）。
+- 返回列表：文本框下方常驻文字按钮（键 `card.map.backToList`，样式与行内删除按钮同款、左对齐），在场条件只是编辑形态标记为真，与文本框内容无关；按钮可用性随表单可写状态，与行内删除按钮一致。激活后本列换回下拉，草稿原样带入：值在目录中→选中对应项；不在目录中→以保留项显示原值（为目录缺项值保留下拉选项）；空值→占位项。焦点移回下拉。鼠标路径为点击按钮；键盘路径为 Tab 聚焦按钮、Enter 或 Space 激活（原生按钮行为）。
+- 切换不变量：仅切换编辑形态时，本行完整模型 id 草稿、作用范围、provider 草稿（含手输值）、审查模型、推理强度与其他行草稿全部保持，不产生任何配置写入。编辑形态标记不进入字段暂存表、暂存差异比较与保存计划：只切换过形态的表单仍是「无改动」，映射字段无暂存条目，「恢复默认」按钮不因此在场，保存按钮不因此可用；只有四字段条件与选择的差异（含 clear）构成映射字段的暂存条目，保存始终只写四字段条件与选择（6.2）。该不变量适用于结构化行——纯 id 旧键行进入自定义输入即转为结构化行、构成映射字段的改动（保存按钮可用，旧键按保存计划迁移）。
+- 呈现与往返：目录缺项值与含斜杠的完整模型 id 在下拉中经保留项原样显示，在文本框中经控件值与 `title` 原样显示；两种形态往返不丢、不改写、不按目录猜测。手输值恰与目录某项相同时，返回列表后直接选中该项；空值往返保持为空。
+- provider 列目录不可读：目录不可读时 provider 列为文本框，不显示返回按钮——下拉无可列项，返回不构成可用形态；已输值保留可编辑。目录恢复可读后，`providerCustom` 仍为真的行显示文本框与返回按钮，返回后按「返回列表」条目带入草稿。
+- 执行助手模型列目录不可读：目录不可读时模型列仍渲染下拉（占位项＋当前值保留项＋「自定义…」）；`modelCustom` 为真时为文本框加返回按钮，返回后按「返回列表」条目呈现。
+- 作用范围切换是字段编辑：选「任意 provider」把 provider 置空值、`providerCustom` 置假；选「指定 provider」把 provider 置目录首个 id（目录不可读时置空串）、`providerCustom` 置假。返回列表不经过作用范围切换，用「返回列表选择」按钮完成；`modelCustom` 不随作用范围切换变化。
+- 行形态边界：待确认含斜杠旧键行不参与双向切换，确认前值只读；确认或经编辑转为结构化行后适用本段规则，纯 id 旧键行经任一编辑（含进入自定义输入）即转为结构化行。保存成功后行状态由配置重建，编辑形态标记置假、回到列表形态。行删除或映射字段执行「恢复默认」（clear）后行集合重建，编辑形态标记随原行销毁置假；多行的标记各自独立保持，不迁移到其他行。
+- 空值行衔接：文本框清空的行即空模型行，按 `card.map.incomplete` 规则显示行级说明、不进保存计划；该规则对两种编辑形态一致。
+
+旧 `byParentModel` 字典条目在映射表中呈现：不含斜杠的纯 id 键显示为「任意 provider＋该 id」的规则行；含斜杠旧键显示为待确认行——呈现两种原意（任意 provider 下模型 id 为整键；指定 provider 为首段、模型 id 为余下段），用户选择其一后转为对应结构化规则。确认前按 6.2 兼容链读取、原值保留。保存计划按暂存差异生成：映射表无改动不写映射路径；有改动时写入新结构全量——新结构只收新建行与由旧键确认、编辑转来的行，未编辑的旧键（纯 id 键与未确认的含斜杠键）保留在 `byParentModel`、不写入新结构，不产生同条件双写；已确认或已编辑的旧键从 `byParentModel` 移除。旧字典只减不增；新结构与旧字典并存时，同条件命中按 6.2 兼容链次序（新结构在前）确定性取值。映射字段暂存 clear 后的行添加或编辑以最终清单为准：值条目取代 clear 条目，保存按 set 写入新结构全量、用户层键在场——「已单独设置」胶囊如实反映该显式覆盖，与单值字段 clear 后再编辑的同一暂存语义一致（有意语义，非特例分支）。
+
+映射表列内布局与盒模型口径：
+
+- `.dsafm_input` 声明 `box-sizing:border-box`。同一样式类同时服务下拉与文本框，两者的浏览器默认计宽口径不同——文本框按 content-box、下拉按 border-box；`width:100%` 加左右内边距与边框在 content-box 下必然超出列轨道（隔离复测口径见 10.2 A4 的布局矩阵）。归一 border-box 后，`width:100%` 即所属列轨道内容盒宽，34px 高含边框，与 `.dsafm_area` 及宿主官方输入规格一致。归一作用于该样式类的全部使用点（字段行文本框、映射表下拉与文本框、provider 手输框、旧键只读框），多行文本已自带同口径。
+- 列内控件宽度：下拉与文本框占满所属列轨道（`width:100%`、`min-width:0`），不越轨道；返回按钮为文字自然宽、左对齐，不宽于同列文本框，极窄列下文字按 normal 换行、宽度上限为同列文本框宽（`max-width:100%`），不裁切、不用省略号；单元格内文本框与返回按钮纵向堆叠，间距与作用范围列的堆叠间距一致（4px）。34px 高、8px 圆角与 8px 列间距沿用现行值。
+
+映射表布局验收口径（供自动化测试与真实页面巡检，判定对象为渲染后的元素矩形与计算样式）：
+
+1. 行网格内任意两个控件的外边界矩形两两不相交。
+2. 五列形态下映射表行网格内相邻两列控件的矩形水平间距不小于 7px（8px 列间距减 1px 的容差）；文本框外边界不与下一列控件相交。判据 2 只作用于映射表行网格内，不套用 `.dsafm_ctl` 等非网格布局——默认审查模型行两下拉间距 6px 属现行合法形态。
+3. 下拉与文本框的计算高度为 34px（容差 1px），圆角为 8px。
+4. 行容器与表单容器不因映射表控件产生横向滚动（`scrollWidth` 不大于 `clientWidth`）；共用 `.dsafm_input` 的其余控件按第 1、4 条同判，无布局退化。
+5. 视口不大于 520px 时行收单列、表头隐藏（现行断点），按第 1、3、4 条判定；视口较宽而宿主设置容器较窄时五列随容器压缩，按第 1–4 条判定，不设最低列宽。
+6. 重叠修复不以隐藏或裁切文本框末端实现；文本框外边界实际落在所属列轨道内，由第 1、2 条判定。
 
 数字字段的输入与校验文案使用官方 `SettingsValueField`，外套共用字段外壳（标签行与覆盖组外置）；下拉、布尔、多行及模型控件采用共用字段外壳和草稿模型。字段标签、说明、「已单独设置」状态和说明入口结构一致：13px 标签、12px 说明、字段间细分隔、12px 上下间距；普通控件 34px 高、8px 圆角，使用宿主现行颜色令牌。保存按钮只有草稿合法且有改动时可用，写失败保留草稿。每个字段的常驻文字说明入口按 7.2.1 实现。
 
@@ -474,6 +500,7 @@ aria 语义：`aria-expanded` 表开合；`aria-controls` 关联展开区域 `he
 | `option.legacy.any` | 任意 provider，模型 id 为 {id} | Any provider, model id {id} |
 | `option.legacy.named` | 指定 provider {provider}，模型 id 为 {id} | Provider {provider}, model id {id} |
 | `card.map.legacy.pending` | 确认前按兼容规则读取，原值保留。 | Until confirmed, the key keeps its value and is read per the compatibility rules. |
+| `card.map.backToList` | 返回列表选择 | Back to list |
 | `warn.modelIssue.global` | 默认审查模型不可用：{reason}。实际使用：{effective}。 | The default reviewer model is unavailable: {reason}. Currently using: {effective}. |
 | `warn.modelIssue.rule` | 此规则选择的审查模型不可用：{reason}。实际使用：{effective}。 | The reviewer model picked by this rule is unavailable: {reason}. Currently using: {effective}. |
 | `warn.modelIssue.session` | 本会话选择的审查模型 {configured} 不可用：{reason}。实际使用：{effective}。 | This session's reviewer model {configured} is unavailable: {reason}. Currently using: {effective}. |
@@ -1014,7 +1041,7 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
 - A1 控件与暂存：控件回读、暂存保存恢复、覆盖组拆分显隐——「已单独设置」胶囊只随用户层在场（未保存的改动不产生胶囊、保存落库后出现、暂存恢复默认在保存的 unset 生效前胶囊仍在场），「恢复默认」按钮随用户层键或暂存条目任一在场；时限零值语义（审查 0 立即超时、人工 0 立即拒绝）；秒数非法输入仍保生效值；已配置但不存在的预设显式提示且不丢弃用户值；英文 id、两语言独立。
 - A2 语言与标点：英文界面标点按 7.5 封闭清单逐点断言半角形态（触发器模型段 `Reviewer model: `、失败分支 `Switch failed: `、菜单推理强度项 `Effort: `、枚举后缀 ` (〈原值〉)`、并列连接 `, `、保存失败冒号），中文档同点位断言全角形态，两语言各自成独立用例；英文字典序列化文本对全角字符类（U+3000–U+303F、U+FF01–U+FF60）零命中，client.js 字符串值、模板字符串与正则式的全角字符扫描按 7.5 封闭白名单断言。
 - A3 卡片真实状态与及时显隐、人工零时限立即结算不出现等待瞬态。
-- A4 映射表：作用范围控件回显与手输、重复条件行级错误与保存禁用、空执行助手模型行的行级说明在场（`card.map.incomplete`，12px、`label-secondary`、非错误色）且保存时不保留该行、「添加一行」按钮与表头左缘对齐与「操作」列宽不小于 56px 的样式断言、含斜杠旧键迁移确认两分支与确认前原值保留。
+- A4 映射表：作用范围控件回显与手输、重复条件行级错误与保存禁用、空执行助手模型行的行级说明在场（`card.map.incomplete`，12px、`label-secondary`、非错误色）且保存时不保留该行、「添加一行」按钮与表头左缘对齐与「操作」列宽不小于 56px 的样式断言、含斜杠旧键迁移确认两分支与确认前原值保留；双向切换（7.2）——任意 provider 与指定 provider 两个作用范围各完成「列表→自定义→列表→自定义」：选「自定义…」后该列渲染文本框与返回按钮（`card.map.backToList`），激活返回后渲染下拉；目录不可读时执行助手模型列仍渲染下拉、provider 列恒为文本框且无返回按钮，目录恢复可读后 `providerCustom` 为真的行返回按钮在场；保存成功后映射行回到列表形态——暂存清空、行由新配置快照重建、编辑形态标记不在；切换不变量——仅切换形态时本行作用范围、provider（含手输值）、完整模型 id、审查模型、推理强度与其他行草稿逐字段保持，不触发配置写入，标记不进字段暂存表：纯切换后映射字段无暂存条目、「恢复默认」按钮不在场、保存按钮不因此可用（不变量适用于结构化行，纯 id 旧键行进入自定义即转结构化行、构成改动）；返回带入——手输值在目录中→选中对应项、不在→保留项显示原值、空→占位项，目录缺项值与含斜杠完整模型 id 两形态往返不改写；布局——`.dsafm_input` 规则文本含 `box-sizing:border-box`、`height:34px`、`border-radius:8px`、`width:100%` 与 `min-width:0`，返回按钮规则含 `max-width:100%`（CSS 文本断言），矩形判据（控件外边界不越所属列轨道、相邻列控件间距不小于 7px、计算高 34px 容差 1px、不新增横向滚动）按 7.2 验收口径经布局矩阵执行（隔离浏览器复用映射表控件与网格样式），共用该样式类的其余控件（provider 手输框、旧键只读框、字段行文本框）同判无退化。
 - A5 分置提示：三类分置提示按 7.2.0 位置与内容出现且级联同屏保留；会话选择不可用提示句含所配引用（`{configured}` 渲染为条目 `configured` 原值）与实际使用引用，`global`／`rule` 键不含 `{configured}`；`effectiveModel` 空串形态（`global`／`rule`／`session`／`globalUnsetShadowed` 键）的层含义句与首句句间连接随语言断言——英文两句间恰一个半角空格、中文直连无空格（判定源 `warn.modelIssue.layer`）；裸 id 配置（全局默认或映射目标）回退时，触发器模型段引用与提示句实际使用引用逐字一致（条目 `effectiveModel` 归一为解析后的 `provider/model`，与 `state.effective` 同口径）；空全局默认提示在设置页顶部与 composer 出现（reviewer.model 为空即出现；composer 条目与会话不可用条目互斥、控件附近至多一条；effectiveLayer=follow-parent 时用 followParent 键、否则用 globalUnsetShadowed 键且不得出现「按未设置的全局默认跟随」声称；effectiveModel 空串时省略「实际使用」句，不可用键与 globalUnsetShadowed 键的层含义句在场、followParent 与 globalUnset 键无冗余层句）。
 - A6 触发器结构：两段结构按 7.3.2 断言——`.dsafm_seat_model` 与 `.dsafm_seat_effort` 分别在场；档位文案按生效层断言——`state.layer === 'session'`（会话层生效）时档位段文本＝`sessionEffort` 原值（未指定即 `effort.default`「自动选择」；显式档位不被支持时仍显示所选原值），其余形态（回退与未单独选择）档位段文本＝`effectiveEffort` 原值（未指定且模型支持 `low` 时为 `low`、空串即 `effort.default`，undefined 无档位段）；回退形态断言——`sessionModel` 已设置且 `modelIssues` 含 `scope='session'` 条目时档位段显示回退后生效档位、触发器出现回退标识段（文本＝`composer.fallbackBadge` 取值、复用 `.dsafm_badge` 样式、插在档位段之后）、`aria-label` 以两段拼接文本开头并以一个半角空格承接回退标识文案；反例——会话层生效与未单独选择两种形态渲染树无回退标识段；两段拼接文本逐字等于 `审查模型：{模型引用} · {档位文案}`（中文）与 `Reviewer model: {模型引用} · {档位文案}`（英文）；`aria-label` 以该拼接文本开头并含完整模型引用与档位文案；无生效模型时 `.dsafm_seat_model` 在场且文本为 `composer.followGlobalShort`（取值见 7.3.1）、`.dsafm_seat_effort` 不在渲染树；既有触发器的单段拼接断言与整体 `composer.followGlobalShort` 断言按两段结构改写为按元素断言；`.dsafm_seat_name` 在 CSS 文本与渲染树两处断言零残留（防只删样式不删元素），`max-width:160px` 在 CSS 文本断言零残留。
 - A7 样式逐属性断言：`.dsafm_seat` 含 `min-width:0` 与 `max-width:min(100%, calc(100vw - 156px))`，`.dsafm_seat_model` 含 `flex:0 1 auto`、`min-width:0`、`text-overflow:ellipsis`，`.dsafm_seat_effort` 含 `flex:none` 与 `white-space:nowrap`，`.dsafm_seat_pending` 含 `flex:0 1 auto`、`min-width:0`、`max-width:180px`、`overflow:hidden`、`text-overflow:ellipsis`、`white-space:nowrap`，`.dsafm_badge` 含 `flex:none`、`font-size:11px`、`margin-left:6px`，`.dsafm_seatwrap` 含 `display:inline-flex`、`flex-direction:column`、`align-items:flex-start`、`min-width:0`、`gap:4px`，`.dsafm_seatwrap>*` 含 `min-width:0` 与 `max-width:100%`（防宿主锚点的 `min-width:auto` 把触发器顶出包裹层），媒体查询行 `@media (max-width:1279.98px)` 在 CSS 文本在场且其内 `.dsafm_seatwrap .dsafm_warnline` 含 `margin-left:78px`（选择器带 `.dsafm_seatwrap` 作用域，设置页提示行不受避让影响）。
@@ -1025,7 +1052,7 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
 **说明入口与名称断言清单**：
 
 - B1 说明入口：7.2.1/7.2.2/7.3.1/7.4/7.4.1/8.5.1 的键值与行为——20 个字段各有一个带可见文字的说明按钮、`aria-expanded`/`aria-controls` 成对、展开后按钮文字变「收起说明」、再点收起；开合前后暂存表、保存计划、保存可用性、输入值与常驻提醒句均不变。
-- B2 文案断言分层：短文案（字段名、选项、枚举、模板句、占位符键）逐键精确断言中英定稿值；长帮助与提示（`help.*`、长 `warn.*`、`view.retention`、`card.presets.missing.remedy`）断言关键事实、条件、占位符、语言与显示位置，配合人工文案审查；固定术语、协议原值与需求明确要求保留的安全原文继续精确检查；退役键不出现在字典（测试替身中仅防回潮装置可引用退役键名，并断言其不被消费）；`card.presets.none`/`missing`/`unavailable` 的短文案与空清单两分支逐键断言，`missing.remedy` 按长帮助口径断言；7.4.1 的 `cardcause.modelUnavailable`、`cardcause.outputInvalid`、`cardcause.other`、`cardcause.timeout` 四键中英定稿值进逐键断言清单；界面复用的 `degraded.queue-overflow`／`queue-timeout`／`breaker-open`／`output-empty`／`output-truncated` 五键不另立取值，断言与 §8.5.1 的既有词条同键同值。
+- B2 文案断言分层：短文案（字段名、选项、枚举、模板句、占位符键）逐键精确断言中英定稿值；长帮助与提示（`help.*`、长 `warn.*`、`view.retention`、`card.presets.missing.remedy`）断言关键事实、条件、占位符、语言与显示位置，配合人工文案审查；固定术语、协议原值与需求明确要求保留的安全原文继续精确检查；退役键不出现在字典（测试替身中仅防回潮装置可引用退役键名，并断言其不被消费）；`card.presets.none`/`missing`/`unavailable` 的短文案与空清单两分支逐键断言，`missing.remedy` 按长帮助口径断言；7.2.2 的 `card.map.backToList` 进逐键断言清单；7.4.1 的 `cardcause.modelUnavailable`、`cardcause.outputInvalid`、`cardcause.other`、`cardcause.timeout` 四键中英定稿值进逐键断言清单；界面复用的 `degraded.queue-overflow`／`queue-timeout`／`breaker-open`／`output-empty`／`output-truncated` 五键不另立取值，断言与 §8.5.1 的既有词条同键同值。
 - B3 鼠标与键盘：替身上对按钮分别调点击处理器与 keydown 处理器（Enter 与 Space 各一次），断言 `aria-expanded` 翻转与展开区显隐（装置层不转译键事件，键盘路径由组件自身承载）。
 - B4 数字字段承载：数字字段不传 `help` 且外套字段外壳（标签旁说明按钮、覆盖组自绘），归零与收行两条 `.dsafm_numhost` 承载规则、退役规则 `.dsafm_f_help` 零残留与统一分隔线 `.dsafm_field + .dsafm_field` 在场均在 CSS 文本断言，防官方空标签行露出、内边距叠加与字段间分隔线丢失。
 - B5 双主题样式：样式类（`min-width/min-height:24px`、`label-secondary` 取色、`focus-visible`）在 CSS 文本与 DOM 替身双核对。
@@ -1112,6 +1139,12 @@ stderr 的一行是一条日志记录，不是一次审批的全部内容。阶�
   6. 空串成句规则——不可用键与 `globalUnsetShadowed` 键空串时「实际使用」句省略且层含义句（`warn.modelIssue.layer`）在场，`globalUnset`／`followParent` 键无冗余层句。
   7. 浅色与深色主题下分别用计算样式读取提示文字与背景取值，按 WCAG 相对亮度公式断言对比度 ≥4.5:1（与说明按钮巡检同法；浅色主题断言文字取插件声明的 `#92400e` 而非 warn-label 令牌值，深色主题断言 warn-label 令牌值）。
   8. 层含义文案的括号随语言断言——中文帧的提示句含「实际使用：全局默认（global）：<引用>」（「默认」与「（」之间无空格），英文帧含 `Currently using: Global default (global): <ref>`（括号前恰一个半角空格、后紧贴）。
+- 映射表自定义输入巡检（执行者：巡检脚本与人工，主题轮次与截图留证沿用本节总述口径）：
+  1. 往返与路径：设置页映射行在任意 provider 与指定 provider 两个作用范围各完成「列表→自定义→列表→自定义」，鼠标路径（下拉点选「自定义…」、点击「返回列表选择」）与键盘路径（下拉方向键选中「自定义…」、Tab 聚焦返回按钮＋Enter 或 Space）各走一遍；中文与英文界面各一轮。进入自定义后断言 `document.activeElement` 为文本框且 `selectionStart` 等于文本长度，返回后为对应下拉。切换前后读行内控件值与保存按钮可用态，断言本行作用范围、provider（含手输值）、完整模型 id、审查模型、推理强度与其他行草稿不变，纯切换后映射字段无暂存条目、「恢复默认」按钮不在场；往返全程不触发保存，设置快照前后一致。巡检末轮另以自建实例自由数据真实保存复检——保存并重开设置页，复检映射行回到列表形态、行值与保存内容一致。
+  2. 返回带入三形态：手输目录内值、目录缺项值（含含斜杠完整模型 id）与空值各构造一例，断言返回后分别为选中对应项、保留项原值、占位项，再次进入自定义不改写文本框内容；两态各截一帧。
+  3. 目录不可读形态：真实例的模型目录经宿主 RPC 读取、恒可读，不构造服务故障；目录不可读与恢复可读的形态不在真页巡检范围，由 10.2 A4 的测试替身断言承载。
+  4. 矩形与视觉：两种编辑形态下逐控件读 `getBoundingClientRect` 与计算样式，按 7.2 布局验收口径第 1–4 条断言（控件矩形两两不相交、相邻列间距不小于 7px、计算高 34px 容差 1px、圆角 8px、无新增横向滚动）；截图由具备视觉能力的核查者实际读取，核对切换入口可见可点、输入框末端可见、文字无遮挡截断。
+  5. 窄形态：视口不大于 520px 取单列帧（行收单列、表头隐藏），按 7.2 布局验收口径第 1、3、4 条判定（单列无相邻列，第 2 条不适用）；视口宽而宿主设置容器窄取五列压缩帧，按第 1–4 条判定；各帧截图留证。
 
 静态 DOM 判据由 `tools/build-dom-dump.mjs` 三件套（`test/settings-dom-dump.test.mjs`、`test/fixtures/settings-dom-dump.txt`）同步承载：说明按钮计数 20 个、全部带可见文字与成对 aria 属性、点击后展开区在场；字段清单对照测试内转抄的 20 字段标签清单逐项核对（转抄清单不随字段集增删自动变红，字段集变更须重采夹具），控件取值经 `normalizeConfig` 与生效配置动态对账，退役字段不出现在 dump。旧截图与接口返回不作为界面验证证据。
 
