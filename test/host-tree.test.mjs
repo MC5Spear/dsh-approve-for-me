@@ -4,12 +4,12 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 /**
- * 宿主解析树的锚点守卫：把 `tools/_host-resolve.mjs` 的锚点改回 0.1.7 树时，
+ * 宿主解析树的锚点守卫：`tools/_host-resolve.mjs` 的锚点指向其他宿主版本时，
  * 套件其余用例不会变红——本守卫钉住的就是这个缺口。
  * 本用例断言：宿主解析钩子生效时（npm test 带 `--import ./tools/_host-hooks.mjs`），
  * `@deepseek-ai/dsh-llm` 解析出的实体版本必须与本包 `package.json` 的锁定版本一致——
- * 锚点退回 0.1.7 树（解析出 0.1.7-rc.1）即红；离线跑（无钩子）时解析到仓库自带
- * `node_modules` 的同版实体，锁文件与锁定版本不一致同样会红。
+ * 锚点树与锁定版本不符即红；离线跑（无钩子）时解析到仓库自带 `node_modules` 的
+ * 实体，实体版本与锁定版本不一致同样会红。
  */
 
 /** 从解析出的实体 URL 定位包根，读取其 package.json，返回 version 字段与解析 URL。 */
@@ -23,7 +23,7 @@ function resolvedPackageVersion(specifier) {
   };
 }
 
-test('守卫：dsh-llm 宿主解析版本与 package.json 锁定版本一致（锚点退回 0.1.7 树即红）', () => {
+test('守卫：dsh-llm 宿主解析版本与 package.json 锁定版本一致（锚点指向其他版本即红）', () => {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   const pinned = pkg.dependencies['@deepseek-ai/dsh-llm'];
   const { resolved, version } = resolvedPackageVersion('@deepseek-ai/dsh-llm');

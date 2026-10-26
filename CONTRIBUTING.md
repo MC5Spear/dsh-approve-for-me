@@ -55,6 +55,8 @@ npm run probe:typert        # 离线校验 ./typert 清单
 
 涉及真实实例的端到端验证请在你**自己的实例**上跑。那类取证工具（`tools/browser-shot.mjs` 浏览器驱动、`tools/probe-rpc.mjs` 实例 RPC 探针、`tools/probe-composer-dom.mjs` 页面结构探针等）**随本仓发布**：接入坐标（实例地址、token 文件、浏览器路径、输出目录）一律经 `tools/local-config.mjs` 给定或显式传参，脚本不含机器事实，可在你自己的实例上排障取证；**运行产物**（截图、DOM 转储、步骤脚本）落在本机配置的输出目录，不进提交。
 
+会话日志类探针（`tools/probe-sessions.mjs`、`tools/probe-review-coverage.mjs`、`tools/probe-approval-coverage.mjs`、`tools/probe-r28-zh-inject.mjs`、`tools/probe-stderr-shapes.mjs`）读你指定的 home：优先 `DSH_HOME` 环境变量、未设置时回落 `~/.dsh`（历史布局），实际目标打印在输出首行；会话日志的两种命名（`session.jsonl.zstd` 与 `session.vN.jsonl.zstd`）都认、每会话取最高代。按时间分类的口径（如 `probe-approval-coverage.mjs` 的 `--trace-epoch`）由你显式给出，脚本不内置单机日期。
+
 ## 本仓自身约定（fork 维护者参考）
 
 **公开内容边界**：

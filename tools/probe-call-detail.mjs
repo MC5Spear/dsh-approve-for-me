@@ -15,7 +15,7 @@ if (session === '' || callId === undefined) {
   console.error('usage: node tools/probe-call-detail.mjs <sessionId> <callId>');
   process.exit(2);
 }
-const root = join(homedir(), '.dsh', 'sessions');
+const root = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'sessions');
 
 let file;
 for (const ws of readdirSync(root)) {

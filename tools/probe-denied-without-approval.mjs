@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { readSessionLog } from './session-log.mjs';
 
-const root = join(homedir(), '.dsh', 'sessions');
+const root = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'sessions');
 /** 结构化标记：dsh-sandbox 的固定词汇，可信。 */
 const MARKER = /\[sandbox: /u;
 /** 裸文本：启发式，只作为"疑似"。 */

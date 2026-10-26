@@ -10,6 +10,18 @@
  *   2. `.local/config.mjs` 配置文件
  *   3. 文档化跳过——返回 undefined，**不抛错、不内置任何回退机器事实**
  *
+ * **实例目标的解析优先序**（`instance()`／`resolveInstance()`；安全操作的关键，
+ * 只设匿名环境变量并不等于「覆盖默认实例」）：
+ *   1. 显式指名（`instance('名字')`，工具侧 `--url/--token-file` 显式传参同层）
+ *      ——只认该名，找不到即 undefined，不回落任何默认。
+ *   2. 未指名时取 `defaultInstance`（`DSAFM_INSTANCE` > 配置文件）指向的**具名**实例；
+ *      配置里声明过该具名实例时，匿名环境实例不参与。
+ *   3. 具名默认不存在（未配置/未声明）时，才用匿名回退
+ *      `DSAFM_INSTANCE_URL`／`DSAFM_TOKEN_FILE`（CI 一次性实例的用法）。
+ *   即：想把探针指向别的实例，要么显式传参/指名，要么改 `defaultInstance`；
+ *   只设 `DSAFM_INSTANCE_URL` 在已有具名默认时**不起作用**（这是既有约定，
+ *   不经兼容核对不做静默变更）。连接前请核对 `targetLine()` 打印的目标标识。
+ *
  * 调用方拿到 undefined 时应当「跳过该用例/探针并打印一行说明」（见 missingNotice），
  * 而不是失败：公开克隆者没有本机环境，跳过是预期形态，不是错误。
  *
@@ -18,6 +30,7 @@
  * `DSAFM_<实例名大写>_URL` / `DSAFM_<实例名大写>_TOKEN_FILE`。
  */
 import { existsSync } from 'node:fs';
+import { basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** 本机配置文件的绝对路径（相对本模块定位，因此与 cwd 无关）。 */
@@ -157,22 +170,47 @@ export async function outputDir() {
 }
 
 /**
+ * 实例目标解析（纯函数，测试用假配置直接覆盖优先序矩阵）。
+ *
+ * 优先序见模块头注：显式指名只认该名；未指名先取具名默认实例（匿名环境实例
+ * **不覆盖**已声明的具名默认）；具名默认不存在才用匿名回退。
+ * @param {object} config - `loadLocalConfig()` 归一化后的配置（测试可传假配置）。
+ * @param {string} [name] - 实例名；省略时按默认实例与匿名回退解析。
+ * @returns {{url: string|undefined, tokenFile: string|undefined}|undefined} 接入信息。
+ */
+export function resolveInstance(config, name) {
+  const wanted = name ?? config.defaultInstance;
+  if (config.instances[wanted] !== undefined) return config.instances[wanted];
+  if (name === undefined && config.fallbackInstance !== undefined) return config.fallbackInstance;
+  return undefined;
+}
+
+/**
+ * 连接前的非敏感目标标识行（每次连接前核对，无法确认即停止）。
+ *
+ * 只含实例 URL 与 token 文件**名**（不含目录、不含 token 内容）——足够核对目标，
+ * 又不把机器路径或凭据带进日志/报告。
+ * @param {{url?: string, tokenFile?: string} | undefined} entry - 接入信息。
+ * @returns {string} 一行标识。
+ */
+export function targetLine(entry) {
+  const url = typeof entry?.url === 'string' && entry.url.length > 0 ? entry.url : '-';
+  const tokenFile = typeof entry?.tokenFile === 'string' && entry.tokenFile.length > 0
+    ? basename(entry.tokenFile)
+    : '-';
+  return `[dsafm] 连接目标 url=${url} tokenFile=${tokenFile}`;
+}
+
+/**
  * 取实例的接入信息。
  *
- * 给了名称：只取该名称的实例，找不到返回 `undefined`——不回落默认实例，避免探针悄然
- * 连错目标。具名实例须在配置文件 `instances` 里声明，`DSAFM_<名>_*` 环境变量只覆盖
- * 已声明条目的取值。
- * 未给名称：先取 `defaultInstance` 指向的名称；该名称不存在时才用匿名回退
- * （`DSAFM_INSTANCE_URL` / `DSAFM_TOKEN_FILE`）。
+ * 优先序与安全说明见模块头注与 `resolveInstance()`；这里只做装载与委托。
  * @param {string} [name] - 实例名；省略时按默认实例与匿名回退解析。
  * @returns {Promise<{url: string|undefined, tokenFile: string|undefined}|undefined>} 接入信息。
  */
 export async function instance(name) {
   const config = await loadLocalConfig();
-  const wanted = name ?? config.defaultInstance;
-  if (config.instances[wanted] !== undefined) return config.instances[wanted];
-  if (name === undefined && config.fallbackInstance !== undefined) return config.fallbackInstance;
-  return undefined;
+  return resolveInstance(config, name);
 }
 
 /**

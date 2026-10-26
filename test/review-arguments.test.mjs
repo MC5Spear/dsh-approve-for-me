@@ -1,5 +1,5 @@
 /**
- * 真实工具参数独立送审（requirements §3.1／design §3.1：参数独立成段；其余判据＝既有回归全绿）。
+ * 真实工具参数独立送审（requirements §3.1／design §3.1：参数独立成段）。
  *
  * 真实 `apply` 接线（官方消息构造器＋替身流）：断言落在实际送审消息（`options[0].messages`）上，
  * 不以调用计数或替身名称判定。`prompt.renderArguments` 的占位与序列化另设直测。

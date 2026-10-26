@@ -1,7 +1,7 @@
 /**
  * dsh-approve-for-me — 语法自检。
  *
- * 为什么不是一条 `node --check a && node --check b && …`：文件是新增/改名过的，写死清单就会漏。
+ * 为什么不是一条 `node --check a && node --check b && …`：新增或改名文件时写死清单就会漏。
  * 这里自动枚举入口与 `lib/` 下的全部模块逐个 `node --check`，任何一个失败即整体失败。
  *
  * 为什么必须覆盖 `lib/**`：宿主相关模块（如 `lib/bridge.js`）在离线环境里无法被测试导入，

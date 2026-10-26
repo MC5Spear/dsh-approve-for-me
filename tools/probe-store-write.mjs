@@ -8,9 +8,9 @@ import { readFileSync, existsSync, rmSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
+const home = process.env.DSH_HOME ?? join(homedir(), '.dsh');
 const deployed = join(
-  homedir(),
-  '.dsh',
+  home,
   'profiles',
   'web',
   'node_modules',
@@ -21,7 +21,7 @@ const deployed = join(
 console.log('store module:', deployed, existsSync(deployed));
 const { createTraceStore } = await import(`file:///${deployed.replace(/\\/gu, '/')}`);
 
-const dir = join(homedir(), '.dsh', 'approve-for-me', 'reviews');
+const dir = join(home, 'approve-for-me', 'reviews');
 const key = 'probe-store-write';
 const before = readdirSync(dir);
 console.log('files before:', before.length);

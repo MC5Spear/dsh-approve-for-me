@@ -71,14 +71,10 @@ window.__ModuleLoader__.load({
 		};
 
 		/**
-		 * 14px 下箭头（内联 SVG）。
-		 *
-		 * 为什么不用 `primitives.IconChevronDownOutline14`：宿主（基线 dsh 0.2.1-rc.2）的图标
-		 * 用尺寸变体命名（`IconChevronDownOutline` + `Regular`/`Medium`/`Artwork` 后缀），
-		 * `IconChevronDownOutline14` 在宿主里**不存在**，
-		 * `jsx(undefined)` 直接触发 React #130「Element type is invalid」，
-		 * 结果是槽条目整条崩溃、页面静默空白（宿主 renderer 的报错模板：`slot entry crashed in '<slotKey>'`）。
-		 * 图标名跨版本不稳定，自带内联 SVG 更可靠（design §7.1）。
+		 * 14px 下箭头（内联 SVG）。宿主图标名跨版本不稳定，引用不存在的导出会让
+		 * `jsx(undefined)` 触发 React #130「Element type is invalid」，槽条目整条崩溃、
+		 * 页面静默空白（宿主 renderer 的报错模板：`slot entry crashed in '<slotKey>'`），
+		 * 因此自带内联 SVG（design §7.1）。
 		 * @param {object} props - `className`。
 		 * @returns {object} SVG 元素。
 		 */
@@ -221,6 +217,7 @@ window.__ModuleLoader__.load({
 			"view.loading": "读取中…",
 			"view.loadFailed": "读取审查记录失败",
 			"view.count": "共 {n} 条",
+			"view.count.one": "共 {n} 条",
 			"view.refresh": "刷新",
 			"view.disabled": "审查记录视图已关闭（ui.trace.ownView = false）",
 			"view.readFailed": "记录读取失败或不完整，列表可能缺少条目",
@@ -481,6 +478,7 @@ window.__ModuleLoader__.load({
 			"view.loading": "Loading…",
 			"view.loadFailed": "Failed to load review records",
 			"view.count": "{n} records",
+			"view.count.one": "{n} record",
 			"view.refresh": "Refresh",
 			"view.disabled": "The review-log view is disabled (ui.trace.ownView = false)",
 			"view.readFailed": "Record read failed or incomplete; entries may be missing",
@@ -657,7 +655,7 @@ window.__ModuleLoader__.load({
 
 		/** 注入样式；同一 tagId 只插入一次，避免重复挂载时样式叠加。 */
 		const CSS = [
-			// 设置界面照官方设置表单重绘（规格来源见 docs/design.md；现行宿主令牌表不存在的别名零命中）。
+			// 设置界面按官方设置表单规格实现（规格来源见 docs/design.md；所用别名均存在于现行宿主令牌表）。
 			// 外壳：无卡片边框/圆角/底色，只做纵向布局（按计算样式核）。
 			".dsafm_form{display:flex;flex-direction:column;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary)}",
 			".dsafm_readonly{margin:0 0 12px;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary)}",
@@ -766,8 +764,8 @@ window.__ModuleLoader__.load({
 			// 按位置命中宿主锚点根，不依赖宿主类名；包裹层之外的元素不受影响。
 			".dsafm_seatwrap>*{min-width:0;max-width:100%}",
 			// 窄视口避让（design §7.3.2 避让条）：宿主把模式行压缩后其预设触发器向右溢出、叠在提示行上
-			// （375 带提示帧实测触发器盒右缘 198、提示行左缘 140.44）。78＝74（198−最左座位左缘 124）＋4px
-			// 间隙；门槛取 1280 之下——宽带唯一实测帧 1280 未盖字，375–1280 之间无实测一律避让。
+			// （量测帧：触发器盒右缘 198、提示行左缘 140.44）。缩进 78＝74（198−最左座位左缘 124）＋4px 间隙，
+			// 覆盖已知带提示形态的前置控件避让；门槛取 1280 之下、之上不避让（带宽与判据见 design §7.3.2）。
 			// 只加插件自身左边距：不提升层级、不改宿主布局；提示行收窄后按 anywhere 断行吸收。
 			"@media (max-width:1279.98px){.dsafm_seatwrap .dsafm_warnline{margin-left:78px}}",
 			".dsafm_stack{display:flex;flex-direction:column;gap:6px;min-width:0}",
@@ -842,10 +840,9 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 把字段值渲染成编辑框里的文本。
-		 * @param {unknown} value - 值。
+		 * @param {unknown} value - 字段当前值。
 		 * @param {object} field - 字段定义。
-		 * @returns {string} 文本。
+		 * @returns {string} 编辑框文本。
 		 */
 		function toDraft(value, field) {
 			if (value === undefined || value === null) return "";
@@ -2016,7 +2013,11 @@ window.__ModuleLoader__.load({
 				children: [
 					jsxRuntime.jsx("span", {
 						className: "dsafm_review_count",
-						children: records === null ? t("view.loading") : t("view.count").replace("{n}", String(records.length)),
+						children: records === null
+							? t("view.loading")
+							: records.length === 1
+								? t("view.count.one").replace("{n}", "1")
+								: t("view.count").replace("{n}", String(records.length)),
 					}),
 					error === "" ? null : jsxRuntime.jsx("span", { className: "dsafm_hint dsafm_warn", children: error }),
 					// 读取降级必须可见——「列表可能不完整」不是错误（数据仍在），用警示色而非错误文案。
@@ -2225,18 +2226,21 @@ window.__ModuleLoader__.load({
 				const metaParts = [];
 				const metaOf = (titleKey, value, formatter) => {
 					if (value === undefined || value === null || value === "") return;
+					// 标题—取值冒号随标题语言（design §7.5）：标题片段恒经字典本地化，中文标题接全角冒号。
+					const colon = /[\u3400-\u9fff]/u.test(t(titleKey)) ? "：" : ": ";
 					if (formatter !== undefined) {
 						const text = formatter(value);
 						if (text === null) return;
-						metaParts.push(`${t(titleKey)}: ${text}`);
+						metaParts.push(`${t(titleKey)}${colon}${text}`);
 						return;
 					}
-					metaParts.push(`${t(titleKey)}: ${String(value)}`);
+					metaParts.push(`${t(titleKey)}${colon}${String(value)}`);
 				};
 				// 旧格式详情（有模型结论、无最终结果）按 design §8.5 同样说明结果缺失——outcome 缺失
 				// 且 decision 在场时显式标注，不静默跳过；其余字段仍按 §8.4「取不到明确缺失」不设假占位。
 				if ((record.outcome === undefined || record.outcome === null || record.outcome === "") && typeof record.decision === "string" && record.decision.length > 0) {
-					metaParts.push(`${t("detail.outcome")}: ${t("view.noOutcome")}`);
+					// 与 metaOf 同口径：冒号随「detail.outcome」标题片段的语言（design §7.5）。
+					metaParts.push(`${t("detail.outcome")}${/[\u3400-\u9fff]/u.test(t("detail.outcome")) ? "：" : ": "}${t("view.noOutcome")}`);
 				} else {
 					metaOf("detail.outcome", record.outcome, (value) => (decisionKeyOf(value) === null ? String(value) : t(decisionKeyOf(value))));
 				}
@@ -2613,9 +2617,8 @@ window.__ModuleLoader__.load({
 				conditionCounts.set(key, (conditionCounts.get(key) ?? 0) + 1);
 			}
 			/**
-			 * 行是否处于重复条件状态。
 			 * @param {object} row - 行状态。
-			 * @returns {boolean} 是否重复。
+			 * @returns {boolean} 行条件键在显示表中出现超过一次。
 			 */
 			const duplicateRow = (row) => {
 				const key = rowConditionKeyOf(row);
@@ -2624,9 +2627,8 @@ window.__ModuleLoader__.load({
 			// rule 作用域的醒目提示按行条件配对（design §7.2.0）：条件键同一比较口径。
 			const ruleIssues = issuesOf(issues, "rule");
 			/**
-			 * 行附近渲染的 rule 作用域提示。
 			 * @param {object} row - 行状态。
-			 * @returns {object[]} 提示元素（通常 0 或 1 条）。
+			 * @returns {object[]} 条件键配对命中的提示（通常 0 或 1 条）。
 			 */
 			const rowIssuesOf = (row) => {
 				const key = rowConditionKeyOf(row);
@@ -2635,14 +2637,12 @@ window.__ModuleLoader__.load({
 			};
 
 		/**
-			 * 写入一个暂存条目。
 			 * @param {string} key - 字段路径（"." 连接）。
-			 * @param {object} entry - 暂存值（{text}/{value}/{clear}）。
+			 * @param {object} entry - 暂存值（{text}/{value}/{clear}，只有保存才写库）。
 			 * @returns {void}
 			 */
 			const stageEntry = (key, entry) => setStaged((previous) => ({ ...previous, [key]: entry }));
 			/**
-			 * 暂存 FIELDS 文本。
 			 * @param {object} field - 字段定义。
 			 * @param {string} text - 编辑文本。
 			 * @returns {void}
@@ -2655,9 +2655,8 @@ window.__ModuleLoader__.load({
 			 */
 			const stageClear = (path) => stageEntry(path.join("."), { clear: true });
 			/**
-			 * 暂存结构化值（presets 数组 / model 对象 / 行表 / 布尔）。
 			 * @param {readonly string[]} path - 字段路径。
-			 * @param {unknown} val - 值。
+			 * @param {unknown} val - 结构化值（presets 数组 / model 对象 / 行表 / 布尔）。
 			 * @returns {void}
 			 */
 			const stageValue = (path, val) => stageEntry(path.join("."), { value: val });
@@ -2838,8 +2837,7 @@ window.__ModuleLoader__.load({
 
 			/**
 			 * 保存：一次 `mutate` 写入全部暂存；成功清空暂存（显示值回落到新快照），
-			 * 失败保留暂存供修改（官方语义）。宿主控制器对「宿主拒绝」解析 false 而不抛错
-			 * （0.1.7 已如此，0.2.1-rc.2 复核维持）。
+			 * 失败保留暂存供修改（官方语义）。宿主控制器对「宿主拒绝」解析 false 而不抛错。
 			 * @returns {void}
 			 */
 			const save = () => {
@@ -3117,7 +3115,7 @@ window.__ModuleLoader__.load({
 				for (const row of displayTable) requestEfforts(row.ref);
 			});
 
-			/** 模型选择字段的暂存入口。 */
+			/** @type {(next: object) => void} 模型选择写入暂存（保存才写库）。 */
 			const stageModel = (next) => stageValue(["reviewer", "model"], next);
 
 			const chooseDefaultModel = (ref) => {
@@ -3203,9 +3201,8 @@ window.__ModuleLoader__.load({
 			};
 
 			/**
-			 * 普通字段行（select/bool/lines/数字）；数字字段用官方 `SettingsValueField`，其余走字段外壳自绘。
 			 * @param {object} field - 字段定义。
-			 * @returns {object} 行元素。
+			 * @returns {object} 行元素；数字字段用官方 `SettingsValueField`，其余走字段外壳自绘。
 			 */
 			const fieldRow = (field) => {
 				if (field.kind === "number") return numberField(field);
@@ -3533,7 +3530,7 @@ window.__ModuleLoader__.load({
 				);
 			});
 
-			/** 默认审查模型行（字段外壳＋模型/档位两个下拉，选择即暂存）。 */
+			/** 默认审查模型行：模型/档位选择即暂存，保存才写库。 */
 			const modelRow = () =>
 				fieldShell({
 					label: t("card.field.defaultModel"),
@@ -3551,7 +3548,7 @@ window.__ModuleLoader__.load({
 						}),
 				});
 
-			/** 按执行助手模型映射行（字段外壳＋全宽五列结构化规则表，增删改只暂存）。 */
+			/** 按执行助手模型映射行：全宽五列规则表，增删改只暂存、保存才写库。 */
 			const mapRow = () =>
 				fieldShell({
 					label: t("card.field.parentModelRules"),
@@ -3591,7 +3588,7 @@ window.__ModuleLoader__.load({
 						}),
 				});
 
-			/** 接管预设行（字段外壳＋多选 picker；勾选只暂存）。 */
+			/** 接管预设行：多选 picker 勾选只暂存，保存才写库。 */
 			const presetsRow = () =>
 				fieldShell({
 					label: t("card.presets.label"),
@@ -3652,7 +3649,7 @@ window.__ModuleLoader__.load({
 			});
 		}
 
-		/** 需要的客户端服务：slot 注册表、字典、RPC 载体、设置表单（0.1.7 的 configForms）、会话列表。 */
+		/** 需要的客户端服务：slot 注册表、字典、RPC 载体、设置表单（configForms）、会话列表。 */
 		const inject = ["slots", "locale", "connection", "configForms", "sessions"];
 
 		/**
@@ -3749,9 +3746,8 @@ window.__ModuleLoader__.load({
 			};
 
 			/**
-			 * 订阅会话列表变化。
 			 * @param {() => void} listener - 回调。
-			 * @returns {(() => void) | undefined} 取消订阅函数。
+			 * @returns {(() => void) | undefined} 取消订阅函数；服务不可用时 undefined（调用方按无变化处理）。
 			 */
 			const subscribeSessions = (listener) => {
 				try {
@@ -3763,7 +3759,7 @@ window.__ModuleLoader__.load({
 
 			// 设置表单（requirements §6.1／design §7.2）：本包详情页 `plugins.bundle.config`（keyed，键＝包名），生命周期由 `whileServed` 管理——
 			// 宿主没服务本命名空间（或行被停用）时不挂表单，避免读不到控制器的空卡；宿主恢复服务时自动重挂。
-			// 数据源是 `configForms.get(行id)` 控制器（getSnapshot/subscribe/mutate 与 0.1.5 旧 scope 控制器同形）；组件自取控制器，
+			// 数据源是 `configForms.get(行id)` 控制器（getSnapshot/subscribe/mutate）；组件自取控制器，
 			// bundle 级槽的 owner props 只有 `view:'page'`（不注入 form），不注册 `plugins.row.config`（落点唯一）。
 			ctx.effect(
 				() =>
@@ -3818,7 +3814,8 @@ window.__ModuleLoader__.load({
 			// 会话视图「审查记录」（design §8.5 呈现层第一落点）：与「对话」（order 0）、「轨迹」（order 10）并列的
 			// 第三个页签，`list` 座位按 `priority` 再 `order` 升序排，20 恰好排在其后。
 			// owner props 是 `{ viewRequest, openView, completeViewRequest }`；`useTrajectory` 等 hook 走标准 props。
-			ctx.slots.inject("conversation.view", () =>
+			/** 注册 conversation.view 条目；同 id 再注册即替换该格条目（宿主 keyed 槽语义，用于页签标签换语言）。 */
+			const registerReviewView = () =>
 				ctx.slots.register(
 					{
 						name: "conversation.view",
@@ -3829,7 +3826,46 @@ window.__ModuleLoader__.load({
 						inject: () => ({ rpcCall: call, sessionIdOf, subscribeSessions, useNsT }),
 					},
 					ReviewView,
-				),
+				);
+			ctx.slots.inject("conversation.view", registerReviewView);
+
+			// 页签标签随插件界面语言换词（design §7.5 页签合同）：宿主 viewTabs/refreshViews 只在
+			// slots.subscribe、ctx.locale、开发者工具开关三类触发上重投影，插件语言档不在其中——
+			// label thunk 虽然每次投影现读，但没人触发投影就永远不重读。这里在设置行被服务期间订阅
+			// 控制器快照：插件界面语言保存成功（快照变化）且「view.review」标签文本确实变了时，按同 id
+			// 重注册条目，借 slots.subscribe 触发一次重投影；保存失败（快照不变）、文本未变、auto 档
+			// （文本由宿主 locale 决定，宿主自己会触发）都不重注册。基线随宿主 locale 变化同步刷新：
+			// 宿主 locale 变了宿主会自己重投影（页签文本随之正确），这里只把基线换成投影后的文本、
+			// 不重注册——否则 auto 档换语言后再保存强制档，新文本可能与陈旧基线同文而漏掉一次真正
+			// 的换词重注册。重注册失败保持既有条目——下一次宿主触发源仍会现读 thunk。
+			ctx.effect(
+				() =>
+					ctx.configForms.whileServed([NS], () => {
+						const controller = controllerOf();
+						if (typeof controller?.subscribe !== "function") return () => {};
+						let last = nsT("view.review");
+						const disposeLocale =
+							typeof ctx.locale?.subscribe === "function"
+								? ctx.locale.subscribe(() => {
+										last = nsT("view.review");
+									})
+								: null;
+						const disposeConfig = controller.subscribe(() => {
+							const next = nsT("view.review");
+							if (next === last) return;
+							last = next;
+							try {
+								registerReviewView();
+							} catch {
+								// 保持既有条目，不打断其他订阅方。
+							}
+						});
+						return () => {
+							disposeConfig();
+							disposeLocale?.();
+						};
+					}),
+				"approve-for-me: view tab label refresh",
 			);
 
 			// 记录表近似行（可选，默认关；design §8.5）：内部自回退，任何失败只写 window.__dsafmProbe，不影响上面四个挂点。

@@ -156,7 +156,7 @@ test('volatile 热改：apply 挂 loader/volatile-update 监听，mode 热改为
   assert.equal(streamed, 0, 'off 请求期不得触发模型调用');
 });
 
-test('mode=off 时不注册应答者', async (t) => {
+test('mode=off 冷启动仍注册应答器；enabled=false 才装载期不注册（design §2.1）', async (t) => {
   const host = await loadHost();
   if (host === undefined) {
     t.skip('宿主包不可解析（离线环境）');
@@ -171,8 +171,25 @@ test('mode=off 时不注册应答者', async (t) => {
   try {
     const env = makeCtx({ mode: 'off' });
     host.apply(env.ctx, { mode: 'off' });
-    assert.equal(env.listeners.some((entry) => entry.event === 'approval/request'), false);
-    assert.match(written.join(''), /disabled by configuration/);
+    assert.equal(
+      env.listeners.some((entry) => entry.event === 'approval/request'),
+      true,
+      'mode 是 volatile：off 冷启动也注册应答器，跳过在请求期判定——只在装载期判断会让热切 off 再切回的实例拿不回应答器',
+    );
+    const startup = written.join('');
+    assert.match(startup, /answerer registered/, '启动行注册态说明与实际注册态一致');
+    assert.match(startup, /mode=off /, '行内 mode 字段表达档位');
+
+    // enabled=false（非 volatile）维持装载期不注册（等同未安装）。
+    const writtenDisabled = [];
+    process.stderr.write = (chunk) => {
+      writtenDisabled.push(String(chunk));
+      return true;
+    };
+    const envDisabled = makeCtx({ enabled: false, mode: 'rules' });
+    host.apply(envDisabled.ctx, { enabled: false, mode: 'rules' });
+    assert.equal(envDisabled.listeners.some((entry) => entry.event === 'approval/request'), false);
+    assert.match(writtenDisabled.join(''), /disabled by configuration/);
   } finally {
     process.stderr.write = original;
   }
@@ -180,7 +197,7 @@ test('mode=off 时不注册应答者', async (t) => {
 
 // ── 子代理覆盖的接线断言（requirements §2.2／design §2.2）──────────────────
 
-test('接线：rules 模式挂 session/created 监听且装载补扫翻可覆盖子会话；off 模式都不挂', async (t) => {
+test('接线：rules 模式挂 session/created 监听且装载补扫翻可覆盖子会话', async (t) => {
   const host = await loadHost();
   if (host === undefined) {
     t.skip('宿主包不可解析（离线环境）');
@@ -200,13 +217,46 @@ test('接线：rules 模式挂 session/created 监听且装载补扫翻可覆盖
   const second = subagentServices();
   assert.doesNotThrow(() => created.handler(second.child));
   assert.equal(second.appendCalls.length, 1, 'session/created 监听没有翻新委派子会话');
+});
 
-  // off：既无应答者也无 session/created（禁用时翻策略只会留下无人应答的 ask）。
-  const wiringOff = subagentServices();
-  const envOff = makeCtx({ mode: 'off' }, wiringOff.services);
-  host.apply(envOff.ctx, { mode: 'off' });
-  assert.equal(envOff.listeners.some((entry) => entry.event === 'session/created'), false);
-  assert.equal(wiringOff.appendCalls.length, 0, 'off 模式不该发生任何翻策略');
+test('接线：off 冷启动同样挂监听——off 期不翻策略，热切回 rules 后新建委派会话恢复追加', async (t) => {
+  const host = await loadHost();
+  if (host === undefined) {
+    t.skip('宿主包不可解析（离线环境）');
+    return;
+  }
+  const written = [];
+  const original = process.stderr.write;
+  process.stderr.write = (chunk) => {
+    written.push(String(chunk));
+    return true;
+  };
+  try {
+    const wiringOff = subagentServices();
+    const config = { mode: 'off' };
+    const envOff = makeCtx(config, wiringOff.services);
+    host.apply(envOff.ctx, config);
+    const created = envOff.listeners.find((entry) => entry.event === 'session/created');
+    assert.ok(created, 'off 冷启动也注册 session/created 监听（design §2.2：注册一次、事件时点判 mode）');
+    assert.equal(wiringOff.appendCalls.length, 0, 'off 期间装载补扫不翻任何子会话');
+    // off 期间创建的委派子会话：监听入口直调不翻（保持宿主钉死的 never）。
+    const offPeriodChild = subagentServices();
+    assert.doesNotThrow(() => created.handler(offPeriodChild.child));
+    assert.equal(offPeriodChild.appendCalls.length, 0, 'off 期间创建的委派子会话不翻');
+    assert.ok(
+      written.join('').includes('mode=off 期间不翻'),
+      'off 期跳过要留可见审计行',
+    );
+    // 热切回 rules（volatile 引用更新）：新建委派子会话恢复追加。
+    config.mode = 'rules';
+    const afterRules = subagentServices();
+    assert.doesNotThrow(() => created.handler(afterRules.child));
+    assert.equal(afterRules.appendCalls.length, 1, '热切回 rules 后 session/created 恢复翻新委派子会话');
+    // 热切换不是装载边界：不重跑补扫，off 期间创建的子会话不被补翻。
+    assert.equal(offPeriodChild.appendCalls.length, 0, 'mode 热切换不重跑装载补扫（off 期子会话保持 never）');
+  } finally {
+    process.stderr.write = original;
+  }
 });
 
 test('接线：分叉会话按主会话对待——补扫与 session/created 都不翻策略', async (t) => {
@@ -387,7 +437,7 @@ test('退役静态扫描：源码零补丁框架/旧档位键/旧宿主 API 残�
   const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
   /**
-   * 对一份源码跑禁词扫描（注释也算：实现侧注释已清理，残留即违规）。
+   * 对一份源码跑禁词扫描（注释也算：残留即违规）。
    * @param {string} source - 源码文本。
    * @returns {string[]} 命中的禁词。
    */

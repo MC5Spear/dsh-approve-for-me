@@ -222,7 +222,7 @@ test('无 callId 的并发请求各自执行；大批量顺序执行后状态干
   assert.deepEqual(again, { ok: true, value: 'again' }, '重发同键重新执行，不复用任何缓存');
 });
 
-// ── 排队与冷却零值的现行边界（design §5.1；验证留档，不改语义） ────────
+// ── 排队与冷却零值的现行边界（design §5.1） ────────
 
 test('queueMax=0 → 满载时不排队，直接按 queue-overflow 拒绝', async () => {
   const scheduler = createScheduler({ max: 1, queueMax: 0, queueTimeoutMs: 1000 });

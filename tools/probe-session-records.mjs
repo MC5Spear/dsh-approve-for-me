@@ -9,9 +9,9 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 
 const ids = process.argv.slice(2).map((id) => id.replace(/^session-/u, ''));
+const home = process.env.DSH_HOME ?? join(homedir(), '.dsh');
 const deployed = join(
-  homedir(),
-  '.dsh',
+  home,
   'profiles',
   'web',
   'node_modules',
@@ -20,7 +20,7 @@ const deployed = join(
   'trace-store.js',
 );
 const { createTraceStore } = await import(`file:///${deployed.replace(/\\/gu, '/')}`);
-const dir = join(homedir(), '.dsh', 'approve-for-me', 'reviews');
+const dir = join(home, 'approve-for-me', 'reviews');
 
 const store = createTraceStore({ dir, capture: 'full' });
 for (const id of ids) {

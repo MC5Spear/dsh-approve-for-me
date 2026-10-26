@@ -322,8 +322,7 @@ test('createMode：coverage 先于预设分支；非委派不受影响', () => {
 
 test('config：trigger.subagents 默认 review；skip 合法；非法值被 schema 拒', () => {
   assert.equal(normalizeConfig({}).trigger.subagents, 'review');
-  // raw resolve 的默认值是 volatile 引用（0.1.7、0.2.0-rc.2 与 0.2.1-rc.2（schemastery 3.18.5）实测维持）
-  // ——引用当前值是 review，归一化后解包。
+  // raw resolve 的默认值是 volatile 引用——引用当前值是 review，归一化后解包。
   const rawDefault = Config({}).trigger.subagents;
   assert.equal(isVolatile(rawDefault), true, '默认值应是 volatile 引用（否则锚到的 schemastery <3.18.4）');
   assert.equal(rawDefault.get(), 'review');

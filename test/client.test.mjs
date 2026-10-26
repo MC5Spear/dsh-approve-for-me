@@ -158,8 +158,7 @@ function makeCtx(options = {}) {
   const scope = {
     getSnapshot: () => snapshot,
     subscribe: () => () => {},
-    // ConfigFormController 语义（0.1.7 已如此，0.2.1-rc.2 复核维持）：
-    // 宿主拒绝时解为 false 而不抛错。
+    // ConfigFormController 语义：宿主拒绝时解为 false 而不抛错。
     // options.mutateRejects=true 模拟拒绝（快照不变化——recovery 已把宿主状态回读一致）。
     mutate: async (ops) => {
       if (options.mutateRejects === true) return false;
@@ -219,7 +218,7 @@ function makeCtx(options = {}) {
         call: (channel, endpoint, payload) => rpc(channel, endpoint, payload),
       },
     },
-    // 0.1.7 configForms 服务：get(entryId) 返回控制器；whileServed(namespaces, register)
+    // configForms 服务：get(entryId) 返回控制器；whileServed(namespaces, register)
     // 在任一命名空间被服务时即 register(servedSet) 一次。默认模拟「已服务」立即注册；
     // options.unserved=true 模拟宿主未服务本命名空间（不调 register——卡片不应挂载）。
     configForms: {
@@ -339,7 +338,7 @@ test('注册四个挂点：设置卡片、composer 下拉、审批卡片状态�
   // 设置表单走 keyed 槽（落点唯一）：键 = 包名；控制器以行 id（不是槽位键）获取，不注册 `plugins.row.config`。
   const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
   assert.equal(card.options.key, 'dsh-approve-for-me');
-  assert.deepEqual(env.servedWatches, [['approve-for-me']], 'whileServed 应只看守本命名空间');
+  assert.deepEqual(env.servedWatches, [['approve-for-me'], ['approve-for-me']], 'whileServed 看守的两个生命周期（设置卡＋页签标签换语言）都只守本命名空间');
   assert.equal(env.injected[0], 'plugins.bundle.config');
   // `conversation.approval.detail` 是 `single`：既有占用者（`ApprovalCommand`）priority 为 0，
   // 只有负数才能成为 `entriesOfSlot[0]`。
@@ -401,7 +400,10 @@ test('设置卡数据源：configForms 以行 id 取控制器，whileServed 管�
   const card = env.registrations.find((entry) => entry.options.name === 'plugins.bundle.config');
   // 注入槽是 thunk：渲染器解析条目时才求值，故测试显式调用一次。
   const injectedProps = card.options.inject();
-  assert.deepEqual(env.formGets, ['approve-for-me'], '控制器以行 id（命名空间）获取，不是槽位键');
+  assert.ok(
+    env.formGets.length >= 1 && env.formGets.every((id) => id === 'approve-for-me'),
+    '控制器以行 id（命名空间）获取，不是槽位键',
+  );
   assert.equal(injectedProps.scope, env.scope, '注入的 scope 是 configForms.get 的返回值');
   assert.equal(typeof injectedProps.rpcCall, 'function');
 });
@@ -1023,8 +1025,25 @@ test('接管工具名单：label 走字典键 field.tools，help.tools 中英同
   const env = makeCtx();
   client.apply(env.ctx);
   const dicts = env.dictionaries[0].dicts;
-  assert.equal(dicts.zh['help.tools'], '纳入自动审批的工具名单，每行一个工具名。空清单覆盖所有工具的升权审批；填写后只处理名单内工具的升权请求，其余工具保持宿主原流程。');
+  // 关键事实分层断言（不盯整句字面）：文案措辞可调，语义要素缺失即红。
+  const zhFacts = (text) => ({
+    每行一个工具名: text.includes('每行一个工具名'),
+    空清单覆盖所有工具: text.includes('空清单覆盖所有工具'),
+    只处理名单内工具: text.includes('只处理名单内工具'),
+    其余工具保持宿主原流程: text.includes('其余工具保持宿主原流程'),
+  });
+  for (const [fact, ok] of Object.entries(zhFacts(dicts.zh['help.tools']))) {
+    assert.ok(ok, `zh help.tools 缺关键事实：${fact}`);
+  }
+  // 变异测试：改坏任一事实，分层断言必须能红（防退化成整句存在性检查）。
+  assert.equal(
+    Object.values(zhFacts(dicts.zh['help.tools'].replace('每行一个工具名', '每行若干工具名'))).every(Boolean),
+    false,
+    '改坏「每行一个」事实后断言必须失败',
+  );
   assert.match(dicts.en['help.tools'], /Tools under auto-approval, one name per line/u);
+  assert.match(dicts.en['help.tools'], /Empty covers every tool's escalations/u, 'en 同步「空清单覆盖全部」事实');
+  assert.match(dicts.en['help.tools'], /the rest keep the host flow/u, 'en 同步「其余走宿主原流程」事实');
   // 字段标签进字典：zh 保留现名，en 有对译；两语言必须同键同在。
   assert.equal(dicts.zh['field.tools'], '纳入自动审批的工具');
   assert.equal(dicts.en['field.tools'], 'Tools under auto-approval');
@@ -3729,6 +3748,7 @@ const REVIEW_TEXT = {
   'view.needSession': '请先打开一个会话',
   'view.empty': '本会话还没有自动审批记录',
   'view.count': '共 {n} 条',
+  'view.count.one': '共 {n} 条',
   'view.readFailed': '记录读取失败或不完整，列表可能缺少条目',
   'view.retention': '记录跟随产生它的会话。界面每次回读最近一个窗口（默认 200 条，随 ui.trace.maxRecords 可配置）；单会话文件超过窗口四倍时轮转，只保留最近一个窗口，更早记录此时删除；会话文件数超上限时删除最旧。需长期留存请在轮转前备份；减少采集不删除已有记录。',
   'list.outcome': '最终审批：{v}',
@@ -3914,6 +3934,115 @@ test('审查视图：协议回落理由按界面语言改写，zh 详情无英�
   assert.ok(!text.includes(DEFAULT_RATIONALE), 'zh 记录详情不得出现英文回落行');
 });
 
+test('审查视图条数单复数（design §8.5.1）：恰一条取 one 键、零与多条取 count 键', async () => {
+  resetHooks();
+  const client = loadClient();
+  const row = (id, at) => ({ approvalId: id, callId: `call_${id}`, toolName: 'pwsh', origin: 'main', escalation: null, startedAt: at, endedAt: at + 10, queueMs: 0, reviewMs: 0, humanWaitMs: null, decision: 'deny', outcome: 'rejected', source: 'llm', reason: 'r', subject: 'npm i', truncated: false });
+  // 只换条数两键（one/count 文本可分辨），其余键沿用 zh 测试字典。
+  const countT = (key) => (key === 'view.count' ? '{n} records' : key === 'view.count.one' ? '{n} record' : REVIEW_TEXT[key] ?? key);
+  /** 每档独立装载一次视图，取回条数行文本（避免组件内部状态跨档复用）。 */
+  const countTextOf = async (records) => {
+    resetHooks();
+    const env = makeCtx({
+      currentSession: 's1',
+      call: async (endpoint) => {
+        if (endpoint === 'approveForMe/traceRecords') return { ok: true, value: { records, readFailed: false } };
+        if (endpoint === 'approveForMe/getState') return { ok: true, value: { trace: { capture: 'summary', ownView: true, turnSummary: true } } };
+        return { ok: true, value: {} };
+      },
+    });
+    client.apply(env.ctx);
+    const view = env.registrations.find((entry) => entry.options.name === 'conversation.view');
+    const props = { t: countT, ...view.options.inject() };
+    render(view.component, props);
+    await tick();
+    await tick();
+    hookIndex = 0;
+    return JSON.stringify(render(view.component, props));
+  };
+  assert.match(await countTextOf([row('ap1', 1_700_000_000_000)]), /"1 record"/, '恰一条记录取 view.count.one');
+  assert.match(
+    await countTextOf([row('ap1', 1_700_000_000_000), row('ap2', 1_700_000_001_000)]),
+    /"2 records"/,
+    '多条记录取 view.count',
+  );
+  assert.match(await countTextOf([]), /"0 records"/, '零条记录同样取 view.count');
+});
+
+test('页签标签随插件界面语言换词：保存成功且文本变化才按同 id 重注册（design §7.5 页签合同）', async () => {
+  const client = loadClient();
+  const snapshot = { status: 'ready', value: {}, base: {}, user: {}, revision: 1, writable: true };
+  const env = makeCtx({ snapshot });
+  // 控制器订阅可观测：通知即模拟「保存成功后快照变化」被投递到订阅方。
+  const listeners = new Set();
+  env.scope.subscribe = (listener) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  };
+  client.apply(env.ctx);
+  const viewsBefore = env.registrations.filter((entry) => entry.options.name === 'conversation.view');
+  assert.equal(viewsBefore.length, 1, '初次装载恰注册一次');
+  assert.equal(viewsBefore[0].options.label(), 'view.review', 'auto 档无宿主绑定时退回键名');
+  // 快照未变的通知（保存失败或无关字段变化）：不重注册。
+  for (const listener of listeners) listener();
+  assert.equal(env.registrations.filter((entry) => entry.options.name === 'conversation.view').length, 1, '标签文本未变不重注册');
+  // 保存成功：language.ui=zh → 标签文本变化 → 同 id 重注册。
+  snapshot.value.language = { ui: 'zh' };
+  for (const listener of listeners) listener();
+  const views = env.registrations.filter((entry) => entry.options.name === 'conversation.view');
+  assert.equal(views.length, 2, '文本变化触发同 id 重注册（借 slots.subscribe 触发宿主重投影）');
+  assert.equal(views[1].options.id, viewsBefore[0].options.id, '同 id 替换该格条目');
+  assert.equal(views[1].options.order, viewsBefore[0].options.order);
+  assert.equal(views[1].options.label(), '审查记录', '重注册条目的标签按新语言档现读');
+  // 再次无变化通知：不再叠加注册。
+  for (const listener of listeners) listener();
+  assert.equal(env.registrations.filter((entry) => entry.options.name === 'conversation.view').length, 2, '重复通知幂等');
+});
+
+test('页签标签基线随宿主 locale 同步：auto 换语言后保存强制档不因陈旧基线漏重注册（design §7.5）', async () => {
+  const client = loadClient();
+  const snapshot = { status: 'ready', value: {}, base: {}, user: {}, revision: 1, writable: true };
+  const env = makeCtx({ snapshot });
+  // 自备宿主 locale 替身：bind 按当前环境语言取词、subscribe 收集宿主 locale 变化订阅方。
+  let ambient = 'zh';
+  const dicts = new Map();
+  const localeListeners = new Set();
+  env.ctx.locale = {
+    register: (ns, payload) => {
+      dicts.set(ns, payload);
+      return () => {};
+    },
+    bind: (ns) => (key) => dicts.get(ns)?.[ambient]?.[key] ?? key,
+    subscribe: (listener) => {
+      localeListeners.add(listener);
+      return () => localeListeners.delete(listener);
+    },
+  };
+  const listeners = new Set();
+  env.scope.subscribe = (listener) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  };
+  client.apply(env.ctx);
+  const viewCount = () => env.registrations.filter((entry) => entry.options.name === 'conversation.view').length;
+  assert.equal(viewCount(), 1, '初次装载恰注册一次');
+  assert.equal(
+    env.registrations.find((entry) => entry.options.name === 'conversation.view').options.label(),
+    '审查记录',
+    'auto 档页签文本随宿主环境语言（bind 现读）',
+  );
+  // 宿主 locale 切到 en：宿主自己重投影页签（thunk 现读），插件只同步基线、不重注册。
+  ambient = 'en';
+  for (const listener of localeListeners) listener();
+  assert.equal(viewCount(), 1, '宿主 locale 变化不额外重注册（宿主触发源自己重投影）');
+  // 保存强制 zh：新文本与订阅启动时的旧基线同文（审查记录），但页签当前显示的是英文——必须重注册。
+  snapshot.value.language = { ui: 'zh' };
+  for (const listener of listeners) listener();
+  const views = env.registrations.filter((entry) => entry.options.name === 'conversation.view');
+  assert.equal(views.length, 2, '与陈旧基线同文也不漏真正的换词重注册');
+  assert.equal(views[1].options.label(), '审查记录', '重注册条目按强制档现读');
+});
+
 test('审查视图：合并行主判定为 outcome、判定与结算并存可分辨，Z 只累加在场分段；详情按 approvalId 拉', async () => {
   resetHooks();
   const client = loadClient();
@@ -3972,17 +4101,18 @@ test('审查视图：合并行主判定为 outcome、判定与结算并存可分
   assert.match(allowText, /PROMPT-A/);
   assert.match(allowText, /OUTPUT-A/);
   // 详情元信息：最终审批结果/决定方式/模型选择来源/尝试次数/标识在场（§8.5.1 详情字段定稿名）。
-  assert.match(allowText, /最终审批结果: 拒绝（rejected）/);
-  assert.match(allowText, /模型结论: 放行（allow）/);
-  assert.match(allowText, /决定方式: 人工（human）/);
-  assert.match(allowText, /模型选择来源: 会话选择（session）/);
-  assert.match(allowText, /尝试次数: 1/);
-  assert.match(allowText, /取证工具调用: 0/, '详情 tools 计数行在场（design §8.5.1），0 正常显示');
-  assert.match(allowText, /接管预设: auto-approve/);
-  assert.match(allowText, /配置标识: a1b2c3d4e5f6/);
-  assert.match(allowText, /策略标识: zh:missing/);
-  assert.match(allowText, /归属: 主会话（main）/);
-  assert.match(allowText, /升权目标: danger-full-access/);
+  // 冒号随「detail.*」标题片段语言（design §7.5）：中文标题接全角冒号。
+  assert.match(allowText, /最终审批结果：拒绝（rejected）/);
+  assert.match(allowText, /模型结论：放行（allow）/);
+  assert.match(allowText, /决定方式：人工（human）/);
+  assert.match(allowText, /模型选择来源：会话选择（session）/);
+  assert.match(allowText, /尝试次数：1/);
+  assert.match(allowText, /取证工具调用：0/, '详情 tools 计数行在场（design §8.5.1），0 正常显示');
+  assert.match(allowText, /接管预设：auto-approve/);
+  assert.match(allowText, /配置标识：a1b2c3d4e5f6/);
+  assert.match(allowText, /策略标识：zh:missing/);
+  assert.match(allowText, /归属：主会话（main）/);
+  assert.match(allowText, /升权目标：danger-full-access/);
 
   // 收起 A、点开 B（摘要档且审查已执行：全文段均不在场、decision 在场）：第三级判「未开启全文采集」。
   const headsB = findAllByClass(render(view.component, props), 'dsafm_review_head');
@@ -4014,8 +4144,8 @@ test('审查视图：合并行主判定为 outcome、判定与结算并存可分
   hookIndex = 0;
   const cText = JSON.stringify(render(view.component, props));
   assert.match(cText, /排队 — · 审查 — · 人工 —/, '缺失段显示 —，不按 0 计');
-  assert.match(cText, /环节: 排队（queue）/);
-  assert.match(cText, /缺失或异常情况: 队列已满（queue-overflow）/);
+  assert.match(cText, /环节：排队（queue）/);
+  assert.match(cText, /缺失或异常情况：队列已满（queue-overflow）/);
   // 记录视图按显示类别呈现（design §7.4.1）：固定前缀不在界面显示，记录原值仍在存储层。
   assert.match(cText, /队列已满（queue-overflow）/, '理由段按显示类别呈现');
   assert.ok(!cText.includes('审查未执行：'), '固定前缀不得显示在界面文案中');
@@ -4027,7 +4157,7 @@ test('审查视图：合并行主判定为 outcome、判定与结算并存可分
   assert.equal((cText.match(/本次未记录此项/g) ?? []).length, 6, '审查未执行记录的全部缺段归「本次未记录此项」');
   assert.ok(!cText.includes('未开启全文采集'), '审查未执行的记录不得归因未开启全文采集');
   assert.ok(!cText.includes('未取上下文'), '审查未执行的记录不得归因未取上下文');
-  assert.ok(!cText.includes('最终审批结果: null'), 'C 行 decision 缺失时模型结论段不渲染');
+  assert.ok(!cText.includes('最终审批结果：null'), 'C 行 decision 缺失时模型结论段不渲染');
 });
 
 test('审查视图：装配环节超时结算行——环节标签渲染为装配（assembly）（design §8.5.1）', async () => {
@@ -4059,7 +4189,7 @@ test('审查视图：装配环节超时结算行——环节标签渲染为装�
   await tick();
   hookIndex = 0;
   const text = JSON.stringify(render(view.component, props));
-  assert.match(text, /环节: 装配（assembly）/, 'stage=assembly 渲染定稿环节标签');
+  assert.match(text, /环节：装配（assembly）/, 'stage=assembly 渲染定稿环节标签');
   assert.match(text, /装配超时/, '理由段携带装配超时原因');
 });
 
@@ -4136,7 +4266,7 @@ test('审查视图 §10.2：tools 大于 0 反证「未调用取证工具」，p
   // probes 缺失但计数为 2：不得声称「未调用取证工具」；缺段与 input 同归统一缺省（design §8.5.1 反证）。
   assert.ok(!text.includes('未调用取证工具'), 'tools=2 证伪「未调用」，probes 缺失不得归「未调用取证工具」');
   assert.equal((text.match(/本次未记录此项/g) ?? []).length, 2, 'probes 与 input 两段缺失归统一缺省');
-  assert.match(text, /取证工具调用: 2/, '详情 tools 计数行在场，矛盾对用户可见');
+  assert.match(text, /取证工具调用：2/, '详情 tools 计数行在场，矛盾对用户可见');
 });
 
 test('审查视图 §10.2：degraded 含 transcript 反证「未取上下文」，evidence 缺失归统一缺省', async () => {
@@ -4171,7 +4301,7 @@ test('审查视图 §10.2：degraded 含 transcript 反证「未取上下文」�
   const text = JSON.stringify(render(view.component, props));
   assert.ok(!text.includes('未取上下文'), 'degraded 含 transcript 时 evidence 缺失不得归「未取上下文」');
   assert.equal((text.match(/本次未记录此项/g) ?? []).length, 2, 'evidence 与 input 两段缺失归统一缺省');
-  assert.match(text, /缺失或异常情况: 会话目录缺失（cwd）、上下文读取失败或截断（transcript）/, '读取失败原因由 degraded 段承载');
+  assert.match(text, /缺失或异常情况：会话目录缺失（cwd）、上下文读取失败或截断（transcript）/, '读取失败原因由 degraded 段承载');
 });
 
 test('审查视图 §10.2：degraded 含 transcript-read-failed 反证「未取上下文」，文案按专属键', async () => {
@@ -4206,7 +4336,7 @@ test('审查视图 §10.2：degraded 含 transcript-read-failed 反证「未取�
   const text = JSON.stringify(render(view.component, props));
   assert.ok(!text.includes('未取上下文'), 'degraded 含 transcript-read-failed 时 evidence 缺失不得归「未取上下文」');
   assert.equal((text.match(/本次未记录此项/g) ?? []).length, 2, 'evidence 与 input 两段缺失归统一缺省');
-  assert.match(text, /缺失或异常情况: 上下文读取失败（transcript-read-failed）/, '该标记按专属键取词（不用读取失败/截断两义合并的文案）');
+  assert.match(text, /缺失或异常情况：上下文读取失败（transcript-read-failed）/, '该标记按专属键取词（不用读取失败/截断两义合并的文案）');
   assert.ok(!text.includes('上下文读取失败或截断'), '不得回落读取失败/截断两义合并的文案');
 });
 
@@ -4243,7 +4373,7 @@ test('审查视图 §10.2：output 缺失且 decision=error 归「模型未提�
   const text = JSON.stringify(render(view.component, props));
   assert.match(text, /PROMPT-O/, '全文段在场（全文采集证实）');
   assert.match(text, /REASON-O/, 'reasoning 在场，排除 reasoning 分支出文案');
-  assert.match(text, /模型结论: 失败（error）/, 'decision=error 的模型结论照常渲染');
+  assert.match(text, /模型结论：失败（error）/, 'decision=error 的模型结论照常渲染');
   // reasoning 在场时唯一一次「模型未提供」只能来自 output 缺失＋decision=error 分支（design §8.5.1）。
   assert.equal((text.match(/模型未提供/g) ?? []).length, 1, 'output 缺失且 decision=error → 模型未提供（§8.5.1 二级分派）');
   assert.equal((text.match(/本次未记录此项/g) ?? []).length, 1, 'input 缺失（全文采集下无反证）→ 本次未记录此项');
@@ -4340,8 +4470,8 @@ test('审查视图：旧格式行（无 outcome）主位＝模型结论并附「
   await tick();
   hookIndex = 0;
   const detailText = JSON.stringify(render(view.component, props));
-  assert.match(detailText, /最终审批结果: 未记录最终审批结果/, '详情同样说明结果缺失（design §8.5）');
-  assert.match(detailText, /模型结论: 放行（allow）/);
+  assert.match(detailText, /最终审批结果：未记录最终审批结果/, '详情同样说明结果缺失（design §8.5）');
+  assert.match(detailText, /模型结论：放行（allow）/);
 });
 
 test('审查视图 §10.2：enum 探测式取词、多值顿号连接、entry 前缀族、degraded=none 不列段', async () => {
@@ -4382,11 +4512,11 @@ test('审查视图 §10.2：enum 探测式取词、多值顿号连接、entry �
   hookIndex = 0;
   const text = JSON.stringify(render(view.component, props));
   // enum 探测（§10.2）：字典没有 layer.made-up-layer → 不抛错，按 enum.unknown 展示原值。
-  assert.match(text, /模型选择来源: made-up-layer（含义未知）/, '未知枚举按「原值（含义未知）」展示');
+  assert.match(text, /模型选择来源：made-up-layer（含义未知）/, '未知枚举按「原值（含义未知）」展示');
   // fieldsDefaulted 多值：逐项映射后以顿号连接。
-  assert.match(text, /自动补全的字段: 风险分级（risk）、授权分级（auth）/);
+  assert.match(text, /自动补全的字段：风险分级（risk）、授权分级（auth）/);
   // degraded 多值：逐项映射＋entry 前缀族按 degraded.entry 映射并保留完整原值。
-  assert.match(text, /缺失或异常情况: 队列已满（queue-overflow）、单条证据截断（entry:tool-call）/);
+  assert.match(text, /缺失或异常情况：队列已满（queue-overflow）、单条证据截断（entry:tool-call）/);
 });
 
 test('审查视图 §10.2：degraded=none 表示无标记，不渲染该段', async () => {
@@ -4665,6 +4795,8 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['list.decision', '模型结论：{v}', "Model conclusion: {v}"],
     ['view.noOutcome', '未记录最终审批结果', "No final outcome recorded"],
     ['view.reasonDefaulted', '审查器未提供理由', "No rationale provided by the reviewer."],
+    ['view.count', '共 {n} 条', "{n} records"],
+    ['view.count.one', '共 {n} 条', "{n} record"],
     // —— §8.5.1 缺段说明表 ——
     ['absent.noContext', '未取上下文', "No context collected"],
     ['absent.noProbes', '未调用取证工具', "No evidence tools called"],
@@ -5334,12 +5466,12 @@ test('静态扫描：退役文案与失效令牌零命中、外壳类退役', as
   assert.equal(SOURCE.includes('dsafm_section'), false, '分区标题类零命中');
   assert.equal(SOURCE.includes('dsafm_divider'), false, '分区线类零命中');
   assert.equal(SOURCE.includes('dsafm_actions'), false, '旧操作区类零命中');
-  // 交付 CSS 串对宿主令牌表不存在的别名零命中（含官方笔误 bg-layer-4；
-  // 0.1.7、0.2.0-rc.2 与 0.2.1-rc.2 三树定义集合一致）。
+  // 交付 CSS 串对宿主令牌表不存在的别名零命中——反例集里的 bg-layer-4 是
+  // 历史上曾被误引的失效名，保留作检出反证（加回任一即红）。
   for (const token of ['--dsw-alias-state-warning-primary', '--dsw-alias-label-error', '--dsw-alias-bg-layer-4']) {
     assert.equal(SOURCE.includes(token), false, `失效令牌零命中：${token}`);
   }
-  // 笔误修正：警示色用现行别名 state-warn-primary。
+  // 警示色使用现行别名 state-warn-primary。
   assert.ok(SOURCE.includes('--dsw-alias-state-warn-primary'), '警示色应使用现行别名');
   // 卡片外观（源码侧）：.dsafm_form 不声明 border/radius/底色。
   const formRule = /\.dsafm_form\{[^}]*\}/u.exec(SOURCE)?.[0] ?? '';

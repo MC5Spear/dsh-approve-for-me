@@ -355,7 +355,7 @@ async function waitForLines(path, expect, timeoutMs = 4000) {
 }
 
 // 按行数等待会在并行负载下提前返回：第 N 行可能还是同一次请求的 review 行，不是目标请求的结算行。
-// 同步点改为「这些 callId 的 settle 行都已落盘」，与写入顺序无关。
+// 同步点是「这些 callId 的 settle 行都已落盘」，与写入顺序无关。
 async function waitForSettles(path, callIds, timeoutMs = 4000) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {

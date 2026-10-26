@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { readSessionLog } from './session-log.mjs';
 
-const root = join(homedir(), '.dsh', 'sessions');
+const root = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'sessions');
 const DENY_TEXT = /Access is denied|is denied|EPERM|denied under|sandboxDenial/u;
 let asked = 0;
 let withResult = 0;

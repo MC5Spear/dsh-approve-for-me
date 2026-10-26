@@ -8,8 +8,9 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 
 const fragments = process.argv.slice(2);
-const root = join(homedir(), '.dsh', 'sessions');
-const reviews = join(homedir(), '.dsh', 'approve-for-me', 'reviews');
+const home = process.env.DSH_HOME ?? join(homedir(), '.dsh');
+const root = join(home, 'sessions');
+const reviews = join(home, 'approve-for-me', 'reviews');
 
 for (const ws of readdirSync(root)) {
   const wsDir = join(root, ws);

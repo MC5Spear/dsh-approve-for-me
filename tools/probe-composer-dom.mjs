@@ -9,7 +9,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { browserPath, instance, missingNotice, outputDir } from './local-config.mjs';
 
 // 接入信息与浏览器路径经本机配置加载器取（显式传参 > 配置 > 文档化跳过）。
@@ -33,7 +33,8 @@ const token = existsSync(TOKEN_FILE)
   ? (/token=([A-Za-z0-9_-]+)/u.exec(readFileSync(TOKEN_FILE, 'utf8'))?.[1] ?? '')
   : '';
 const url = token === '' ? BASE : `${BASE}/?token=${token}`;
-console.log(`# url=${url}  token=${token === '' ? 'none' : 'ok'}`);
+// 目标标识与 targetLine 同形态：实例坐标＋token 文件名＋token 在场与否，token 值不进日志。
+console.log(`# url=${BASE} tokenFile=${TOKEN_FILE === '' ? '-' : basename(TOKEN_FILE)} token=${token === '' ? 'none' : 'ok'}`);
 
 const edge = spawn(
   EDGE,

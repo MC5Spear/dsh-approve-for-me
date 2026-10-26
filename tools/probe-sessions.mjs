@@ -1,43 +1,41 @@
 /**
  * dsh 会话日志的只读探针。
  *
- * 两种模式，都直接读真实的 `session.jsonl.zstd` 容器：
+ * 两种模式，都直接读真实的会话日志容器（`session.jsonl.zstd` 与 `session.vN.jsonl.zstd`
+ * 都认，每会话取当前代＝最高代）：
  *   node tools/probe-sessions.mjs <needle> [maxLinesPerSession]
  *       打印包含 <needle> 的 JSONL 行
  *   node tools/probe-sessions.mjs --events [typeFilter]
- *       统计每种事件 `type` 的出现次数，各附一行样本
+ *       统计每种事件 `type` 的出现次数，各附一行样本（v4 事件包裹与一行多事件数组都归一）
  *
+ * 目标 home：优先 `DSH_HOME` 环境变量，未设置时回落 `~/.dsh`；
+ * 实际使用的 home 打印在输出首行，不静默转向。
  * @module tools/probe-sessions
  */
 import { join } from 'node:path';
-import { listSessionLogs, readSessionLog } from './session-log.mjs';
+import { homedir } from 'node:os';
+import { listSessionLogs, parseSessionEvents, readSessionLog } from './session-log.mjs';
 
-const DSH_HOME = process.env.DSH_HOME ?? join(process.env.USERPROFILE ?? '', '.dsh');
+const DSH_HOME = process.env.DSH_HOME ?? join(process.env.USERPROFILE ?? homedir(), '.dsh');
 const logs = listSessionLogs(join(DSH_HOME, 'sessions'));
 const args = process.argv.slice(2);
+console.log(`home=${DSH_HOME}`);
 
 if (args[0] === '--events') {
   const filter = args[1];
   const census = new Map();
   for (const { file } of logs) {
-    let text;
+    let parsed;
     try {
-      text = readSessionLog(file);
+      parsed = parseSessionEvents(readSessionLog(file));
     } catch {
       continue;
     }
-    for (const line of text.split('\n')) {
-      if (line.length === 0) continue;
-      let row;
-      try {
-        row = JSON.parse(line);
-      } catch {
-        continue;
-      }
-      const type = row?.type ?? '(no type)';
-      const entry = census.get(type) ?? { count: 0, sample: line.slice(0, 300) };
+    for (const event of parsed.events) {
+      const entry = census.get(event.type) ?? { count: 0, sample: '' };
       entry.count += 1;
-      census.set(type, entry);
+      if (entry.sample.length === 0) entry.sample = JSON.stringify(event.data).slice(0, 300);
+      census.set(event.type, entry);
     }
   }
   const rows = [...census.entries()]

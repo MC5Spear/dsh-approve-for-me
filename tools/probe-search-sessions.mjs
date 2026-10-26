@@ -16,7 +16,7 @@ if (needle === undefined || needle.length === 0) {
 }
 const ctxIndex = process.argv.indexOf('--context');
 const ctx = ctxIndex >= 0 ? Number(process.argv[ctxIndex + 1]) : 160;
-const root = join(homedir(), '.dsh', 'sessions');
+const root = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'sessions');
 
 /** 只认 session.jsonl.zstd 与 session.v<N>.jsonl.zstd 两种命名，其余文件忽略。 */
 function sessionFiles(dir) {

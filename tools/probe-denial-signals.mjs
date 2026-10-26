@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { readSessionLog } from './session-log.mjs';
 
-const root = join(homedir(), '.dsh', 'sessions');
+const root = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'sessions');
 /** 静态判定带提权参数的工具（近似名单，随宿主版本漂移，以宿主工具 schema 为准；
  *  read/glob/grep/str_replace_editor 已按宿主源核验无 `sandbox_permissions`，不列）。 */
 const ESCALATION_CAPABLE = new Set(['pwsh', 'bash', 'write', 'edit']);

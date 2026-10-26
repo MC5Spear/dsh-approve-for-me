@@ -289,6 +289,42 @@ test('包装剥层：内层命中并记层数', () => {
   assert.equal(nested?.wrapDepth, 2);
 });
 
+test('包装内层按引号感知规则重拆：无空格分号与直写同口径（design §12.1）', () => {
+  // 内层分号后无空格（`ok;rm` 粘连）与有空格同判——重拆用与外层同一规则。
+  const bashGlued = hardCmd('bash -c "echo ok;rm -rf /not-real"');
+  assert.equal(bashGlued?.code, 'hard-h1-posix', '内层无空格分号拆出的 rm -rf 命中 H1');
+  assert.equal(bashGlued?.wrapDepth, 1);
+  const pwshGlued = hardCmd('pwsh -Command "Write-Output ok;mshta https://example.invalid/"');
+  assert.equal(pwshGlued?.code, 'hard-h3-entry', '内层无空格分号拆出的 mshta 加载网址命中 H3');
+  assert.equal(pwshGlued?.wrapDepth, 1);
+  // 等价性双向：同一文本直写命中 ⇔ 作为包装内层命中（差仅层数）。
+  const direct = hardCmd('echo ok;rm -rf /not-real');
+  assert.equal(direct?.code, 'hard-h1-posix');
+  assert.equal(direct?.wrapDepth, 0);
+  const spaced = hardCmd('bash -c "echo ok; rm -rf /not-real"');
+  assert.equal(spaced?.code, 'hard-h1-posix', '有空格分号同样命中');
+  // 内层换行也是语句边界：多行脚本同样逐句判定。
+  const multiline = hardCmd('bash -c "Remove-Item -Recurse C:\\probe\nWrite-Output ok"');
+  assert.equal(multiline?.code, 'hard-h1-powershell', '内层按换行拆句后逐句判定');
+});
+
+test('包装内层多语句逐句判定、首个命中即拒；两层包装逐层重拆', () => {
+  const multi = hardCmd('pwsh -Command "Write-Output a; Write-Output b; Remove-Item -Recurse C:\\probe"');
+  assert.equal(multi?.code, 'hard-h1-powershell', '第三条语句才命中：逐句判定不漏中后段');
+  const twoLayers = hardCmd("bash -c \"bash -c 'echo ok;rm -rf /not-real'\"");
+  assert.equal(twoLayers?.code, 'hard-h1-posix', '两层包装每层剥出后都先重拆再逐句判定');
+  assert.equal(twoLayers?.wrapDepth, 2);
+});
+
+test('包装内层引号内的分号不拆：重拆保持引号感知边界', () => {
+  // 反例：分号在引号内——naive 按 `;` 拆会把 `rm -rf /not-real'` 拆成第二条语句造成误拦。
+  assert.equal(hardCmd("bash -c \"echo 'x;rm -rf /not-real'\""), undefined, '引号内的分号不产生第二条语句');
+  // 引号内路径分号：重拆后仍单语句，命中来自该语句自身的删除动词（非拆散产物）。
+  const quotedPath = hardCmd('bash -c "Remove-Item \'C:\\a;b\' -Recurse"');
+  assert.equal(quotedPath?.code, 'hard-h1-powershell', '单语句按动词＋-Recurse 命中');
+  assert.equal(quotedPath?.wrapDepth, 1);
+});
+
 test('包装剥层：POSIX 短旗标簇同按执行标志剥层', () => {
   // 簇形态正例（design §12.1）：单横线＋小写字母且簇内含 c，命令文本取自标志 token 之后。
   assert.equal(hardCmd("bash -lc 'rm -rf /probe'")?.code, 'hard-h1-posix');

@@ -1,14 +1,15 @@
 /**
  * 回归测试：注入消息的源形状必须通过宿主会话格式 v4 的真准入校验。
  *
- * 0.1.7 会话格式 v4 退役了 v3 的插件源包装：`agent.inject()` 若用旧包装构造消息，
- * `session.append` 的行准入抛 `format v4 message requires a producer-owned source kind`，
- * 当轮中断、会话卡死。本文件用宿主锚点树导出的真校验器 `assertV4RowAdmission`
+ * 会话格式 v4 要求生产者自有源（design：`lib/source.js` 是形状权威）：
+ * `agent.inject()` 若用宿主保留的旧式包装构造消息，`session.append` 的行准入抛
+ * `format v4 message requires a producer-owned source kind`，当轮中断、会话卡死。
+ * 本文件用宿主锚点树导出的真校验器 `assertV4RowAdmission`
  * （经 `tools/_host-resolve.mjs` 锚定）守住 `lib/source.js` 的形状：
  * 生产与测试共用 `injectionMessage` 工厂，测试校验的就是生产构造的那份消息。
  *
- * 能失败性：反例用例断言 v3 形状仍被同一校验器拒绝——校验器若变成空转，
- * 反例先红；把 `lib/source.js` 改回旧形状，正向用例即红。
+ * 能失败性：反例用例断言旧式形状仍被同一校验器拒绝——校验器若变成空转，
+ * 反例先红；`lib/source.js` 偏离规范形状，正向用例即红。
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';

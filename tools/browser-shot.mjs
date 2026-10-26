@@ -9,6 +9,11 @@
  *   node tools/browser-shot.mjs --dump                     # 只导出现有页面的文本与可点击元素
  *   node tools/browser-shot.mjs ... --script steps.json        # 按脚本执行点击与截图
  *
+ * 目标解析（安全操作约定，见 tools/local-config.mjs 头注）：省略 --url/--token-file 时
+ * 取本机配置的具名默认实例；具名默认不存在才用匿名环境变量回退——只设
+ * `DSAFM_INSTANCE_URL`/`DSAFM_TOKEN_FILE` **不会**覆盖已配置的具名默认。连接前会在
+ * stderr 打一行非敏感目标标识，核对不是预期实例就停止。
+ *
  * 步骤脚本是一组动作（与下方分派实现逐项对应；**`click` 传纯字符串**——
  * 它被原样交给 `clickText(text)` 做文本比较，写成 `{"click":{"text":"…"}}` 对象形式
  * 会永远匹配失败返回 not found）：
@@ -25,7 +30,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { browserPath, instance, missingNotice, outputDir } from './local-config.mjs';
+import { browserPath, instance, missingNotice, outputDir, targetLine } from './local-config.mjs';
 
 /**
  * CDP 端口：spawn 模式下随机取（固定端口会被上一次没杀干净的 headless Edge 占住，
@@ -230,6 +235,8 @@ async function run() {
     process.stdout.write(missingNotice('instance', '真实页面探针需要一个可访问的实例') + '\n');
     return;
   }
+  // 连接前核对非敏感目标标识：目标不是预期的自建实例就立即停止。
+  process.stderr.write(targetLine({ url: opts.url, tokenFile: opts.tokenFile }) + '\n');
   if (opts.cdp !== '') {
     PORT = Number(opts.cdp);
   } else {

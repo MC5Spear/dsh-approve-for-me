@@ -7,9 +7,9 @@
  *   node --import ./tools/_host-hooks.mjs tools/check-typert-manifest.mjs
  *
  * **锚点从本机配置取，不硬编码**（见 tools/local-config.mjs 与 tools/local-config.example.mjs）：
- * 首选配置里的 `hostModules`；没配时退回宿主 profile 树与 npm 全局树两个通用候选。
- * 本机实测 `$DSH_HOME/profiles/node_modules` 下的目录符号链接对 Node 不可遍历
- * （`stat` 报 UNKNOWN），故按候选顺序取第一个可读的目录。
+ * 首选配置里的 `hostModules`；没配时退回宿主 profile 树与 npm 全局树两个通用候选，
+ * 按候选顺序取第一个可读的目录——候选里的目录符号链接可能对 Node 不可遍历
+ * （`stat` 报 UNKNOWN 的形态），读到这种候选按失败处理、试下一个。
  */
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';

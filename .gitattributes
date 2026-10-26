@@ -1,7 +1,8 @@
 # 行尾统一为 LF。
 #
-# 为什么必须显式声明：Windows 上 git 的 `core.autocrlf` 默认为 `true`，克隆出来的工作区
-# 会变成 CRLF；`eol=lf` 在检出时强制 LF，不依赖各机器的 `core.autocrlf`／`core.eol` 设置。
+# 为什么必须显式声明：Windows 上的 git 可能带 `core.autocrlf=true`（安装器的常见默认），
+# 克隆出来的工作区会变成 CRLF；`eol=lf` 在检出时强制 LF，不依赖各机器的
+# `core.autocrlf`／`core.eol` 设置。
 # 范围以本文件为准：文本与二进制由 git 自动判定，二进制按下方规则原样保留；子目录若另有
 # .gitattributes，以其更具体的规则为先。
 * text=auto eol=lf

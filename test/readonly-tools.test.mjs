@@ -376,8 +376,8 @@ test('home 根为别名拼写时围栏仍拒止（8.3 短名；不自证别名�
   const canonical = await realpath(home);
   let alias = null;
   if (home.toLowerCase() !== canonical.toLowerCase()) {
-    // 临时目录本身就是别名拼写——CI runner 的 TEMP 含 8.3 短名前缀（与 CI 失败同构）；
-    // macOS /var→/private/var 同属 home 侧别名，同样接受。
+    // 临时目录本身就是别名拼写（TEMP 可能含 8.3 短名前缀；macOS 的 /var→/private/var
+    // 同属 home 侧别名），同样接受。
     alias = home;
   } else {
     // NTFS 短名生成规则给候选：大写、滤非法字符、取前 6 字符＋~n；realpath 等值即自证，零子进程。
@@ -394,8 +394,8 @@ test('home 根为别名拼写时围栏仍拒止（8.3 短名；不自证别名�
     }
   }
   if (alias === null) {
-    // 跳过原因写实：顺序后缀形态（~1..~4）被既有目录占尽后，NTFS 转为哈希形态短名，无法按规则构造；
-    // CI 上第一分支必然命中（TEMP 自带别名前缀），此处跳过可见、由 T2 覆盖同一代码路径。
+    // 跳过原因写实：顺序后缀形态（~1..~4）被既有目录占尽后，NTFS 转为哈希形态短名，
+    // 无法按规则构造；本环境下别名分支未被本用例执行，不计为通过。
     t.skip('未取得可自证的 8.3 别名：临时目录无别名前缀，且短名后缀形态不可构造');
     return;
   }
@@ -506,8 +506,8 @@ test('junction 真建：遍历不进入符号链接目录（建链失败显式�
   await writeFile(join(root, 'real', 'inside.txt'), 'junction-target\n');
   const link = join(root, 'linkdir');
   await symlink(join(root, 'real'), link, 'junction');
-  // 语义钉子（本机实测）：junction 的 lstat.isSymbolicLink()=false（reparse 点非符号链接）、
-  // 但 readdir({withFileTypes}) 的 Dirent 报 symlink=true——walk 防护依赖的正是后者，这里显式钉住。
+  // 语义钉子：Windows junction 在 readdir({withFileTypes}) 的 Dirent 里报 symlink=true
+  // ——walk 防护依赖的正是这一点，这里显式钉住。
   const dirents = await readdir(join(root), { withFileTypes: true });
   const linkEntry = dirents.find((entry) => entry.name === 'linkdir');
   assert.ok(linkEntry, 'junction 建链失败即显式失败，不静默跳过');

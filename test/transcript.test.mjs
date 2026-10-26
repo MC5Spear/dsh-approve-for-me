@@ -125,6 +125,16 @@ test('读取失败三形态（抛错／接口缺失／返回非数组）→ 恰�
   assert.equal(TRANSCRIPT_READ_FAILED, 'transcript-read-failed', '标记值与词汇表一致');
 });
 
+test('maxEntries=0 主动不取事件：判定先于读取，快照抛错或服务缺失都不产生读取降级', () => {
+  let snapshotCalls = 0;
+  const counting = { snapshotEvents: () => { snapshotCalls += 1; throw new Error('boom'); } };
+  const thrown = collectEvidence(counting, { maxEntries: 0 });
+  assert.deepEqual(thrown, { text: '', entries: 0, truncated: false, degraded: [] }, '抛错快照在零条数下不触发读取降级');
+  assert.equal(snapshotCalls, 0, '零条数不调用 snapshotEvents（design §3.2 次序）');
+  const missing = collectEvidence(undefined, { maxEntries: 0 });
+  assert.deepEqual(missing, { text: '', entries: 0, truncated: false, degraded: [] }, '会话缺失同样不产生读取降级');
+});
+
 test('总量截断恰记 transcript-truncated，单条截断仍是 entry:<类型> 前缀族', () => {
   const long = () => `${'A'.repeat(2000)}TAIL`;
   const result = collectEvidence(sessionWith([userMessage(long()), userMessage(long())]), {

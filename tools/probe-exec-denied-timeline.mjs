@@ -12,7 +12,7 @@ import { readSessionLog } from './session-log.mjs';
 
 const maxIndex = process.argv.indexOf('--max');
 const max = maxIndex >= 0 ? Number(process.argv[maxIndex + 1]) : 60;
-const root = join(homedir(), '.dsh', 'sessions');
+const root = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'sessions');
 const DENIED_RE = /Program '([^']+)' failed to run: Access is denied/gu;
 
 const rows = [];
