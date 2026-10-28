@@ -1,7 +1,5 @@
 # dsh-approve-for-me
 
-[![CI](https://github.com/MC5Spear/dsh-approve-for-me/actions/workflows/ci.yml/badge.svg)](https://github.com/MC5Spear/dsh-approve-for-me/actions/workflows/ci.yml)
-
 > 第三方社区插件，与 DeepSeek Harness 官方无关。个人维护，接受 issue，不接受外部 PR；响应与修复时间视维护者可用时间而定。安全问题同样通过 issue 提交，请先脱敏。
 
 为无人值守长任务和需要协助判断操作风险的用户提供沙箱升权审查。独立的大语言模型（LLM）审查器可以读取本地证据，按操作风险和用户授权决定是否允许本次操作。危险拒绝与审查故障会分别说明。
@@ -194,9 +192,9 @@ dsh plugin --profile web remove dsh-approve-for-me
 | 持续超时或模型故障 | 审查模型是否可用、时限是否为零、是否处于冷却期 | 修正配置或等待冷却；仍失败时停止连续请求并反馈 |
 | 记录缺失或不完整 | 页面缺失说明、全文采集是否开启、日志是否有写入错误 | 保存现有证据后反馈；开启全文只影响后续记录 |
 
-需要帮助时，按[报 issue 的要求](<CONTRIBUTING.md#报-issue>)提交最小可复现信息：宿主与插件版本、触发步骤、脱敏配置、相关审计行或截图。提交前去掉凭据、私人路径和会话内容；不要用真实危险操作复现问题。维护者据此核对原因和处理办法。
+需要帮助时，提交最小可复现信息：宿主与插件版本、触发步骤、脱敏配置、相关审计行或截图。提交前去掉凭据、私人路径和会话内容；不要用真实危险操作复现问题。维护者据此核对原因和处理办法。
 
-需要在克隆仓库中运行测试或模型探针时，参阅[环境准备与测试说明](<CONTRIBUTING.md#环境准备fork--复现用>)。
+需要在克隆仓库中运行测试或模型探针时，参阅仓库内 docs/ 与 tools/ 的说明。
 
 ## AI 维护者
 
@@ -213,7 +211,5 @@ dsh plugin --profile web remove dsh-approve-for-me
 | --- | --- |
 | 完整行为要求与配置默认值 | [需求](<docs/requirements.md>) |
 | 实现机制与验证方法 | [设计](<docs/design.md>) |
-| 问题报告、测试与维护说明 | [参与指南](<CONTRIBUTING.md>) |
-| 发布历史 | [变更记录](<CHANGELOG.md>) |
 
 MIT，见 [LICENSE](<LICENSE>)。部分英文 Guardian 模板、拒绝指令及策略源自 [OpenAI Codex](https://github.com/openai/codex)（Apache-2.0），归属与许可见 [NOTICE](<NOTICE>)。
