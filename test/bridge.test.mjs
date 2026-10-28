@@ -138,6 +138,29 @@ testHost('getState：trigger.unknown=review 且服务缺失时视为接管', asy
   assert.equal((await instance.getState('s1')).active, true);
 });
 
+testHost('getState：mode=off 时 active=false 且 preset 仍上报（design §2.1 短路先于预设折算）', async () => {
+  const instance = service({
+    session: { id: 's1' },
+    service: { current: () => 'auto-approve', defaultPreset: 'auto-approve' },
+    config: { mode: 'off', reviewer: {}, trigger: { presets: ['auto-approve'], unknown: 'skip' } },
+  });
+  const state = await instance.getState('s1');
+  assert.equal(state.preset, 'auto-approve');
+  assert.equal(state.active, false);
+});
+
+testHost('getState：mode 热切换 off↔rules 随 volatile 快照逐次反映', async () => {
+  let mode = 'off';
+  const instance = service({
+    session: { id: 's1' },
+    service: { current: () => 'auto-approve', defaultPreset: 'auto-approve' },
+    settingsSnapshot: () => ({ revision: 2, value: { mode, reviewer: {}, trigger: { presets: ['auto-approve'], unknown: 'skip' } } }),
+  });
+  assert.equal((await instance.getState('s1')).active, false, 'mode=off 时控件判定不接管');
+  mode = 'rules';
+  assert.equal((await instance.getState('s1')).active, true, '切回 rules 后恢复接管');
+});
+
 testHost('pendingState：无登记表或会话无条目时返回空数组，不抛', () => {
   const empty = service({ session: { id: 's1' } });
   assert.deepEqual(empty.pendingState('s1'), { entries: [] });
@@ -604,7 +627,7 @@ testHost('traceRecords：同一审批两类记录按 approvalId 合并，旧格�
         toolName: 'pwsh',
         origin: 'main',
         escalation: 'danger-full-access',
-        startedAt: 1000,
+        startedAt: 1200,
         endedAt: 2500,
         queueMs: 100,
         reviewMs: 1000,
@@ -643,7 +666,7 @@ testHost('traceRecords：同一审批两类记录按 approvalId 合并，旧格�
   assert.equal(merged.decision, 'allow', 'decision 在场＝有审查记录');
   assert.equal(merged.outcome, 'rejected', 'outcome 在场＝有结算记录');
   assert.equal(merged.source, 'human');
-  assert.equal(merged.startedAt, 1000, '起点取审查记录');
+  assert.equal(merged.startedAt, 1000, '起点取最早在场值（结算记录＝请求进入锚点，design §8.5 装配差值口径）');
   assert.equal(merged.endedAt, 2900, '终点取结算记录');
   assert.equal(merged.humanWaitMs, 300);
   assert.equal(merged.truncated, true, '任一记录置真即真');

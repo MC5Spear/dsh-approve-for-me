@@ -1198,15 +1198,26 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 审批耗时 Z ＝ 在场分段之和（design §8.5：只累加在场的分段，缺失段不按 0 计）。
+		 * 审批耗时 Z（design §8.5）：结算记录携带起止时间时＝起止之差（含装配差值——装配段
+		 * 不落独立分段字段，其耗时按「起止差−在场分段之和」归入审批一侧，起止差即审批跨度）；
+		 * 起止缺失（旧记录）时退回在场分段之和，缺失段不按 0 计。
 		 * @param {object | null | undefined} record - 记录（摘要或合并详情）。
 		 * @returns {number} 毫秒。
 		 */
 		function approvalMsOf(record) {
-			return [record?.queueMs, record?.reviewMs, record?.humanWaitMs].reduce(
+			const segments = [record?.queueMs, record?.reviewMs, record?.humanWaitMs].reduce(
 				(sum, value) => (typeof value === "number" && Number.isFinite(value) ? sum + value : sum),
 				0,
 			);
+			const { startedAt, endedAt } = record ?? {};
+			if (
+				typeof startedAt === "number" && Number.isFinite(startedAt)
+				&& typeof endedAt === "number" && Number.isFinite(endedAt)
+				&& endedAt >= startedAt
+			) {
+				return endedAt - startedAt;
+			}
+			return segments;
 		}
 
 		/**
@@ -1829,9 +1840,10 @@ window.__ModuleLoader__.load({
 			const stateText = entry.state === "waiting-human" ? `${t("cardstate.waiting")} · ${causeText}` : t("cardstate.reviewing");
 			// 倒计时分派（design §7.4）：reviewing 状态读审查截止（review），waiting-human 读人工
 			// 截止（human），两类时限不得互串——deadlineKind 与状态矛盾（如交人工却标 review）属
-			// 归一化错误，按状态锚定，不让倒计时整段消失或串显另一类时限。审查截止恒有值
-			// （零值与装配耗尽在写入前已按立即超时结算，不进入倒计时显示态）；缺失形态按回退
-			// 推断防御处理，不渲染倒计时。人工阶段 null 截止不渲染倒计时（零时限立即结算，无瞬态）。
+			// 归一化错误，按状态锚定，不让倒计时整段消失或串显另一类时限。reviewing 排队段不写
+			// 截止（出队回调才补写审查时限），null 截止是合法排队形态，不渲染倒计时；deadlineKind
+			// 与状态矛盾的缺失形态同样按回退推断防御处理。人工阶段 null 截止不渲染倒计时（零时限
+			// 立即结算，无瞬态）。
 			const deadlineKind = entry.state === "waiting-human" ? "human" : "review";
 			const remaining = entry.deadlineAt === null ? null : Math.max(0, Math.ceil((entry.deadlineAt - now) / 1000));
 			const countdown =

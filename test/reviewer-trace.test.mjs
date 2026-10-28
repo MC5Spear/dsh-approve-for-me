@@ -859,7 +859,7 @@ test('真链：排队中的请求被取消——不执行审查、不写 error �
   }
 });
 
-test('真链：审查计时在排队期间到点——按超时结算且冷却计数不因任务未启动而丢失', async (t) => {
+test('真链：排队等待不消耗审查预算——出队后按剩余预算完成审查（ISS-172 三段划分）', async (t) => {
   const host = await loadHost();
   if (host === undefined) {
     t.skip('宿主包不可解析（离线环境）');
@@ -868,12 +868,14 @@ test('真链：审查计时在排队期间到点——按超时结算且冷却�
   const tmp = await mkdtemp(join(tmpdir(), 'afm-qtimer-'));
   const previousHome = process.env.DSH_HOME;
   process.env.DSH_HOME = tmp;
-  // 排队等待上限远大于审查时限：让排队中的请求先被审查计时器击中（任务未启动）。
+  // 排队等待上限远大于审查时限：旧实现里排队中的请求会被「从请求进入起算」的审查计时器击中；
+  // 三段预算划分后排队段不武装审查计时器——排队请求等到执行位后按剩余预算照常完成审查。
   const config = {
     mode: 'rules',
     reviewer: { model: 'deepseek-official/probe-model', timeoutMs: 120 },
     concurrency: { max: 1, queueMax: 4, queueTimeoutMs: 60000 },
-    breaker: { consecutiveDenials: 1, windowSize: 10, windowDenials: 5, cooldownMs: 60000 },
+    // 冷却阈值抬高：占位请求的审查超时只计一次 error，不得打开冷却拦截后续请求。
+    breaker: { consecutiveDenials: 5, windowSize: 10, windowDenials: 5, cooldownMs: 60000 },
   };
   const listeners = [];
   let streamCalls = 0;
@@ -908,55 +910,41 @@ test('真链：审查计时在排队期间到点——按超时结算且冷却�
   try {
     host.apply(ctx, config);
     const answerer = listeners.find((entry) => entry.event === 'approval/request').handler;
-    // 请求 1 占住唯一执行位（流挂起）；请求 2 同会话排队，审查时限 120ms 在排队期间到点。
+    // 请求 1 占住唯一执行位（流挂起）：它在自己的出队回调武装 120ms 审查计时器，到点按审查超时结算。
     const first = answerer({
       agent: { session: makeSession('session-qtimer', 'call-t1'), inject: () => {} },
       callId: 'call-t1',
       toolName: 'pwsh',
       reason: 'escalate sandbox to danger-full-access: run npm i',
     }, () => new Promise(() => {}));
+    // 请求 2 同会话排队：排队段不武装审查计时器，120ms 审查时限不因排队耗尽。
     const second = answerer({
       agent: { session: makeSession('session-qtimer', 'call-t2'), inject: () => {} },
       callId: 'call-t2',
       toolName: 'pwsh',
       reason: 'escalate sandbox to danger-full-access: run npm i',
     }, () => new Promise(() => {}));
-    assert.equal(await second, 'rejected', '排队中被审查计时击中：按超时拒绝结算');
-    // 未启动任务的超时计数已发生（consecutiveDenials=1）→ 冷却打开：第三个请求未执行审查即被拦。
-    const third = await answerer({
-      agent: { session: makeSession('session-qtimer', 'call-t3'), inject: () => {} },
-      callId: 'call-t3',
-      toolName: 'pwsh',
-      reason: 'escalate sandbox to danger-full-access: run npm i',
-    }, () => new Promise(() => {}));
-    assert.equal(third, 'rejected', '冷却打开后的请求按拒绝结算');
+    assert.equal(await first, 'rejected', '占位请求按自身审查计时器到点：超时拒绝');
+    // 释放挂起的流：占位任务的迟到结论被弃置（信号已中止），执行位交还排队请求。
     releaseStream();
-    // 占位请求与排队请求共用同一审查时限：releaseStream 时占位请求自身的计时器多半已到点。
-    // 竞速双结局都合法（timer 赢→rejected/timeout、流先赢→allowed-once，迟到结论 late 丢弃），
-    // 本测试只钉排队计数链（second/third 断言），不锁占位请求的具体结局。
-    const firstOutcome = await first;
-    assert.ok(firstOutcome === 'allowed-once' || firstOutcome === 'rejected', `占位请求结局合法（实得 ${firstOutcome}）`);
-    assert.equal(streamCalls, 1, '排队请求与冷却拦截请求都不发起模型流（1＝占位请求）');
+    // 排队请求出队：审查开始回调按剩余预算（≈时限−装配，不含排队等待）武装计时器，流已完成即放行。
+    assert.equal(await second, 'allowed-once', '排队等待不消耗审查预算：出队后照常完成审查并放行');
+    assert.equal(streamCalls, 2, '两个请求各发起一次模型流');
     const file = join(tmp, 'approve-for-me', 'reviews', 'qtimer.jsonl');
-    const lines = await waitForSettles(file, ['call-t1', 'call-t2', 'call-t3']);
+    const lines = await waitForSettles(file, ['call-t1', 'call-t2']);
     const settles = lines.filter((row) => row.kind === 'settle');
     const firstSettle = settles.find((row) => row.callId === 'call-t1');
-    if (firstOutcome === 'rejected') {
-      assert.equal(firstSettle.source, 'timeout', '占位请求按超时结算时：来源为 timeout');
-      assert.equal(firstSettle.stage, 'review', '环节记审查');
-    } else {
-      assert.equal(firstSettle.outcome, 'allowed-once');
-    }
+    assert.equal(firstSettle.outcome, 'rejected');
+    assert.equal(firstSettle.source, 'timeout', '占位请求按超时来源结算');
+    assert.equal(firstSettle.stage, 'review', '环节记审查（自身计时器到点）');
     const secondSettle = settles.find((row) => row.callId === 'call-t2');
-    assert.ok(secondSettle, '排队超时请求的结算记录在场');
-    assert.equal(secondSettle.outcome, 'rejected');
-    assert.equal(secondSettle.source, 'timeout', '按超时来源结算');
-    assert.equal(secondSettle.stage, 'review', '环节记审查（审查计时到点，非排队等待上限）');
-    const thirdSettle = settles.find((row) => row.callId === 'call-t3');
-    assert.ok(thirdSettle, '冷却拦截请求的结算记录在场');
-    assert.equal(thirdSettle.source, 'llm', '冷却未执行按通道故障来源结算');
-    assert.match(thirdSettle.reason, /冷却/u, '结算理由写明冷却');
+    assert.ok(secondSettle, '排队请求的结算记录在场');
+    assert.equal(secondSettle.outcome, 'allowed-once');
+    assert.ok(secondSettle.queueMs >= 100, `排队时长如实体现在 queueMs（实得 ${secondSettle.queueMs}，应 ≥ 占位请求的 120ms 审查期）`);
+    // 结算理由不写「审查未执行」：请求真的执行了审查。
+    assert.ok(!/审查未执行/u.test(secondSettle.reason ?? ''), '排队请求不是调度失败形态');
   } finally {
+    releaseStream();
     if (previousHome === undefined) delete process.env.DSH_HOME;
     else process.env.DSH_HOME = previousHome;
   }

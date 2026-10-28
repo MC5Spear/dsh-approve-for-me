@@ -55,6 +55,14 @@ function makeRt(cfg, options = {}) {
     async review(_request, _located, _pre, _cfg, opts) {
       // §5.3 计数口径测试缝：捕获传入的在飞审查信号，供断言中止标记（超时/被替代）。
       state.reviewSignals.push(opts?.signal);
+      // 三段预算测试缝（design §4.3/§5.1）：模拟出队交接复核后的「审查开始回调」——生产中由
+      // 调度器任务体在发起审查前触发，gate 借此按剩余预算武装审查计时器并补写卡片审查截止。
+      // 缺省按立即出队（queueMs=0）异步触发（与生产同样晚于 reviewing 状态初写）；
+      // `onReviewStart:'never'` 模拟回调永不触达（队列满/排队超时/冷却未执行审查）。
+      if (options.onReviewStart !== 'never') {
+        await delay(options.onReviewStartDelayMs ?? 0);
+        opts?.onReviewStart?.(options.queueMs ?? 0);
+      }
       if (options.reviewDelayMs !== undefined) await delay(options.reviewDelayMs);
       if (options.reviewThrows === true) throw new Error('review exploded');
       // 测试缝（迟到观测端到端链）：真实审查器收尾时写 phase=review 审计行且带 late 观测（与 reviewer 的 review 审计行同形）。
@@ -264,14 +272,17 @@ test('路径 2：审查 deny（fallback=reject）→ rejected + 撤回 + 注入'
 });
 
 test('路径 3：审查超时 → rejected + 注入（超时文案，点明可重试）', async () => {
-  const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 20 } }), {
-    reviewDelayMs: 200,
+  // 预算 150ms：满套件负载下出队回调可能延迟数十毫秒——预算过小会先触发
+  // 「回调发现剩余非正」的装配耗尽分支（文案与归账都不同）；reviewDelayMs 400 保证
+  // 审查计时器先到点（150 < 400），late 结论按超时口径落账。
+  const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 150 } }), {
+    reviewDelayMs: 400,
     verdict: { decision: 'allow', reason: 'late', toolCalls: 0, fields: {} },
   });
   const outcome = await onApprovalRequest(request(), next, rt);
   assert.equal(outcome, 'rejected');
   assert.match(state.injections[0], /自动审批未在时限内完成（超时）/u);
-  assert.match(state.injections[0], /超时环节：审查超时 20 ms/u);
+  assert.match(state.injections[0], /超时环节：审查超时 150 ms/u);
   assert.match(state.injections[0], /这不是「判定为危险」/u);
   assert.match(state.injections[0], /可以直接重试/u);
   // 超时不是危险判定：不得出现 codex 的通用拒绝末句。
@@ -282,7 +293,7 @@ test('路径 3：审查超时 → rejected + 注入（超时文案，点明可�
   // 该路径有 await 竞速边界，宿主撤回通道可观测投影信号。
   assert.equal(state.nextCalls, 1, '正时限：卡片随审查开始弹出');
   assert.equal(state.aborts.length, 1, '超时结算撤回已弹卡片（waterfall + cancel 成对）');
-  assert.equal(state.pending.filter((entry) => entry.op === 'set').length, 1, 'reviewing 卡片状态在场');
+  assert.equal(state.pending.filter((entry) => entry.op === 'set').length, 2, 'reviewing 初写＋出队回调补写在场');
 });
 
 test('路径 3：reviewer.timeoutMs=0 立即超时（不开始尝试，环节记装配，不弹卡＋计数）', async () => {
@@ -369,12 +380,14 @@ test('路径 5：fallback=ask，人工先答 → 人工结果，审查被取消'
 });
 
 test('路径 5：fallback=ask，审查未放行 → handoff 审计，人工超时 → rejected + 注入', async () => {
-  const { rt, state, next } = makeRt(baseConfig({ fallback: 'ask', human: { timeoutMs: 20, timeoutFrom: 'request' }, reviewer: { timeoutMs: 30000 } }), {
+  // 人工预算 200ms：审查 deny 的续延在满套件负载下可能延迟数十毫秒——预算过小会走
+  // 「交人工前预算已耗尽」分支（不写 handoff 行），与本用例要验的形状不同。
+  const { rt, state, next } = makeRt(baseConfig({ fallback: 'ask', human: { timeoutMs: 200, timeoutFrom: 'request' }, reviewer: { timeoutMs: 30000 } }), {
     verdict: { decision: 'deny', risk: 'medium', authorization: 'low', reason: 'needs human', toolCalls: 0, fields: { risk: 'medium', auth: 'low', tools: 0, degraded: 'none' } },
   });
   const outcome = await onApprovalRequest(request(), next, rt);
   assert.equal(outcome, 'rejected');
-  assert.match(state.injections[0], /超时环节：人工未在时限内响应 20 ms/u);
+  assert.match(state.injections[0], /超时环节：人工未在时限内响应 200 ms/u);
   assert.doesNotMatch(state.injections[0], /不要用等价手段绕过该拒绝/u);
   assert.ok(state.audits.some((entry) => entry.phase === 'handoff' && entry.decision === 'ask'));
   const decide = state.audits.find((entry) => entry.phase === 'decide');
@@ -564,18 +577,20 @@ test('关闭弹卡：deny + ask 时交人工才调 next()，且只调一次', as
     { verdict: { decision: 'deny', reason: 'risky', toolCalls: 0, fields: { risk: 'high', auth: 'low', tools: 0, degraded: 'none' } } },
   );
   const promise = onApprovalRequest(request(), next, rt);
-  await tick();
+  // 出队回调经真实定时器时序（setTimeout(0)）晚于 immediates：给一拍真实时间再观测。
+  await delay(5);
   await tick();
   assert.equal(state.nextCalls, 1, '交人工时调用 next()');
   assert.ok(state.audits.some((entry) => entry.phase === 'handoff' && entry.decision === 'ask'));
-  // 状态表先写 reviewing，再在交人工时改写成 waiting-human 并带上原因类别与理由（design §7.4）。
+  // 状态表先写 reviewing（排队段无截止）、出队回调补写截止，再在交人工时改写成 waiting-human
+  // 并带上原因类别与理由（design §7.4）。
   const sets = state.pending.filter((entry) => entry.op === 'set');
   const states = sets.map((entry) => entry.state);
-  assert.deepEqual(states, ['reviewing', 'waiting-human']);
-  assert.equal(sets[1].cause, 'deny', '模型判定拒绝交人工：cause=deny');
-  assert.equal(sets[1].reason, 'risky');
-  assert.equal(sets[1].deadlineKind, 'human', '交人工后倒计时按人工截止时间分派');
-  assert.ok(sets[1].deadlineAt - Date.now() > 0, '人工时限为正数');
+  assert.deepEqual(states, ['reviewing', 'reviewing', 'waiting-human']);
+  assert.equal(sets[2].cause, 'deny', '模型判定拒绝交人工：cause=deny');
+  assert.equal(sets[2].reason, 'risky');
+  assert.equal(sets[2].deadlineKind, 'human', '交人工后倒计时按人工截止时间分派');
+  assert.ok(sets[2].deadlineAt - Date.now() > 0, '人工时限为正数');
   state.nextResolvers[0]('rejected');
   const outcome = await promise;
   assert.equal(outcome, 'rejected');
@@ -598,23 +613,34 @@ test('关闭弹卡：timeoutFrom=request 且剩余≤0 时不弹卡，直接按�
   assert.equal(state.audits.find((entry) => entry.phase === 'decide').source, 'timeout');
 });
 
-test('卡片状态（requirements §6.3／design §7.4）：reviewing 带审查时限，超时转人工时换成人工时限', async () => {
+test('卡片状态（requirements §6.3／design §7.4）：reviewing 排队段无截止、出队回调补写审查时限，超时转人工时换成人工时限', async () => {
   const { rt, state, next } = makeRt(
-    baseConfig({ fallback: 'ask', reviewer: { timeoutMs: 20 }, human: { timeoutMs: 4000, timeoutFrom: 'handoff' } }),
-    { reviewDelayMs: 200, verdict: { decision: 'allow', reason: 'late', toolCalls: 0, fields: {} } },
+    baseConfig({ fallback: 'ask', reviewer: { timeoutMs: 200 }, human: { timeoutMs: 4000, timeoutFrom: 'handoff' } }),
+    { reviewDelayMs: 800, verdict: { decision: 'allow', reason: 'late', toolCalls: 0, fields: {} } },
   );
   const promise = onApprovalRequest(request(), next, rt);
   await tick();
-  const first = state.pending.find((entry) => entry.op === 'set');
-  assert.equal(first.state, 'reviewing');
-  assert.equal(first.deadlineKind, 'review');
-  // 截止起点回溯请求进入时刻（requirements §4.2：装配消耗同一份预算）——与状态条登记点的
-  // 差 ≤ 时限值，慢机下不小于时限减去装配余量。
-  assert.ok(first.deadlineAt - first.startedAt <= 20 && first.deadlineAt - first.startedAt >= 10);
-  await delay(40);
+  const initial = state.pending.find((entry) => entry.op === 'set');
+  assert.equal(initial.state, 'reviewing');
+  assert.equal(initial.deadlineAt, undefined, '排队段不带审查截止（回调未触达时不渲染倒计时）');
+  // 出队回调经真实定时器（setTimeout(0)）：轮询等补写在场，负载下时点漂移不参与断言。
+  for (let i = 0; i < 100 && state.pending.filter((entry) => entry.op === 'set').length < 2; i += 1) await delay(5);
+  const sets = state.pending.filter((entry) => entry.op === 'set');
+  // 补写：deadlineKind=review；截止起点回溯请求进入时刻（装配消耗不补回、排队不计入），
+  // deadlineAt ≈ startedAt + 时限（±计时器精度与调度抖动），不因出队时点重新赠予。
+  const backfill = sets[1];
+  assert.ok(backfill, '出队回调补写在场');
+  assert.equal(backfill.state, 'reviewing', '补写仍是 reviewing（同一审批状态）');
+  assert.equal(backfill.deadlineKind, 'review');
+  assert.ok(
+    backfill.deadlineAt - backfill.startedAt <= 200 + 40 && backfill.deadlineAt - backfill.startedAt >= 200 - 40,
+    `截止回溯请求进入（实得差 ${backfill.deadlineAt - backfill.startedAt}，应 ≈200ms）`,
+  );
+  // 审查计时器（200ms）先于审查完成（800ms）到点：状态转 waiting-human。
+  await delay(300);
   await tick();
-  const second = state.pending.filter((entry) => entry.op === 'set')[1];
-  assert.equal(second.state, 'waiting-human', '审查超时后状态转 waiting-human（design §7.4）');
+  const second = state.pending.filter((entry) => entry.op === 'set').find((entry) => entry.state === 'waiting-human');
+  assert.ok(second, '审查超时后状态转 waiting-human（design §7.4）');
   assert.equal(second.cause, 'timeout', '审查超时交人工：cause=timeout');
   assert.equal(second.deadlineKind, 'human');
   assert.ok(second.deadlineAt - Date.now() > 0, '人工时限为正数');
@@ -628,15 +654,105 @@ test('卡片状态 cause=error（design §7.4）：通道故障交人工时 caus
     { verdict: { decision: 'error', reason: 'empty output', toolCalls: 0, fields: {} } },
   );
   const promise = onApprovalRequest(request(), next, rt);
+  await delay(5);
   await tick();
   await tick();
   const sets = state.pending.filter((entry) => entry.op === 'set');
-  assert.equal(sets[1].state, 'waiting-human');
-  assert.equal(sets[1].cause, 'error', 'error 判定（未超时）交人工：cause=error');
-  assert.equal(sets[1].reason, 'empty output', '通道故障理由随状态透传');
-  assert.equal(sets[1].deadlineKind, 'human');
+  const waiting = sets.find((entry) => entry.state === 'waiting-human');
+  assert.ok(waiting, 'error 判定（未超时）交人工：waiting-human 在场');
+  assert.equal(waiting.cause, 'error', 'error 判定（未超时）交人工：cause=error');
+  assert.equal(waiting.reason, 'empty output', '通道故障理由随状态透传');
+  assert.equal(waiting.deadlineKind, 'human');
   state.nextResolvers[0]('rejected');
   await promise;
+});
+
+test('三段预算（design §4.3/§5.1）：审查开始回调未触达——审查计时器不武装，队列失败不冒充审查超时', async () => {
+  const { rt, state, next } = makeRt(
+    baseConfig({ fallback: 'reject', reviewer: { timeoutMs: 20 }, concurrency: { queueTimeoutMs: 30000 } }),
+    {
+      onReviewStart: 'never',
+      // 模拟调度层失败包络（队列已满/排队超时/冷却未执行审查的既有形状）：审查未执行。
+      verdict: { decision: 'error', reason: '审查未执行：queue-overflow', toolCalls: 0, fields: { degraded: 'queue-overflow', tools: 0 }, stage: 'queue' },
+    },
+  );
+  const outcome = await onApprovalRequest(request(), next, rt);
+  assert.equal(outcome, 'rejected', '按通道故障模板结算（fallback=reject）');
+  // 回调未触达：不存在 label=review 的审查计时器（占位竞速永不由此路结算）。
+  assert.equal(state.timers.filter((entry) => entry.label === 'review').length, 0, '未武装审查计时器');
+  const sets = state.pending.filter((entry) => entry.op === 'set');
+  assert.equal(sets.length, 1, '只有 reviewing 初写，无出队补写');
+  assert.equal(sets[0].deadlineAt, undefined, '排队段不带审查截止');
+  const decide = state.audits.find((entry) => entry.phase === 'decide');
+  assert.equal(decide.source, 'llm');
+  assert.match(state.injections[0], /队列已满|排队|冷却|queue-overflow|审查未执行/u, '文案写明调度环节，不冒充审查超时');
+});
+
+test('三段预算（design §4.3/§5.1）：排队时长不计入审查预算——出队武装按剩余预算，非墙钟差、非全额重赠', async () => {
+  // 形态一：伪称排队 500ms（不真实流逝）。武装按非排队流逝计量＝max(0, 实际流逝−排队)：
+  // 实际流逝只有装配 ~40ms，被 max(0, 40−500) 截为 0，武装满额 100ms。两种错误实现的
+  // 实际取值都在断言域 [90,100] 外：①把伪称排队计入流逝（完整流逝 540ms → 100−540 钳
+  // 1ms 保底）；②真墙钟差但未扣排队外的语义差（≈100−40=60ms）——此处即红。
+  {
+    const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 100 } }), {
+      configForDelayMs: 40,
+      queueMs: 500,
+      verdict: { decision: 'allow', reason: 'ok', toolCalls: 0, fields: {} },
+    });
+    const outcome = await onApprovalRequest(request(), next, rt);
+    assert.equal(outcome, 'allowed-once');
+    const reviewTimer = state.timers.find((entry) => entry.label === 'review');
+    assert.ok(reviewTimer, '出队回调武装了审查计时器');
+    assert.ok(reviewTimer.ms >= 90 && reviewTimer.ms <= 100, `剩余预算排除排队段（实得 ${reviewTimer.ms}，应≈满额 100）`);
+  }
+  // 形态二：无排队（queueMs 0）且装配真实消耗 ~40ms——武装应≈60ms；「出队全额重赠预算」的
+  // 回归（回到满额 100）在此红。
+  {
+    const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 100 } }), {
+      configForDelayMs: 40,
+      queueMs: 0,
+      verdict: { decision: 'allow', reason: 'ok', toolCalls: 0, fields: {} },
+    });
+    const outcome = await onApprovalRequest(request(), next, rt);
+    assert.equal(outcome, 'allowed-once');
+    const reviewTimer = state.timers.find((entry) => entry.label === 'review');
+    assert.ok(reviewTimer, '出队回调武装了审查计时器');
+    assert.ok(reviewTimer.ms >= 15 && reviewTimer.ms <= 75, `武装扣除了装配消耗（实得 ${reviewTimer.ms}，应≈60±负载；钳位 1 与全额 100 两类回归都在窗外）`);
+  }
+});
+
+test('三段预算（design §5.1）：出队回调发现剩余非正——按装配耗尽立即结算，环节记装配、不武装审查计时器', async () => {
+  // 装配后余额为正进入竞速（时限 100、装配 ~40ms），审查开始回调再延迟 90ms——回调时点
+  // 非排队流逝 ≈130ms ≥ 100ms：剩余非正。此时钳 1ms 武装会把它冒充成审查超时（回归形态）。
+  const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 100 } }), {
+    configForDelayMs: 40,
+    onReviewStartDelayMs: 90,
+    verdict: { decision: 'allow', reason: 'late', toolCalls: 0, fields: {} },
+  });
+  const outcome = await onApprovalRequest(request(), next, rt);
+  assert.equal(outcome, 'rejected');
+  assert.equal(state.timers.filter((entry) => entry.label === 'review').length, 0, '不武装审查计时器');
+  assert.equal(state.settles[0].stage, 'assembly', '环节记装配');
+  assert.equal(state.settles[0].source, 'timeout');
+  assert.match(state.injections[0], /超时环节：装配超时 100 ms/u, '通知按装配环节超时模板（不写审查超时）');
+  // 计数经任务结果照旧（design §5.3，scheduler.record 在任务体内结算）——gate 侧不重复计数。
+  assert.equal(state.countTimeouts, 0, 'gate 侧不 countTimeout（防双计）');
+  assert.ok(state.aborts.length >= 1, '已弹卡片随立即结算撤回');
+  // 起止锚点：装配等待计入审批跨度（§8.5）。
+  assert.ok(state.settles[0].endedAt - state.settles[0].startedAt >= 120, '结算跨度含装配与回调等待');
+});
+
+test('结算跨度起点恒为请求进入（design §8.5 装配差值口径）：装配等待计入审批跨度', async () => {
+  const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 5000 } }), {
+    configForDelayMs: 40,
+    verdict: { decision: 'allow', reason: 'ok', toolCalls: 0, fields: {} },
+  });
+  const entryAt = Date.now();
+  const outcome = await onApprovalRequest(request(), next, rt);
+  assert.equal(outcome, 'allowed-once');
+  const settle = state.settles[0];
+  assert.ok(settle.startedAt >= entryAt - 2 && settle.startedAt <= entryAt + 5, '结算起点＝请求进入锚点（不是 screen 之后的时刻）');
+  assert.ok(settle.endedAt - settle.startedAt >= 35, '起止差捕捉到装配等待（40ms 配置读取计入审批一侧）');
 });
 
 test('人工时限为 0 时不登记人工阶段卡片状态，交人工立即按拒绝结算（requirements §4.2）', async () => {
@@ -645,15 +761,19 @@ test('人工时限为 0 时不登记人工阶段卡片状态，交人工立即�
     { verdict: { decision: 'deny', reason: 'x', toolCalls: 0, fields: {} } },
   );
   const promise = onApprovalRequest(request(), next, rt);
+  await delay(5);
   await tick();
-  await tick();
-  // reviewing 状态恒带审查截止（design §7.4）；
-  // 人工阶段零时限：不登记无截止时间的人工待决状态（§4.3），立即按拒绝结算。
+  // handoff 起算的零人工时限不预先耗尽竞速：出队回调先于结算武装（守卫不触发），reviewing
+  // 两写＝排队段初写（无截止）＋出队补写（带审查截止）；deny 交人工遇人工 0 立即按拒绝结算，
+  // 不登记无截止时间的人工待决状态（§4.3）。（request 起算的零时限变体＝G6：结算先于回调，
+  // 守卫挡下补写、恰一写。）
   const sets = state.pending.filter((entry) => entry.op === 'set');
-  assert.equal(sets.length, 1, '只有 reviewing 一条，没有人工阶段状态');
+  assert.equal(sets.length, 2, 'reviewing 初写＋出队回调补写两条，没有人工阶段状态');
   assert.equal(sets[0].state, 'reviewing');
-  assert.ok(Number.isFinite(sets[0].deadlineAt), '审查截止恒有值');
-  assert.equal(sets[0].deadlineKind, 'review');
+  assert.equal(sets[0].deadlineAt, undefined, '排队段不带审查截止');
+  assert.equal(sets[1].state, 'reviewing');
+  assert.ok(Number.isFinite(sets[1].deadlineAt), '出队回调补写后审查截止在场');
+  assert.equal(sets[1].deadlineKind, 'review');
   // 卡片在入口弹出（humanCardDuringReview 默认开）后立即被超时结算撤回：没有人工等待段。
   assert.equal(state.nextCalls, 1);
   const outcome = await promise;
@@ -920,7 +1040,7 @@ test('装配慢但有限不误杀：消耗部分预算后审查照常竞速放�
   assert.ok(assemblyTimers.length >= 1);
   assert.ok(assemblyTimers.every((entry) => entry.cleared === true), '装配备用计时器已清理');
   const reviewTimer = state.timers.find((entry) => entry.label === 'review');
-  assert.ok(reviewTimer && reviewTimer.ms <= 100 && reviewTimer.ms >= 1, '审查计时器用剩余预算');
+  assert.ok(reviewTimer && reviewTimer.ms >= 15 && reviewTimer.ms <= 75, '审查计时器用剩余预算（≈100−40 装配消耗±负载；全额重赠 100 与钳位 1 都在此红）');
 });
 
 test('装配期间取消：不弹卡、不审查，按 cancelled/signal 结算', async () => {  const controller = new AbortController();
@@ -1156,9 +1276,10 @@ test('gate 侧：人工抢先结算后迟到的审查照常收尾，decide 行�
 });
 
 test('端到端链：审查超时结算后，迟到的 review 行 late=yes 且 decide 恰一行', async () => {
-  // 时距 ≥10×（30ms 超时 vs 400ms 审查延迟）：慢机上竞速也不会拼错时序。
-  const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 30 } }), {
-    reviewDelayMs: 400,
+  // 时距 ≥3×（150ms 超时 vs 500ms 审查延迟）：满套件负载下出队回调可能延迟数十毫秒，
+  // 预算过小会先触发装配耗尽分支（decide 归 timeout 而非 llm）；150ms 给回调留足余量。
+  const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 150 } }), {
+    reviewDelayMs: 500,
     reviewWritesAudit: true,
   });
   const outcome = await onApprovalRequest(request(), next, rt);
@@ -1170,7 +1291,7 @@ test('端到端链：审查超时结算后，迟到的 review 行 late=yes 且 d
   assert.equal(state.injections.length, 1);
   assert.match(state.injections[0], /超时/u, '按超时语义结算（超时文案）');
   // 超时抢先 abort 审查信号后，审查仍在跑——等它收尾，finish 行必须带 late=yes（整条链一次断完）。
-  await new Promise((resolvePromise) => setTimeout(resolvePromise, 600));
+  await new Promise((resolvePromise) => setTimeout(resolvePromise, 800));
   const lateRow = state.audits.find((row) => row.phase === 'review');
   assert.ok(lateRow, '迟到审查收尾必须留下 review 行');
   assert.equal(lateRow.late, 'yes');
@@ -1505,8 +1626,9 @@ test('结算记录：硬性危险拦截 → rejected/hard，审计行 source=har
 });
 
 test('结算记录：审查超时 → rejected/timeout，stage=review', async () => {
-  const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 20 } }), {
-    reviewDelayMs: 100,
+  // 150ms 预算防负载翻转（回调延迟过小预算会走装配耗尽分支、stage=assembly）。
+  const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 150 } }), {
+    reviewDelayMs: 300,
     verdict: { decision: 'allow', reason: 'late', toolCalls: 0, fields: {} },
   });
   await onApprovalRequest(request(), next, rt);
@@ -1552,6 +1674,10 @@ test('结算记录：交人工后人工作答 → source=human，humanWaitMs 从
   });
   const promise = onApprovalRequest(request(), next, rt);
   await tick();
+  // 出队回调经真实定时器（setTimeout(0)）：先等审查确实交人工（handoff 行在场）再起测等待段，
+  // 负载下回调时点漂移不再压窄 humanWaitMs。
+  for (let i = 0; i < 100 && !state.audits.some((entry) => entry.phase === 'handoff'); i += 1) await delay(5);
+  assert.ok(state.audits.some((entry) => entry.phase === 'handoff'), '交人工先行发生');
   await delay(15);
   state.nextResolvers[0]('rejected');
   const outcome = await promise;

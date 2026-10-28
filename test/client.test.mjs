@@ -3847,7 +3847,7 @@ const reviewT = (key) => REVIEW_TEXT[key] ?? key;
  * C 只有结算（队列已满，未执行审查——decision/model 等模型侧字段缺失）。
  */
 const TRACE_ROWS = [
-  { approvalId: 'apA', callId: 'call_A', toolName: 'pwsh', origin: 'main', escalation: 'danger-full-access', startedAt: 1_700_000_000_000, endedAt: 1_700_000_002_100, queueMs: 100, reviewMs: 2000, humanWaitMs: null, decision: 'allow', outcome: 'rejected', source: 'human', model: 'zai/glm-5.3', effort: 'low', risk: 'low', auth: 'high', reason: '命令安全', subject: 'npm i', truncated: false },
+  { approvalId: 'apA', callId: 'call_A', toolName: 'pwsh', origin: 'main', escalation: 'danger-full-access', startedAt: 1_700_000_000_000, endedAt: 1_700_000_002_500, queueMs: 100, reviewMs: 2000, humanWaitMs: null, decision: 'allow', outcome: 'rejected', source: 'human', model: 'zai/glm-5.3', effort: 'low', risk: 'low', auth: 'high', reason: '命令安全', subject: 'npm i', truncated: false },
   { approvalId: 'apB', callId: 'call_B', toolName: 'edit', origin: 'main', escalation: null, startedAt: 1_700_000_010_000, endedAt: 1_700_000_010_500, queueMs: 0, reviewMs: 500, humanWaitMs: null, decision: 'deny', outcome: 'rejected', source: 'llm', model: 'zai/glm-5.3', effort: 'low', risk: 'high', auth: 'low', reason: '改动敏感文件', subject: 'edit x.ts', truncated: false },
   { approvalId: 'apC', callId: 'call_C', toolName: 'pwsh', origin: 'subagent', escalation: null, startedAt: 1_700_000_020_000, endedAt: 1_700_000_020_010, queueMs: null, reviewMs: null, humanWaitMs: null, decision: null, outcome: 'rejected', source: 'llm', model: null, effort: null, risk: null, auth: null, reason: '审查未执行：queue-overflow', subject: 'npm run build', truncated: false },
 ];
@@ -4073,9 +4073,9 @@ test('审查视图：合并行主判定为 outcome、判定与结算并存可分
   assert.match(listText, /模型结论：放行（allow）/, '方向相反时模型结论为次级并列标注');
   assert.equal((listText.match(/模型结论：/g) ?? []).length, 1, '同向行（deny→rejected）不得重复并列次级标注');
   assert.ok(!listText.includes('未记录最终审批结果'), '有 outcome 的行不得出现旧格式回退标注');
-  // C 行（只有结算）：Z 无任何在场分段 → 0ms 由在场分段求和得出。
+  // C 行（只有结算）：无任何在场分段但有起止——Z＝起止差 10ms（含装配差值，design §8.5）。
   assert.match(listText, /npm run build/);
-  assert.match(listText, /审批 0 ms/, '无在场分段时 Z=0（求和口径）');
+  assert.match(listText, /审批 10 ms/, '无在场分段时 Z＝起止差（装配差值口径）');
 
   // 点开 A（匹配上，humanWaitMs 只在详情里）：X=5000ms，Z=100+2000+400=2500ms，Y=2500ms。
   const heads = findAllByClass(listTree, 'dsafm_review_head');
@@ -4151,13 +4151,41 @@ test('审查视图：合并行主判定为 outcome、判定与结算并存可分
   assert.ok(!cText.includes('审查未执行：'), '固定前缀不得显示在界面文案中');
   assert.ok(!cText.includes('工具总计'), '匹配不上时不得显示等式');
   assert.match(cText, /未匹配到工具行/, '匹配不上时必须标注，不猜 X');
-  assert.match(cText, /审批 0 ms/, '无在场分段时 Z=0（求和口径）');
+  assert.match(cText, /审批 10 ms/, '无在场分段时 Z＝起止差（装配差值口径，非求和）');
   // C（queue-overflow 结算、decision 缺失＝审查未执行）：全文段缺失不构成「未开启」的证据，
   // 六个缺段全部归统一缺省（design §8.5.1 第三级以 decision 在场为前提）。
   assert.equal((cText.match(/本次未记录此项/g) ?? []).length, 6, '审查未执行记录的全部缺段归「本次未记录此项」');
   assert.ok(!cText.includes('未开启全文采集'), '审查未执行的记录不得归因未开启全文采集');
   assert.ok(!cText.includes('未取上下文'), '审查未执行的记录不得归因未取上下文');
   assert.ok(!cText.includes('最终审批结果：null'), 'C 行 decision 缺失时模型结论段不渲染');
+});
+
+test('审查视图 §8.5：起止缺失（旧记录）时 Z 退回在场分段之和；起止倒置同样回退', async () => {
+  resetHooks();
+  const client = loadClient();
+  // 旧记录不带起止时间：Z 只能按在场分段求和；起止倒置（异常数据）不产生负值，同样回退。
+  const rows = [
+    { approvalId: 'apF', callId: 'call_F', toolName: 'pwsh', origin: 'main', escalation: null, queueMs: 150, reviewMs: 50, humanWaitMs: null, decision: 'deny', outcome: 'rejected', source: 'llm', model: 'zai/glm-5.3', effort: 'low', risk: 'high', auth: 'low', reason: 'r', subject: 'no-ts', truncated: false },
+    { approvalId: 'apG', callId: 'call_G', toolName: 'pwsh', origin: 'main', escalation: null, startedAt: 500, endedAt: 400, queueMs: 10, reviewMs: 5, humanWaitMs: null, decision: 'deny', outcome: 'rejected', source: 'llm', model: 'zai/glm-5.3', effort: 'low', risk: 'high', auth: 'low', reason: 'r', subject: 'inverted', truncated: false },
+  ];
+  const env = makeCtx({
+    currentSession: 's1',
+    call: async (endpoint) => {
+      if (endpoint === 'approveForMe/traceRecords') return { ok: true, value: { records: rows, readFailed: false } };
+      if (endpoint === 'approveForMe/getState') return { ok: true, value: { trace: { capture: 'summary', ownView: true, turnSummary: true } } };
+      return { ok: true, value: {} };
+    },
+  });
+  client.apply(env.ctx);
+  const view = env.registrations.find((entry) => entry.options.name === 'conversation.view');
+  const props = { t: reviewT, ...view.options.inject() };
+  render(view.component, props);
+  await tick();
+  await tick();
+  hookIndex = 0;
+  const listText = JSON.stringify(render(view.component, props));
+  assert.match(listText, /审批 200 ms/, '起止缺失时 Z＝在场分段之和（150+50）');
+  assert.match(listText, /审批 15 ms/, '起止倒置按异常数据回退求和（10+5）');
 });
 
 test('审查视图：装配环节超时结算行——环节标签渲染为装配（assembly）（design §8.5.1）', async () => {
@@ -4923,9 +4951,10 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
       ['插件是否已停用', '重新启用插件或重启宿主可能恢复', '可改选标准权限档', '彻底清理按使用说明的卸载一节', '不解析、不改写用户 YAML'],
       ['disabled plugin', 'Re-enabling or restarting', 'pick a standard tier', 'uninstall section of the manual', 'never parses or rewrites user YAML']],
     ['card.presets.unavailable',
-      // 长提示不逐字冻结（design §10.2 B2 第二层）：等义精简可过；原因枚举与「确认后重试」路径删除必红。
-      ['服务缺失、读取失败或没有可用预设信息', '确认权限预设服务可用后重试'],
-      ['a missing service, a read failure, or no preset information', 'check the permission preset service and retry']],
+      // 长提示不逐字冻结（design §10.2 B2 第二层）：分项事实各自在场即可，等义改写通过；
+      // 三类原因与处置路径的逐项保护见下方分项块（缺任一项必红）。
+      ['读不到预设目录', '可能原因', '服务缺失', '读取失败', '预设信息', '确认权限预设服务可用', '重试'],
+      ['The preset catalog is unavailable', 'Possible causes', 'a missing service', 'a read failure', 'preset information', 'check the permission preset service', 'retry']],
   ];
   for (const [key, zhFacts, enFacts] of LONG_COPY_FACTS) {
     assert.ok(typeof zh[key] === 'string' && zh[key].length > 0, `${key} 的中文应在场`);
@@ -4935,6 +4964,26 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     }
     for (const fact of enFacts) {
       assert.ok(en[key].includes(fact), `${key} 的英文须含关键事实「${fact}」`);
+    }
+  }
+  // 长提示分项保护（design §10.2 B2 第二层）：上表条目的等价正例与逐项删除反例——等义改写
+  // （保留三类原因与处置顺序、仅换措辞）必须通过分项检查；从现行文案删去任一原因或处置
+  // 片段后，同一检查必须失败，防止分项退化成无约束力的整段冻结。
+  const unavailableCases = [
+    [zh['card.presets.unavailable'],
+      '读不到预设目录。可能原因：服务缺失、读取失败或预设信息不可用。确认权限预设服务可用，再重试。',
+      ['读不到预设目录', '可能原因', '服务缺失', '读取失败', '预设信息', '确认权限预设服务可用', '重试']],
+    [en['card.presets.unavailable'],
+      'The preset catalog is unavailable. Possible causes: a missing service, a read failure, or unusable preset information; check the permission preset service, then retry.',
+      ['The preset catalog is unavailable', 'Possible causes', 'a missing service', 'a read failure', 'preset information', 'check the permission preset service', 'retry']],
+  ];
+  for (const [copy, equivalent, facts] of unavailableCases) {
+    const factsPresent = (text) => facts.every((fact) => text.includes(fact));
+    assert.ok(factsPresent(copy), 'card.presets.unavailable 现行文案须含全部分项事实');
+    assert.ok(factsPresent(equivalent), 'card.presets.unavailable 等义改写须通过分项检查');
+    for (const fact of facts) {
+      const without = copy.split(fact).join('');
+      assert.ok(!factsPresent(without), `card.presets.unavailable 删除「${fact}」后分项检查须失败`);
     }
   }
   // design §7.2.2：仅 session 键携带所配引用占位符；global/rule 键不得含。
@@ -4950,7 +4999,7 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
 test('审查视图：详情匹配 PTC 子调用行；truncated 标注已截断；拿不到 useTrajectory 时只显示 Z', async () => {
   resetHooks();
   const client = loadClient();
-  const rows = [{ ...TRACE_ROWS[0], approvalId: 'apP', callId: 'call_ptc', truncated: true, queueMs: 100, reviewMs: 100, decision: null, outcome: 'rejected', source: 'llm', reason: '危险写入', subject: null }];
+  const rows = [{ ...TRACE_ROWS[0], approvalId: 'apP', callId: 'call_ptc', truncated: true, queueMs: 100, reviewMs: 100, endedAt: 1_700_000_000_350, decision: null, outcome: 'rejected', source: 'llm', reason: '危险写入', subject: null }];
   const detail = { ...rows[0], humanWaitMs: 0, prompt: 'P2' };
   const env = makeCtx({
     currentSession: 's1',
@@ -4975,8 +5024,10 @@ test('审查视图：详情匹配 PTC 子调用行；truncated 标注已截断�
   await tick();
   hookIndex = 0;
   const subText = JSON.stringify(render(view.component, propsSub));
-  // 匹配的是 subCalls 里的结算子调用（callTime→time = 1500ms），Z = 100 + 100 + 0 = 200ms，Y = 1300ms。
-  assert.match(subText, /工具总计 1\.5 s = 执行 1\.3 s \+ 审批 200 ms/);
+  // 匹配的是 subCalls 里的结算子调用（callTime→time = 1500ms）。Z＝起止差 350ms
+  //（在场分段 100+100+0=200ms ＋ 装配差值 150ms——装配段计入审批一侧，design §8.5），
+  // Y = 1150ms（formatMillis 一位小数 → 1.1 s）。
+  assert.match(subText, /工具总计 1\.5 s = 执行 1\.1 s \+ 审批 350 ms/);
   assert.match(subText, /已截断/, 'truncated=true 时标注已截断');
 
   // 没有 useTrajectory（旧宿主）：只显示 Z，不猜 X，也不崩。
@@ -5004,7 +5055,7 @@ test('审查视图：详情匹配 PTC 子调用行；truncated 标注已截断�
   await tick();
   hookIndex = 0;
   const text2 = JSON.stringify(render(view2.component, props2));
-  assert.match(text2, /审批 200 ms/);
+  assert.match(text2, /审批 350 ms/);
   assert.match(text2, /未匹配到工具/);
 });
 
