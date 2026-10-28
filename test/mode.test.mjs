@@ -178,6 +178,37 @@ test('resolveActivation：连 defaultPreset 都取不到时 resolved=false 且�
   assert.equal(result.active, false);
 });
 
+test('resolveActivation：mode=off 短路先于预设折算——active 折为 false，preset 仍上报', () => {
+  const result = resolveActivation(
+    {
+      permissionPresets: () => ({ current: () => 'auto-approve', defaultPreset: 'auto-approve' }),
+      trigger: { presets: ['auto-approve'], unknown: 'skip' },
+      mode: 'off',
+    },
+    session(),
+  );
+  assert.deepEqual(result, { preset: 'auto-approve', active: false, resolved: true, unknown: false });
+});
+
+test('resolveActivation：mode=off 时不可判定折算同样被短路（unknown=review 不改 active）', () => {
+  const result = resolveActivation(
+    { permissionPresets: () => undefined, trigger: { presets: ['auto-approve'], unknown: 'review' }, mode: 'off' },
+    session(),
+  );
+  assert.equal(result.active, false);
+  assert.equal(result.preset, null);
+});
+
+test('resolveActivation：mode 热切换随快照逐次反映（off→rules 恢复接管）', () => {
+  const depsOf = (mode) => ({
+    permissionPresets: () => ({ current: () => 'auto-approve', defaultPreset: 'auto-approve' }),
+    trigger: { presets: ['auto-approve'], unknown: 'skip' },
+    mode,
+  });
+  assert.equal(resolveActivation(depsOf('off'), undefined).active, false);
+  assert.equal(resolveActivation(depsOf('rules'), undefined).active, true);
+});
+
 // ── gate 跳过路径的审计去重通道（requirements §5.3／design §8.1） ────────────
 
 test('gateSkip：同 (会话, 因) 首行放行，异因/异会话照常', () => {
