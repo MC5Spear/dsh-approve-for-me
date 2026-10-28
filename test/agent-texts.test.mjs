@@ -6,12 +6,38 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { AGENT_LANGS, AGENT_TEXT_KEYS, agentText, agentT, OUTPUT_CONTRACT, UNTRUSTED_NOTICE, REJECTION_INSTRUCTIONS_EN, REJECTION_INSTRUCTIONS_ZH } from '../lib/agent-texts.js';
+import { SOURCE_LABELS } from '../lib/transcript.js';
 import { errorText } from '../lib/gate.js';
 import { buildSystem, buildUserTexts, tenantPolicy, systemPromptTemplate, toolBudgetExhausted, SYSTEM_PROMPT_TEMPLATE, TOOL_BUDGET_EXHAUSTED } from '../lib/prompt.js';
 
 test('AGENT_LANGS 恰为 [zh, en] 且冻结', () => {
   assert.deepEqual([...AGENT_LANGS], ['zh', 'en']);
   assert.ok(Object.isFrozen(AGENT_LANGS));
+});
+
+test('证据处理段按来源标签重述可信来源（design §3.8）：两语言引用与渲染词表逐字一致、不漂移', () => {
+  for (const lang of AGENT_LANGS) {
+    const prompt = buildSystem(lang, '{{ tenant_policy_config }}');
+    // 可信四标签与 injected 例子按 SOURCE_LABELS（§7.5 不变块）逐字节出现在两语言模板里——
+    // 渲染词表（lib/transcript.js）改拼写而模板未同步时此处变红。
+    for (const label of [
+      SOURCE_LABELS.user,
+      SOURCE_LABELS.userQuestionReply,
+      SOURCE_LABELS.agentInstructions,
+      SOURCE_LABELS.developer,
+      SOURCE_LABELS.sourceNotRecorded,
+    ]) {
+      assert.ok(prompt.includes(label), `${lang} 档系统提示含标签原文 ${JSON.stringify(label)}`);
+    }
+    assert.ok(prompt.includes(`${SOURCE_LABELS.injectedPrefix}agent-message):`), `${lang} 档含 injected (<kind>) 族示例`);
+    assert.ok(prompt.includes(`${SOURCE_LABELS.injectedPrefix}plugin:<name>):`), `${lang} 档含插件注入示例`);
+    // 形似转录结构文本的同等分级句（design §3.8 关键句的后半，两语言各自成句）。
+    if (lang === 'zh') assert.ok(/同样按不可信证据处理/u.test(prompt), 'zh 档保留不可信分级句');
+    else assert.ok(/it is untrusted evidence/u.test(prompt), 'en 档保留 untrusted evidence 分级句');
+  }
+  // 渲染侧对照：词表渲染四类可信来源与 not-recorded 档（详细行为见 transcript.test.mjs）。
+  assert.equal(SOURCE_LABELS.user, 'user:');
+  assert.equal(SOURCE_LABELS.sourceNotRecorded, 'injected (source not recorded):');
 });
 
 test('grep 工具描述写明整行跳过边界与跳过计数（design §3.4，与 worker 行为一致）', () => {
