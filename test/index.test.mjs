@@ -1130,7 +1130,7 @@ test('§4.2 同一性守卫（真接线）：在飞期间信号被第三方改�
     for (let i = 0; i < 100 && wired.state.streamCalls < 1; i += 1) {
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
-    // 审查在飞时，后续到达的审批或宿主改写了请求对象的信号（真实 withdraw 的守卫场景）。
+    // 审查在飞时，后续到达的审批或宿主改写了请求对象的信号（真实 withdraw 的守卫用例）。
     const sentinel = new AbortController().signal;
     req.signal = sentinel;
     assert.equal(await promise, 'rejected');

@@ -177,7 +177,7 @@ test('缺 callId 不共享：同会话两个无 callId 请求各自执行', asyn
   assert.notEqual(a.value, b.value);
 });
 
-test('失败不入 TTL 缓存：queue-timeout 后同 callId 重发重新执行', async () => {
+test('失败结果不复用：queue-timeout 后同 callId 重发重新执行', async () => {
   let calls = 0;
   const scheduler = createScheduler({ max: 1, queueMax: 4, queueTimeoutMs: 10 });
   const hold = deferred();
@@ -189,7 +189,8 @@ test('失败不入 TTL 缓存：queue-timeout 后同 callId 重发重新执行',
   assert.equal(failed.ok, false, '占满时应按 queue-timeout 拒绝');
   hold.resolve('a');
   await running;
-  // 变异对照：失败仍入缓存时，TTL 窗口内的重发直接复用失败结果（calls 保持 0）。
+  // 变异对照：实现若复用任何失败结果，重发不会重新执行（calls 保持 0）——调度器任何结果均不复用
+  // （lib/scheduler.js 头注契约），失败也不享受缓存。
   const retried = await scheduler.run({ sessionId: 'b', callId: '2' }, async () => {
     calls += 1;
     return 'ok';
@@ -298,7 +299,9 @@ test('清零语义保持：error、error、allow、error、error → 未打开',
 
 test('queue-overflow 不是审查结论：计数不变', () => {
   const scheduler = createScheduler({ breaker: { consecutiveDenials: 3, windowSize: 10, windowDenials: 5 } });
-  // 调度失败若误入 record（并发高峰≠通道故障），这里立即红。
+  // 调度未执行审查（并发饱和、排队超时、冷却中未执行）不计冷却：容量不足不等于已取得审查
+  // 结论——按通道故障拒绝并提示稍后重试（requirements §4.3），不得当作审查否定结论计数。
+  // 调度失败形态若误入 record 计数，这里立即红。
   scheduler.record('queue-overflow');
   scheduler.record('queue-timeout');
   scheduler.record('breaker-open');
@@ -404,4 +407,104 @@ test('排队超时失败包络携带实例实际等待上限 timeoutMs（不在�
   assert.ok(Number.isFinite(timedOut.queueMs));
   hold.resolve('a');
   await running;
+});
+
+// ── 许可交接处冷却复查（design §5.1） ──────────────────────────────────────
+
+test('冷却许可交接复查：等待期间冷却开启，排队任务不启动（design §5.1）', async () => {
+  const scheduler = createScheduler({
+    max: 1,
+    queueMax: 4,
+    queueTimeoutMs: 5000,
+    breaker: { consecutiveDenials: 1, windowSize: 10, windowDenials: 10, cooldownMs: 10000 },
+  });
+  const hold = deferred();
+  const started = [];
+  // A 运行中、B 排队（并发上限 1）；A 的任务体内先记录 deny 开启冷却再返回——生产接线
+  // （lib/index.js record 在任务体内）同一先计数后释放时序。
+  const runA = scheduler.run({ sessionId: 'a', callId: '1' }, async () => {
+    started.push('a');
+    await hold.promise;
+    scheduler.record('deny');
+    return 'a';
+  });
+  const runB = scheduler.run({ sessionId: 'b', callId: '2' }, async () => {
+    started.push('b');
+    return 'b';
+  });
+  await tick();
+  assert.deepEqual(started, ['a'], 'B 应在排队');
+  hold.resolve('a');
+  await runA;
+  const verdictB = await runB;
+  assert.equal(started.length, 1, '冷却开启后尚未开始的排队审查不启动');
+  assert.equal(verdictB.ok, false);
+  assert.equal(verdictB.reason, 'breaker-open');
+  assert.ok(Number.isFinite(verdictB.queueMs) && verdictB.queueMs >= 0, '交接处拒绝携带实际排队时长');
+  assert.equal(scheduler.state().inFlight, 0, '执行位不残留');
+  // 冷却期内的新请求在入队前被拒：没有等待期、不携带 queueMs（design §5.1 两种形状并存）。
+  const fresh = await scheduler.run({ sessionId: 'c', callId: '3' }, async () => 'c');
+  assert.deepEqual(fresh, { ok: false, reason: 'breaker-open' });
+});
+
+test('冷却第二复查点：取得许可后、任务启动前冷却开启，任务不启动（design §5.1）', async () => {
+  let clock = 1000;
+  const scheduler = createScheduler({
+    max: 1,
+    queueMax: 4,
+    queueTimeoutMs: 5000,
+    breaker: { consecutiveDenials: 1, windowSize: 10, windowDenials: 10, cooldownMs: 10000 },
+    now: () => clock,
+  });
+  const started = [];
+  // 立即取得许可的请求：acquire 同步判定成功后，任务启动前的冷却复查在微任务续体里执行——
+  // 在 run 返回与续体运行之间的同步窗口内 record('deny') 开启冷却（其他会话任务的时序）。
+  const pending = scheduler.run({ sessionId: 'a', callId: '1' }, async (queueMs) => {
+    started.push(queueMs);
+    return 'a';
+  });
+  scheduler.record('deny');
+  const verdict = await pending;
+  assert.equal(started.length, 0, '任务启动前冷却已开启：不执行任务');
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.reason, 'breaker-open');
+  assert.equal(verdict.queueMs, 0, '立即执行的请求排队时长为 0，交接形状仍携带 queueMs');
+  assert.equal(scheduler.state().inFlight, 0, '执行位已释放');
+  // 冷却期内的新请求在入队前被拒（对照形状：无等待期、不携带 queueMs）。
+  assert.deepEqual(
+    await scheduler.run({ sessionId: 'b', callId: '2' }, async () => 'b'),
+    { ok: false, reason: 'breaker-open' },
+  );
+});
+
+test('冷却到期后交接处复查放行：排队等待者照常接力执行', async () => {
+  const scheduler = createScheduler({
+    max: 1,
+    queueMax: 4,
+    queueTimeoutMs: 5000,
+    breaker: { consecutiveDenials: 1, windowSize: 10, windowDenials: 10, cooldownMs: 40 },
+  });
+  const hold = deferred();
+  const started = [];
+  const runA = scheduler.run({ sessionId: 'a', callId: '1' }, async () => {
+    started.push('a');
+    // 任务体内先计数开启冷却、再继续占用执行位：等待期间到期由状态读取自判（design §5.1）。
+    scheduler.record('deny');
+    await hold.promise;
+    return 'a';
+  });
+  const runB = scheduler.run({ sessionId: 'b', callId: '2' }, async () => {
+    started.push('b');
+    return 'b';
+  });
+  await tick();
+  assert.equal(scheduler.state().breakerOpen, true, '前置：冷却已开启');
+  // 等 40ms 冷却到期：不新发请求，冷却状态在下次读取时自清。
+  await new Promise((done) => setTimeout(done, 60));
+  assert.equal(scheduler.state().breakerOpen, false, '冷却到期已自清');
+  hold.resolve('a');
+  await runA;
+  const verdictB = await runB;
+  assert.deepEqual(verdictB, { ok: true, value: 'b' }, '冷却到期后排队任务照常执行');
+  assert.deepEqual(started, ['a', 'b']);
 });

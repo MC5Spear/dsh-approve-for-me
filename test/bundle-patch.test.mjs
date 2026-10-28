@@ -122,11 +122,11 @@ test('bundle patch：三标准档取值与 dsh-base 逐字一致', () => {
   assert.equal(scalarOf(tierIndex(block, 'danger-full-access'), block, 'approval'), 'never');
 });
 
-test('bundle patch：auto-approve knobs 与 workspace-write 逐字段等同＋展示名在场', () => {
+test('bundle patch：auto-approve 与 workspace-write 逐字段等同＋展示名在场', () => {
   const block = rowBlock('permission');
   const workspaceWrite = tierIndex(block, 'workspace-write');
   const autoApprove = tierIndex(block, 'auto-approve');
-  // knobs 等同是宿主 derive() 会话回落的前提（design §9.1）：unset 或改值都会让旧会话悬空。
+  // 两组 permission 配置档逐字段等同一事是宿主 derive() 会话回落的前提（design §9.1）：unset 或改值都会让旧会话悬空。
   assert.equal(scalarOf(autoApprove, block, 'sandbox'), scalarOf(workspaceWrite, block, 'sandbox'), 'auto-approve.sandbox 必须与 workspace-write 相同');
   assert.equal(scalarOf(autoApprove, block, 'approval'), scalarOf(workspaceWrite, block, 'approval'), 'auto-approve.approval 必须与 workspace-write 相同');
   assert.match(patchLines[autoApprove + 3] ?? '', /name: 自动审批/u, 'auto-approve 需带展示名');

@@ -68,7 +68,7 @@ test('sessionLogFiles/currentSessionLog：版本化命名与当前代选择', ()
   }
 });
 
-test('listSessionLogs：v4 命名的会话不再空结果', () => {
+test('listSessionLogs：v4 命名的会话日志照常枚举', () => {
   const home = makeHome();
   try {
     const dir = join(home, 'sessions', 'ws-a', 'session-abc');

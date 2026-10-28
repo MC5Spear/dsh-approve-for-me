@@ -842,7 +842,7 @@ test('设置表单不自带标题块：插件名与描述由宿主详情页渲�
   const env = makeCtx();
   client.apply(env.ctx);
   const dicts = env.dictionaries[0].dicts;
-  // 标题/描述键属退役折叠头分支：中英两侧都不得出现（退役名即幻觉源）。
+  // 标题/描述由宿主详情页提供：设置字典不消费这些键，中英两侧都不得出现。
   assert.equal('card.title' in dicts.zh, false);
   assert.equal('card.title' in dicts.en, false);
   assert.equal('card.description' in dicts.zh, false);
@@ -4685,10 +4685,11 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
   assert.ok(zh['view.retention'].length > 0, '保留范围文案应在场');
 
   // 文案断言分两层（design §10.2 B2 分层口径）：
-  // ① DESIGN_FINAL 逐键精确断言——短文案：字段名、选项、枚举、模板句、占位符键、常驻短句（hint.*）；
+  // ① DESIGN_FINAL 逐键精确断言——短文案：字段名、选项、枚举、模板句、占位符键、单行短提示（hint.* 短句）；
   // ② LONG_COPY_FACTS 关键事实断言——长帮助与提示：help.*、长 warn.*（空全局默认三键）、
-  //    view.retention、card.presets.missing.remedy。长文案不整段逐字冻结：等义精简（含删除
-  //    冗余尾句）不应使本测试变红；删除必要事实、条件或占位符的改动由下列子串检出。
+  //    view.retention、card.presets.missing.remedy，以及两条长说明位（hint.reviewer.maxTokens、
+  //    card.presets.unavailable）——长说明不因 hint/card 键前缀整段冻结，等义精简可过、
+  //    删除必要事实、条件或占位符的改动由子串检出。
   // 两张清单都是手工转抄，不是设计文件解析校验；设计定稿表修订时须同步本清单。
   // 短文案与本地期望值不符时失败；长文案仅检查下列事实片段，设计表需另行人工核对。
   const DESIGN_FINAL = [
@@ -4752,7 +4753,6 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['hint.language.ui', '插件界面文案的语言。', "Language of the plugin's UI copy."],
     ['hint.language.agent', '发给审查模型的文本与给执行助手的通知，两者使用的语言。', "Language shared by the texts sent to the reviewer and the notices sent to the agent."],
     ['hint.reviewer.timeoutMs', '自动审查的等待上限（毫秒）；0 立即超时。', "Auto-review wait limit (ms); 0 times out immediately."],
-    ['hint.reviewer.maxTokens', '审查输出的 token 上限（token 是模型计量文本的单位）；0 不向模型传输出上限，由模型或供应商默认值决定；推理模型可能先把额度用于推理，上限过小可能导致没\u2060有\u2060有\u2060效\u2060结\u2060论。', "Review output cap in tokens (a token is the unit models use to measure text); 0 sends no cap, leaving the model or provider default; reasoning models may spend the budget on reasoning first — too small a cap can leave no usable conclusion."],
     ['hint.ui.humanCardDuringReview', '审查期间是否提前显示人工审批卡片。', "Whether the human card appears early during review."],
     ['hint.human.timeoutMs', '人工作答的等待上限（毫秒）；0 立即拒绝。', "Human-answer wait limit (ms); 0 rejects immediately."],
     ['hint.human.timeoutFrom', '人工作答从何时开始计时：审批请求发出时，或交人工时。', "Where the human-answer timing starts: at the approval request, or at the handoff."],
@@ -4764,10 +4764,10 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['hint.ui.injectMaxBytes', '单条通知的字节上限；0 不裁剪。', "Byte cap per notice; 0 does not trim."],
     ['hint.tools', '纳入自动审批的工具，每行一个；空清单覆盖全部工具。', "Tools under auto-approval, one per line; empty covers all."],
     ['hint.denyPatterns', '每行一条正则表达式；命中即直接拒绝，模型与人工都不能推翻。', "One regex per line; a hit rejects outright, beyond model or human."],
-    // —— §7.2.2 预设多选提示表 ——（missing.remedy 为长文案，按 LONG_COPY_FACTS 口径断言）
+    // —— §7.2.2 预设多选提示表 ——（missing.remedy、presets.unavailable 与 maxTokens 为长文案，
+    //     按 LONG_COPY_FACTS 口径断言，不在本表逐字冻结）
     ['card.presets.none', '清单为空时，已知预设都不会接管审批；无法识别的预设按「无法识别权限预设时」的设置处置。', 'With an empty list no known preset is taken over; presets that cannot be identified follow "When the preset cannot be identified".'],
     ['card.presets.missing', '配置中存在但当前预设表里没有：', "Configured but absent from the current preset table: "],
-    ['card.presets.unavailable', '读不到预设目录。可能原因：服务缺失、读取失败或没有可用预设信息；可确认权限预设服务可用后重试。', 'The preset catalog is unavailable. Possible causes: a missing service, a read failure, or no preset information; check the permission preset service and retry.'],
     // —— §7.3.1 会话控件表 ——
     ['composer.label', '审查模型', "Reviewer model"],
     ['composer.section.effort', '推理强度', "Effort"],
@@ -4872,6 +4872,11 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['help.reviewer.maxTokens',
       ['token 是模型计量文本的单位', '由模型或供应商默认值决定', '推理', noConclusion, '具体数值因模型与推理强度而异'],
       ['measure text', 'model or provider default', 'reasoning', 'no usable conclusion', 'varies by model and effort']],
+    ['hint.reviewer.maxTokens',
+      // 长提示不逐字冻结（design §10.2 B2 第二层）：等义精简可过；以下事实删除必红——
+      // token 单位、0＝不传上限（不是无限）、供应商默认接管、推理额度风险、无有效结论风险。
+      ['token 是模型计量文本的单位', '0 不向模型传输出上限', '由模型或供应商默认值决定', '推理', noConclusion],
+      ['a token is the unit models use to measure text', '0 sends no cap', 'model or provider default', 'reasoning', 'no usable conclusion']],
     ['help.human.timeoutMs',
       ['仅在「自动审查未允许时＝交给人工决定」时使用', '0 表示立即拒绝', '到点按拒绝结算'],
       ['only when the fallback is Ask', '0 rejects immediately', 'settles as a rejection']],
@@ -4917,6 +4922,10 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['card.presets.missing.remedy',
       ['插件是否已停用', '重新启用插件或重启宿主可能恢复', '可改选标准权限档', '彻底清理按使用说明的卸载一节', '不解析、不改写用户 YAML'],
       ['disabled plugin', 'Re-enabling or restarting', 'pick a standard tier', 'uninstall section of the manual', 'never parses or rewrites user YAML']],
+    ['card.presets.unavailable',
+      // 长提示不逐字冻结（design §10.2 B2 第二层）：等义精简可过；原因枚举与「确认后重试」路径删除必红。
+      ['服务缺失、读取失败或没有可用预设信息', '确认权限预设服务可用后重试'],
+      ['a missing service, a read failure, or no preset information', 'check the permission preset service and retry']],
   ];
   for (const [key, zhFacts, enFacts] of LONG_COPY_FACTS) {
     assert.ok(typeof zh[key] === 'string' && zh[key].length > 0, `${key} 的中文应在场`);
@@ -5185,7 +5194,7 @@ test('恢复默认的无操作路径：无用户层键时 clear 不产生写入�
   const stagedReset = findByClass(stagedField, 'dsafm_reset');
   assert.ok(stagedReset, '暂存写入的字段应出现恢复默认');
   // 胶囊只随用户层在场（requirements §6.1）：暂存写入不产生「已单独设置」；
-  // 「恢复默认」按钮因暂存条目在场（丢弃草稿的通路），二者不再同进退。
+  // 「恢复默认」按钮因暂存条目在场（丢弃草稿的通路），二者各自独立判定。
   assert.equal(JSON.stringify(stagedField).includes('card.override'), false, '暂存写入但用户层无键——不显示已单独设置');
   // 点「恢复默认」：用户层本无键 → clear 是无操作 → 保存回到置灰，零写入。
   stagedReset.props.onClick();
@@ -5466,8 +5475,8 @@ test('静态扫描：退役文案与失效令牌零命中、外壳类退役', as
   assert.equal(SOURCE.includes('dsafm_section'), false, '分区标题类零命中');
   assert.equal(SOURCE.includes('dsafm_divider'), false, '分区线类零命中');
   assert.equal(SOURCE.includes('dsafm_actions'), false, '旧操作区类零命中');
-  // 交付 CSS 串对宿主令牌表不存在的别名零命中——反例集里的 bg-layer-4 是
-  // 历史上曾被误引的失效名，保留作检出反证（加回任一即红）。
+  // 交付 CSS 串对宿主令牌表不存在的别名零命中——反例集里含不存在的失效名，
+  // 保留作负向样本（加回任一即红），检出依据是它们不在现行令牌表中。
   for (const token of ['--dsw-alias-state-warning-primary', '--dsw-alias-label-error', '--dsw-alias-bg-layer-4']) {
     assert.equal(SOURCE.includes(token), false, `失效令牌零命中：${token}`);
   }
@@ -5871,7 +5880,7 @@ test('触发器样式 §7.3.2：两段规则在场、固定宽度上限与旧类
     }
   }
   // 78px 只许出现在 1279.98px 避让块内：平铺扫描允许的 78px，再由原文本扫描限定位置——
-  // 顶层（媒体块外）名名或结构式规则声明 margin-left 一律判（唯一合法的 78px 在媒体块内层，
+  // 顶层（媒体块外）名档或结构式规则声明 margin-left 一律判（唯一合法的 78px 在媒体块内层，
   // 顶层扫不到）。
   for (const s of source.matchAll(/([^{}]*)\{([^}]*)\}/g)) {
     if (!/warnline|seatwrap/u.test(s[1])) continue;

@@ -201,7 +201,7 @@ test('反例：判据自身的豁免不进待办（它的规则表就是那些�
   );
 });
 
-test('反例：临时工单归档后不得再被豁免（重新放回公开层必须硬红，而不是一段提示）', () => {
+test('反例：临时工单归档后不得再被豁免（重新放回公开层必须整用例变红，而不是一段提示）', () => {
   const root = mkdtempSync(join(tmpdir(), 'dsafm-surface-'));
   try {
     writeFileSync(join(root, '.gitignore'), `${LOCAL_LINE}\n`, 'utf8');

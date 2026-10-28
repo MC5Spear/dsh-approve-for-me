@@ -14,6 +14,28 @@ test('AGENT_LANGS 恰为 [zh, en] 且冻结', () => {
   assert.ok(Object.isFrozen(AGENT_LANGS));
 });
 
+test('grep 工具描述写明整行跳过边界与跳过计数（design §3.4，与 worker 行为一致）', () => {
+  // 关键事实断言（等义改写可过）：两语言都必须说明超长行整行跳过（不是截断）且结果报告跳过数。
+  // 实现依据：lib/regex-worker.mjs 超过 maxLineChars 的行在匹配前整行跳过并回传 skippedLong；
+  // 结果后缀由 tool.grepSkippedLong 渲染。
+  for (const lang of AGENT_LANGS) {
+    const grep = agentT(lang, 'tool.schemas').find((tool) => tool.name === 'grep');
+    assert.ok(grep, `${lang} 档存在 grep 工具`);
+    const joined = grep.description.replace(/\s+/gu, ' ');
+    assert.match(joined, /100/u, `${lang}：命中数上限在场`);
+    assert.match(joined, /500/u, `${lang}：行长阈值在场`);
+    if (lang === 'zh') {
+      assert.match(joined, /整行跳过/u, `${lang}：整行跳过（非截断）`);
+      assert.match(joined, /不截断/u);
+      assert.match(joined, /报告跳过/u, `${lang}：结果报告跳过数`);
+    } else {
+      assert.match(joined, /skipped whole/u, `${lang}: skipped whole, not truncated`);
+      assert.match(joined, /not truncated/u);
+      assert.match(joined, /reports the skipped count/u);
+    }
+  }
+});
+
 test('两语言键集一一对应（单侧加键必红）', () => {
   assert.deepEqual([...AGENT_TEXT_KEYS.zh], [...AGENT_TEXT_KEYS.en]);
   // 反向对照：证明比较器本身在工作——把键集复制后增删，差集非空。

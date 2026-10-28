@@ -58,9 +58,7 @@ async function cdpTarget() {
       const list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json();
       const page = list.find((item) => item.type === 'page');
       if (page?.webSocketDebuggerUrl !== undefined) return page.webSocketDebuggerUrl;
-    } catch {
-      // 还没起来。
-    }
+    } catch {}
     await new Promise((resolve) => setTimeout(resolve, 400));
   }
   throw new Error('CDP not ready');

@@ -81,9 +81,7 @@ async function waitForCdp(budgetMs) {
     try {
       const response = await fetch(`http://127.0.0.1:${PORT}/json/version`);
       if (response.ok) return await response.json();
-    } catch {
-      // 还没起来。
-    }
+    } catch {}
     await sleep(200);
   }
   throw new Error('CDP 端口未在预算内就绪');
@@ -186,9 +184,7 @@ class Session {
   close() {
     try {
       this.socket.close();
-    } catch {
-      // 忽略。
-    }
+    } catch { /* 关闭失败无处理价值：取证数据已在手，残留连接随进程退出回收 */ }
   }
 }
 
@@ -511,7 +507,7 @@ async function run() {
         try {
           child.kill('SIGKILL');
         } catch {
-          // 忽略。
+          // 进程可能已随 Browser.close 退出；无进一步手段，下方仍尝试资料目录清理。
         }
       }
     }

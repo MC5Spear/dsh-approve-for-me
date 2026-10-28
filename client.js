@@ -655,8 +655,9 @@ window.__ModuleLoader__.load({
 
 		/** 注入样式；同一 tagId 只插入一次，避免重复挂载时样式叠加。 */
 		const CSS = [
-			// 设置界面按官方设置表单规格实现（规格来源见 docs/design.md；所用别名均存在于现行宿主令牌表）。
-			// 外壳：无卡片边框/圆角/底色，只做纵向布局（按计算样式核）。
+			// 设置界面按官方设置表单规格实现（规格来源见 docs/design.md）；失效令牌的零命中
+			// 由测试的负向样本钉住，取色理由见各规则注释。
+			// 外壳：无卡片边框/圆角/底色，只做纵向布局。
 			".dsafm_form{display:flex;flex-direction:column;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary)}",
 			".dsafm_readonly{margin:0 0 12px;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary)}",
 			// 字段：竖排，标签行 → 控件 → 常驻说明；相邻字段 0.5px 分隔线（见官方 fields.module.css）。

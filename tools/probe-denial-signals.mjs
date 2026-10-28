@@ -15,8 +15,9 @@ import { homedir } from 'node:os';
 import { readSessionLog } from './session-log.mjs';
 
 const root = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'sessions');
-/** 静态判定带提权参数的工具（近似名单，随宿主版本漂移，以宿主工具 schema 为准；
- *  read/glob/grep/str_replace_editor 已按宿主源核验无 `sandbox_permissions`，不列）。 */
+/** 带提权参数工具的静态近似名单（手工维护，随宿主版本漂移，权威判定以当时宿主工具 schema 为准；
+ *  阴性排除只是「该工具未见提权参数」的近似分类，不构成授权边界，不据此放行）。
+ *  重核方法：对目标宿主版本的工具定义枚举 schema 是否含 sandbox_permissions 入参。 */
 const ESCALATION_CAPABLE = new Set(['pwsh', 'bash', 'write', 'edit']);
 const SIGS = {
   isError: (content) => content?.isError === true,

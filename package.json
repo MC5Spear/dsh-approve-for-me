@@ -25,11 +25,13 @@
   "files": [
     "lib",
     "assets",
+    "docs",
     "client.js",
     "typert.host.js",
     "cordis.patch.yml",
     "README.md",
     "LICENSE",
+    "LICENSES",
     "NOTICE"
   ],
   "engines": {

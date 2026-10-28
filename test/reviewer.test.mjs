@@ -668,7 +668,7 @@ test('留痕：失败尝试的 finish 摘要只在 capture=full 档进 trace det
 // ── 计数口径：abort 型 error 的 superseded 分类（design §5.3） ──────────────
 
 test('分类：gate 他路先结算的中止（REVIEW_SUPERSEDED 标记/宿主取消 reason）→ verdict 带 superseded（design §5.3）', async () => {
-  // 场景一：gate 的标记 reason（人工先答/卡片关闭/人工超时竞速获胜/回调抛错路径）在进入审查前已中止。
+  // 分支一：gate 的标记 reason（人工先答/卡片关闭/人工超时竞速获胜/回调抛错路径）在进入审查前已中止。
   const marked = new AbortController();
   marked.abort(REVIEW_SUPERSEDED);
   const markedHarness = harness([
@@ -684,7 +684,7 @@ test('分类：gate 他路先结算的中止（REVIEW_SUPERSEDED 标记/宿主�
   assert.equal(markedLine.degraded, 'superseded', '跳过原因必须落审计（review 行 degraded）');
   assert.equal(markedLine.late, 'yes');
 
-  // 场景二：宿主取消发生在流内——request.signal 在流迭代中被中止（宿主自己的取消 reason，
+  // 分支二：宿主取消发生在流内——request.signal 在流迭代中被中止（宿主自己的取消 reason，
   // 非超时标记），流随即撕裂：走 catch 路径的中止分类（流内中止与启动前中止同一口径）。
   const cancelled = new AbortController();
   const cancelledHarness = harness([

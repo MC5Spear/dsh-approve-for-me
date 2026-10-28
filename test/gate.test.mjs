@@ -35,7 +35,7 @@ function makeRt(cfg, options = {}) {
     async configFor() {
       // 装配延迟测试缝（与 reviewDelayMs 同款）：把等待注入装配阶段——人工 request 起算的预算从
       // 请求进入应答者就开始消耗，configFor 的耗时必须吃掉该预算（用于构造预算被装配前置等待
-      // 耗尽的场景，供 G1–G4 验证耗尽语义与起算点）。
+      // 耗尽的形态，供 G1–G4 验证耗尽语义与起算点）。
       if (options.configForDelayMs !== undefined) await delay(options.configForDelayMs);
       // 装配挂死测试缝：永不 resolve，装配备用计时器是唯一出口。
       if (options.configForNever === true) await new Promise(() => {});
@@ -522,7 +522,7 @@ test('finally 清理全部计时器与监听器', async () => {
   for (const cancel of state.cancels) assert.equal(cancel.cleared, true, '监听器未清理');
 });
 
-test('rejectText 输出注入模板并含风险与授权', () => {
+test('rejectText 返回注入模板并含风险与授权', () => {
   const text = rejectText('reason here', { risk: 'high', auth: 'unknown' });
   assert.match(text, /本次升权请求被拒绝/);
   assert.match(text, /风险：high；授权证据：unknown/);
@@ -1581,6 +1581,48 @@ test('结算记录：人工超时 → rejected/timeout，stage=human', async () 
   await onApprovalRequest(request(), next, rt);
   assertSettleShape(state.settles[0], { outcome: 'rejected', source: 'timeout' });
   assert.equal(state.settles[0].stage, 'human');
+});
+
+test('结算记录：无审查记录的故障转人工超时保存 subject/reason/queueMs（design §8.4）', async () => {
+  // 冷却未执行是「无 review 记录」路径：转人工理由唯一留痕在结算记录——结论在场必存。
+  const { rt, state, next } = makeRt(
+    baseConfig({ fallback: 'ask', human: { timeoutMs: 15, timeoutFrom: 'handoff' }, reviewer: { timeoutMs: 30000 }, ui: { humanCardDuringReview: false } }),
+    {
+      verdict: {
+        decision: 'error',
+        reason: '审查未执行：breaker-open（冷却中，拒绝密集或故障密集）',
+        toolCalls: 0,
+        queueMs: 31,
+        stage: 'queue',
+        fields: { degraded: 'breaker-open', tools: 0 },
+      },
+    },
+  );
+  await onApprovalRequest(request(), next, rt);
+  const settle = state.settles[0];
+  assertSettleShape(settle, { outcome: 'rejected', source: 'timeout' });
+  assert.equal(settle.stage, 'human');
+  assert.match(settle.reason, /审查未执行：breaker-open/, '转人工原因随结算保存');
+  assert.equal(settle.queueMs, 31, '结论携带的排队时长随结算保存');
+  assert.match(settle.subject, /npm i/, 'subject 与其他结算同源');
+  const decide = state.audits.find((row) => row.phase === 'decide' && row.source === 'timeout');
+  assert.match(decide.reason, /审查未执行：breaker-open/, '审计 decide 行同步携带理由');
+});
+
+test('结算记录：审查未收束的人工超时——reason 明确缺失不伪造（design §8.4）', async () => {
+  // 审查期间人工时限到点（first.kind=human-timeout，无审查结论）：subject 照常、reason 缺失。
+  const { rt, state, next } = makeRt(
+    baseConfig({ fallback: 'ask', human: { timeoutMs: 15, timeoutFrom: 'request' }, reviewer: { timeoutMs: 30000 } }),
+    { reviewDelayMs: 5000 },
+  );
+  await onApprovalRequest(request(), next, rt);
+  const settle = state.settles[0];
+  assertSettleShape(settle, { outcome: 'rejected', source: 'timeout' });
+  assert.equal(settle.stage, 'human');
+  assert.equal(settle.reason, undefined, '审查未收束：理由明确缺失，不伪造');
+  assert.match(settle.subject, /npm i/, 'subject 仍取回查结果');
+  const decide = state.audits.find((row) => row.phase === 'decide' && row.source === 'timeout');
+  assert.equal(decide.reason, undefined);
 });
 
 test('结算记录：卡片关闭 → cancelled/gateway；请求取消 → cancelled/signal', async () => {

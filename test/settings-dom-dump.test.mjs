@@ -140,12 +140,15 @@ test('配置区容器无自绘卡片外壳（计算样式）', () => {
   assert.match(dump, /background=`rgba\(0, 0, 0, 0\)`/u, '不应有成片底色');
 });
 
-test('说明入口（§7.2.1）：20 个按钮带可见文字，aria 成对，展开文本为总开关定稿文案', () => {
+test('说明入口（§7.2.1）：20 个按钮带可见文字，aria 成对，展开文本承载总开关关键事实', () => {
   assert.match(dump, /说明按钮 20 个（全部位于字段外壳标签行的 `\.dsafm_labelgroup` 内，标签旁）/u, '说明按钮应 20 个（全部经字段外壳标签行）');
   assert.match(dump, /按钮带可见文字「说明／收起说明」（`\.dsafm_helpbtn_text`）/u, '说明按钮应带可见文字');
   assert.match(dump, /`aria-label`＝「字段名：说明」、Enter\/Space 键盘可达/u, '无障碍名格式与键盘可达应在档');
   assert.match(dump, /点击 mode 字段后：aria-expanded=`true`、展开区在场=`true`、同屏展开区数量=1/u, '点击后应展开且仅展开一个');
-  assert.match(dump, /展开文本首段＝「总开关：规则检查＋LLM 审查＝正常接管；完全不接管＝等同未安装，宿主审批流程不受影响。」/u, '展开文本应为定稿总开关文案（design §7.2.1）');
+  // 展开文本只断关键事实（mode 的接管语义），不逐字冻结普通帮助全文：重新采集换等义措辞不应
+  // 让本测试变红；删掉任一关键事实（正常接管含规则检查与 LLM 审查、关闭＝不接管且等同未安装、
+  // 宿主审批流程不受影响）由下列子串检出。历史档 fixture 保持原句不动（档案不改历史值）。
+  assert.match(dump, /展开文本首段＝「总开关：[^\n]*规则检查[^\n]*LLM 审查[^\n]*正常接管；完全不接管＝等同未安装，宿主审批流程不受影响。」/u, '展开文本应承载总开关关键事实（design §7.2.1）');
   assert.match(dump, /开合不触碰草稿\/保存计划（纯展示状态）/u, '开合纯展示语义应在档');
   // §1 逐字文本：每个字段名行后紧跟「说明」按钮文字（20 处＝20 字段）。
   assert.equal((pageText.split('\n').filter((l) => l.trim() === '说明').length), 20, '§1 中「说明」按钮文字应恰 20 处');
@@ -238,7 +241,7 @@ test('控件取值逐项等于生效值（profile 用户层＋默认合并的产
     assert.ok(path, `未知控件 id：${suffix}（CTL_PATHS 需同步 client.js 的字段集合）`);
     let expected = at(path);
     if (/^on（checked=(true|false)）$/u.test(cell)) {
-      // checkbox 显示 on（checked=true）。
+      // checkbox 档案行显示 on，实际两态由 checked 布尔承载：与生效值逐项对账，两态都核。
       assert.equal(cell.includes(`checked=${String(expected)}`), true, `${suffix} 取值应等于生效值 ${expected}`);
       continue;
     }

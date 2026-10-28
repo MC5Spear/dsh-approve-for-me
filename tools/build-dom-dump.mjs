@@ -1,13 +1,13 @@
 /**
  * 从 browser-shot 的 --result JSON 生成设置表单 DOM 证据档。
- * 用法：node tools/build-dom-dump.mjs <result.json> <css-scope.json|-> <out.txt> --f51-before N --f51-after N
+ * 用法：node tools/build-dom-dump.mjs <result.json> <css-scope.json|-> <out.txt> --badlogin-before N --badlogin-after N
  * 档案格式与 test/settings-dom-dump.test.mjs 的断言逐项对应（requirements §6.1 结构判据＋暂存语义＋换算读数）。
  * CSS 收窄扫描在主取证内（DUMP-A 的 scoped 段）；第二参数传 - 表示无独立 CSS 结果文件。
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const [resultPath, cssPath, outPath, ...rest] = process.argv.slice(2);
-if (!resultPath || !cssPath || !outPath) throw new Error('usage: build-dom-dump.mjs <result.json> <css-scope.json|-> <out.txt> --f51-before N --f51-after N');
+if (!resultPath || !cssPath || !outPath) throw new Error('usage: build-dom-dump.mjs <result.json> <css-scope.json|-> <out.txt> --badlogin-before N --badlogin-after N');
 const arg = (name, fallback) => {
 	const i = rest.indexOf(name);
 	return i >= 0 ? rest[i + 1] : fallback;
@@ -62,7 +62,7 @@ lines.push('', '接管预设为多选 picker（button + aria-expanded），不�
 lines.push('## 8. dsafm 类清单（容器内去重；退役类零残留）', '', [`dsafm_form`, ...dsafmClasses.filter((name) => name !== 'dsafm_form')].join(' / '), '');
 lines.push('退役类零残留：无 dsafm_row、dsafm_label、dsafm_section、dsafm_divider、dsafm_actions、dsafm_help、dsafm_map_block、dsafm_f_help（数字字段进字段外壳后旧式说明行退役）。`dsafm_chevron` 在场属下拉 picker 箭头；`dsafm_helpbtn_text` 为说明按钮的可见文字 span；`dsafm_numhost` 为数字字段承载官方输入组件的外壳容器（design §7.2.1）。', '');
 lines.push('## 9. 失败登录计数', '');
-lines.push(`- 采集前 \`BadPasswordAttempts=${arg('--f51-before', '未读')}\`，采集后 \`=${arg('--f51-after', '未读')}\`（Get-LocalUser 返回 null，如实留档未读；无头 Edge 启动次数以 shots-manifest 记录表为准；窗口阈值 10/10min，纪律 ≤5 次/10min）。`, '');
+lines.push(`- 采集前 \`BadPasswordAttempts=${arg('--badlogin-before', '未读')}\`，采集后 \`=${arg('--badlogin-after', '未读')}\`（Get-LocalUser 返回 null，如实留档未读；无头 Edge 启动次数以 shots-manifest 记录表为准；窗口阈值 10/10min，纪律 ≤5 次/10min）。`, '');
 lines.push('## 10. 毫秒字段换算读数（.dsafm_f_sec，干净页＝无暂存）', '');
 if (!Array.isArray(seconds) || seconds.length === 0) {
 	lines.push('（采集失败：seconds 段缺失——DUMP-A 未捕获换算读数行）', '');

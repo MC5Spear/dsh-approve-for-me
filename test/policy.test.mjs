@@ -161,7 +161,7 @@ test('未配置实例的生效配置 denyPatterns 为空数组；显式写入出
   assert.equal(restored.action, 'deny');
 });
 
-test('场景回归：提交说明含出厂清单样例文本的 git commit 默认进审查', () => {
+test('行为回归：提交说明含出厂清单样例文本的 git commit 默认进审查', () => {
   // 样例文本用 format c:：随命令走的提交说明命中出厂规则、不触硬性拦截层
   // （说明里含 Remove-Item -Recurse 一类硬性拦截形态时按硬性拦截拒绝，偏多拦口径
   // 见 hard-block 矩阵）。

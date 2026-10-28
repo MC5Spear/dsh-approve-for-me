@@ -7,7 +7,7 @@
  * `--trace-epoch <ISO8601>` 显式给出（例如该部署里 `reviews/` 目录最早一行的落盘时间）；
  * 未给出时不做「早于启用」豁免，缺口一律报 MISSING(no epoch)。
  * 用法：node tools/probe-approval-coverage.mjs [--trace-epoch 2026-09-11T20:15:00+08:00]
- * 目标 home：优先 `DSH_HOME` 环境变量，未设置时回落 `~/.dsh`（历史布局）；
+ * 目标 home：优先 `DSH_HOME` 环境变量，未设置时回落 `~/.dsh`；
  * 实际使用的 home 打印在输出首行，不静默转向。
  * @module tools/probe-approval-coverage
  */

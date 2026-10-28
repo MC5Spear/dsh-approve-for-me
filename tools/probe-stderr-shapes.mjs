@@ -15,7 +15,7 @@ const root = join(home, 'sessions');
 console.error(`home=${home}`);
 /** 有副作用、且静态判定**没有**提权参数的工具 —— 这才是我们覆盖不到的集合
  *  （近似名单，随宿主版本漂移，以 DSH_HOME 指向实例的宿主树为准核对；run_code 的
- *  PTC 控制参数带 `sandbox_permissions`、async_run 在 0.2.1-rc.2 宿主树无此工具名——均不列）。 */
+ *  PTC 控制参数（platform tool call 控制参数）带 `sandbox_permissions`、async_run 在 0.2.1-rc.2 宿主树无此工具名——均不列）。 */
 const SIDE_EFFECT_UNSUPPORTED = new Set(['str_replace_editor', 'tool-bash-persistent', 'tool-pwsh-persistent']);
 
 const shapes = new Map();

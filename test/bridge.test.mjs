@@ -423,7 +423,7 @@ testHost('modelIssues：rule 作用域诊断取值随归一——ruleProvider �
   assert.match(structured.reason, /unknown provider ghost/u);
 });
 
-testHost('modelIssues：session 作用域仅会话场景产生；无会话不产生', async () => {
+testHost('modelIssues：session 作用域仅会话内求值时产生；无会话不产生', async () => {
   const withChoice = service({
     session: undefined,
     stored: { s1: { model: 'ghost/nope', effort: '' } },

@@ -4,7 +4,7 @@
  * 会话枚举走共用读取器（`session.jsonl.zstd` 与 `session.vN.jsonl.zstd` 都认，每会话取当前代）；
  * 事件解析兼容 v4 事件包裹与一行多事件数组。
  * 用法：node tools/probe-review-coverage.mjs
- * 目标 home：优先 `DSH_HOME` 环境变量，未设置时回落 `~/.dsh`（历史布局）；
+ * 目标 home：优先 `DSH_HOME` 环境变量，未设置时回落 `~/.dsh`；
  * 实际使用的 home 打印在输出首行，不静默转向。
  * @module tools/probe-review-coverage
  */

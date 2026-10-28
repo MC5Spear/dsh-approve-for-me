@@ -185,6 +185,51 @@ test('H2：`--` 长选项的冒号绑定值按目标候选过标记检查（desi
   assert.equal(hardCmd('rm --foo:$home /etc/x'), undefined);
 });
 
+test('H2：`--` 选项结束后的操作数态——负号动态目标过检（design §12.1）', () => {
+  // design §12.1 选项结束与操作数态：恰为 `--` 的裸 token 触发切换，其后 token 不再按旗标/参数
+  // 归类、整 token 按位置操作数过检——负号开头的动态目标（变量/命令替换）必须按操作数过检，不得按旗标跳过。
+  assert.equal(hardCmd('rm -f -- literal.tmp "-$victim"').code, 'hard-h2-target');
+  assert.equal(hardCmd('rm -f -- literal.tmp "-$(printf victim)"').code, 'hard-h2-target');
+  assert.equal(hardCmd('rm -f -- "-$victim"').code, 'hard-h2-target', '无前置字面目标控制同样命中');
+  assert.equal(hardCmd('rm -f -- @targets').code, 'hard-h2-target', '操作数态与并集前缀叠加');
+  assert.equal(hardCmd('rm -f -- --$victim').code, 'hard-h2-target', '操作数态后 `--` 前缀 token 是操作数');
+  // 字面负号文件名不含动态标记，不误拦；`--force` 非裸分隔符、不触发切换。
+  assert.equal(hardCmd('rm -f -- literal.tmp -literal.tmp'), undefined);
+  assert.equal(hardCmd('rm -f --force literal.tmp'), undefined);
+  assert.equal(hardCmd('rm -f -- --'), undefined, '第二个 `--` 是字面文件名操作数');
+  // 旗标层不因 `--` 停扫（design §12.1）：`rm -- -r x` 仍按 -Recurse 缩写命中 H1（偏误拦，经 3.3 改写重送消化）。
+  assert.equal(hardCmd('rm -- -r ./sample').code, 'hard-h1-powershell');
+});
+
+test('H2：横线 token 自身含族动态标记即按目标候选过检（三族统一）', () => {
+  // del/erase/rd/rmdir 在 CMD 真实语义不解析横线选项，负号 token 就是待删文件名，
+  // `%VAR%`/`!名字!` 在双引号内照常展开（design §12.1 横线动态候选规则）。
+  assert.equal(hardCmd('del /s literal.tmp "-%VAR%"').code, 'hard-h2-target');
+  assert.equal(hardCmd('rd /q literal.tmp "-!victim!"').code, 'hard-h2-target');
+  assert.equal(hardCmd('rm -f literal.tmp "-$victim"').code, 'hard-h2-target', '无 `--` 的前置字面目标形态同缝闭合');
+  // `!` 仅作 CMD 族标记：POSIX 语境的 `!` 是文件名字面字符。
+  assert.equal(hardCmd('rm -f literal.tmp "-!victim!"'), undefined);
+  assert.equal(hardCmd('rm -f literal.tmp "!victim"'), undefined, '位置操作数的 `!` 同为字面字符');
+  // 字面负号文件名不含标记，仍按旗标跳过。
+  assert.equal(hardCmd('rm -f literal.tmp -literal.tmp'), undefined);
+  // 已识别参数（目标/取值/开关）的绑定值按各自分类条款判定，横线动态候选不改判。
+  assert.equal(hardCmd('remove-item -exclude:-$victim literal.tmp'), undefined, '取值参数冒号绑定值含标记仍跳过');
+  assert.equal(hardCmd('Remove-Item -Force @targets').code, 'hard-h2-target', 'PS 族既有拒绝回归');
+});
+
+test('H2：跨 shell 删除动词的保守并集——PowerShell 动态前缀（design §12.1）', () => {
+  // rm/del/erase/rd/rmdir 在 PowerShell 里都是 Remove-Item 别名，其 PowerShell 读法无法静态排除：
+  // 两族并入 `@` splat 与 `(` 子表达式前导前缀（仍只认串首），POSIX/CMD 字面反例不受影响。
+  assert.equal(hardCmd('rm -Force @targets').code, 'hard-h2-target');
+  assert.equal(hardCmd('del -Force (Join-Path C:\\temp victim)').code, 'hard-h2-target');
+  assert.equal(hardCmd('erase -Force @paths').code, 'hard-h2-target');
+  assert.equal(hardCmd('rd /q @targets').code, 'hard-h2-target');
+  assert.equal(hardCmd('rm -f @targets.txt').code, 'hard-h2-target', '串首 @ 的字面名计入误拦（经改写重送消化）');
+  assert.equal(hardCmd('del /s C:\\temp\\victim.tmp'), undefined, '字面路径反例');
+  assert.equal(hardCmd('rm -f /tmp/a.tmp'), undefined, '斜杠路径反例（POSIX 语境斜杠 token 是操作数）');
+  assert.equal(hardCmd('Remove-Item -Force C:\\probe\\literal'), undefined, '本名字面反例不回归');
+});
+
 test('H3：两个硬性拦截入口正例', () => {
   assert.equal(hardCmd('mshta https://probe.example/sample').code, 'hard-h3-entry');
   assert.equal(hardCmd('mshta.exe http://probe.example').code, 'hard-h3-entry');

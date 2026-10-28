@@ -73,7 +73,7 @@ test('rt.timer 的入参上界注释在位（config 层保证 ≤ 2^31-1）', ()
 
 // ── normalizeConfig 对 language 分节的合并语义（design §6.1） ───────────────
 
-test('language 进逐组合并：部分传入输出完整分节，不静默换语言', () => {
+test('language 进逐组合并：部分传入合并出完整分节，不静默换语言', () => {
   const merged = normalizeConfig({ language: { ui: 'zh' } });
   assert.equal(merged.language.agent, 'en', '未提及的子字段补默认（现状 undefined → agentLangOf 静默回落）');
   assert.equal(merged.language.ui, 'zh');

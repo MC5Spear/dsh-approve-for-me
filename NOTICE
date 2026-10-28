@@ -5,17 +5,32 @@ dsh-approve-for-me is licensed under the MIT License (see LICENSE).
 
 This product includes text taken from the OpenAI Codex project
 (https://github.com/openai/codex), which is licensed under the
-Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0):
+Apache License, Version 2.0. A copy of that license is included at
+`LICENSES/Apache-2.0.txt`; the authoritative text is maintained by the
+Apache Software Foundation (https://www.apache.org/licenses/LICENSE-2.0).
 
 - `lib/agent-texts.js` — the English Guardian system prompt template
-  (`SYSTEM_PROMPT_EN`) and the English rejection instructions
-  (`REJECTION_INSTRUCTIONS_EN`) are taken verbatim from Codex
-  (`ext/guardian-reviewer/src/`); the output contract and the untrusted
-  evidence notice are adapted from the same source; the Chinese system
-  prompt (`SYSTEM_PROMPT_ZH`) and Chinese rejection instructions are
-  translations of those Codex-derived texts.
-- `assets/tenant-policy.md` — taken verbatim from the Codex tenant
-  policy template; `assets/tenant-policy.zh.md` is a translation of it.
+  (`SYSTEM_PROMPT_EN`) is adapted and condensed from the Codex guardian
+  prompt texts (`codex-rs/core/assets/guardian/policy_template.md`
+  lineage, e.g. at upstream commit 03f01456, since moved to
+  `codex-rs/prompts/templates/guardian/`: opening sentence and section
+  structure shared, wording modified for this project); the English
+  rejection instructions (`REJECTION_INSTRUCTIONS_EN`) are taken verbatim
+  from `codex-rs/ext/guardian-reviewer/src/completion.rs` (the
+  `REJECTION_INSTRUCTIONS` constant, lines 19-25; e.g. upstream commit
+  03f01456); the output contract keeps the shape of
+  `codex-rs/ext/guardian-reviewer/src/assessment.rs:107-119` (e.g.
+  upstream commit 03f01456); the untrusted evidence notice is
+  project-written, following the same evidence-grading approach; the
+  Chinese system prompt (`SYSTEM_PROMPT_ZH`) and Chinese rejection
+  instructions are translations of those Codex-derived texts.
+- `assets/tenant-policy.md` — adapted and condensed from the Codex
+  guardian tenant policy: the first five sections keep the upstream
+  section structure, with individual outcome sentences quoted verbatim
+  or near-verbatim and the rest rewritten for this project; the last two
+  sections ("URL Opening via System Entries", "Resubmission Guidance")
+  are project additions not present upstream. `assets/tenant-policy.zh.md`
+  is a Chinese translation of the resulting document.
 
 The corresponding file headers carry per-item attribution. All other
 content in this repository is original to the dsh-approve-for-me project.

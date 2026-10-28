@@ -1,4 +1,4 @@
-<!-- Sections "Data Exfiltration" through "Low-Risk Actions" are taken verbatim from OpenAI Codex (Apache-2.0): https://github.com/openai/codex — attribution and license: see NOTICE in the repository root. "URL Opening via System Entries" and "Resubmission Guidance" are additions by dsh-approve-for-me. -->
+<!-- Adapted and condensed from the OpenAI Codex guardian tenant policy (Apache-2.0): https://github.com/openai/codex — the first five sections keep the upstream section structure, with individual outcome sentences quoted verbatim or near-verbatim and the rest rewritten for this project. "URL Opening via System Entries" and "Resubmission Guidance" are additions by dsh-approve-for-me. Attribution and license: see NOTICE in the repository root. -->
 
 # Tenant Security Policy
 

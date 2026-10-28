@@ -390,7 +390,7 @@ test('home 根为别名拼写时围栏仍拒止（8.3 短名；不自证别名�
           alias = candidate;
           break;
         }
-      } catch { /* 候选不存在，试下一个 */ }
+      } catch {}
     }
   }
   if (alias === null) {
@@ -401,7 +401,8 @@ test('home 根为别名拼写时围栏仍拒止（8.3 短名；不自证别名�
   }
   assert.notEqual(alias.toLowerCase(), canonical.toLowerCase(), '别名拼写须与真实路径不同（防恒真）');
   const tools = createReadonlyTools({ rootDir: tmpdir(), dshHomeOf: () => alias });
-  // 变红判据：根按字面、目标经 realpath 的实现里，别名根对展开后的目标前缀失配 → p1/p2 变红。
+  // 不变式：只归一目标、不归一根的实现对别名根拼写失配——根与目标两侧都按字面与真实形态
+  // 并集判定，两种别名拼写的目标都必须拒止。
   const p1 = await tools.run('read_file', { path: join(canonical, 'sessions', 'session-1.jsonl') });
   assert.equal(p1.denied, true, '长名拼写的目标应拒止');
   assert.equal(p1.isError, true);
@@ -422,7 +423,7 @@ test('home 根为联结点拼写时围栏仍拒止，别名根下不存在路径
   const junctionPath = join(tmpdir(), `dsafm-jl-${process.pid}-${Date.now()}`);
   await symlink(canonical, junctionPath, 'junction');
   const tools = createReadonlyTools({ rootDir: tmpdir(), dshHomeOf: () => junctionPath });
-  // 变红判据：联结点拼写的根对 realpath 展开后的目标前缀失配 → p1/p2 在旧实现变红。
+  // 不变式同上：根按字面与真实形态并集判定，联结点拼写的根同样拒止两种目标拼写。
   const p1 = await tools.run('read_file', { path: join(canonical, 'sessions', 'session-1.jsonl') });
   assert.equal(p1.denied, true, '真实路径目标应拒止');
   const p2 = await tools.run('read_file', { path: join(junctionPath, 'sessions', 'session-1.jsonl') });
@@ -430,7 +431,8 @@ test('home 根为联结点拼写时围栏仍拒止，别名根下不存在路径
   // 并集哨兵：别名根下不存在的路径按字面命中——「两侧只比较 realpath」的朴素实现在此失效打开。
   const p3 = await tools.run('read_file', { path: join(junctionPath, 'current-url.txt') });
   assert.equal(p3.denied, true, '联结点根下不存在的路径同样拒止（并集哨兵）');
-  // 对照：home 为真实根、目标经联结点拼写——目标侧归一化在岗，修复前后都绿。
+  // 对照组方向相反：home 为真实根、目标经联结点拼写——检验目标侧归一化（缺失路径须先归一
+  // 再判围栏），该组目标必须拒止，与根侧拼写组互补。
   const control = createReadonlyTools({ rootDir: tmpdir(), dshHomeOf: () => canonical });
   const p4 = await control.run('read_file', { path: join(junctionPath, 'sessions', 'session-1.jsonl') });
   assert.equal(p4.denied, true, '对照：真实根下经联结点拼写的目标仍拒止');
