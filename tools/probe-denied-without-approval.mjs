@@ -1,8 +1,9 @@
 /**
- * 一次性取证脚本：把判据反过来问——「某次调用以沙箱拒绝收场，而同一 callId 从未出现审批请求」有多少。
+ * 一次性取证脚本：统计「某次调用以沙箱拒绝收场，且所选会话记录里同一 callId 未出现审批请求」的次数。
  *
- * 这正是"该工具没有提权路径"的可观测形态：它被拒了，却没有任何审批发生。
- * 两种拒绝都要认：①结构化标记（[sandbox: …]）；②裸文本（Access is denied / EPERM，启发式）。
+ * 结论边界：这只说明所选记录中没有这些调用的审批记录。审批走了别的分支、记录不全或审批请求
+ * 未分发都会呈现同样的观测形态，不能据此认定该工具没有提权路径。
+ * 两种拒绝都统计：①结构化标记（[sandbox: …]，可信）；②裸文本（Access is denied / EPERM，启发式，算疑似）。
  *
  * 用法：node tools/probe-denied-without-approval.mjs
  */
@@ -67,7 +68,7 @@ for (const ws of readdirSync(root)) {
     for (const item of denied) {
       const tool = names.get(item.callId) ?? '?';
       const asked = approved.has(item.callId);
-      // 只关心"没走审批"的那些：那才是插件覆盖不到的部分。
+      // 只统计所选记录里未见审批请求的那些，逐条留给人工核对来源。
       if (asked) continue;
       const bucket = byTool.get(tool) ?? { marker: 0, raw: 0 };
       bucket[item.marker ? 'marker' : 'raw'] += 1;
@@ -78,7 +79,7 @@ for (const ws of readdirSync(root)) {
   }
 }
 
-console.log('被拒且同 callId 无审批请求的调用，按工具分组：\n');
+console.log('所选记录中被拒且同 callId 无审批请求的调用，按工具分组：\n');
 console.log('工具            结构化标记  裸文本(疑似)');
 for (const [tool, bucket] of [...byTool].sort((left, right) => right[1].marker + right[1].raw - (left[1].marker + left[1].raw))) {
   console.log(`${tool.padEnd(16)}${String(bucket.marker).padStart(8)}${String(bucket.raw).padStart(12)}`);
