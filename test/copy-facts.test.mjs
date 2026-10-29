@@ -9,9 +9,17 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { copyFactFailures, tokenRiskDisplayProtected } from './helpers/copy-facts.mjs';
+import { COPY_FACTS, FACT_KINDS, copyFactFailures, tokenRiskDisplayProtected } from './helpers/copy-facts.mjs';
 
 const fails = (key, lang, text) => copyFactFailures(key, lang, text);
+
+test('登记事实职责完整：134不同事实恰好各属一个主类', () => {
+  const actual = [...new Set(Object.values(COPY_FACTS).flatMap((facts) => facts.map((fact) => fact.id)))].sort();
+  const classified = Object.values(FACT_KINDS).flat();
+  assert.equal(actual.length, 134);
+  assert.equal(new Set(classified).size, classified.length, '分类不能重复占位');
+  assert.deepEqual(classified.sort(), actual, '所有当前事实都须显式分类，不以分类代替行为反例');
+});
 
 // ── 正例：真正换措辞的中英文文案（同一检查器通过） ────────────────────────────
 
@@ -309,6 +317,17 @@ test('条件等义正例：空与非空、Ask与Reject邻句各自绑定动作',
     ['help.human.timeoutMs', 'zh', '人工作答等待上限（毫秒），仅在直接拒绝时使用。0 立即拒绝，不是无限等待；到点拒绝。'],
     ['help.human.timeoutMs', 'en', 'Human-answer wait limit (ms), used only when fallback is Reject. 0 rejects immediately, not an endless wait. Expiry rejects.'],
   ]) assert.ok(fails(key, lang, text).length > 0, `${key}/${lang} 直接条件类别反转必须失败`);
+});
+
+test('确定行为极性只绑定对应对象，不被无关否定分句误拒', () => {
+  assert.deepEqual(fails('help.allowEscalationTo', 'zh', '本项设定自动批准所能给出的最高权限，只是圈定可送审、可允许的升权范围；范围内的请求照样要过规则检查和模型审查，绝不是无条件全批。默认的完全访问最宽；选工作区内修改时，比工作区写入更高的升权一律不放行。未命中并不代表安全。'), []);
+  assert.deepEqual(fails('help.allowEscalationTo', 'en', 'This sets the highest permission auto-approval may hand out; it bounds which escalations may be reviewed or allowed. Anything in range still passes the rule checks and the model review — never a blanket approval of everything. Full access is the widest default; workspace write never lets an escalation beyond workspace writes through. This is not the final approval outcome.'), []);
+  assert.deepEqual(fails('help.denyPatterns', 'zh', '每行一条正则表达式；全部字符串参数都匹配，不仅命令。可写 /source/flags。命中即拒绝，不调用模型、不交人工，模型和人工都无法推翻。空清单只关闭这层文本匹配；不可编译的行跳过。'), []);
+});
+
+test('可能性与建议不冒充必然义务：保守说明可与原风险同时成立', () => {
+  assert.deepEqual(fails('card.presets.missing.remedy', 'zh', '该预设不在宿主当前预设表中。可依次检查插件是否已停用、宿主版本是否兼容、预设是否自定义。重新启用或重启可能恢复，也可能不恢复；仍未恢复时按原因排查，改选标准权限档，卸载清理手工处理。插件不解析、不改写用户 YAML。'), []);
+  assert.deepEqual(fails('card.presets.missing.remedy', 'en', 'The preset is absent from the current preset table. Check disabled plugins, compatible hosts and custom presets. Re-enabling or restarting may restore it, and may not restore it; pick a standard tier and use the uninstall manual cleanup. The plugin never parses nor rewrites user YAML.'), []);
 });
 
 test('反例：说明缺失整条报缺失', () => {

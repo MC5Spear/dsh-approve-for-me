@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test, { after } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { DEFAULT_RATIONALE } from '../lib/reviewer.js';
-import { COPY_FACTS, copyFactFailures, tokenRiskDisplayProtected } from './helpers/copy-facts.mjs';
+import { COPY_FACTS, FACT_KINDS, copyFactFailures, tokenRiskDisplayProtected } from './helpers/copy-facts.mjs';
 
 /** 渲染期望从真实字典模板组装；事实和固定名称另有独立断言，普通句不再转抄。 */
 function warningText(dict, key, { configured = '', reason = '', layer, model = '' }) {
@@ -4946,6 +4946,175 @@ test('当前条件动作有限清单：条件保留而动作直接反转仍必�
     assert.ok(dictionaryFactFailures(env.dictionaries[0].dicts).some((failure) => failure.startsWith(`${lang}/${key}:`)), `${key}/${lang} 动作${from}→${to}必须失败`);
   }
   assert.equal(cases.length, 60);
+});
+
+test('全部行为事实有限反例：72行为与3可能性事实的中英相反值可失败', () => {
+  const roster = {
+    '采用模型或供应商默认': [['由模型或供应商默认值决定', '不由模型或供应商默认值决定'], ['leaving the model or provider default', 'not leaving the model or provider default']],
+    '额度可能先用于推理': [['可能先把额度', '绝不会先把额度'], ['may spend the budget', 'never spend the budget']],
+    '审查文本和执行通知': [['发给审查模型', '不发给审查模型'], ['texts sent', 'texts not sent']],
+    '审查期间提前人工卡片': [['提前显示', '不提前显示'], ['appears early', 'does not appear early']],
+    '阈值依模型和强度': [['因模型与推理强度而异', '不因模型与推理强度而异'], ['threshold varies', 'threshold does not vary']],
+    '清单外宿主流程': [['保持宿主', '不保持宿主'], ['rest keep', 'rest do not keep']],
+    '接管升权': [['处理升权', '不处理升权'], ['hand escalation', 'do not hand escalation']],
+    '其他预设保留流程': [['保持宿主', '不保持宿主'], ['presets keep', 'presets do not keep']],
+    '未知预设按设置': [['按「无法识别权限预设时」', '不按「无法识别权限预设时」'], ['presets follow', 'presets do not follow']],
+    '强度自动低档': [['就使用 `low`', '就不使用 `low`'], ['use `low`', 'do not use `low`']],
+    '否则模型默认': [['由模型默认值决定', '不由模型默认值决定'], ['model default decide', 'model default not decide']],
+    '旧纯id任意provider': [['按任意 provider', '不按任意 provider'], ['read as any-provider', 'read as not any-provider']],
+    '装配结论全程': [['涵盖装配', '不涵盖装配'], ['covering assembly', 'not covering assembly']],
+    '到点拒绝': [['到点按拒绝结算', '到点不按拒绝结算'], ['Expiry settles as a rejection', 'Expiry does not settle as a rejection']],
+    '请求起算用剩余': [['只使用剩余时间', '不使用剩余时间'], ['only gets the remainder', 'does not get the remainder']],
+    '交人工重新起算': [['重新开始计时', '不重新开始计时'], ['handoff itself', 'not the handoff itself']],
+    '范围仍审查': [['仍须通过规则检查与模型审查', '无需通过规则检查与模型审查'], ['still passes the rule checks and the review', 'still need not pass the rule checks or the review']],
+    '完全访问最宽': [['＝最宽', '＝不最宽'], ['is widest', 'is not widest']],
+    '拒绝结算': [['按拒绝结算', '不按拒绝结算'], ['reject settles', 'reject does not settle']],
+    '人工卡片和超时拒绝': [['到点按拒绝结算', '到点不按拒绝结算'], ['human limit rejects', 'human limit does not reject']],
+    '分叉按主会话': [['按主会话对待', '不按主会话对待'], ['as main sessions', 'as not main sessions']],
+    '全部四类': [['四类都发送', '四类都不发送'], ['sends all four', 'sends none of the four']],
+    '字节上限及截断标记': [['超出截断', '超出不截断'], ['is trimmed', 'is not trimmed']],
+    '匹配所有字符串参数非仅命令': [['匹配对象是', '不匹配的对象是'], ['is matched', 'is not matched']],
+    '坏正则跳过': [['行跳过', '行不跳过'], ['are skipped', 'are not skipped']],
+    '跟随宿主': [['跟随宿主', '不跟随宿主'], ['follow the host', 'not follow the host']],
+    '下一渲染生效': [['渲染生效', '渲染不生效'], ['Takes effect', 'Does not take effect']],
+    '默认英文': [['默认英文', '默认不是英文'], ['Defaults to English', 'Defaults to not English']],
+    '原因后实际模型': [['实际使用', '实际不使用'], ['Currently using', 'Currently not using']],
+    '真实生效层': [['当前生效', '当前不生效'], ['Currently effective', 'Currently not effective']],
+    '跟随当前执行模型': [['跟随执行助手', '不跟随执行助手'], ['reviews follow', 'reviews do not follow']],
+    '斜杠旧键需确认': [['请确认', '无需确认'], ['confirm its original', 'do not confirm its original']],
+    '确认前兼容读取原值': [['规则读取', '规则不读取'], ['is read per', 'is not read per']],
+    '未知按设置': [['按「无法识别权限预设时」', '不按「无法识别权限预设时」'], ['identified follow', 'identified do not follow']],
+    '检查服务后重试': [['服务可用后重试', '服务可用后不重试'], ['and retry', 'and do not retry']],
+    '重新启用或重启可能恢复': [['可能恢复', '绝不会恢复'], ['may restore', 'will never restore']],
+    '标准档与卸载清理': [['可改选标准', '不可改选标准'], ['pick a standard', 'do not pick a standard']],
+    '记录随会话': [['记录跟随', '记录不跟随'], ['Records follow', 'Records do not follow']],
+    '超四倍轮转留窗口删旧': [['时轮转', '时不轮转'], ['it is rewritten', 'it is not rewritten']],
+    '超文件上限删最旧': [['时删除最旧', '时不删除最旧'], ['files are deleted', 'files are not deleted']],
+    '轮转前备份': [['轮转前备份', '轮转前不备份'], ['Back up before', 'Do not back up before']],
+    '过小上限可能无有效结论': [['没有有效结论', '有有效结论'], ['no usable conclusion', 'a usable conclusion']],
+    '操作无法识别': [['无法辨认', '可以辨认'], ['cannot be identified', 'can be identified']],
+    '模型人工不能推翻': [['都不能推翻', '都能推翻'], ['beyond model or human', 'overridable by model or human']],
+    '不是额外授权': [['不等于授予', '等于授予'], ['grants no extra', 'grants extra']],
+    '不影响审批': [['不影响接管', '影响接管'], ['never the take-over', 'also the take-over']],
+    '斜杠确认且不自动改写': [['不自动改写', '自动改写'], ['never rewritten', 'rewritten']],
+    '重试不重赠': [['重试不另获', '重试另获'], ['get no fresh time budget', 'get a fresh time budget']],
+    '超时拒绝报环节不是危险': [['不是危险判定', '是危险判定'], ['not a danger verdict', 'a danger verdict']],
+    '不是全批': [['不等于自动批准', '等于自动批准'], ['not a blanket approval', 'a blanket approval']],
+    '工作区不放行更宽': [['升权不放行', '升权放行'], ['rejects wider', 'allows wider']],
+    '拒绝不调模型': [['不调用模型', '调用模型'], ['without the model', 'with the model']],
+    '缺失标记不作安全': [['不把缺失当作安全', '把缺失当作安全'], ['never counts as safe', 'counts as safe']],
+    '委派无人工': [['没有人工通道', '有人工通道'], ['have no human channel', 'have a human channel']],
+    '已结算不可迟改': [['不能由迟到', '可由迟到'], ['cannot be overturned', 'can be overturned']],
+    '仅失败不发允许': [['允许不发送', '允许也发送'], ['skips allow notices', 'sends allow notices']],
+    '记录视图独立': [['不受本开关影响', '受本开关影响'], ['unaffected by this switch', 'affected by this switch']],
+    '记录独立': [['与该上限无关', '与该上限有关'], ['ignore this limit', 'obey this limit']],
+    '拒绝无模型人工': [['不交人工', '交人工'], ['no human', 'a human']],
+    '不影响模型语言': [['不改变发送', '改变发送'], ['never touches', 'touches']],
+    '独立界面语言': [['互不影响', '互相影响'], ['is independent', 'is not independent']],
+    '默认模型不可用': [['不可用', '可用'], ['unavailable', 'available']],
+    '规则模型不可用': [['不可用', '可用'], ['unavailable', 'available']],
+    '会话配置不可用': [['不可用', '可用'], ['unavailable', 'available']],
+    '未选模型不保存': [['不保留该行', '保留该行'], ['not kept', 'kept']],
+    '模型拒绝非最终结果': [['：{reason}', '：{reason}，这就是最终审批结果，无需人工'], [': {reason}', ': {reason}. This is the final approval outcome; no human is needed']],
+    '超时无结论': [['未取得有效结论', '取得有效结论'], ['without a conclusion', 'with a conclusion']],
+    '故障无有效结论': [['未取得有效结论', '取得有效结论'], ['without a conclusion', 'with a conclusion']],
+    '目录不可读': [['读不到', '读得到'], ['is unavailable', 'is available']],
+    '服务缺失': [['服务缺失', '服务齐全'], ['missing service', 'available service']],
+    '读取失败': [['读取失败', '读取成功'], ['read failure', 'successful read']],
+    '信息不可用': [['没有可用预设信息', '有可用预设信息'], ['no preset information', 'usable preset information']],
+    '配置在场但当前表缺失': [['配置中存在', '配置中不存在'], ['Configured but absent', 'Not configured but absent']],
+    '插件不改YAML': [['不解析', '解析'], ['never parses', 'parses']],
+    '减少采集不删': [['不删除已有记录', '删除已有记录'], ['never deletes', 'deletes']],
+  };
+  resetHooks();
+  const original = makeCtx();
+  loadClient().apply(original.ctx);
+  const dicts = original.dictionaries[0].dicts;
+  const audited = [];
+  const errors = [];
+  for (const [id, pair] of Object.entries(roster)) {
+    const keys = Object.entries(COPY_FACTS).filter(([, facts]) => facts.some((fact) => fact.id === id)).map(([key]) => key);
+    for (const key of keys) for (const [index, lang] of ['zh', 'en'].entries()) {
+      const [from, to] = pair[index];
+      const current = dicts[lang][key];
+      const normalized = current.replace(/\u2060/gu, '');
+      if (!normalized.includes(from)) { errors.push(`${key}/${lang}/${id}:目标不存在:${from}`); continue; }
+      const mutated = normalized.replace(from, to);
+      let count = 0;
+      const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+        if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+        count++;
+        return prefix + JSON.stringify(mutated);
+      });
+      assert.equal(count, 1);
+      resetHooks();
+      const env = makeCtx();
+      loadClient(source).apply(env.ctx);
+      const actual = env.dictionaries[0].dicts[lang][key];
+      assert.equal(actual, mutated);
+      if (!copyFactFailures(key, lang, actual).includes(id)) errors.push(`${key}/${lang}/${id}:反转仍通过:${from}→${to}`);
+      assert.deepEqual(copyFactFailures(key, lang, current), [], `${key}/${lang} 原当前值须通过`);
+      audited.push(`${id}/${lang}`);
+    }
+  }
+  assert.equal(Object.keys(roster).length, 75);
+  assert.equal(audited.length, 160, '75不同事实跨共享条目形成80登记×两语反例');
+  assert.deepEqual(Object.keys(roster).sort(), [...FACT_KINDS.positive, ...FACT_KINDS.negative, '额度可能先用于推理', '过小上限可能无有效结论', '重新启用或重启可能恢复'].sort(), '72行为与3可能性事实必须各有真实反例，不以分类充当覆盖');
+  assert.deepEqual([...new Set(audited.map((id) => id.replace(/\/(?:zh|en)$/u, '')))].sort(), Object.keys(roster).sort());
+  assert.deepEqual(errors, [], errors.join('\n'));
+});
+
+test('复合行为事实：独立动作、主体与对象也各自有真实相反值', () => {
+  const cases = [
+    ['help.allowEscalationTo', 'zh', '仍须通过规则检查与模型审查', '无需通过规则检查与模型审查'],
+    ['help.allowEscalationTo', 'en', 'still passes the rule checks and the review', 'still need not pass the rule checks or the review'],
+    ['help.unknownSubject', 'zh', '不调用模型', '调用模型'],
+    ['help.unknownSubject', 'zh', '不调用模型、立即拒绝', '不调用模型、不立即拒绝'],
+    ['help.unknownSubject', 'en', 'refuses at once', 'does not refuse at once'],
+    ['help.unknownSubject', 'en', 'without the model', 'with the model'],
+    ['help.denyPatterns', 'zh', '不调用模型', '调用模型'],
+    ['help.denyPatterns', 'zh', '不交人工', '交人工'],
+    ['help.denyPatterns', 'zh', '都不能推翻', '都能推翻'],
+    ['help.denyPatterns', 'en', 'no model', 'a model'],
+    ['help.denyPatterns', 'en', 'no human', 'a human'],
+    ['help.denyPatterns', 'en', 'no override', 'free override'],
+    ['help.fallback', 'zh', '未允许一律拒绝', '未允许一律放行'],
+    ['help.fallback', 'en', 'always means rejected', 'always means approved'],
+    ['help.ui.humanCardDuringReview', 'zh', '人工结果优先', '审查结果优先'],
+    ['help.ui.humanCardDuringReview', 'en', 'human answer wins', 'review answer wins'],
+    ['help.ui.inject', 'zh', '四类都发送', '四类都不发送'],
+    ['help.ui.inject', 'en', 'sends all four', 'sends none of the four'],
+    ['card.presets.missing.remedy', 'zh', '不改写用户 YAML', '改写用户 YAML'],
+    ['card.presets.missing.remedy', 'en', 'or rewrites', 'but rewrites'],
+    ['hint.trigger.unknown', 'en', 'cannot be read', 'can be read'],
+    ['hint.reviewer.model', 'en', 'means the agent', 'means not the agent'],
+    ['help.reviewer.model', 'en', 'reviews on the agent', 'reviews not on the agent'],
+    ['hint.reviewer.maxTokens', 'en', 'reasoning first', 'reasoning'],
+    ['help.reviewer.maxTokens', 'en', 'reasoning first', 'reasoning'],
+    ['hint.ui.humanCardDuringReview', 'en', 'appears early', 'appears late'],
+  ];
+  resetHooks();
+  const original = makeCtx();
+  loadClient().apply(original.ctx);
+  const dicts = original.dictionaries[0].dicts;
+  const errors = [];
+  for (const [key, lang, from, to] of cases) {
+    assert.ok(dicts[lang][key].includes(from), `${key}/${lang} ${from} 实际在场`);
+    const mutated = dicts[lang][key].replace(from, to);
+    let count = 0;
+    const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+      if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+      count++;
+      return prefix + JSON.stringify(mutated);
+    });
+    assert.equal(count, 1);
+    resetHooks();
+    const env = makeCtx();
+    loadClient(source).apply(env.ctx);
+    assert.equal(env.dictionaries[0].dicts[lang][key], mutated);
+    if (!dictionaryFactFailures(env.dictionaries[0].dicts).some((failure) => failure.startsWith(`${lang}/${key}:`))) errors.push(`${key}/${lang}:${from}→${to}`);
+  }
+  assert.deepEqual(errors, [], errors.join('\n'));
 });
 
 test('当前token风险显示：原生字典源码错位和部分保护变异必须失败', () => {

@@ -67,7 +67,7 @@ function claimsFinalOutcome(text, lang) {
 /** 已登记正向关系的紧邻否定；只查看关系词前缀，不把其他分句的否定当作反转。 */
 function affirmativeConcept(text, lang, concept) {
   const negativePrefix = lang === 'zh'
-    ? /(?:不|未|非|没有|并非|不是|无需|不能|无法|不再)(?:会|再|更|直接|立即|单独|保持|被|逐条|只|按拒绝)?\s*$/u
+    ? /(?:不|未|非|没有|并非|不是|无需|不能|无法|不再)(?:会|再|更|直接|立即|单独|保持|被|逐条|只|按拒绝|由|因|按|使用|可改选|按拒绝)?\s*$/u
     : /\b(?:not|no|never|without|cannot|can't|doesn't|don't|isn't|aren't)(?:\s+(?:be|a|an|the|as|called|used|run|act|acts|counted|timed|remain|remains|more|directly|immediately))*\s*$/iu;
   let found = false;
   for (const clause of text.split(/[。；;，,:：.!?！？\n—]/u)) {
@@ -118,6 +118,9 @@ const CONDITION_ACTIONS = {
 /** 只登记当前文案已承诺的条件，未知改写仍须人工核对。 */
 function conditionFactFailures(key, lang, text) {
   const failures = [];
+  if (key === 'hint.trigger.unknown' && !(lang === 'zh' ? /读不到|无法读取|无法识别|不可读|读取不到/u : /cannot be read|unreadable|cannot be identified/iu).test(text)) failures.push('读不到预设条件');
+  if ((key === 'hint.reviewer.model' || key === 'help.reviewer.model') && (lang === 'zh' ? /不使用执行助手/u : /not the agent|not on the agent|any model/iu).test(text)) failures.push('默认跟随目标反转');
+  if (key === 'hint.allowEscalationTo' && !(lang === 'zh' ? /更高[^。；]{0,12}(?:不|不能|不会)[^。；]{0,8}批准/u : /wider[^.;]{0,24}(?:never|not)[^.;]{0,12}approv/iu).test(text)) failures.push('更高权限不批准');
   const check = (id, condition, opposite, action) => {
     const spec = CONDITION_ACTIONS[id];
     const validate = (clause) => {
@@ -338,7 +341,7 @@ export const COPY_FACTS = {
     r('分叉按主会话', S(/分叉/u, /主会话/u), S(/forked/iu, /main session/iu)),
   ],
   'help.ui.humanCardDuringReview': [
-    r('抢先人工优先', AND(S(/抢先|先/u, /人工/u, /优先/u), (text) => affirmativeConcept(text, 'zh', /优先/u)), AND(S(/answer first|first/iu, /human/iu, /wins|beats|prevails/iu), (text) => affirmativeConcept(text, 'en', /wins?|beats?|prevails?/iu))),
+    r('抢先人工优先', AND(S(/抢先|先/u, /人工/u, /优先/u), /人工(?:结果|作答)[^。；]{0,4}优先/u, (text) => affirmativeConcept(text, 'zh', /优先/u)), AND(S(/answer first|first/iu, /human/iu, /wins|beats|prevails/iu), /human answer[^.;]{0,6}(?:wins|beats|prevails)/iu, (text) => affirmativeConcept(text, 'en', /wins?|beats?|prevails?/iu))),
     r('已结算不可迟改', S(/已完成|已结算/u, /不能|无法|不可/u, /迟到|晚|迟/u, /推翻|改变|撤销/u), S(/settled/iu, /cannot|can.t|not/iu, /late/iu, /overturned|overturn|undo/iu)),
     r('关闭后真交人工才显示', S(/关闭/u, /仅|只/u, /确实|真正|真的/u, /交给人工|交人工/u, /显示/u), S(/\boff\b/iu, /only/iu, /truly|actually|really/iu, /handed over|handoff/iu, /appears|shows|card/iu)),
   ],
@@ -464,6 +467,104 @@ export const COPY_FACTS = {
     r('减少采集不删', S(/减少|调低|降低/u, /采集|capture|collect/u, /不|不会|并不/u, /删除|删|delet/u), S(/reduc|turning.{0,12}down|lower|cut/iu, /capture|collect/iu, /not|never|no/u, /delet|remove/iu)),
   ],
 };
+// 每个不同事实只列一个主类；行为/状态与精确记号的测试职责分开。
+export const FACT_KINDS = {
+  positive: '采用模型或供应商默认|审查文本和执行通知|审查期间提前人工卡片|阈值依模型和强度|清单外宿主流程|接管升权|其他预设保留流程|未知预设按设置|强度自动低档|否则模型默认|旧纯id任意provider|装配结论全程|到点拒绝|请求起算用剩余|交人工重新起算|范围仍审查|完全访问最宽|拒绝结算|人工卡片和超时拒绝|分叉按主会话|全部四类|字节上限及截断标记|匹配所有字符串参数非仅命令|坏正则跳过|跟随宿主|下一渲染生效|默认英文|原因后实际模型|真实生效层|跟随当前执行模型|斜杠旧键需确认|确认前兼容读取原值|未知按设置|检查服务后重试|标准档与卸载清理|记录随会话|超四倍轮转留窗口删旧|超文件上限删最旧|轮转前备份'.split('|'),
+  negative: '操作无法识别|模型人工不能推翻|不是额外授权|不影响审批|斜杠确认且不自动改写|重试不重赠|超时拒绝报环节不是危险|不是全批|工作区不放行更宽|拒绝不调模型|缺失标记不作安全|委派无人工|已结算不可迟改|仅失败不发允许|记录视图独立|记录独立|拒绝无模型人工|不影响模型语言|独立界面语言|默认模型不可用|规则模型不可用|会话配置不可用|未选模型不保存|模型拒绝非最终结果|超时无结论|故障无有效结论|目录不可读|服务缺失|读取失败|信息不可用|配置在场但当前表缺失|插件不改YAML|减少采集不删'.split('|'),
+  condition: '额度可能先用于推理|过小上限可能无有效结论|重新启用或重启可能恢复|预设清单决定接管升权|读不到预设的处置|预设不匹配跳过记录|未设置跟随当前模型|零立即超时|零立即拒绝|零不传上限|关闭完全不接管|最高权限及更高不批|审查未允许后处置|零不裁剪|空清单覆盖全部|命中拒绝|填写后只处理名单内|空清单已知不接管|不接管与继续两分支|开启逐条|关闭同原因一条|未设跟随当前模型|排队不占预算|零立即到点|仅人工备用|零拒绝非无限|关闭后真交人工才显示|关闭零通知|空只关本层|默认未设置|仅全局落层跟随|无会话及映射条件|会话未选且默认未设|全局未设且仅此层跟随|仅本会话选择'.split('|'),
+  direction: '映射先于全局|会话更优先|会话映射全局顺序|审查独立调用|会话高于映射高于全局|抢先人工优先'.split('|'),
+  quantity: '毫秒单位|通知字节单位|每行一个工具|每行正则|唯一条件|每条件唯一|回读窗口及默认'.split('|'),
+  format: '模型引用格式|标志格式|配置键'.split('|'),
+  object: '默认模型与强度|执行模型匹配|插件界面语言|token 文本计量单位|请求和交人工两个起点|给执行助手通知范围|完整id作用范围|最高权限上限|本会话审查模型|可能原因框架|停用兼容自定义排查'.split('|'),
+};
+
+/** 行为极性只作用于该事实的对象子句，不能从无关分句借否定或动作。 */
+const behaviorPositive = (zhSubject, zhAction, enSubject, enAction) => {
+  const check = (text, lang, subject, action) => {
+    const relevant = sents(text).filter((part) => subject.test(part) && action.test(part));
+    return relevant.length > 0 && relevant.every((part) => affirmativeConcept(part, lang, action));
+  };
+  return { zh: (text) => check(text, 'zh', zhSubject, zhAction), en: (text) => check(text, 'en', enSubject, enAction) };
+};
+const behaviorNegative = (zh, en) => ({ zh, en });
+const BEHAVIOR_FACTS = {
+  '采用模型或供应商默认': behaviorPositive(/模型|供应商/u, /由模型或供应商默认|默认/u, /model|provider/iu, /leaving|defaults?/iu),
+  '额度可能先用于推理': { zh: (text) => !/绝不|绝不会/u.test(text) && /先|优先|首先/u.test(text), en: (text) => !/never[^.;]{0,8}spend/iu.test(text) && /first|before/iu.test(text) },
+  '审查文本和执行通知': behaviorPositive(/文本|通知/u, /发给|给执行助手/u, /text|notice/iu, /sent|shared/iu),
+  '审查期间提前人工卡片': { zh: (text) => affirmativeConcept(text, 'zh', /提前|早|抢先/u), en: (text) => /early/iu.test(text) && affirmativeConcept(text, 'en', /appears?|shows?/iu) },
+  '阈值依模型和强度': behaviorPositive(/模型|强度/u, /因模型|异|变|不同|决定/u, /model|effort/iu, /varies|depends|differs/iu),
+  '清单外宿主流程': behaviorPositive(/其余|其他|名单外|清单外/u, /保持|走/u, /rest|unlisted|others/iu, /keep|retain|flow/iu),
+  '接管升权': behaviorPositive(/清单内/u, /接管|处理/u, /listed preset/iu, /hand|take/iu),
+  '其他预设保留流程': behaviorPositive(/其他|其余|别的/u, /保持|流程/u, /other/iu, /keep|retain/iu),
+  '未知预设按设置': behaviorPositive(/无法识别|不能识别/u, /按|处置/u, /unidentifiable|cannot be identified/iu, /follow/iu),
+  '强度自动低档': behaviorPositive(/low/iu, /使用|用|选/u, /low/iu, /use|pick/iu),
+  '否则模型默认': behaviorPositive(/否则|不然|若不支持/u, /由模型默认|默认/u, /otherwise|else|if not/iu, /default|decide/iu),
+  '旧纯id任意provider': behaviorPositive(/纯模型 id|纯 id/u, /任意/u, /plain.id/iu, /any.provider|any/iu),
+  '装配结论全程': behaviorPositive(/装配/u, /涵盖|覆盖/u, /assembly/iu, /cover/iu),
+  '到点拒绝': behaviorPositive(/到点|到期|超时/u, /按拒绝结算|拒绝/u, /expiry|expire|times? out/iu, /settle|reject/iu),
+  '请求起算用剩余': behaviorPositive(/请求/u, /使用剩余|剩余|余下/u, /request/iu, /gets?|remainder|remaining/iu),
+  '交人工重新起算': behaviorPositive(/交人工|转人工/u, /重新|重起|另起/u, /handoff/iu, /handoff itself|fresh|restart|begins again|new|itself/iu),
+  '范围仍审查': { zh: (text) => !/(?:无需|不必|不用|不须)(?:通过)?[^。；]{0,18}(?:规则|模型审查)/u.test(text) && affirmativeConcept(text, 'zh', /通过|过规则/u), en: (text) => !/(?:need not|does not|do not|not required to)[^.;]{0,18}pass/iu.test(text) && affirmativeConcept(text, 'en', /pass(?:es)?/iu) },
+  '完全访问最宽': behaviorPositive(/完全访问/u, /最宽/u, /full access/iu, /widest/iu),
+  '拒绝结算': behaviorPositive(/直接拒绝/u, /结算/u, /reject/iu, /settles?/iu),
+  '人工卡片和超时拒绝': behaviorPositive(/人工作答|人工/u, /按拒绝结算|拒绝/u, /human/iu, /reject/iu),
+  '分叉按主会话': behaviorPositive(/分叉/u, /按主会话/u, /forked/iu, /main session/iu),
+  '全部四类': behaviorPositive(/四类/u, /发送|发给/u, /all four/iu, /sends? all|reach/iu),
+  '字节上限及截断标记': behaviorPositive(/通知|字节|超出/u, /截断|标记/u, /text|notice|byte/iu, /trimmed|marker/iu),
+  '匹配所有字符串参数非仅命令': behaviorPositive(/字符串|参数/u, /匹配/u, /string argument/iu, /matched/iu),
+  '坏正则跳过': behaviorPositive(/不可编译|无法编译/u, /跳过/u, /uncompilable|cannot compile/iu, /skip/iu),
+  '跟随宿主': behaviorPositive(/宿主/u, /跟随/u, /host/iu, /follow/iu),
+  '下一渲染生效': behaviorPositive(/渲染/u, /生效/u, /render/iu, /takes? effect|applies/iu),
+  '默认英文': behaviorPositive(/默认/u, /英文/u, /default/iu, /English/iu),
+  '原因后实际模型': behaviorPositive(/\{effective\}/u, /实际|当前|使用|在用/u, /\{effective\}/u, /using|in use|actual/iu),
+  '真实生效层': behaviorPositive(/\{layer\}/u, /生效|当前/u, /\{layer\}/u, /effective|current/iu),
+  '跟随当前执行模型': behaviorPositive(/执行助手/u, /跟随|使用/u, /agent/iu, /follow/iu),
+  '斜杠旧键需确认': { zh: (text) => affirmativeConcept(text, 'zh', /确认/u), en: (text) => affirmativeConcept(text, 'en', /confirm(?!ed)/iu) },
+  '确认前兼容读取原值': behaviorPositive(/确认|原值/u, /读取|保留/u, /confirm|value/iu, /read|keeps?/iu),
+  '未知按设置': behaviorPositive(/无法识别|不能识别/u, /按|处置/u, /cannot be identified/iu, /follow/iu),
+  '检查服务后重试': behaviorPositive(/服务/u, /确认|检查|重试/u, /service/iu, /check|retry/iu),
+  '重新启用或重启可能恢复': { zh: (text) => !/(?:绝不|绝不会|必然|一定)[^。；]{0,6}恢复/u.test(text), en: (text) => !/(?:never|always|certainly)[^.;]{0,8}restore/iu.test(text) },
+  '标准档与卸载清理': behaviorPositive(/标准|卸载/u, /可改选|改选|处理|清理/u, /standard|uninstall/iu, /pick|cleanup/iu),
+  '记录随会话': behaviorPositive(/记录/u, /跟随|跟着|属于/u, /record/iu, /follow|belong|stay/iu),
+  '超四倍轮转留窗口删旧': behaviorPositive(/四倍/u, /轮转|删除/u, /four times/iu, /rewritten|rotation|rotat|delet/iu),
+  '超文件上限删最旧': behaviorPositive(/文件/u, /删除|删/u, /file/iu, /deleted|delet|go first|dropped/iu),
+  '轮转前备份': behaviorPositive(/轮转/u, /备份/u, /rotation|rotat/iu, /back/iu),
+  '过小上限可能无有效结论': behaviorNegative(/(?:没有|无|得不到|不产生|难以)(?:任何)?(?:有效|可用)(?:的)?(?:结论|结果)/u, /(?:no|without)(?: a)? (?:usable|valid) (?:conclusion|answer)/iu),
+  '操作无法识别': behaviorNegative(/(?:无法|不能|难以)(?:辨认|识别|确定)/u, /(?:cannot|unable|can't)[^.;]{0,12}(?:identif|recogniz|recover)/iu),
+  '模型人工不能推翻': behaviorNegative(/(?:模型[^。；]{0,12}人工|人工[^。；]{0,12}模型)[^。；]{0,6}(?:都不能|不能|无法|不可|均不)[^。；]{0,3}(?:推翻|改变|反转)/u, /(?:beyond model or human|neither model nor human[^.;]{0,12}(?:override|overturn)|no[^.;]{0,12}(?:model|human)[^.;]{0,12}override)/iu),
+  '不是额外授权': behaviorNegative(/(?:不等于|并非|不是)[^。；]{0,8}(?:授予|授权|权限)/u, /(?:grants? no|no extra|no additional)[^.;]{0,12}permission/iu),
+  '不影响审批': behaviorNegative(/(?:不|无关)[^。；]{0,6}影响[^。；]{0,6}(?:接管|审批)/u, /(?:never|not)[^.;]{0,12}(?:take.over|approval|affect|change)/iu),
+  '斜杠确认且不自动改写': behaviorNegative(/(?:不|不会)自动?改写/u, /(?:never|not)[^.;]{0,12}rewrit/iu),
+  '重试不重赠': behaviorNegative(/重试[^。；]{0,8}(?:不|无|没)[^。；]{0,12}(?:时限|预算)/u, /retr(?:y|ies)[^.;]{0,16}(?:no|not|never)[^.;]{0,20}(?:budget|time)/iu),
+  '超时拒绝报环节不是危险': behaviorNegative(/(?:不是|并非|非|不算)危险/u, /(?:not a|no|not) danger/iu),
+  '不是全批': behaviorNegative(/(?:不等于|并非|不是|绝不是|绝不)[^。；]{0,8}(?:自动批准全部|全部操作|全批|无条件)/u, /(?:not a|never a|no|not) blanket/iu),
+  '工作区不放行更宽': behaviorNegative(/(?:升权[^。；]{0,5}(?:不放行|不批|拒绝)|(?:不放行|不批|拒绝)[^。；]{0,12}升权)/u, /workspace[^.;]{0,12}(?:reject|never|not)[^.;]{0,30}escalation/iu),
+  '拒绝不调模型': { zh: (text) => /(?:不调用|不调)模型/u.test(text) && affirmativeConcept(text, 'zh', /立即拒绝/u), en: (text) => /without the model|no model|not call[^.;]{0,8}model/iu.test(text) && affirmativeConcept(text, 'en', /refuses?|rejects?/iu) },
+  '缺失标记不作安全': behaviorNegative(/(?:不把缺失当作|不(?:会)?(?:视为|当作)|并非|从未)[^。；]{0,8}安全/u, /missing[^.;]{0,12}(?:never|not)[^.;]{0,16}safe/iu),
+  '委派无人工': behaviorNegative(/(?:委派|子代理)[^。；]{0,8}(?:没有|无)人工通道/u, /(?:delegated|subagents?)[^.;]{0,20}(?:no|without) human channel/iu),
+  '已结算不可迟改': behaviorNegative(/(?:已完成|已结算)[^。；]{0,8}(?:不能|无法|不可)[^。；]{0,12}(?:推翻|改变|撤销)/u, /settled[^.;]{0,12}(?:cannot|can't|not)[^.;]{0,30}(?:overturned|overturn|undo)/iu),
+  '仅失败不发允许': behaviorNegative(/允许[^。；]{0,6}(?:不发送|不发)/u, /skips? allow|allow[^.;]{0,24}(?:not sent|omitted)|omits[^.;]{0,8}allow/iu),
+  '记录视图独立': behaviorNegative(/(?:审查记录|记录)[^。；]{0,18}(?:不受|无关|独立)[^。；]{0,8}(?:开关|显示)|(?:开关|显示)[^。；]{0,8}无关/u, /(?:review.log|record)[^.;]{0,20}(?:unaffected|independent|nothing to do)/iu),
+  '记录独立': behaviorNegative(/(?:该上限|本上限)[^。；]{0,4}无关|(?:不受|无关)[^。；]{0,8}(?:上限|限制)/u, /records?[^.;]{0,40}(?:ignore|regardless|independent)[^.;]{0,12}(?:limit|cap)|regardless[^.;]{0,12}(?:limit|cap)/iu),
+  '拒绝无模型人工': behaviorNegative(/(?:不调用模型|无模型)[^。；]{0,8}(?:不交人工|无人工)/u, /no model[^.;]{0,8}no human|without (?:a )?model[^.;]{0,12}(?:or )?human/iu),
+  '不影响模型语言': behaviorNegative(/(?:不改变|不影响|不触碰)[^。；]{0,15}(?:模型|文本)/u, /(?:never|not)[^.;]{0,12}(?:touch|change|affect)[^.;]{0,12}(?:model|text)/iu),
+  '独立界面语言': { zh: (text) => /(?:界面|插件)[^。；]{0,8}(?:互不影响|独立|无关)/u.test(text), en: (text) => affirmativeConcept(text, 'en', /independent|separate/iu) },
+  '默认模型不可用': behaviorNegative(/(?:默认|全局)[^。；:：]{0,12}(?:不可用|无法|不能|失败)/u, /default[^.;:]{0,25}(?:unavailable|cannot|failed)/iu),
+  '规则模型不可用': behaviorNegative(/规则[^。；:：]{0,14}(?:不可用|无法)/u, /(?:rule|picked)[^.;:]{0,30}unavailable|unavailable[^.;:]{0,30}(?:rule|picked)/iu),
+  '会话配置不可用': behaviorNegative(/会话[^。；:：]{0,30}不可用/u, /session[^.;:]{0,40}unavailable/iu),
+  '未选模型不保存': behaviorNegative(/(?:不保留|不留|丢弃)[^。；]{0,8}(?:行|模型)|(?:行|模型)[^。；]{0,8}(?:不保留|丢弃)/u, /not kept|dropped/iu),
+  '模型拒绝非最终结果': { zh: (text) => !claimsFinalOutcome(text, 'zh'), en: (text) => !claimsFinalOutcome(text, 'en') },
+  '超时无结论': behaviorNegative(/(?:未取得|无)[^。；]{0,4}结论/u, /(?:without|no|not)[^.;]{0,8}conclusion/iu),
+  '故障无有效结论': behaviorNegative(/(?:未取得|无)[^。；]{0,4}结论/u, /(?:without|no|not)[^.;]{0,8}conclusion/iu),
+  '目录不可读': behaviorNegative(/读不到|无法读取|不可用/u, /unavailable|cannot be read|unreadable/iu),
+  '服务缺失': behaviorNegative(/服务[^。；]{0,4}缺失/u, /missing service|service[^.;]{0,8}missing/iu),
+  '读取失败': behaviorNegative(/读取[^。；]{0,4}失败/u, /read failure|read that failed|failed read|reading fails/iu),
+  '信息不可用': behaviorNegative(/(?:没有|无)[^。；]{0,6}(?:预设信息|可用)/u, /no preset information|unusable|without preset information/iu),
+  '配置在场但当前表缺失': { zh: (text) => /配置[^。；]{0,6}(?<!不)存在[^。；]{0,20}(?:没有|不在|缺失)/u.test(text), en: (text) => affirmativeConcept(text, 'en', /configured|config/iu) && /absent|missing|not in/iu.test(text) },
+  '插件不改YAML': behaviorNegative(/不解析[^。；]{0,4}不改写[^。；]{0,8}YAML/u, /(?:never|not)[^.;]{0,12}parses\s+(?:nor|or)\s+rewrites[^.;]{0,12}YAML/iu),
+  '减少采集不删': behaviorNegative(/(?:减少|调低|降低)[^。；]{0,6}采集[^。；]{0,4}(?:不|不会|并不)删除/u, /(?:reduc|turning.{0,12}down|lower|cut)[^.;]{0,30}(?:not|never|no)[^.;]{0,10}(?:delet|remove)/iu),
+};
+
 const PLACEHOLDERS = {
   'warn.modelIssue.global': ['reason', 'effective'], 'warn.modelIssue.rule': ['reason', 'effective'],
   'warn.modelIssue.session': ['configured', 'reason', 'effective'], 'warn.modelIssue.layer': ['layer'],
@@ -484,9 +585,14 @@ export function copyFactFailures(key, lang, text) {
   const normalized = normalizeCopy(text);
   const failures = key === 'help.mode' ? helpModeFailures(normalized) : (COPY_FACTS[key] ?? []).filter((fact) => {
     const check = fact[lang];
-    return typeof check === 'function' ? !check(normalized) : !check.test(normalized);
+    const present = typeof check === 'function' ? check(normalized) : check.test(normalized);
+    const behavior = BEHAVIOR_FACTS[fact.id]?.[lang];
+    const polarity = !behavior || (typeof behavior === 'function' ? behavior(normalized) : behavior.test(normalized));
+    return !present || !polarity;
   }).map((fact) => fact.id);
   failures.push(...conditionFactFailures(key, lang, normalized));
+  if (key === 'help.fallback' && !(lang === 'zh' ? /(?:未允许|未通过|不允许)(?:一律|均|都)?拒绝/u : /(?:not allowed|not approved)[^.;]{0,24}(?:reject|denied)/iu).test(normalized)) failures.push('委派未允许拒绝');
+  if (key === 'help.denyPatterns' && !(lang === 'zh' ? /模型[^。；]{0,4}人工[^。；]{0,6}(?:不能|无法|不可)[^。；]{0,4}(?:推翻|改变|反转)/u : /no override|neither model nor human[^.;]{0,16}(?:override|overturn)/iu).test(normalized)) failures.push('命中结果不可推翻');
   const zeroClause = sents(normalized).find((clause) => /\b0\b/u.test(clause));
   if (zeroClause && /timeoutMs$/u.test(key) && !affirmativeConcept(zeroClause, lang, lang === 'zh' ? /立即|马上|即刻|拒绝|超时/u : /immediately|at once|right away|rejects?|times? out|timeout/iu)) failures.push('零值正向关系被否定');
   if (zeroClause && /timeoutMs$/u.test(key) && /(?:不|不会|并非|不是).{0,3}立即|(?:不|不会|并非|不是)\s*(?:拒绝|超时)|\b(?:does not|do not|doesn't|don't|not|never)\b.{0,15}(?:immediate|at once|reject|time out)|\b(?:reject|timeout)\b.{0,8}\b(?:not|never)\b/iu.test(zeroClause)) failures.push('零值含义反转');
