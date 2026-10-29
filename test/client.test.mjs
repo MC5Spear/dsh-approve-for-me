@@ -3,6 +3,7 @@ import test, { after } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { DEFAULT_RATIONALE } from '../lib/reviewer.js';
 import { COPY_FACTS, FACT_KINDS, SUBCONDITION_IDS, copyFactFailures, tokenRiskDisplayProtected } from './helpers/copy-facts.mjs';
+import { checkModeHelpFacts } from './helpers/mode-copy-facts.mjs';
 
 /** 渲染期望从真实字典模板组装；事实和固定名称另有独立断言，普通句不再转抄。 */
 function warningText(dict, key, { configured = '', reason = '', layer, model = '' }) {
@@ -4673,6 +4674,58 @@ test('当前mode帮助确实受测：两语关闭仍接管的加载副本必须�
     assert.equal(env.dictionaries[0].dicts[lang]['help.mode'], badCopy[lang], '变异必须进入实际加载字典');
     assert.ok(dictionaryFactFailures(env.dictionaries[0].dicts).some((failure) => failure.startsWith(`${lang}/help.mode:`)), '同一live检查必须检出关闭反转');
   }
+});
+
+test('mode唯一事实关系：开态两审查义务与关态三事实的真实反转各自失败', () => {
+  const cases = [
+    ['zh', '规则检查', '不做规则检查', 'on-rule-check'],
+    ['zh', '规则检查', '不经规则检查', 'on-rule-check'],
+    ['zh', '规则检查', '规则检查不执行', 'on-rule-check'],
+    ['zh', 'LLM 审查', '不做LLM 审查', 'on-llm-review'],
+    ['zh', 'LLM 审查', '不经LLM 审查', 'on-llm-review'],
+    ['zh', 'LLM 审查', 'LLM 审查不执行', 'on-llm-review'],
+    ['en', 'rule check plus LLM review', 'without rule check plus LLM review', 'on-rule-check'],
+    ['en', 'rule check plus LLM review', 'no rule check plus LLM review', 'on-rule-check'],
+    ['en', 'rule check plus LLM review', 'rule check is not performed, but LLM review', 'on-rule-check'],
+    ['en', 'plus LLM review', 'without LLM review', 'on-llm-review'],
+    ['en', 'plus LLM review', 'plus no LLM review', 'on-llm-review'],
+    ['en', 'plus LLM review', 'plus LLM review is not performed', 'on-llm-review'],
+    ['zh', '正常接管', '不正常接管', 'on-rule-check'],
+    ['en', 'takes over as configured', 'does not take over as configured', 'on-llm-review'],
+    ['zh', '完全不接管', '完全接管', 'off-no-takeover'],
+    ['en', 'off behaves', 'on behaves', 'off-no-takeover'],
+    ['zh', '等同未安装', '不等同未安装', 'off-equivalent-to-uninstalled'],
+    ['en', 'off behaves', 'off does not behave', 'off-equivalent-to-uninstalled'],
+    ['zh', '宿主审批流程不受影响', '宿主审批流程受到影响', 'host-flow-unaffected'],
+    ['en', 'host approvals untouched', 'host approvals not untouched', 'host-flow-unaffected'],
+    ['zh', '正常接管', '关闭时正常接管', 'on-llm-review'],
+    ['en', 'rule check plus LLM review takes', 'When off, rule check plus LLM review takes', 'on-rule-check'],
+  ];
+  resetHooks();
+  const original = makeCtx();
+  loadClient().apply(original.ctx);
+  const dicts = original.dictionaries[0].dicts;
+  for (const [lang, from, to, id] of cases) {
+    const current = dicts[lang]['help.mode'];
+    assert.ok(current.includes(from), `${lang} mode真实目标在场:${from}`);
+    const mutated = current.replace(from, to);
+    let count = 0;
+    const source = SOURCE.replace(/("help\.mode":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+      if (/[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+      count++;
+      return prefix + JSON.stringify(mutated);
+    });
+    assert.equal(count, 1);
+    resetHooks();
+    const env = makeCtx();
+    loadClient(source).apply(env.ctx);
+    const actual = env.dictionaries[0].dicts[lang]['help.mode'];
+    assert.equal(actual, mutated);
+    assert.ok(checkModeHelpFacts(actual).includes(id), `${lang}/${id}:${from}→${to}`);
+    assert.ok(copyFactFailures('help.mode', lang, actual).length > 0, '同一live接线不得绕开专用权威');
+    assert.deepEqual(copyFactFailures('help.mode', lang, current), []);
+  }
+  assert.equal(cases.length, 22);
 });
 
 test('当前零值与拒绝规则提示：直接反转加载副本由同一live检查检出', () => {

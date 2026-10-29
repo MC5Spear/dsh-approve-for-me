@@ -10,6 +10,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { COPY_FACTS, FACT_KINDS, copyFactFailures, tokenRiskDisplayProtected } from './helpers/copy-facts.mjs';
+import { checkModeHelpFacts } from './helpers/mode-copy-facts.mjs';
 
 const fails = (key, lang, text) => copyFactFailures(key, lang, text);
 
@@ -352,6 +353,56 @@ test('内部子条件等义正例：相反类别邻句不替代支持、阈值�
   assert.deepEqual(fails('help.tools', 'en', 'One tool per line. Empty covers all tools; once filled, only listed tools are handled and the rest keep the host flow. Unlisted tools are not intercepted.'), []);
   assert.deepEqual(fails('help.ui.injectMaxBytes', 'zh', '发给执行助手的单条通知的字节上限；超过上限时截断并带标记，0 不裁剪。审查记录按会话独立保存，与该上限无关。未超过上限的通知保持原样。'), []);
   assert.deepEqual(fails('help.ui.injectMaxBytes', 'en', 'Byte cap for one notice; text exceeding the cap is trimmed with a marker, 0 does not trim. Review records are kept per session and ignore this limit. A shorter notice is unchanged.'), []);
+});
+
+test('mode有限关系正反例：开关分支与两个审查动作各自绑定，正确关态邻句保留', () => {
+  const samples = [
+    ['zh', '开启后由插件接管审批：先做规则筛查，再交模型独立审查。关闭时插件不进行任何接管，效果与未安装它相同；宿主自身的审批流程保持原样。'],
+    ['en', 'When on, the plugin takes over approvals: a rule screen first, then an independent LLM review. When off, it does not take over at all — the effect is the same as if it were not installed, and the host approval flow is left untouched.'],
+  ];
+  for (const [lang, text] of samples) {
+    assert.deepEqual(checkModeHelpFacts(text), []);
+    assert.deepEqual(fails('help.mode', lang, text), []);
+    const suffix = lang === 'zh' ? '关闭时不做规则检查，不经LLM审查，也不接管审批。' : ' When off, there is no take-over, without a rule check or LLM review.';
+    assert.deepEqual(checkModeHelpFacts(text + suffix), [], '正确off分支否定两动作不能伤及on义务');
+    assert.deepEqual(fails('help.mode', lang, text + suffix), []);
+  }
+  const cases = [
+    ['zh', '先做规则筛查', '不做规则筛查', 'on-rule-check'],
+    ['zh', '先做规则筛查', '不经规则筛查', 'on-rule-check'],
+    ['zh', '再交模型独立审查', '不做模型独立审查', 'on-llm-review'],
+    ['zh', '再交模型独立审查', '不经模型独立审查', 'on-llm-review'],
+    ['en', 'a rule screen first', 'without a rule screen', 'on-rule-check'],
+    ['en', 'a rule screen first', 'no rule screen', 'on-rule-check'],
+    ['en', 'an independent LLM review', 'without LLM review', 'on-llm-review'],
+    ['en', 'an independent LLM review', 'LLM review is not performed', 'on-llm-review'],
+    ['zh', '开启后', '关闭后', 'on-rule-check'],
+    ['en', 'When on', 'When off', 'on-llm-review'],
+    ['zh', '关闭时', '开启时', 'off-no-takeover'],
+    ['en', 'When off', 'When on', 'off-no-takeover'],
+    ['zh', '插件不进行任何接管', '插件进行任何接管', 'off-reversal'],
+    ['en', 'does not take over', 'takes over', 'off-reversal'],
+    ['zh', '效果与未安装它相同', '效果不与未安装它相同', 'off-equivalent-to-uninstalled'],
+    ['en', 'the same as if it were not installed', 'not the same as if it were not installed', 'off-equivalent-to-uninstalled'],
+    ['zh', '宿主自身的审批流程保持原样', '宿主自身的审批流程会改变', 'host-flow-unaffected'],
+    ['en', 'host approval flow is left untouched', 'host approval flow is affected', 'host-flow-unaffected'],
+  ];
+  for (const [lang, from, to, id] of cases) {
+    const original = samples.find(([language]) => language === lang)[1];
+    assert.ok(original.includes(from));
+    const actual = original.replace(from, to);
+    assert.ok(checkModeHelpFacts(actual).includes(id), `${lang}/${id}:${to}`);
+    assert.ok(fails('help.mode', lang, actual).length > 0);
+  }
+  assert.equal(cases.length, 18);
+  for (const [lang, suffix, id] of [
+    ['zh', '关闭时不接管，但插件仍接管审批。', 'off-reversal'],
+    ['en', ' When off, it does not take over, but the plugin takes over approvals.', 'off-reversal'],
+    ['zh', '关闭时不等同未安装。', 'off-equivalent-to-uninstalled'],
+    ['en', ' When off, it does not behave as if uninstalled.', 'off-equivalent-to-uninstalled'],
+    ['zh', '宿主审批流程受到影响。', 'host-flow-unaffected'],
+    ['en', ' The host approval flow is affected.', 'host-flow-unaffected'],
+  ]) assert.ok(checkModeHelpFacts(samples.find(([language]) => language === lang)[1] + suffix).includes(id), '另一正确关系不能掩盖同对象相反关系');
 });
 
 test('反例：说明缺失整条报缺失', () => {

@@ -203,7 +203,6 @@ const shared = {
 };
 
 // ── help.mode：复用 mode-copy-facts 的总开关事实检查器（避免两套权威） ──
-// 英文现行文案以「off behaves as if uninstalled」承载零接管（无显式否定接管词），补充认定。
 
 /** help.mode 检查器缺失事实 id → 本表规则 id 的映射（on 两项并入「规则加模型正常接管」）。 */
 const MODE_RULE_BY_MISSING = {
@@ -215,14 +214,9 @@ const MODE_RULE_BY_MISSING = {
   'off-reversal': '关闭含义反转',
 };
 
-/** 关闭态以「等同未安装」承载零接管的补充认定（同一子句内 off 标记＋等同未安装说法）。 */
-const offAsUninstalled = S(/off|关闭|关掉/iu, /as if[^,;.]{0,40}(not installed|uninstalled)|等同未安装|与未安装|如同未安装/iu);
-
-/** help.mode 事实检查：返回缺失规则 id 列表（复用 mode 检查器＋上述补充认定）。 */
+/** help.mode 仅映射专用唯一权威返回的事实 id，不另作语义补充。 */
 function helpModeFailures(text) {
-  const missing = checkModeHelpFacts(text);
-  const effective = missing.filter((id) => id !== 'off-no-takeover' || !offAsUninstalled(text));
-  return [...new Set(effective.map((id) => MODE_RULE_BY_MISSING[id] ?? id))];
+  return [...new Set(checkModeHelpFacts(text).map((id) => MODE_RULE_BY_MISSING[id] ?? id))];
 }
 
 export const COPY_FACTS = {

@@ -15,15 +15,26 @@ function clausesOf(text) {
     .filter(Boolean);
 }
 
-/** 关闭态标记：子句谈的是关闭／off 状态。 */
-const OFF_MARKER = /(关闭|关掉|off|when off|完全)/iu;
+/** 关闭态标记；历史原句的“完全不接管”也承载关闭分支。 */
+const OFF_MARKER = /关闭|关掉|\boff\b|完全(?:不|无|没有)[^。；;]{0,8}接管/iu;
+const ON_MARKER = /开启|打开|\b(?:when\s+)?on\b/iu;
 
 /** 否定接管：子句声明不接管（中英否定式与「零接管」表述）。 */
 const NEG_TAKEOVER =
   /(不|无|未|没有)[^\n，。；;:,]{0,6}接管|(不|无|未|没有)任何接管|does not take over|do not take over|takes? over nothing|takes? over no|not take over|no take[- ]?over|without take[- ]?over/iu;
 
 /** 肯定接管：子句出现接管动作（中英）。 */
-const AFF_TAKEOVER = /(接管|take[s]? over|takeover)/iu;
+const AFF_TAKEOVER = /接管|takes? over|take[- ]?over/iu;
+
+/** 每次接管提及分别判极性，关态另一处“不接管”不能掩盖肯定接管。 */
+function takeoverStates(text) {
+  return [...text.matchAll(new RegExp(AFF_TAKEOVER.source, 'giu'))].map((match) => {
+    const before = text.slice(0, match.index);
+    const after = text.slice(match.index + match[0].length);
+    return !/(?:不|无|未|没有)(?:进行|任何|正常|再|会){0,2}\s*$|\b(?:not|never|no|without)\s*$/iu.test(before)
+      && !/^\s*(?:nothing|no\b)/iu.test(after);
+  });
+}
 
 /** 等同未安装：关闭态效果等同于插件未安装（中英多种等义说法）。 */
 const AS_UNINSTALLED =
@@ -33,27 +44,48 @@ const AS_UNINSTALLED =
 const HOST_FLOW_KEPT =
   /宿主[^，。；]{0,14}?(审批|许可)[^，。；]{0,12}?(不受影响|不会[^，。；]{0,6}改变|保持原样|照常|不变|原样)|(不影响|不改变|不触碰)宿主|宿主(自身)?的?(审批|许可)(流程|过程)?(照常|保持原样|不受影响)|(host|host's?)[^,;.]{0,20}?(approval|approvals)[^,;.]{0,40}?(untouched|unaffected|unchanged|stays|left untouched|keep)/iu;
 
+/** 只看概念前后的有限动作否定；不把另一义务或另一分支的否定借给当前概念。 */
+function conceptPolarity(text, concept) {
+  let found = false;
+  for (const match of text.matchAll(new RegExp(concept.source, concept.flags.replace('g', '') + 'g'))) {
+    const before = text.slice(0, match.index);
+    const after = text.slice(match.index + match[0].length);
+    if (/(?:不正常|不做|不经|不进行|不执行|不经过|不通过|无需|无须|不用|省略|跳过|没有|不包含|without|excluding|not|no|never|skip|skips|omits?)(?:\s+(?:a|an|the|any|do|perform|run|conduct|include))*\s*$/iu.test(before)) return false;
+    if (/^\s*(?:不做|不执行|不进行|不参与|(?:is|are)\s+(?:not\s+(?:performed|run|included)|omitted|skipped)|does not run|doesn['’]t run)/iu.test(after)) return false;
+    found = true;
+  }
+  return found;
+}
+
+/** 逗号只在出现下一开关标记时切开，保留当前状态与后续动作的联系。 */
+const modeClauses = (text) => clausesOf(text).flatMap((part) => part.split(/(?=(?:关闭|关掉|开启|打开|when\s+(?:on|off)\b|off\s*:|on\s*:))/iu)).filter(Boolean);
+const PARTS = { rule: /规则(?:检查|筛查|审查)?|rule(?: check| screen)?/iu, llm: /LLM(?:\s*审查|\s*review)?|模型(?:独立)?审查|model review|review by the (?:LLM|model)/iu };
+
 /**
  * 检查一段 mode 帮助文本是否承载总开关全部关键事实。
  * @param {string} text - 待检文本（历史档原句或改写文案，中英均可）。
  * @returns {string[]} 缺失事实／反转清单；空数组＝全部事实在场。
  */
 export function checkModeHelpFacts(text) {
-  const clauses = clausesOf(text);
+  const clauses = modeClauses(text);
   const missing = [];
-  // 开启态事实 1／2：同一条子句里「规则检查」「LLM（模型）审查」与肯定接管并存
-  //（历史句「规则检查＋LLM 审查＝正常接管」与改写「先做规则筛查，再交模型独立审查」同过）。
-  // on-llm-review 只认显式 LLM／模型参与：仅「规则审查」等不含模型的措辞不算模型事实。
-  const onClauses = clauses.filter((clause) => !OFF_MARKER.test(clause) && AFF_TAKEOVER.test(clause) && !NEG_TAKEOVER.test(clause));
-  if (!onClauses.some((clause) => /(规则|rule)/iu.test(clause))) missing.push('on-rule-check');
-  if (!onClauses.some((clause) => /(LLM|模型|model review|review by the (?:LLM|model))/iu.test(clause))) missing.push('on-llm-review');
-  // 关闭态事实 3／4：关闭＝不接管；关闭＝等同未安装。
-  if (!clauses.some((clause) => OFF_MARKER.test(clause) && NEG_TAKEOVER.test(clause))) missing.push('off-no-takeover');
-  if (!clauses.some((clause) => AS_UNINSTALLED.test(clause))) missing.push('off-equivalent-to-uninstalled');
-  // 事实 5：宿主审批流程不受影响。
-  if (!clauses.some((clause) => HOST_FLOW_KEPT.test(clause))) missing.push('host-flow-unaffected');
-  // 反转守卫：关闭态子句出现无否定的肯定接管＝关闭含义被反转。
-  if (clauses.some((clause) => OFF_MARKER.test(clause) && AFF_TAKEOVER.test(clause) && !NEG_TAKEOVER.test(clause))) missing.push('off-reversal');
+  // 正常接管的隐含开态与显式 on 均可；两个审查义务分别核对，排除任一个都不能靠另一个补足。
+  const onClauses = clauses.filter((part) => !OFF_MARKER.test(part) && AFF_TAKEOVER.test(part) && !NEG_TAKEOVER.test(part) && conceptPolarity(part, AFF_TAKEOVER));
+  for (const [id, concept] of [['on-rule-check', PARTS.rule], ['on-llm-review', PARTS.llm]]) {
+    const relevant = onClauses.filter((part) => concept.test(part));
+    const offRunsIt = clauses.some((part) => OFF_MARKER.test(part) && AFF_TAKEOVER.test(part) && !NEG_TAKEOVER.test(part) && concept.test(part) && conceptPolarity(part, concept));
+    if (!relevant.length || relevant.some((part) => !conceptPolarity(part, concept)) || offRunsIt) missing.push(id);
+  }
+  const offClauses = clauses.filter((part) => OFF_MARKER.test(part) && !ON_MARKER.test(part));
+  const equivalent = (part) => AS_UNINSTALLED.test(part) && !/(?:不|非)等同|不与未安装|not\s+(?:behave|like|the same|as if)|does not behave|doesn['’]t behave/iu.test(part);
+  // 英文现行“off behaves as if uninstalled”本身表达零接管；仅“关闭＝等同未装”仍须显式不接管。
+  const noTakeover = (part) => takeoverStates(part).includes(false) || /\boff\b[^.;]{0,16}behaves?\s+as if/iu.test(part) && equivalent(part);
+  const offReversal = offClauses.some((part) => takeoverStates(part).some(Boolean) || /不是不接管|并非不接管|not\s+(?:no take.over|not take over)/iu.test(part));
+  if (!offClauses.some(noTakeover) || offReversal) missing.push('off-no-takeover');
+  if (!offClauses.some(equivalent) || offClauses.some((part) => AS_UNINSTALLED.test(part) && !equivalent(part))) missing.push('off-equivalent-to-uninstalled');
+  const hostReversal = clauses.some((part) => /宿主|\bhost\b/iu.test(part) && /宿主[^。；;]{0,24}(?:受到影响|会改变|被改变)|(?:不再|并非|不是)[^。；;]{0,8}(?:不受影响|保持原样)|host[^.;]{0,48}(?:is affected|is changed|not untouched|not unaffected|not unchanged)/iu.test(part));
+  if (!clauses.some((part) => HOST_FLOW_KEPT.test(part)) || hostReversal) missing.push('host-flow-unaffected');
+  if (offReversal) missing.push('off-reversal');
   return missing;
 }
 
