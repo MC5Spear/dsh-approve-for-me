@@ -546,7 +546,7 @@ const SUBCONDITION_FACTS = {
   '已结算不可迟改': { zh: (text) => /(?:已完成|已结算)的?结果/u.test(text) && !/(?:未完成|未结算)的?结果[^。；]{0,24}(?:推翻|改变)/u.test(text), en: (text) => /\bsettled result\b/iu.test(text) && !/\b(?:unsettled|not settled) result\b/iu.test(text) },
   '关闭后真交人工才显示': { zh: (text) => !/(?:不只|不仅)[^。；]{0,18}(?:交给人工|交人工)/u.test(text), en: (text) => !/not only[^.;]{0,50}handed over/iu.test(text) },
   '全部四类': { zh: (text) => /四类|全部/u.test(text) && !/非四类|不全/u.test(text), en: (text) => /all four/iu.test(text) && !/not all four/iu.test(text) },
-  '仅失败不发允许': { zh: (text) => /仅拒绝|只[^。；]{0,6}拒绝/u.test(text) && !/不仅拒绝|不只[^。；]{0,6}拒绝/u.test(text), en: (text) => !/deny[^.;]{0,40}(?:not only|and allow)/iu.test(text) },
+  '仅失败不发允许': { zh: (text) => /仅拒绝|只[^。；]{0,6}拒绝/u.test(text) && !/不仅拒绝|不只[^。；]{0,6}拒绝/u.test(text), en: (text) => sents(text).filter((part) => /skips? allow|omits? allow|allow notices are not sent/iu.test(part)).every((part) => !/deny[^.;]{0,40}(?:not only|and allow)/iu.test(part)) },
   '字节上限及截断标记': {
     zh: (text) => thresholdEvent(text, 'zh', /超出|超过/u, /截断|裁剪/u),
     en: (text) => thresholdEvent(text, 'en', /longer|exceeds?|exceeding/iu, /trim(?:med)?/iu),
@@ -596,7 +596,7 @@ function negativeRelationCancelled(text, lang, relation) {
   return false;
 }
 const NEGATIVE_RELATIONS = {
-  '模型人工不能推翻': [/(?:都)?不能推翻|无法推翻|不可推翻/u, /beyond model or human|neither model nor human[^.;]{0,12}(?:override|overturn)|no override/iu],
+  '模型人工不能推翻': [/(?:都)?不能推翻|无法推翻|不可推翻/u, /beyond (?:model or human|human or model)|neither model nor human[^.;]{0,12}(?:override|overturn)|no override/iu],
   '不是额外授权': [/不等于授予|并非授予|不是额外授权/u, /grants no extra permission|no additional permission/iu],
   '不影响审批': [/不影响(?:接管|审批)/u, /never the take.over|not[^.;]{0,12}approval/iu],
   '斜杠确认且不自动改写': [/不自动改写|不会自动改写/u, /never rewritten|not rewritten/iu],
@@ -645,6 +645,70 @@ const NEGATIVE_RELATIONS = {
 };
 export const NEGATIVE_RELATION_IDS = Object.keys(NEGATIVE_RELATIONS);
 
+/** 只在承载该关系的分句核参与者，前后明确排除不能以另一处同名词补足。 */
+function includedParticipants(text, lang, relation, participants) {
+  const parts = sents(text).filter((part) => relation.test(part));
+  return participants.every((concept) => parts.some((part) => concept.test(part)))
+    && parts.every((part) => participants.every((concept) => {
+      for (const match of part.matchAll(new RegExp(concept.source, concept.flags.replace('g', '') + 'g'))) {
+        const before = part.slice(0, match.index);
+        const after = part.slice(match.index + match[0].length);
+        if (lang === 'zh'
+          ? /(?:不含|不包括|排除|而非|并非|不是|不由|非)\s*$/u.test(before) || /^\s*(?:不参与|不在内|被排除|不适用)/u.test(after)
+          : /\b(?:not|without|excluding|except)\s*(?:the\s+)?$/iu.test(before) || /^\s*(?:not\b|is excluded|are excluded|does not apply|is not included)/iu.test(after)) return false;
+      }
+      return true;
+    }));
+}
+const participantFact = (zhRelation, zhParticipants, enRelation, enParticipants) => ({
+  zh: (text) => includedParticipants(text, 'zh', zhRelation, zhParticipants),
+  en: (text) => includedParticipants(text, 'en', enRelation, enParticipants),
+});
+
+/** 数量只绑定登记对象与动作；阿拉伯数字和有限中英文数词表示同一数量。 */
+const cardinal = (text) => ({ '一': 1, '一个': 1, one: 1, single: 1, '四': 4, four: 4, '二百': 200, '两百': 200, 'two hundred': 200 }[text.toLowerCase()] ?? Number(text));
+function exactCount(text, pattern, expected, implicit = false) {
+  const matches = [...text.matchAll(new RegExp(pattern.source, pattern.flags.replace('g', '') + 'g'))];
+  return matches.length > 0 && matches.every((match) => {
+    const amount = match.slice(1).find((value) => value !== undefined);
+    return amount === undefined ? implicit : cardinal(amount) === expected;
+  });
+}
+const QUANTITY_FACTS = {
+  '每行一个工具': { zh: (text) => exactCount(sents(text).filter((part) => /工具/u.test(part)).join('；'), /每行[^。；，]{0,4}(一|\d+)个(?=工具|名|[，,；]|$)/iu, 1), en: (text) => exactCount(text, /\b(one|single|\d+)\s+(?:name|tool)?\s*(?:on |per |each )?(?:each |per )?line/iu, 1) },
+  '每行正则': { zh: (text) => exactCount(text, /每行[^。；，]{0,3}(一|\d+)条正则/u, 1), en: (text) => exactCount(text, /\b(one|single|\d+)\s+(?:regex|regular expression)\s+(?:per|on each) line/iu, 1) },
+  '关闭同原因一条': { zh: (text) => exactCount(text, /(?:关闭|关掉)[^。；]{0,24}(一|\d+)条/u, 1), en: (text) => exactCount(text, /\boff[^.;]{0,12}(one|single|\d+)\s+line/iu, 1) },
+  '唯一条件': { zh: (text) => exactCount(text, /(?:只能有|只允许)(一|\d+)条规则/u, 1), en: (text) => exactCount(text, /\b(one|single|\d+) rule(?:s)?\s+(?:per|for each)|(?:allows only|allows)\s+(one|single|\d+) rule/iu, 1) },
+  '每条件唯一': { zh: (text) => exactCount(text, /(?:只能有|只允许)(一|\d+)条规则/u, 1), en: (text) => exactCount(text, /\b(one|single|\d+) rule(?:s)?\s+(?:per|for each)|only\s+(one|single|\d+) rule/iu, 1) },
+  '全部四类': { zh: (text) => exactCount(text, /(四|\d+)类[^。；]{0,8}(?:发送|发给)/u, 4), en: (text) => exactCount(text, /all\s+(four|\d+)(?:\s+kinds)?(?:\s+reach)?/iu, 4) },
+  '回读窗口及默认': { zh: (text) => exactCount(text, /默认\s*(\d+|二百|两百)\s*条/u, 200), en: (text) => exactCount(text, /(\d+|two hundred) entries by default|default[^\d.;]{0,10}(\d+|two hundred) entries/iu, 200) },
+  '超四倍轮转留窗口删旧': {
+    zh: (text) => exactCount(text, /(?:超过|超出)[^。；，]{0,10}(四|\d+)倍/u, 4) && exactCount(text, /(?:只保留|只留下|留下)(?:最近)(?:(一|二|两|\d+)个)?窗口/u, 1, true),
+    en: (text) => exactCount(text, /\b(four|\d+) times the window/iu, 4) && exactCount(text, /(?:keep only|only) the latest\s+(?:(one|two|\d+)|window)/iu, 1, true),
+  },
+};
+export const QUANTITY_IDS = Object.keys(QUANTITY_FACTS);
+const PARTICIPANT_FACTS = {
+  '采用模型或供应商默认': { zh: (text) => includedParticipants(text.replace(/[，,]/gu, '；'), 'zh', /(?:由|采用|使用|改用|取用)[^。；]{0,24}(?:模型|供应商)[^。；]{0,12}默认(?:值)?[^。；]{0,8}(?:决定|提供|生效)?/u, [/模型/u, /供应商/u]), en: (text) => includedParticipants(text, 'en', /leaving|defaults? (?:appl(?:y|ies)|decide)|default provided/iu, [/model/iu, /provider/iu]) },
+  '默认模型与强度': participantFact(/默认/u, [/审查模型/u, /推理强度|强度/u], /default/iu, [/reviewer model/iu, /effort|strength/iu]),
+  '审查文本和执行通知': participantFact(/文本|通知/u, [/审查/u, /文本/u, /执行助手/u, /通知/u], /text|notice/iu, [/text/iu, /reviewer/iu, /notice/iu, /agent/iu]),
+  '请求和交人工两个起点': participantFact(/计时|起算/u, [/审批请求|请求/u, /交人工|转人工/u], /timing|timer/iu, [/approval request|request/iu, /handoff/iu]),
+  '完整id作用范围': participantFact(/作用范围/u, [/任意 provider/iu, /指定 provider/iu], /scope/iu, [/any provider/iu, /specific/iu]),
+  '范围仍审查': participantFact(/范围内/u, [/规则检查|规则/u, /模型审查|模型/u], /in range|in scope/iu, [/rule checks?|rules?/iu, /review/iu]),
+  '全部四类': participantFact(/四类|全部/u, [/允许/u, /拒绝/u, /超时/u, /故障/u], /all four|all 4/iu, [/allow/iu, /deny/iu, /timeout/iu, /fail/iu]),
+  '仅失败不发允许': participantFact(/仅拒绝|只[^。；]{0,8}拒绝/u, [/拒绝/u, /超时/u, /故障/u], /skips? allow|omits? allow|allow notices are not sent/iu, [/deny/iu, /timeout/iu, /fail/iu]),
+  '模型人工不能推翻': participantFact(/推翻|改变|反转/u, [/模型/u, /人工/u], /beyond|override|overturn/iu, [/model/iu, /human/iu]),
+  '拒绝无模型人工': participantFact(/不调用|不交/u, [/模型/u, /人工/u], /no model|no human/iu, [/model/iu, /human/iu]),
+  '阈值依模型和强度': participantFact(/数值|阈值/u, [/模型/u, /推理强度|强度/u], /threshold|number/iu, [/model/iu, /effort|strength/iu]),
+  '装配结论全程': participantFact(/全程|全过程/u, [/装配/u, /结论/u], /whole|entire|covering/iu, [/assembly/iu, /conclusion/iu]),
+  '无会话及映射条件': participantFact(/无有效|没有/u, [/会话选择/u, /映射/u], /no effective|without/iu, [/session choice/iu, /rule/iu]),
+  '会话未选且默认未设': { zh: (text) => includedParticipants(text, 'zh', /未|没有/u, [/本会话/u, /选择/u, /全局默认/u]) && /本会话[^。；]{0,8}(?:未|没有)[^。；]{0,6}选择/u.test(text), en: (text) => includedParticipants(text, 'en', /no reviewer|unset|not set/iu, [/this session/iu, /reviewer/iu, /global default/iu]) && /this session[^.;]{0,12}no reviewer/iu.test(text) },
+  '停用兼容自定义排查': participantFact(/检查|排查/u, [/停用/u, /兼容/u, /自定义/u], /check/iu, [/disabled/iu, /incompatible|compatible/iu, /custom/iu]),
+  '重新启用或重启可能恢复': participantFact(/恢复/u, [/重新启用/u, /重启/u], /restore/iu, [/re.enabl/iu, /restart/iu]),
+  '插件不改YAML': participantFact(/YAML/u, [/解析/u, /改写/u], /YAML/iu, [/parses/iu, /rewrites/iu]),
+};
+export const PARTICIPANT_IDS = Object.keys(PARTICIPANT_FACTS);
+
 const BEHAVIOR_FACTS = {
   '采用模型或供应商默认': behaviorPositive(/模型|供应商/u, /由模型或供应商默认|默认/u, /model|provider/iu, /leaving|defaults?/iu),
   '额度可能先用于推理': { zh: (text) => possibleEvent(text, 'zh', /推理/u, /先(?:把|将|用)|先花|优先/u), en: (text) => /first|before/iu.test(text) && possibleEvent(text, 'en', /reasoning/iu, /spend(?:s)?|eat|use/iu) },
@@ -689,7 +753,7 @@ const BEHAVIOR_FACTS = {
   '轮转前备份': { zh: (text) => /轮转/u.test(text) && affirmativeConcept(text, 'zh', /备份/u), en: (text) => /rotation|rotat/iu.test(text) && affirmativeConcept(text, 'en', /back/iu) },
   '过小上限可能无有效结论': { zh: (text) => /(?:没有|无|得不到|不产生|难以)(?:任何)?(?:有效|可用)(?:的)?(?:结论|结果)/u.test(text) && possibleEvent(text, 'zh', /过小|太低|太小|不足/u, /导致|得不到|无可用/u), en: (text) => /(?:no|without)(?: a)? (?:usable|valid) (?:conclusion|answer)/iu.test(text) && possibleEvent(text, 'en', /too small|too low|insufficient/iu, /leave|end/iu) },
   '操作无法识别': behaviorNegative(/(?:无法|不能|难以)(?:辨认|识别|确定)/u, /(?:cannot|unable|can't)[^.;]{0,12}(?:identif|recogniz|recover)/iu),
-  '模型人工不能推翻': behaviorNegative(/(?:模型[^。；]{0,12}人工|人工[^。；]{0,12}模型)[^。；]{0,6}(?:都不能|不能|无法|不可|均不)[^。；]{0,3}(?:推翻|改变|反转)/u, /(?:beyond model or human|neither model nor human[^.;]{0,12}(?:override|overturn)|no[^.;]{0,12}(?:model|human)[^.;]{0,12}override)/iu),
+  '模型人工不能推翻': behaviorNegative(/(?:模型[^。；]{0,12}人工|人工[^。；]{0,12}模型)[^。；]{0,6}(?:都不能|不能|无法|不可|均不)[^。；]{0,3}(?:推翻|改变|反转)/u, /(?:beyond (?:model or human|human or model)|neither model nor human[^.;]{0,12}(?:override|overturn)|no[^.;]{0,12}(?:model|human)[^.;]{0,12}override)/iu),
   '不是额外授权': behaviorNegative(/(?:不等于|并非|不是)[^。；]{0,8}(?:授予|授权|权限)/u, /(?:grants? no|no extra|no additional)[^.;]{0,12}permission/iu),
   '不影响审批': behaviorNegative(/(?:不|无关)[^。；]{0,6}影响[^。；]{0,6}(?:接管|审批)/u, /(?:never|not)[^.;]{0,12}(?:take.over|approval|affect|change)/iu),
   '斜杠确认且不自动改写': behaviorNegative(/(?:不|不会)自动?改写/u, /(?:never|not)[^.;]{0,12}rewrit/iu),
@@ -704,7 +768,7 @@ const BEHAVIOR_FACTS = {
   '仅失败不发允许': behaviorNegative(/允许[^。；]{0,6}(?:不发送|不发)/u, /skips? allow|allow[^.;]{0,24}(?:not sent|omitted)|omits[^.;]{0,8}allow/iu),
   '记录视图独立': behaviorNegative(/(?:审查记录|记录)[^。；]{0,18}(?:不受|无关|独立)[^。；]{0,8}(?:开关|显示)|(?:开关|显示)[^。；]{0,8}无关/u, /(?:review.log|record)[^.;]{0,20}(?:unaffected|independent|nothing to do)/iu),
   '记录独立': behaviorNegative(/(?:该上限|本上限)[^。；]{0,4}无关|(?:不受|无关)[^。；]{0,8}(?:上限|限制)/u, /records?[^.;]{0,40}(?:ignore|regardless|independent)[^.;]{0,12}(?:limit|cap)|regardless[^.;]{0,12}(?:limit|cap)/iu),
-  '拒绝无模型人工': behaviorNegative(/(?:不调用模型|无模型)[^。；]{0,8}(?:不交人工|无人工)/u, /no model[^.;]{0,8}no human|without (?:a )?model[^.;]{0,12}(?:or )?human/iu),
+  '拒绝无模型人工': behaviorNegative(/(?:不调用模型|无模型)[^。；]{0,8}(?:不交人工|无人工)|(?:不交人工|无人工)[^。；]{0,8}(?:不调用模型|无模型)/u, /no model[^.;]{0,8}no human|no human[^.;]{0,8}no model|without (?:a )?model[^.;]{0,12}(?:or )?human/iu),
   '不影响模型语言': behaviorNegative(/(?:不改变|不影响|不触碰)[^。；]{0,15}(?:模型|文本)/u, /(?:never|not)[^.;]{0,12}(?:touch|change|affect)[^.;]{0,12}(?:model|text)/iu),
   '独立界面语言': { zh: (text) => /(?:界面|插件)[^。；]{0,8}(?:互不影响|独立|无关)/u.test(text), en: (text) => affirmativeConcept(text, 'en', /independent|separate/iu) },
   '默认模型不可用': behaviorNegative(/(?:默认|全局)[^。；:：]{0,12}(?:不可用|无法|不能|失败)/u, /default[^.;:]{0,25}(?:unavailable|cannot|failed)/iu),
@@ -719,7 +783,7 @@ const BEHAVIOR_FACTS = {
   '读取失败': behaviorNegative(/读取[^。；]{0,4}失败/u, /read failure|read that failed|failed read|reading fails/iu),
   '信息不可用': behaviorNegative(/(?:没有|无)[^。；]{0,6}(?:预设信息|可用)/u, /no preset information|unusable|without preset information/iu),
   '配置在场但当前表缺失': { zh: (text) => /配置[^。；]{0,6}(?<!不)存在[^。；]{0,20}(?:没有|不在|缺失)/u.test(text), en: (text) => affirmativeConcept(text, 'en', /configured|config/iu) && /absent|missing|not in/iu.test(text) },
-  '插件不改YAML': behaviorNegative(/不解析[^。；]{0,4}不改写[^。；]{0,8}YAML/u, /(?:never|not)[^.;]{0,12}parses\s+(?:nor|or)\s+rewrites[^.;]{0,12}YAML/iu),
+  '插件不改YAML': behaviorNegative(/(?:不解析[^。；]{0,4}不改写|不改写[^。；]{0,4}不解析)[^。；]{0,8}YAML/u, /(?:never|not)[^.;]{0,12}(?:parses\s+(?:nor|or)\s+rewrites|rewrites\s+(?:nor|or)\s+parses)[^.;]{0,12}YAML/iu),
   '减少采集不删': behaviorNegative(/(?:减少|调低|降低)[^。；]{0,6}采集[^。；]{0,4}(?:不|不会|并不)删除/u, /(?:reduc|turning.{0,12}down|lower|cut)[^.;]{0,30}(?:not|never|no)[^.;]{0,10}(?:delet|remove)/iu),
 };
 
@@ -730,6 +794,16 @@ const PLACEHOLDERS = {
   'cardstate.waiting.deny': ['reason'], 'cardstate.waiting.error': ['reason'],
 };
 export const normalizeCopy = (text) => String(text).replace(/[\u2060\u200b]/gu, '').replace(/\s+/gu, ' ').trim();
+/** 仅归一已登记数量的有限等价写法，不把其他配置或协议中的数字改写。 */
+function normalizeFactCounts(key, text) {
+  let value = text;
+  if (/tools$|denyPatterns$/u.test(key)) value = value.replace(/每行([^。；，]{0,4})1(?=[个条])/gu, '每行$1一').replace(/\b1 (?=(?:name|tool|regex|regular expression|per line)\b)|\bsingle (?=(?:name|tool|regex|regular expression)\b)/giu, 'one ');
+  if (key === 'help.trigger.auditEverySkip') value = value.replace(/只记录1条/gu, '只记录一条').replace(/\b1 line\b/giu, 'one line');
+  if (key === 'help.reviewer.parentModelRules' || key === 'card.map.duplicate') value = value.replace(/(?:只能有|只允许)1条规则/gu, (part) => part.replace('1', '一')).replace(/\b1 rule\b/giu, 'one rule');
+  if (key === 'help.ui.inject') value = value.replace(/4类/gu, '四类').replace(/\ball 4\b/giu, 'all four');
+  if (key === 'view.retention') value = value.replace(/默认\s*(?:二百|两百)\s*条/gu, '默认 200 条').replace(/\btwo hundred entries\b/giu, '200 entries').replace(/窗口(?:的)?4倍/gu, '窗口四倍').replace(/\b4 times\b/giu, 'four times').replace(/最近1个窗口/gu, '最近一个窗口').replace(/latest 1\b/giu, 'latest one');
+  return value;
+}
 
 /**
  * 检查一条文案是否承载该键的全部关键事实。
@@ -740,7 +814,7 @@ export const normalizeCopy = (text) => String(text).replace(/[\u2060\u200b]/gu, 
  */
 export function copyFactFailures(key, lang, text) {
   if (typeof text !== 'string' || !text.trim()) return ['说明缺失'];
-  const normalized = normalizeCopy(text);
+  const normalized = normalizeFactCounts(key, normalizeCopy(text));
   const failures = key === 'help.mode' ? helpModeFailures(normalized) : (COPY_FACTS[key] ?? []).filter((fact) => {
     const check = fact[lang];
     const present = typeof check === 'function' ? check(normalized) : check.test(normalized);
@@ -749,7 +823,9 @@ export function copyFactFailures(key, lang, text) {
     const subcondition = SUBCONDITION_FACTS[fact.id]?.[lang];
     const negativeRelation = NEGATIVE_RELATIONS[fact.id]?.[lang === 'zh' ? 0 : 1];
     const cancelled = negativeRelation && negativeRelationCancelled(normalized, lang, negativeRelation);
-    return !present || !polarity || subcondition && !subcondition(normalized) || cancelled;
+    const quantity = QUANTITY_FACTS[fact.id]?.[lang];
+    const participants = PARTICIPANT_FACTS[fact.id]?.[lang];
+    return !present || !polarity || subcondition && !subcondition(normalized) || cancelled || quantity && !quantity(normalized) || participants && !participants(normalized);
   }).map((fact) => fact.id);
   failures.push(...conditionFactFailures(key, lang, normalized));
   if (key === 'help.fallback' && !(lang === 'zh' ? /(?:未允许|未通过|不允许)(?:一律|均|都)?拒绝/u : /(?:not allowed|not approved)[^.;]{0,24}(?:reject|denied)/iu).test(normalized)) failures.push('委派未允许拒绝');

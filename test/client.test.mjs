@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test, { after } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { DEFAULT_RATIONALE } from '../lib/reviewer.js';
-import { COPY_FACTS, FACT_KINDS, SUBCONDITION_IDS, NEGATIVE_RELATION_IDS, copyFactFailures, tokenRiskDisplayProtected } from './helpers/copy-facts.mjs';
+import { COPY_FACTS, FACT_KINDS, SUBCONDITION_IDS, NEGATIVE_RELATION_IDS, QUANTITY_IDS, PARTICIPANT_IDS, copyFactFailures, tokenRiskDisplayProtected } from './helpers/copy-facts.mjs';
 import { checkModeHelpFacts } from './helpers/mode-copy-facts.mjs';
 
 /** 渲染期望从真实字典模板组装；事实和固定名称另有独立断言，普通句不再转抄。 */
@@ -5537,6 +5537,174 @@ test('负关系明确取消：逐事实实际否定概念中英外层取消必�
   }
   assert.equal(controlled.length, 11);
   assert.equal(tested, 294, '46明确负命题共享49登记×两语×3外层取消类别；配置问题标题不冒充断言');
+  assert.deepEqual(errors, [], errors.join('\n'));
+});
+
+test('登记数量与并列参与者：每个原子独立真实反例，数字与候选不能由邻文补足', () => {
+  const counts = {
+    '每行一个工具': [['一个', '两个'], ['one', 'two']],
+    '每行正则': [['一条正则', '两条正则'], ['One regex', 'Two regex']],
+    '关闭同原因一条': [['只记录一条', '只记录两条'], ['one line', 'two lines']],
+    '唯一条件': [['一条规则', '两条规则'], ['One rule', 'Two rules']],
+    '每条件唯一': [['一条规则', '两条规则'], ['one rule', 'two rules']],
+    '全部四类': [['四类都发送', '三类都发送'], ['all four', 'all three']],
+    '回读窗口及默认': [['默认 200 条', '默认 201 条'], ['200 entries by default', '201 entries by default']],
+    '超四倍轮转留窗口删旧': [['只保留最近一个窗口', '只保留最近两个窗口'], ['only the latest one', 'only the latest two']],
+  };
+  const members = {
+    '采用模型或供应商默认': [['模型', '供应商'], ['model', 'provider']],
+    '默认模型与强度': [['审查模型', '推理强度'], ['reviewer model', 'effort']],
+    '审查文本和执行通知': [['审查模型', '执行助手'], ['reviewer', 'agent']],
+    '请求和交人工两个起点': [['审批请求', '交人工'], ['approval request', 'handoff']],
+    '完整id作用范围': [['任意 provider', '指定 provider'], ['any provider', 'specific one']],
+    '范围仍审查': [['规则检查', '模型审查'], ['rule checks', 'the review']],
+    '全部四类': [['允许', '拒绝', '超时', '故障'], ['allow', 'deny', 'timeout', 'failures']],
+    '仅失败不发允许': [['拒绝', '超时', '故障'], ['deny', 'timeout', 'failures']],
+    '模型人工不能推翻': [['模型', '人工'], ['model', 'human']],
+    '拒绝无模型人工': [['模型', '人工'], ['model', 'human']],
+    '阈值依模型和强度': [['模型', '推理强度'], ['model', 'effort']],
+    '装配结论全程': [['装配', '结论'], ['assembly', 'conclusion']],
+    '无会话及映射条件': [['会话选择', '映射'], ['session choice', 'rule']],
+    '会话未选且默认未设': [['会话', '全局默认'], ['session', 'global default']],
+    '停用兼容自定义排查': [['停用', '兼容', '自定义'], ['disabled', 'incompatible', 'custom']],
+    '重新启用或重启可能恢复': [['重新启用', '重启'], ['Re-enabling', 'restarting']],
+    '插件不改YAML': [['解析', '改写'], ['parses', 'rewrites']],
+  };
+  assert.deepEqual(Object.keys(counts).sort(), QUANTITY_IDS.slice().sort());
+  assert.deepEqual(Object.keys(members).sort(), PARTICIPANT_IDS.slice().sort());
+  resetHooks();
+  const original = makeCtx();
+  loadClient().apply(original.ctx);
+  const dicts = original.dictionaries[0].dicts;
+  const errors = [];
+  let checked = 0;
+  const verify = (key, lang, id, from, to, text = dicts[lang][key]) => {
+    assert.ok(text.includes(from), `${key}/${lang}/${id}实际锚:${from}`);
+    const mutated = text.replace(from, to);
+    let count = 0;
+    const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+      if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+      count++;
+      return prefix + JSON.stringify(mutated);
+    });
+    assert.equal(count, 1);
+    resetHooks();
+    const env = makeCtx();
+    loadClient(source).apply(env.ctx);
+    const actual = env.dictionaries[0].dicts[lang][key];
+    assert.equal(actual, mutated);
+    if (!copyFactFailures(key, lang, actual).includes(id)) errors.push(`${key}/${lang}/${id}未检出:${from}→${to}`);
+    checked++;
+  };
+  for (const [id, pair] of Object.entries(counts)) {
+    const keys = Object.entries(COPY_FACTS).filter(([, facts]) => facts.some((fact) => fact.id === id)).map(([key]) => key);
+    for (const key of keys) for (const [i, lang] of ['zh', 'en'].entries()) {
+      let [from, to] = pair[i];
+      if (id === '每行正则' && key === 'help.denyPatterns' && lang === 'en') [from, to] = ['one regex', 'two regex'];
+      verify(key, lang, id, from, to);
+    }
+  }
+  for (const [id, pair] of Object.entries(members)) {
+    const keys = Object.entries(COPY_FACTS).filter(([, facts]) => facts.some((fact) => fact.id === id)).map(([key]) => key);
+    for (const key of keys) for (const [i, lang] of ['zh', 'en'].entries()) {
+      let current = dicts[lang][key];
+      assert.deepEqual(copyFactFailures(key, lang, current), [], `${key}/${lang}原值保留`);
+      // 参与者所在关系用可交换词序的独立同义句，避免另处同名词代替当前候选。
+      for (const member of pair[i]) {
+        if (!current.includes(member)) { errors.push(`${key}/${lang}/${id}缺锚:${member}`); continue; }
+        let target = current;
+        let anchor = member;
+        if (id === '采用模型或供应商默认') {
+          const relation = lang === 'zh' ? /由模型或供应商默认值决定/u : /(?:the )?model or provider default/iu;
+          anchor = current.match(relation)?.[0] ?? member;
+        } else if (id === '阈值依模型和强度') anchor = lang === 'zh' ? '因模型与推理强度而异' : 'varies by model and effort';
+        else if (id === '仅失败不发允许') anchor = lang === 'zh' ? '仅拒绝、超时和故障' : 'deny, timeout and failures skips allow notices';
+        else if (id === '会话未选且默认未设') anchor = lang === 'zh' ? '本会话未单独选择审查模型，按未设置的全局默认' : 'This session has no reviewer of its own and the global default is unset';
+        const removed = anchor.replace(member, '');
+        verify(key, lang, id, anchor, removed, target);
+        if (['模型人工不能推翻', '拒绝无模型人工', '插件不改YAML', '无会话及映射条件', '会话未选且默认未设'].includes(id)) continue;
+        const excluded = anchor.replace(member, lang === 'zh' ? `不含${member}` : `excluding ${member}`);
+        verify(key, lang, id, anchor, excluded, target);
+      }
+    }
+  }
+  const originalCounterexamples = [
+    ['view.retention', 'zh', '超四倍轮转留窗口删旧', '只保留最近一个窗口', '只保留最近两个窗口'],
+    ['view.retention', 'en', '超四倍轮转留窗口删旧', 'keep only the latest one', 'keep only the latest two'],
+  ];
+  for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
+    originalCounterexamples.push([key, 'zh', '采用模型或供应商默认', '模型或供应商默认值', '模型而非供应商默认值']);
+    originalCounterexamples.push([key, 'en', '采用模型或供应商默认', 'model or provider default', 'model default, not the provider default']);
+  }
+  for (const args of originalCounterexamples) verify(...args);
+  verify('view.retention', 'zh', '超四倍轮转留窗口删旧', '超过窗口四倍', '超过窗口三倍');
+  verify('view.retention', 'en', '超四倍轮转留窗口删旧', 'exceeds four times', 'exceeds three times');
+  const sameCounts = [
+    ['help.tools', 'zh', '每行一个', '每行1个'], ['hint.tools', 'en', 'one per line', '1 per line'],
+    ['help.denyPatterns', 'zh', '每行一条正则', '每行1条正则'], ['hint.denyPatterns', 'en', 'One regex', '1 regex'],
+    ['help.trigger.auditEverySkip', 'zh', '只记录一条', '只记录1条'], ['help.trigger.auditEverySkip', 'en', 'one line', '1 line'],
+    ['help.reviewer.parentModelRules', 'zh', '只能有一条规则', '只能有1条规则'], ['card.map.duplicate', 'en', 'one rule', '1 rule'],
+    ['help.ui.inject', 'zh', '四类都发送', '4类都发送'], ['help.ui.inject', 'en', 'all four', 'all 4'],
+    ['view.retention', 'zh', '默认 200 条', '默认二百条'], ['view.retention', 'en', '200 entries', 'two hundred entries'],
+    ['view.retention', 'zh', '只保留最近一个窗口', '只保留最近窗口'], ['view.retention', 'en', 'keep only the latest one', 'keep only the latest window'],
+    ['view.retention', 'zh', '窗口四倍', '窗口4倍'], ['view.retention', 'en', 'four times', '4 times'],
+  ];
+  for (const [key, lang, from, to] of sameCounts) {
+    const current = dicts[lang][key];
+    assert.ok(current.includes(from));
+    assert.deepEqual(copyFactFailures(key, lang, current.replace(from, to)), [], `${key}/${lang} 数词等义保真`);
+  }
+  for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
+    assert.deepEqual(copyFactFailures(key, 'zh', dicts.zh[key].replace('模型或供应商默认值', '供应商或模型默认值')), [], 'or候选换序仍两来源，不要求同时采用');
+    assert.deepEqual(copyFactFailures(key, 'en', dicts.en[key].replace('model or provider default', 'provider or model default')), [], 'either source may supply the default');
+  }
+  for (const [key, lang, suffix] of [
+    ['hint.tools', 'zh', '另一个界面每行2个按钮。'],
+    ['hint.tools', 'en', ' Another interface has 2 buttons per line.'],
+    ['hint.reviewer.maxTokens', 'zh', '另一个默认设置不含供应商选项。'],
+    ['hint.reviewer.maxTokens', 'en', ' Another default setting excludes provider options.'],
+  ]) assert.deepEqual(copyFactFailures(key, lang, dicts[lang][key] + suffix), [], '不同对象的逐行数量或默认选项不属于工具或默认来源关系');
+  const sameMembers = {
+    '采用模型或供应商默认': [['模型或供应商默认值', '供应商或模型默认值'], ['model or provider default', 'provider or model default']],
+    '默认模型与强度': [['审查模型与推理强度', '推理强度与审查模型'], ['reviewer model and effort', 'effort and reviewer model']],
+    '审查文本和执行通知': [['发给审查模型的文本与给执行助手的通知', '给执行助手的通知与发给审查模型的文本'], ['texts sent to the reviewer and the notices sent to the agent', 'notices sent to the agent and the texts sent to the reviewer']],
+    '请求和交人工两个起点': [['审批请求发出时，或交人工时', '交人工时，或审批请求发出时'], ['at the approval request, or at the handoff', 'at the handoff, or at the approval request']],
+    '完整id作用范围': [['任意 provider，或指定 provider', '指定 provider，或任意 provider'], ['any provider, or a specific one', 'a specific one, or any provider']],
+    '范围仍审查': [['规则检查与模型审查', '模型审查与规则检查'], ['the rule checks and the review', 'the review and the rule checks']],
+    '全部四类': [['允许、拒绝、超时和故障', '故障、超时、拒绝和允许'], ['allow, deny, timeout and failures', 'failures, timeout, deny and allow']],
+    '仅失败不发允许': [['仅拒绝、超时和故障', '仅拒绝、故障和超时'], ['deny, timeout and failures skips allow', 'deny, failures and timeout skips allow']],
+    '模型人工不能推翻': [['模型与人工', '人工与模型'], ['model or human', 'human or model']],
+    '拒绝无模型人工': [['不调用模型、不交人工', '不交人工、不调用模型'], ['no model, no human', 'no human, no model']],
+    '阈值依模型和强度': [['模型与推理强度', '推理强度与模型'], ['model and effort', 'effort and model']],
+    '装配结论全程': [['涵盖装配与等待本次审查结论的全过程', '覆盖从装配到本次审查结论的全过程'], ['covering assembly and the whole wait', 'covering the whole wait and assembly']],
+    '无会话及映射条件': [['无有效会话选择且无有效映射', '无有效映射且无有效会话选择'], ['no effective session choice and no effective rule', 'no effective rule and no effective session choice']],
+    '会话未选且默认未设': [['本会话未单独选择审查模型', '本会话没有选择审查模型'], ['This session has no reviewer of its own', 'This session has no reviewer selected']],
+    '停用兼容自定义排查': [['插件是否已停用、宿主版本是否兼容、预设是否为自定义', '预设是否为自定义、插件是否已停用、宿主版本是否兼容'], ['a disabled plugin, an incompatible host version, or a custom preset', 'a custom preset, a disabled plugin, or an incompatible host version']],
+    '重新启用或重启可能恢复': [['重新启用插件或重启宿主可能恢复', '重启宿主或重新启用插件可能恢复'], ['Re-enabling or restarting may restore', 'Restarting or re-enabling may restore']],
+    '插件不改YAML': [['不解析、不改写用户 YAML', '不改写、不解析用户 YAML'], ['never parses or rewrites user YAML', 'never rewrites or parses user YAML']],
+  };
+  assert.deepEqual(Object.keys(sameMembers).sort(), Object.keys(members).sort());
+  for (const [id, pair] of Object.entries(sameMembers)) {
+    const keys = Object.entries(COPY_FACTS).filter(([, facts]) => facts.some((fact) => fact.id === id)).map(([key]) => key);
+    for (const key of keys) for (const [i, lang] of ['zh', 'en'].entries()) {
+      const [from, to] = pair[i];
+      const current = dicts[lang][key];
+      assert.ok(current.includes(from), `${key}/${lang}/${id}等义锚:${from}`);
+      const failures = copyFactFailures(key, lang, current.replace(from, to));
+      if (failures.length) errors.push(`${key}/${lang}/${id}等义误拒:${failures.join(',')}`);
+      assert.deepEqual(copyFactFailures(key, lang, current + (lang === 'zh' ? '另一无关说明不含额外选项。' : ' A separate unrelated note excludes other options.')), [], '无关排除邻句不误拒原候选关系');
+    }
+  }
+  for (const [lang, from, to] of [
+    ['zh', '不调用模型', '调用模型'], ['zh', '不交人工', '交人工'],
+    ['en', 'no model', 'a model'], ['en', 'no human', 'a human'],
+  ]) verify('help.denyPatterns', lang, '拒绝无模型人工', from, to);
+  for (const [lang, from, to] of [
+    ['zh', '不解析', '解析'], ['zh', '不改写', '改写'],
+    ['en', 'never parses or rewrites', 'parses but never rewrites'],
+    ['en', 'never parses or rewrites', 'never parses but rewrites'],
+  ]) verify('card.presets.missing.remedy', lang, '插件不改YAML', from, to);
+  assert.equal(checked, 176, '20数量反例＋140参与者删减或排除＋6报告原例＋2轮转阈值＋8禁止动作独立反转');
   assert.deepEqual(errors, [], errors.join('\n'));
 });
 

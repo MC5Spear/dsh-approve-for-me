@@ -433,6 +433,19 @@ test('负关系取消作用域有限正反例：真实负关系等义与无关�
   ]) assert.ok(checkModeHelpFacts(text).includes(id));
 });
 
+test('量与候选只绑定所属关系：不同对象数字和排除邻句不能误拒，来源or不强制同时采用', () => {
+  for (const [key, lang, text] of [
+    ['hint.tools', 'zh', '纳入自动审批的工具，每行1个；空清单覆盖所有工具。另一个界面每行2个按钮。'],
+    ['hint.tools', 'en', 'Tools under auto-approval, 1 per line; empty covers all. Another interface has 2 buttons per line.'],
+    ['hint.reviewer.maxTokens', 'zh', '审查输出的 token 上限（token 是模型计量文本的单位）；0 不向模型传输出上限，由供应商或模型默认值决定；推理模型可能先把额度用于推理，上限过小可能导致没有有效结论。另一个默认设置不含供应商选项。'],
+    ['hint.reviewer.maxTokens', 'en', 'Review output cap in tokens (a token is the unit models use to measure text); 0 sends no cap, leaving the provider or model default; reasoning models may spend the budget on reasoning first — too small a cap can leave no usable conclusion. Another default setting excludes provider options.'],
+  ]) assert.deepEqual(fails(key, lang, text), [], '明确其他对象不改变数量与来源候选');
+  for (const [lang, text] of [
+    ['zh', '审查输出的 token 上限（token 是模型计量文本的单位）；0 不向模型传输出上限，由模型而非供应商默认值决定；推理模型可能先把额度用于推理，上限过小可能导致没有有效结论。'],
+    ['en', 'Review output cap in tokens (a token is the unit models use to measure text); 0 sends no cap, leaving the model default, not the provider default; reasoning models may spend the budget on reasoning first — too small a cap can leave no usable conclusion.'],
+  ]) assert.ok(fails('hint.reviewer.maxTokens', lang, text).includes('采用模型或供应商默认'));
+});
+
 test('反例：说明缺失整条报缺失', () => {
   assert.deepEqual(fails('hint.mode', 'zh', ''), ['说明缺失']);
   assert.deepEqual(fails('hint.mode', 'zh', undefined), ['说明缺失']);
