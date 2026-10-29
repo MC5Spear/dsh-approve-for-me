@@ -4790,6 +4790,164 @@ test('当前关键正向事实：逐项在真实关系前插不/not必须由live
   }
 });
 
+test('当前条件事实有限清单：双语最小类别反转必须在真实字典中失败', () => {
+  resetHooks();
+  const original = makeCtx();
+  loadClient().apply(original.ctx);
+  const dicts = original.dictionaries[0].dicts;
+  const cases = [];
+  const add = (key, lang, from, to) => cases.push([key, lang, from, to]);
+  for (const key of ['hint.tools', 'help.tools']) {
+    add(key, 'zh', '空清单', '非空清单');
+    add(key, 'en', key === 'hint.tools' ? 'empty covers' : 'Empty covers', 'Non-empty covers');
+  }
+  for (const key of ['help.trigger.presets', 'card.presets.none']) {
+    add(key, 'zh', '清单为空', '清单不为空');
+    add(key, 'en', 'empty list', 'non-empty list');
+  }
+  add('help.denyPatterns', 'zh', '空清单只关闭', '非空清单只关闭');
+  add('help.denyPatterns', 'en', 'empty list disables', 'non-empty list disables');
+  add('help.reviewer.model', 'zh', '推理强度留空', '推理强度不留空');
+  add('help.reviewer.model', 'en', 'empty effort', 'non-empty effort');
+  add('help.human.timeoutMs', 'zh', '＝交给人工决定', '＝直接拒绝');
+  add('help.human.timeoutMs', 'en', 'fallback is Ask', 'fallback is Reject');
+  for (const part of ['hint', 'help']) for (const field of ['reviewer.timeoutMs', 'human.timeoutMs', 'reviewer.maxTokens', 'ui.injectMaxBytes']) {
+    add(`${part}.${field}`, 'zh', '0 ', '非0 ');
+    add(`${part}.${field}`, 'en', '0 ', 'non-zero ');
+  }
+  add('hint.mode', 'zh', '关闭后', '开启后');
+  add('hint.mode', 'en', 'off means', 'on means');
+  add('help.mode', 'zh', '完全不接管＝', '完全接管＝');
+  add('help.mode', 'en', 'off behaves', 'on behaves');
+  add('help.trigger.auditEverySkip', 'zh', '开启后', '关闭后');
+  add('help.trigger.auditEverySkip', 'en', 'On: every', 'Off: every');
+  add('help.trigger.auditEverySkip', 'zh', '关闭时', '开启时');
+  add('help.trigger.auditEverySkip', 'en', 'off: one', 'on: one');
+  add('help.ui.humanCardDuringReview', 'zh', '关闭时', '开启时');
+  add('help.ui.humanCardDuringReview', 'en', 'Off: the card', 'On: the card');
+  for (const key of ['hint.reviewer.model', 'help.reviewer.model', 'warn.modelIssue.globalUnset', 'warn.modelIssue.followParent', 'warn.modelIssue.globalUnsetShadowed']) {
+    add(key, 'zh', '未设置', '已设置');
+    add(key, 'en', key.includes('globalUnset') ? 'not set' : 'unset', key.includes('globalUnset') ? 'already set' : 'set');
+  }
+  add('warn.modelIssue.globalUnset', 'zh', '无有效会话选择', '有有效会话选择');
+  add('warn.modelIssue.globalUnset', 'zh', '无有效映射', '有有效映射');
+  add('warn.modelIssue.globalUnset', 'en', 'no effective session choice', 'an effective session choice');
+  add('warn.modelIssue.globalUnset', 'en', 'no effective rule', 'an effective rule');
+  add('warn.modelIssue.followParent', 'zh', '会话未单独选择', '会话已单独选择');
+  add('warn.modelIssue.followParent', 'en', 'session has no reviewer', 'session has a reviewer');
+  for (const key of ['warn.modelIssue.global', 'warn.modelIssue.rule', 'warn.modelIssue.session']) {
+    add(key, 'zh', '不可用', '可用');
+    add(key, 'en', 'unavailable', 'available');
+  }
+  add('help.ui.inject', 'zh', '选择「不发送」＝', '选择「全部发送」＝');
+  add('help.ui.inject', 'en', 'send none sends', 'send all sends');
+  for (const key of ['hint.tools', 'help.tools']) {
+    add(key, 'zh', '空清单', '不为空的清单');
+    add(key, 'en', key === 'hint.tools' ? 'empty covers' : 'Empty covers', 'Not empty covers');
+  }
+  for (const key of ['hint.trigger.presets', 'help.trigger.presets']) {
+    add(key, 'zh', '清单内', '清单外');
+    add(key, 'en', 'listed', 'unlisted');
+  }
+  add('help.fallback', 'zh', '交给人工决定＝', '直接拒绝＝');
+  add('help.fallback', 'en', 'Ask shows', 'Reject shows');
+  add('help.human.timeoutMs', 'zh', '仅在', '不只在');
+  add('help.human.timeoutMs', 'en', 'used only when', 'used not only when');
+  add('warn.modelIssue.globalUnset', 'zh', '仅当', '不只当');
+  add('warn.modelIssue.globalUnset', 'en', 'only when', 'not only when');
+  for (const [key, lang, from, to] of cases) {
+    assert.ok(dicts[lang][key].includes(from), `${key}/${lang} 条件变异目标必须真实在场：${from}`);
+    const mutated = dicts[lang][key].replace(from, to);
+    let count = 0;
+    const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+      if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+      count++;
+      return prefix + JSON.stringify(mutated);
+    });
+    assert.equal(count, 1);
+    resetHooks();
+    const env = makeCtx();
+    loadClient(source).apply(env.ctx);
+    assert.equal(env.dictionaries[0].dicts[lang][key], mutated, '条件相反值确已进入实际字典');
+    assert.ok(dictionaryFactFailures(env.dictionaries[0].dicts).some((failure) => failure.startsWith(`${lang}/${key}:`)), `${key}/${lang} 条件${from}→${to}必须失败`);
+  }
+  assert.equal(cases.length, 78, '有限实际条件清单数量变更必须明确');
+});
+
+test('当前条件动作有限清单：条件保留而动作直接反转仍必须失败', () => {
+  resetHooks();
+  const original = makeCtx();
+  loadClient().apply(original.ctx);
+  const dicts = original.dictionaries[0].dicts;
+  const cases = [];
+  const add = (key, lang, from, to) => cases.push([key, lang, from, to]);
+  for (const key of ['hint.tools', 'help.tools']) {
+    add(key, 'zh', '覆盖', '不覆盖');
+    add(key, 'en', 'covers', 'does not cover');
+  }
+  for (const key of ['help.trigger.presets', 'card.presets.none']) {
+    add(key, 'zh', key === 'help.trigger.presets' ? '都不接管' : '都不会接管', '都接管');
+    add(key, 'en', 'no known preset', 'every known preset');
+  }
+  add('help.denyPatterns', 'zh', '只关闭', '不只关闭');
+  add('help.denyPatterns', 'en', 'list disables', 'list does not disable');
+  add('help.reviewer.model', 'zh', '表示自动选择', '表示不自动选择');
+  add('help.reviewer.model', 'en', 'effort is automatic', 'effort is not automatic');
+  add('help.human.timeoutMs', 'zh', '时使用', '时不使用');
+  add('help.human.timeoutMs', 'en', 'used only when', 'not used only when');
+  for (const key of ['hint.trigger.presets', 'help.trigger.presets']) {
+    add(key, 'zh', key === 'hint.trigger.presets' ? '接管升权' : '处理升权', key === 'hint.trigger.presets' ? '不接管升权' : '不处理升权');
+    add(key, 'en', 'hand ', 'do not hand ');
+  }
+  add('help.fallback', 'zh', '＝显示人工审批卡片', '＝不显示人工审批卡片');
+  add('help.fallback', 'en', 'Ask shows', 'Ask does not show');
+  for (const key of ['hint.reviewer.model', 'help.reviewer.model', 'warn.modelIssue.globalUnset', 'warn.modelIssue.followParent', 'warn.modelIssue.globalUnsetShadowed']) {
+    add(key, 'zh', key === 'hint.reviewer.model' || key === 'help.reviewer.model' ? '使用执行助手' : '跟随执行助手', key === 'hint.reviewer.model' || key === 'help.reviewer.model' ? '不使用执行助手' : '不跟随执行助手');
+    add(key, 'en', key === 'hint.reviewer.model' ? 'means the agent' : key === 'help.reviewer.model' ? 'default reviews' : 'reviews follow', key === 'hint.reviewer.model' ? 'does not mean the agent' : key === 'help.reviewer.model' ? 'default does not review' : 'reviews do not follow');
+  }
+  for (const part of ['hint', 'help']) {
+    add(`${part}.reviewer.maxTokens`, 'zh', '0 不向模型传', '0 不是不向模型传');
+    add(`${part}.reviewer.maxTokens`, 'en', '0 sends no cap', '0 does not send no cap');
+    add(`${part}.ui.injectMaxBytes`, 'zh', '0 不裁剪', '0 不是不裁剪');
+    add(`${part}.ui.injectMaxBytes`, 'en', '0 does not trim', '0 does not not trim');
+    add(`${part}.human.timeoutMs`, 'zh', part === 'hint' ? '立即拒绝' : '表示立即拒绝', part === 'hint' ? '立即不拒绝' : '表示立即不拒绝');
+    add(`${part}.human.timeoutMs`, 'en', '0 rejects immediately', '0 does not reject immediately');
+    add(`${part}.reviewer.timeoutMs`, 'zh', '0 立即超时', '0 立即不超时');
+    add(`${part}.reviewer.timeoutMs`, 'en', '0 times out immediately', '0 does not time out immediately');
+  }
+  add('hint.mode', 'zh', '完全不接管', '完全接管');
+  add('hint.mode', 'en', 'no take-over', 'not no take-over');
+  add('help.mode', 'zh', '等同未安装', '不等同未安装');
+  add('help.mode', 'en', 'off behaves', 'off does not behave');
+  add('help.trigger.auditEverySkip', 'zh', '都逐条记录', '都不逐条记录');
+  add('help.trigger.auditEverySkip', 'en', 'skip is logged', 'skip is not logged');
+  add('help.trigger.auditEverySkip', 'zh', '只记录一条', '不只记录一条');
+  add('help.trigger.auditEverySkip', 'en', 'off: one line', 'off: not one line');
+  add('help.ui.humanCardDuringReview', 'zh', '后显示卡片', '后不显示卡片');
+  add('help.ui.humanCardDuringReview', 'en', 'Off: the card appears', 'Off: the card does not appear');
+  add('help.ui.inject', 'zh', '一条都不发送', '一条都不是不发送');
+  add('help.ui.inject', 'en', 'send none sends no notices', 'send none sends not no notices');
+  add('help.fallback', 'zh', '＝按拒绝结算', '＝不按拒绝结算');
+  add('help.fallback', 'en', 'reject settles', 'reject does not settle');
+  for (const [key, lang, from, to] of cases) {
+    assert.ok(dicts[lang][key].includes(from), `${key}/${lang} 动作目标真实在场：${from}`);
+    const mutated = dicts[lang][key].replace(from, to);
+    let count = 0;
+    const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+      if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+      count++;
+      return prefix + JSON.stringify(mutated);
+    });
+    assert.equal(count, 1);
+    resetHooks();
+    const env = makeCtx();
+    loadClient(source).apply(env.ctx);
+    assert.equal(env.dictionaries[0].dicts[lang][key], mutated);
+    assert.ok(dictionaryFactFailures(env.dictionaries[0].dicts).some((failure) => failure.startsWith(`${lang}/${key}:`)), `${key}/${lang} 动作${from}→${to}必须失败`);
+  }
+  assert.equal(cases.length, 60);
+});
+
 test('当前token风险显示：原生字典源码错位和部分保护变异必须失败', () => {
   for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
     resetHooks();

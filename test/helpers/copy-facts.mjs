@@ -67,7 +67,7 @@ function claimsFinalOutcome(text, lang) {
 /** 已登记正向关系的紧邻否定；只查看关系词前缀，不把其他分句的否定当作反转。 */
 function affirmativeConcept(text, lang, concept) {
   const negativePrefix = lang === 'zh'
-    ? /(?:不|未|非|没有|并非|不是|无需|不能|无法|不再)(?:会|再|更|直接|立即|单独|保持|被)?\s*$/u
+    ? /(?:不|未|非|没有|并非|不是|无需|不能|无法|不再)(?:会|再|更|直接|立即|单独|保持|被|逐条|只|按拒绝)?\s*$/u
     : /\b(?:not|no|never|without|cannot|can't|doesn't|don't|isn't|aren't)(?:\s+(?:be|a|an|the|as|called|used|run|act|acts|counted|timed|remain|remains|more|directly|immediately))*\s*$/iu;
   let found = false;
   for (const clause of text.split(/[。；;，,:：.!?！？\n—]/u)) {
@@ -78,6 +78,95 @@ function affirmativeConcept(text, lang, concept) {
     }
   }
   return found;
+}
+
+/** 有限条件关系：只在同一动作分句判断指定条件类别，邻句的相反类别不作全文禁词。 */
+function conditionRelation(text, condition, opposite, action, validate = () => true) {
+  let found = false;
+  for (const clause of sents(text)) {
+    if (!action.test(clause)) continue;
+    const local = opposite?.test(clause) ? clause.split(/[，,]/u) : [clause];
+    if (local.some((part) => action.test(part) && condition.test(part) && !opposite?.test(part) && validate(part))) found = true;
+  }
+  return found;
+}
+
+const EMPTY = { zh: /空|留空/u, en: /\bempt(?:y|ied)\b/iu };
+const NONEMPTY = { zh: /非空|不为空|不留空|不是空/u, en: /\bnon[- ]?empty\b|\bnot (?:an? )?empty\b/iu };
+const UNSET = { zh: /未设置|没有设置|尚未设置|为空/u, en: /\bunset\b|\bnot set\b/iu };
+const SET = { zh: /已设置|已经设置|不为空/u, en: /\b(?:is|already) set\b|(?<!not )\bset(?: means| default| reviews)/iu };
+
+// 条件类别以外，动作极性也只核这些已登记关系；不涉及其他说明的否定。
+const CONDITION_ACTIONS = {
+  '空清单条件': [/覆盖|包含|适用|处理/u, /covers?|includes?|applies|handles?|takes?/iu],
+  '空预设条件': [null, null, /不是不|并非不|不再[^。；]{0,8}不接管/u, /not\s+(?:no|not)|not\s+taken over/iu],
+  '空拒绝层条件': [/关闭/u, /disables?/iu],
+  '空强度自动条件': [/自动/u, /automatic/iu],
+  '清单内预设接管条件': [/处理升权|接管/u, /hand/iu],
+  'Reject结算条件': [/结算/u, /settles?/iu],
+  'Ask人工卡片条件': [/显示/u, /shows?/iu],
+  '仅人工备用条件': [/使用|生效|适用/u, /used|applies/iu],
+  '未设默认跟随条件': [/跟随|使用/u, /\bfollow\b|\breviews?\b|\bmeans?\b/iu],
+  '关闭等同未装条件': [/等同|一样|相同/u, /behaves|same|like/iu],
+  '关闭不接管条件': [null, null, /不是不|并非不/u, /not\s+no take|not\s+not take/iu],
+  '关闭才交人工条件': [/显示/u, /appears?|shows?/iu],
+  '关闭零通知条件': [null, null, /不是不发送|并非不发/u, /not\s+(?:no|nothing|not a)/iu],
+  '开启逐条条件': [/记录/u, /logged|log/iu],
+  '关闭单条条件': [/记录/u, /one line|single|logged|log/iu],
+};
+
+/** 只登记当前文案已承诺的条件，未知改写仍须人工核对。 */
+function conditionFactFailures(key, lang, text) {
+  const failures = [];
+  const check = (id, condition, opposite, action) => {
+    const spec = CONDITION_ACTIONS[id];
+    const validate = (clause) => {
+      if (!spec) return true;
+      const concept = spec[lang === 'zh' ? 0 : 1];
+      const reversal = spec[lang === 'zh' ? 2 : 3];
+      if (id === '空预设条件' && !(lang === 'zh' ? /(?:不|无)[^。；]{0,5}接管/u : /no known preset|not[^.;]{0,12}(?:take|taken)/iu).test(clause)) return false;
+      return (!concept || affirmativeConcept(clause, lang, concept)) && !reversal?.test(clause);
+    };
+    if (!conditionRelation(text, condition, opposite, action, validate)) failures.push(id);
+  };
+  if (/^(?:hint|help)\.tools$/u.test(key)) check('空清单条件', EMPTY[lang], NONEMPTY[lang], lang === 'zh' ? /(?:覆盖|包含|适用|处理)(?:全部|所有|一切)/u : /(?:covers?|includes?|applies|handles?|takes?)[^.;]{0,12}\b(?:all|every)\b/iu);
+  if (key === 'help.trigger.presets' || key === 'card.presets.none') check('空预设条件', EMPTY[lang], NONEMPTY[lang], lang === 'zh' ? /已知[^。；]{0,12}(?:不|无)[^。；]{0,5}接管/u : /known preset/iu);
+  if (key === 'help.denyPatterns') check('空拒绝层条件', EMPTY[lang], NONEMPTY[lang], lang === 'zh' ? /只关闭|仅关闭/u : /disables? only|only[^.;]{0,16}(?:disables?|text check|layer)/iu);
+  if (key === 'help.reviewer.model') check('空强度自动条件', lang === 'zh' ? /留空|不填|强度.{0,4}空/u : /(?:empty|blank) effort/iu, lang === 'zh' ? /非空|不留空|强度.{0,4}不为空/u : /non[- ]?empty effort|not (?:an? )?(?:empty|blank) effort/iu, lang === 'zh' ? /自动/u : /automatic/iu);
+  if ((key === 'help.human.timeoutMs' || /^warn\.modelIssue\.globalUnset(?:Shadowed)?$/u.test(key)) && (lang === 'zh' ? /(?:不只|不仅)(?:在|当)[^。；]{0,40}(?:交给人工决定|人工决定|全局)/u : /not only when[^.;]{0,60}(?:ask|global)/iu).test(text)) failures.push('仅在条件被扩大');
+  if (key === 'hint.trigger.presets' || key === 'help.trigger.presets') check('清单内预设接管条件', lang === 'zh' ? /清单内/u : /(?<!un)\blisted\b/iu, lang === 'zh' ? /清单外/u : /\bunlisted\b/iu, lang === 'zh' ? /处理升权|接管升权/u : /hand[^.;]{0,30}escalation/iu);
+  if (key === 'help.fallback') {
+    check('Reject结算条件', lang === 'zh' ? /直接拒绝[＝=]/u : /\breject settles/iu, lang === 'zh' ? /交给人工决定[＝=]/u : /\bask settles/iu, lang === 'zh' ? /按拒绝结算/u : /settles as a rejection/iu);
+    check('Ask人工卡片条件', lang === 'zh' ? /交给人工决定[＝=]/u : /\bask shows/iu, lang === 'zh' ? /直接拒绝[＝=]/u : /\breject shows/iu, lang === 'zh' ? /显示人工审批卡片/u : /shows the human card/iu);
+  }
+  if (key === 'help.human.timeoutMs') check('仅人工备用条件', lang === 'zh' ? /(?:仅|只)[^。；]{0,18}(?:交给人工决定|交人工|人工决定)/u : /only[^.;]{0,40}\b(?:ask|handoff)\b/iu, lang === 'zh' ? /(?:仅|只)[^。；]{0,18}直接拒绝/u : /only[^.;]{0,40}\breject\b/iu, lang === 'zh' ? /使用|生效|适用|时/u : /used|when|applies/iu);
+  if (key === 'hint.reviewer.model' || key === 'help.reviewer.model' || /^warn\.modelIssue\.(?:globalUnset|followParent|globalUnsetShadowed)$/u.test(key)) check('未设默认跟随条件', UNSET[lang], SET[lang], lang === 'zh' ? /(?:跟随|使用)[^。；]{0,12}执行助手/u : /(?:follow|review|means)[^.;]{0,30}(?:agent|current model)/iu);
+  if (key === 'warn.modelIssue.globalUnset') {
+    const noSession = lang === 'zh' ? /(?:无|没有)(?:有效|生效的)?会话选择/u : /(?:no|without) (?:effective )?session choice/iu;
+    const noRule = lang === 'zh' ? /(?:无|没有)(?:有效|生效的)?映射/u : /(?:no|without) (?:effective )?rule/iu;
+    const bothAbsent = lang === 'zh' ? /(?:无|没有)(?:有效|生效的)?会话选择(?:且|和)(?:无|没有)?(?:有效|生效的)?映射/u : /(?:no|without) (?:effective )?session choice and (?:no (?:effective )?)?rule/iu;
+    if (!(bothAbsent.test(text) || noSession.test(text) && noRule.test(text))) failures.push('无会话且无映射条件');
+  }
+  if (/^warn\.modelIssue\.(?:global|rule|session)$/u.test(key)) check('模型不可用条件', lang === 'zh' ? /不可用|无法|不能|失败/u : /unavailable|cannot|failed/iu, lang === 'zh' ? /模型[^。；:：]{0,20}(?<!不)可用/u : /(?<!un)\bavailable\b/iu, lang === 'zh' ? /模型/u : /model/iu);
+  if (key === 'warn.modelIssue.followParent' && !(lang === 'zh' ? /会话(?:未|没有)(?:单独)?选择/u : /session has no reviewer|session[^.;]{0,15}(?:not selected|no choice)/iu).test(text)) failures.push('会话未选择条件');
+  if (/^warn\.modelIssue\.(?:globalUnset|globalUnsetShadowed)$/u.test(key) && !(lang === 'zh' ? /仅|只有/u : /only/iu).test(text)) failures.push('仅全局落层条件');
+  const zeroKey = /^(?:hint|help)\.(?:reviewer\.(?:timeoutMs|maxTokens)|human\.timeoutMs|ui\.injectMaxBytes)$/u.test(key);
+  if (zeroKey) {
+    check('零值条件', /\b0\b/u, lang === 'zh' ? /非\s*0|不为\s*0|大于\s*0/u : /non[- ]?zero|non[- ]?0|not\s+0|greater than\s+0/iu, /\b0\b|non[- ]?zero/iu);
+    for (const clause of sents(text).filter((part) => /\b0\b/u.test(part))) {
+      if (/maxTokens$/u.test(key) && (lang === 'zh' ? /不是不|并非不|仍(?:向模型)?传|仍发送/u : /not\s+(?:send\s+)?(?:no|omit)|still sends?\s+(?:a|the)\s+cap/iu).test(clause)) failures.push('零不传额度动作反转');
+      if (/injectMaxBytes$/u.test(key) && (lang === 'zh' ? /不是不|并非不|仍裁剪/u : /not\s+(?:no|not)|still trims?/iu).test(clause)) failures.push('零不裁剪动作反转');
+    }
+  }
+  if (key === 'help.mode') check('关闭等同未装条件', lang === 'zh' ? /关闭|完全不接管/u : /\boff\b/iu, lang === 'zh' ? /开启|完全接管/u : /\bon\b/iu, lang === 'zh' ? /等同未安装|与未安装|如同未安装/u : /uninstalled|not installed/iu);
+  if (key === 'hint.mode') check('关闭不接管条件', lang === 'zh' ? /关闭|关掉/u : /\boff\b/iu, lang === 'zh' ? /开启|打开/u : /\bon\b/iu, lang === 'zh' ? /不接管/u : /no take.over|not take.over/iu);
+  if (key === 'help.ui.humanCardDuringReview') check('关闭才交人工条件', lang === 'zh' ? /关闭/u : /\boff\b/iu, lang === 'zh' ? /开启/u : /\bon\b/iu, lang === 'zh' ? /仅在确实|只[^。；]{0,8}真正/u : /only[^.;]{0,40}(?:truly|actually|really)/iu);
+  if (key === 'help.ui.inject') check('关闭零通知条件', lang === 'zh' ? /(?:选|选择)[「“"]?不发送[」”"]?[＝=]/u : /(?:pick\s*["']?)?send none/iu, lang === 'zh' ? /(?:选|选择)[「“"]?(?:四类都发送|全部发送)[」”"]?[＝=]/u : /send all[^.;]{0,15}(?:no notices|nothing|not a)/iu, lang === 'zh' ? /(?:一条|任何)[^。；]{0,8}(?:不发送|不发)/u : /no notices|nothing|not a single/iu);
+  if (key === 'help.trigger.auditEverySkip') {
+    check('开启逐条条件', lang === 'zh' ? /开启|打开/u : /\bon\b/iu, lang === 'zh' ? /关闭|关掉/u : /\boff\b/iu, lang === 'zh' ? /每次|逐条/u : /every/iu);
+    check('关闭单条条件', lang === 'zh' ? /关闭|关掉/u : /\boff\b/iu, lang === 'zh' ? /开启|打开/u : /\bon\b/iu, lang === 'zh' ? /同一[^。；]{0,16}一条/u : /one line|single/iu);
+  }
+  return failures;
 }
 
 // ── 跨键共用事实组 ──
@@ -397,6 +486,7 @@ export function copyFactFailures(key, lang, text) {
     const check = fact[lang];
     return typeof check === 'function' ? !check(normalized) : !check.test(normalized);
   }).map((fact) => fact.id);
+  failures.push(...conditionFactFailures(key, lang, normalized));
   const zeroClause = sents(normalized).find((clause) => /\b0\b/u.test(clause));
   if (zeroClause && /timeoutMs$/u.test(key) && !affirmativeConcept(zeroClause, lang, lang === 'zh' ? /立即|马上|即刻|拒绝|超时/u : /immediately|at once|right away|rejects?|times? out|timeout/iu)) failures.push('零值正向关系被否定');
   if (zeroClause && /timeoutMs$/u.test(key) && /(?:不|不会|并非|不是).{0,3}立即|(?:不|不会|并非|不是)\s*(?:拒绝|超时)|\b(?:does not|do not|doesn't|don't|not|never)\b.{0,15}(?:immediate|at once|reject|time out)|\b(?:reject|timeout)\b.{0,8}\b(?:not|never)\b/iu.test(zeroClause)) failures.push('零值含义反转');

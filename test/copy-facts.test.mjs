@@ -292,6 +292,25 @@ test('已登记正向关系有限自查：紧邻不/not不能保留优先、独�
   ]) assert.deepEqual(fails(key, lang, text), [], '无关邻句否定不反转已登记正向关系');
 });
 
+test('条件等义正例：空与非空、Ask与Reject邻句各自绑定动作', () => {
+  for (const [lang, text] of [
+    ['zh', '纳入自动审批的工具，每行一个。非空清单只处理名单内工具；清单留空覆盖所有工具，其余工具走宿主流程。'],
+    ['en', 'One tool per line. A non-empty list only handles listed tools; an empty list covers every tool, while the rest keep the host flow.'],
+    ['zh', '每行一个工具；非空清单只处理名单内，空清单覆盖全部工具。'],
+    ['en', 'One tool per line; a non-empty list handles listed tools, an empty list covers all.'],
+  ]) assert.deepEqual(fails('hint.tools', lang, text), [], '非空邻句不能冒充空条件也不应误伤正确空条件');
+  for (const [lang, text] of [
+    ['zh', '人工作答等待上限（毫秒）。仅在交给人工决定时使用；直接拒绝时不使用这份人工预算。0 表示立即拒绝，不是无限等待；到点按拒绝结算。'],
+    ['en', 'Human-answer wait limit (ms), used only when fallback is Ask. Reject does not use this budget. 0 rejects immediately, not an endless wait. Expiry rejects.'],
+  ]) assert.deepEqual(fails('help.human.timeoutMs', lang, text), [], 'Ask用途不能由别句Reject说明误伤');
+  for (const [key, lang, text] of [
+    ['hint.tools', 'zh', '每行一个工具；非空清单覆盖全部工具。'],
+    ['hint.tools', 'en', 'One tool per line; non-empty covers all.'],
+    ['help.human.timeoutMs', 'zh', '人工作答等待上限（毫秒），仅在直接拒绝时使用。0 立即拒绝，不是无限等待；到点拒绝。'],
+    ['help.human.timeoutMs', 'en', 'Human-answer wait limit (ms), used only when fallback is Reject. 0 rejects immediately, not an endless wait. Expiry rejects.'],
+  ]) assert.ok(fails(key, lang, text).length > 0, `${key}/${lang} 直接条件类别反转必须失败`);
+});
+
 test('反例：说明缺失整条报缺失', () => {
   assert.deepEqual(fails('hint.mode', 'zh', ''), ['说明缺失']);
   assert.deepEqual(fails('hint.mode', 'zh', undefined), ['说明缺失']);
