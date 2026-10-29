@@ -43,6 +43,9 @@ function makeRt(cfg, options = {}) {
       return cfg;
     },
     async locate() {
+      // 同步筛选耗时测试缝（design §4.3）：筛选段延迟消耗装配预算（构造「同步筛选计入预算」
+      // 形态，供装配计时器武装时限断言）。
+      if (options.locateDelayMs !== undefined) await delay(options.locateDelayMs);
       return options.located ?? { command: 'npm i', cwd: 'C:/work', degraded: [] };
     },
     // §5.3 计数缝：装配期/零值立即超时的计数调用在此计数（生产接线为 scheduler.record）。
@@ -1751,30 +1754,39 @@ test('结算记录：审查未收束的人工超时——reason 明确缺失不�
   assert.equal(decide.reason, undefined);
 });
 
-test('结算记录：卡片关闭 → cancelled/gateway；请求取消 → cancelled/signal', async () => {
-  const closed = makeRt(baseConfig({ fallback: 'ask', reviewer: { timeoutMs: 30000 }, human: { timeoutMs: 5000, timeoutFrom: 'handoff' } }), {
+test('结算记录：交人工阶段卡片关闭/请求取消 → cancelled，带 subject 与结论 reason（design §8.4）', async () => {
+  // 关卡模式：next() 只在确实交人工时调用——在 nextCalls 变 1 后触发关闭/取消，
+  // 确定性落在 settleHuman 的交人工分支（竞速期关闭/取消的 subject 属缓改项，不在本例断言）。
+  const closed = makeRt(baseConfig({ fallback: 'ask', reviewer: { timeoutMs: 30000 }, human: { timeoutMs: 5000, timeoutFrom: 'handoff' }, ui: { humanCardDuringReview: false } }), {
     verdict: { decision: 'deny', reason: 'x', toolCalls: 0, fields: {} },
   });
   const closedPromise = onApprovalRequest(request(), closed.next, closed.rt);
-  await tick();
-  await tick();
+  for (let i = 0; i < 100 && closed.state.nextCalls === 0; i += 1) await delay(5);
+  assert.equal(closed.state.nextCalls, 1, '确实交人工后才调 next()');
   // 人工通道以拒绝收尾＝卡片被关闭（gateway）；解析 undefined 只是「无结论的人工作答」。
   closed.state.nextRejectors[0](new Error('card closed'));
   assert.equal(await closedPromise, 'cancelled');
   assertSettleShape(closed.state.settles[0], { outcome: 'cancelled', source: 'gateway' });
+  assert.match(closed.state.settles[0].subject, /npm i/, '交人工阶段结算带 subject（design §8.4）');
+  assert.equal(closed.state.settles[0].reason, 'x', '结论理由随结算保存');
+  const closedDecide = closed.state.audits.find((row) => row.phase === 'decide' && row.source === 'gateway');
+  assert.equal(closedDecide.reason, 'x', '审计 decide 行同步理由');
 
   const controller = new AbortController();
-  const cancelled = makeRt(baseConfig({ fallback: 'ask', reviewer: { timeoutMs: 30000 }, human: { timeoutMs: 5000, timeoutFrom: 'request' } }), {
+  const cancelled = makeRt(baseConfig({ fallback: 'ask', reviewer: { timeoutMs: 30000 }, human: { timeoutMs: 5000, timeoutFrom: 'request' }, ui: { humanCardDuringReview: false } }), {
     verdict: { decision: 'deny', reason: 'x', toolCalls: 0, fields: {} },
   });
   const cancelledPromise = onApprovalRequest(request(controller.signal), cancelled.next, cancelled.rt);
-  await tick();
+  for (let i = 0; i < 100 && cancelled.state.nextCalls === 0; i += 1) await delay(5);
+  assert.equal(cancelled.state.nextCalls, 1, '确实交人工后才调 next()');
   controller.abort();
   assert.equal(await cancelledPromise, 'cancelled');
   assertSettleShape(cancelled.state.settles[0], { outcome: 'cancelled', source: 'signal' });
+  assert.match(cancelled.state.settles[0].subject, /npm i/, '交人工阶段结算带 subject（design §8.4）');
+  assert.equal(cancelled.state.settles[0].reason, 'x', '结论理由随结算保存');
 });
 
-test('结算记录：计时回调抛错 → rejected/error 且 stage 标注环节', async () => {
+test('结算记录：计时回调抛错 → rejected/error 且 stage 标注环节（交人工阶段补 subject）', async () => {
   const { rt, state, next } = makeRt(
     baseConfig({ fallback: 'ask', reviewer: { timeoutMs: 30000 }, human: { timeoutMs: 15, timeoutFrom: 'handoff' } }),
     { timerFireThrows: true, verdict: { decision: 'deny', reason: 'x', toolCalls: 0, fields: {} } },
@@ -1784,18 +1796,115 @@ test('结算记录：计时回调抛错 → rejected/error 且 stage 标注环�
   assertSettleShape(settle, { outcome: 'rejected', source: 'error' });
   assert.equal(settle.stage, 'human', '人工计时回调抛错按 human 环节');
   assert.match(settle.reason, /计时回调抛错/);
+  assert.match(settle.subject, /npm i/, '交人工阶段的抛错结算补 subject（design §8.4，reason 保持抛错描述）');
+  assert.equal(settle.queueMs, undefined, '结论无排队观测时 queueMs 明确缺失');
 });
 
-test('结算记录：应答者逃逸 → rejected/error，取不到的背景字段明确缺失', async () => {
+test('结算记录：应答者逃逸 → rejected/error；同步筛选先于模型解析，背景字段取得到就在场', async () => {
   const { rt, state, next } = makeRt(baseConfig(), { configThrows: true });
   const outcome = await onApprovalRequest(request(), next, rt);
   assert.equal(outcome, 'rejected');
   const settle = state.settles[0];
   assertSettleShape(settle, { outcome: 'rejected', source: 'error' });
-  assert.equal(settle.escalation, undefined, 'configFor 抛错：screen 未执行，escalation 缺失');
+  // design §4.1 同步筛选前置：screen 在模型解析之前执行，configFor 抛错时筛选已完成，
+  // escalation 由筛选产物带入（旧次序「screen 未执行、escalation 缺失」不再成立）。
+  assert.equal(settle.escalation, 'danger-full-access', 'configFor 抛错：screen 已先执行，escalation 在场');
   assert.equal(settle.preset, undefined);
   assert.equal(settle.origin, 'main', 'origin 只看会话形态，不依赖配置');
   assert.match(settle.reason, /审查器内部错误：/);
+});
+
+// ── 同步筛选前置（design §4.1：接管范围判定先于模型解析） ──────────
+
+test('同步筛选前置：跳过分支在模型解析之前返回——configFor 挂死也原样下传', async () => {
+  const { rt, state, next } = makeRt(baseConfig(), {
+    configForNever: true,
+    pre: { action: 'skip', why: 'tool not covered', fields: { action: 'skip', mode: 'rules', tool: 'grep' } },
+  });
+  const gatePromise = onApprovalRequest(request(), next, rt);
+  await tick();
+  state.nextResolvers[0]('passthrough');
+  assert.equal(await gatePromise, 'passthrough', 'skip 原样下传（next 结果透传）');
+  assert.equal(state.nextCalls, 1, 'next() 恰一次');
+  assert.equal(state.settles.length, 0, '不落结算记录');
+  assert.equal(state.timers.length, 0, '不建立任何插件计时器（含装配计时器）');
+  assert.equal(state.cancels.length, 0, '不建立取消监听');
+  assert.equal(state.injections.length, 0, '不注入');
+});
+
+test('同步筛选前置：规则拒绝在模型解析之前结算——configFor 挂死也立即拒绝', async () => {
+  const { rt, state, next } = makeRt(baseConfig(), {
+    configForNever: true,
+    pre: { action: 'deny', why: 'deny pattern', reason: '键 "script" 命中模式 x', fields: { action: 'deny', tool: 'pwsh', source: 'rule' } },
+  });
+  const outcome = await onApprovalRequest(request(), next, rt);
+  assert.equal(outcome, 'rejected');
+  assert.equal(state.nextCalls, 0, '不调 next()');
+  const settle = state.settles[0];
+  assertSettleShape(settle, { outcome: 'rejected', source: 'rule' });
+  assert.match(settle.subject, /npm i/, '身份背景由回查结果带入');
+  assert.equal(state.timers.length, 0, '拒绝分支不建立装配计时器');
+  assert.equal(state.cancels.length, 0, '拒绝分支不建立取消监听');
+});
+
+test('同步筛选前置：筛选段信号已中止 → 按取消结算，不下传不拒绝（requirements §4.1）', async () => {
+  const { rt, state, next } = makeRt(baseConfig());
+  const controller = new AbortController();
+  controller.abort();
+  const outcome = await onApprovalRequest(request(controller.signal), next, rt);
+  assert.equal(outcome, 'cancelled');
+  assert.equal(state.nextCalls, 0, '取消优先于下传');
+  assert.equal(state.timers.length, 0, '未进入竞速段：无计时器');
+  assert.equal(state.cancels.length, 0, '未武装取消监听');
+  assertSettleShape(state.settles[0], { outcome: 'cancelled', source: 'signal' });
+});
+
+test('装配预算从请求进入起算（design §4.3）：同步筛选耗时计入，计时器按剩余武装', async () => {
+  const controller = new AbortController();
+  const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 60 } }), {
+    locateDelayMs: 30,
+    onReviewStart: 'never',
+    reviewDelayMs: 5000,
+  });
+  const gatePromise = onApprovalRequest(request(controller.signal), next, rt);
+  await delay(45);
+  const armed = state.timers.find((entry) => entry.label === 'assembly');
+  assert.ok(armed !== undefined, '装配计时器已武装');
+  assert.ok(armed.ms < 60 && armed.ms > 0, `武装时限取剩余预算（60 − 筛选 ≈30ms），实际 ${armed.ms}`);
+  controller.abort();
+  assert.equal(await gatePromise, 'cancelled');
+});
+
+test('装配预算从请求进入起算（design §4.3）：同步筛选耗尽预算 → 不开始尝试，按装配超时结算', async () => {
+  const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 50 } }), {
+    locateDelayMs: 70,
+  });
+  const outcome = await onApprovalRequest(request(), next, rt);
+  assert.equal(outcome, 'rejected');
+  const settle = state.settles[0];
+  assertSettleShape(settle, { outcome: 'rejected', source: 'timeout' });
+  assert.equal(settle.stage, 'assembly', '环节记装配（requirements §4.4 不开始尝试）');
+  assert.equal(state.nextCalls, 0, '预算耗尽不弹卡');
+  assert.equal(state.countTimeouts, 1, '与真实超时同路计数');
+});
+
+test('单请求单配置快照（design §4.1）：筛选与模型解析共用同一份快照', async () => {
+  const { rt, state, next } = makeRt(baseConfig());
+  let snapshotReads = 0;
+  const snapshot = { revision: 7, value: rt.cfg() };
+  rt.settingsSnapshot = () => {
+    snapshotReads += 1;
+    return snapshot;
+  };
+  let received;
+  rt.configFor = async (_req, snap) => {
+    received = snap;
+    return rt.cfg();
+  };
+  const outcome = await onApprovalRequest(request(), next, rt);
+  assert.equal(outcome, 'allowed-once');
+  assert.equal(snapshotReads, 1, '请求进入时恰读一次');
+  assert.equal(received, snapshot, 'configFor 收到同一份快照对象（热改不分叉本请求口径）');
 });
 
 test('结算记录：onSettle 抛错不影响结算结果', async () => {

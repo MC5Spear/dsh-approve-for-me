@@ -3807,7 +3807,8 @@ const REVIEW_TEXT = {
   'fieldsDefaulted.auth': '授权分级（auth）',
   'fieldsDefaulted.reason': '理由（reason）',
   'degraded.command': '无法辨认本次操作（command）',
-  'degraded.cwd': '会话目录缺失（cwd）',
+  'degraded.cwd': '工作目录缺失（cwd）',
+  'degraded.session-cwd': '会话目录缺失（session-cwd）',
   'degraded.transcript': '上下文读取失败或截断（transcript）',
   'degraded.transcript-read-failed': '上下文读取失败（transcript-read-failed）',
   'degraded.transcript-truncated': '上下文截断（transcript-truncated）',
@@ -4329,7 +4330,7 @@ test('审查视图 §10.2：degraded 含 transcript 反证「未取上下文」�
   const text = JSON.stringify(render(view.component, props));
   assert.ok(!text.includes('未取上下文'), 'degraded 含 transcript 时 evidence 缺失不得归「未取上下文」');
   assert.equal((text.match(/本次未记录此项/g) ?? []).length, 2, 'evidence 与 input 两段缺失归统一缺省');
-  assert.match(text, /缺失或异常情况：会话目录缺失（cwd）、上下文读取失败或截断（transcript）/, '读取失败原因由 degraded 段承载');
+  assert.match(text, /缺失或异常情况：工作目录缺失（cwd）、上下文读取失败或截断（transcript）/, '读取失败原因由 degraded 段承载');
 });
 
 test('审查视图 §10.2：degraded 含 transcript-read-failed 反证「未取上下文」，文案按专属键', async () => {
@@ -4792,9 +4793,8 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['hint.ui.injectMaxBytes', '单条通知的字节上限；0 不裁剪。', "Byte cap per notice; 0 does not trim."],
     ['hint.tools', '纳入自动审批的工具，每行一个；空清单覆盖全部工具。', "Tools under auto-approval, one per line; empty covers all."],
     ['hint.denyPatterns', '每行一条正则表达式；命中即直接拒绝，模型与人工都不能推翻。', "One regex per line; a hit rejects outright, beyond model or human."],
-    // —— §7.2.2 预设多选提示表 ——（missing.remedy、presets.unavailable 与 maxTokens 为长文案，
+    // —— §7.2.2 预设多选提示表 ——（presets.none、missing.remedy、presets.unavailable 与 maxTokens 为长文案，
     //     按 LONG_COPY_FACTS 口径断言，不在本表逐字冻结）
-    ['card.presets.none', '清单为空时，已知预设都不会接管审批；无法识别的预设按「无法识别权限预设时」的设置处置。', 'With an empty list no known preset is taken over; presets that cannot be identified follow "When the preset cannot be identified".'],
     ['card.presets.missing', '配置中存在但当前预设表里没有：', "Configured but absent from the current preset table: "],
     // —— §7.3.1 会话控件表 ——
     ['composer.label', '审查模型', "Reviewer model"],
@@ -4841,7 +4841,8 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['fieldsDefaulted.auth', '授权分级（auth）', "Authorization level (auth)"],
     ['fieldsDefaulted.reason', '理由（reason）', "Rationale (reason)"],
     ['degraded.command', '无法辨认本次操作（command）', "Action cannot be identified (command)"],
-    ['degraded.cwd', '会话目录缺失（cwd）', "Working directory missing (cwd)"],
+    ['degraded.cwd', '工作目录缺失（cwd）', "Working directory missing (cwd)"],
+    ['degraded.session-cwd', '会话目录缺失（session-cwd）', "Session directory missing (session-cwd)"],
     ['degraded.transcript', '上下文读取失败或截断（transcript）', "Context read failure or truncation (transcript)"],
     ['degraded.transcript-read-failed', '上下文读取失败（transcript-read-failed）', "Context read failure (transcript-read-failed)"],
     ['degraded.transcript-truncated', '上下文截断（transcript-truncated）', "Context truncated (transcript-truncated)"],
@@ -4895,8 +4896,8 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
       ['任意 provider，或指定 provider 下的完整模型 id', '会话选择更优先', '命中时先于全局默认', '只能有一条规则', '纯模型 id 键按任意 provider 读取', '含斜杠的旧键', '不自动改写'],
       ['any provider', 'full model id', 'outranks', 'the global default', 'One rule per', 'slash-containing keys', 'rewritten automatically']],
     ['help.reviewer.timeoutMs',
-      ['涵盖装配与等待本次审查结论的全过程', '内部重试不另计时', '超时按拒绝处理并说明发生环节', '不是危险判定', '0 立即超时'],
-      ['covering assembly', 'no fresh budget', 'rejects with its stage named', 'not a danger verdict', '0 times out immediately']],
+      ['涵盖装配与等待本次审查结论的全过程', '排队等待独立计时', '不消耗本预算', '内部重试不另获时限', '超时按拒绝处理并说明发生环节', '不是危险判定', '0 立即超时'],
+      ['covering assembly', 'queue waits are timed separately', 'never consume this budget', 'no fresh time budget', 'rejects with its stage named', 'not a danger verdict', '0 times out immediately']],
     ['help.reviewer.maxTokens',
       ['token 是模型计量文本的单位', '由模型或供应商默认值决定', '推理', noConclusion, '具体数值因模型与推理强度而异'],
       ['measure text', 'model or provider default', 'reasoning', 'no usable conclusion', 'varies by model and effort']],
@@ -4909,7 +4910,7 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
       ['仅在「自动审查未允许时＝交给人工决定」时使用', '0 表示立即拒绝', '到点按拒绝结算'],
       ['only when the fallback is Ask', '0 rejects immediately', 'settles as a rejection']],
     ['help.human.timeoutFrom',
-      ['从审批请求起算＝交人工只使用剩余时间', '从交人工起算＝交人工时重新开始计时'],
+      ['从审批请求起算', '只使用剩余时间', '从交人工起算', '重新开始计时'],
       ['from the approval request', 'from the handoff']],
     ['help.mode',
       ['规则检查＋LLM 审查＝正常接管', '完全不接管＝等同未安装'],
@@ -4950,6 +4951,11 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['card.presets.missing.remedy',
       ['插件是否已停用', '重新启用插件或重启宿主可能恢复', '可改选标准权限档', '彻底清理按使用说明的卸载一节', '不解析、不改写用户 YAML'],
       ['disabled plugin', 'Re-enabling or restarting', 'pick a standard tier', 'uninstall section of the manual', 'never parses or rewrites user YAML']],
+    ['card.presets.none',
+      // 长提示不逐字冻结（design §10.2 B2 第二层）：空清单与未知预设两条事实各自在场即可，
+      // 等义改写通过；逐项删除反例见下方分项块（缺任一项必红）。
+      ['清单为空时', '已知预设', '不会接管', '无法识别的预设', '「无法识别权限预设时」'],
+      ['empty list', 'no known preset', 'taken over', 'cannot be identified', '"When the preset cannot be identified"']],
     ['card.presets.unavailable',
       // 长提示不逐字冻结（design §10.2 B2 第二层）：分项事实各自在场即可，等义改写通过；
       // 三类原因与处置路径的逐项保护见下方分项块（缺任一项必红）。
@@ -4984,6 +4990,31 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     for (const fact of facts) {
       const without = copy.split(fact).join('');
       assert.ok(!factsPresent(without), `card.presets.unavailable 删除「${fact}」后分项检查须失败`);
+    }
+  }
+  // 长提示分项保护（design §10.2 B2 第二层，与 unavailableCases 同构）：presets.none 的空清单
+  // 与未知预设两条事实、timeoutFrom 的两分支计时事实——等义改写须通过，从现行文案删去任一
+  // 分项后同一检查必须失败，防止分项退化成无约束力的整段冻结。
+  const presetsNoneCases = [
+    [zh['card.presets.none'],
+      '清单为空时不会接管任何已知预设；无法识别的预设按「无法识别权限预设时」的设置处置。',
+      ['清单为空时', '已知预设', '不会接管', '无法识别的预设', '「无法识别权限预设时」']],
+    [en['card.presets.none'],
+      'Presets that cannot be identified follow "When the preset cannot be identified"; with an empty list, no known preset is taken over.',
+      ['empty list', 'no known preset', 'taken over', 'cannot be identified', '"When the preset cannot be identified"']],
+  ];
+  const timeoutFromCases = [
+    [zh['help.human.timeoutFrom'],
+      '人工作答从哪一刻开始计时：从审批请求起算时，交人工阶段只使用剩余时间；从交人工起算时，交人工那一刻重新开始计时。',
+      ['从审批请求起算', '只使用剩余时间', '从交人工起算', '重新开始计时']],
+  ];
+  for (const [copy, equivalent, facts] of [...presetsNoneCases, ...timeoutFromCases]) {
+    const factsPresent = (text) => facts.every((fact) => text.includes(fact));
+    assert.ok(factsPresent(copy), '现行文案须含全部分项事实');
+    assert.ok(factsPresent(equivalent), '等义改写须通过分项检查');
+    for (const fact of facts) {
+      const without = copy.split(fact).join('');
+      assert.ok(!factsPresent(without), `删除「${fact}」后分项检查须失败`);
     }
   }
   // design §7.2.2：仅 session 键携带所配引用占位符；global/rule 键不得含。

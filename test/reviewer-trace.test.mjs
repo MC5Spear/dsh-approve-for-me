@@ -859,7 +859,7 @@ test('真链：排队中的请求被取消——不执行审查、不写 error �
   }
 });
 
-test('真链：排队等待不消耗审查预算——出队后按剩余预算完成审查（ISS-172 三段划分）', async (t) => {
+test('真链：排队等待不消耗审查预算——出队后按剩余预算完成审查（三段预算划分）', async (t) => {
   const host = await loadHost();
   if (host === undefined) {
     t.skip('宿主包不可解析（离线环境）');

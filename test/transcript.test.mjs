@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { collectEvidence, locate, normalizeSingleLine, redact, SOURCE_LABELS, TRANSCRIPT_READ_FAILED, TRANSCRIPT_TRUNCATED, truncateKeepEnds } from '../lib/transcript.js';
+import { collectEvidence, foldSessionCwd, locate, normalizeSingleLine, readEvents, redact, resolveExecutionDir, SOURCE_LABELS, TRANSCRIPT_READ_FAILED, TRANSCRIPT_TRUNCATED, truncateKeepEnds } from '../lib/transcript.js';
 import { DEFAULT_REDACT_PATTERNS } from '../lib/policy.js';
 
 /**
@@ -140,7 +140,8 @@ test('SOURCE_LABELS 不变块：词表拼写冻结（系统提示按同一拼写
 // ── 单行归一与行首防伪（design §3.3） ──────────────────────────
 
 test('单行归一：CR/LF/U+2028/U+2029/U+0085 → 字面 \\n，行数恒等于条目数', () => {
-  // 逐字符替换保持可逆（CRLF 与 LF 可区分——归一不增删信息，design §3.3）。
+  // 逐字符替换保持分隔符计数（CRLF 呈现两个字面、LF 一个）；五类分隔符同映一个字面、
+  // 不保留原种类，归一不可逆（design §3.3）。
   assert.equal(normalizeSingleLine('a\r\nb\nc'), 'a\\n\\nb\\nc', 'CR、LF、CRLF 逐字符归一');
   assert.equal(normalizeSingleLine('a\u2028b\u2029c\u0085d'), 'a\\nb\\nc\\nd', 'Unicode 行界与 NEL 同口径');
   const result = collectEvidence(sessionWith([userMessage('first\r\nsecond\u2028third')]), { maxEntries: 5 });
@@ -321,18 +322,23 @@ test('总量截断恰记 transcript-truncated，单条截断仍是 entry:<类型
 });
 
 test('locate 三形态的 degraded 值：回查不到＝command、坏参数＝command、仅目录缺失＝cwd', () => {
-  // 回查不到（无匹配 callId）且目录同时缺失 → cwd 与 command 并存（locate 先记目录缺失再记回查缺失）。
+  // 回查不到（无匹配 callId）且目录同时缺失 → session-cwd、cwd 与 command 并存（两级折算先记
+  // 会话目录缺失，再记执行目录缺失，最后记回查缺失；design §3.1）。
   const both = locate({
     agent: { session: { header: {}, snapshotEvents: () => [{ type: 'tool/call', data: { callId: 'x', arguments: '{"command":"ls"}' } }] } },
     callId: 'missing',
   });
-  assert.deepEqual(both.degraded, ['cwd', 'command']);
+  assert.deepEqual(both.degraded, ['session-cwd', 'cwd', 'command']);
+  assert.equal(both.cwd, undefined);
+  assert.equal(both.sessionCwd, undefined);
   // 坏 JSON 参数（命令不可辨认）→ command。
   const bad = locate({
     agent: { session: { header: { cwd: 'C:\\w' }, snapshotEvents: () => [{ type: 'tool/call', data: { callId: 'c1', arguments: '{oops' } }] } },
     callId: 'c1',
   });
   assert.deepEqual(bad.degraded, ['command']);
+  assert.equal(bad.cwd, 'C:\\w');
+  assert.equal(bad.sessionCwd, 'C:\\w');
   // 参数对象可解析但无命令键 → 回查成功（arguments 透传作证据），不记 command（钉现行行为）。
   const noCommandKey = locate({
     agent: { session: { header: { cwd: 'C:\\w' }, snapshotEvents: () => [{ type: 'tool/call', data: { callId: 'c2', arguments: '{"path":"a.txt"}' } }] } },
@@ -341,11 +347,110 @@ test('locate 三形态的 degraded 值：回查不到＝command、坏参数＝co
   assert.deepEqual(noCommandKey.degraded, []);
   assert.equal(noCommandKey.command, undefined);
   assert.deepEqual(noCommandKey.arguments, { path: 'a.txt' });
-  // 仅目录缺失（回查成功）→ cwd。
+  // 仅目录缺失（回查成功）→ session-cwd 与 cwd 并存：会话目录缺失、执行目录随之缺失（不伪造）。
   const cwdOnly = locate({
     agent: { session: { header: {}, snapshotEvents: () => [{ type: 'tool/call', data: { callId: 'c3', arguments: '{"command":"npm i"}' } }] } },
     callId: 'c3',
   });
-  assert.deepEqual(cwdOnly.degraded, ['cwd']);
+  assert.deepEqual(cwdOnly.degraded, ['session-cwd', 'cwd']);
   assert.equal(cwdOnly.command, 'npm i');
+});
+
+// ── 目录两级折算（design §3.1：目录折叠与宿主投影同义） ──────────
+
+test('foldSessionCwd：最后一条合法 working-directory/change 覆写会话头；非法值跳过继续倒序', () => {
+  const change = (cwd) => ({ type: 'working-directory/change', data: { cwd } });
+  // 事件覆写会话头（合法事件流下与宿主投影同义：header 起步、change 覆写）。
+  assert.equal(
+    foldSessionCwd({ header: { cwd: 'C:\\orig' } }, [change('C:\\first'), change('C:\\second')]),
+    'C:\\second',
+    '取最后一条合法 change 事件',
+  );
+  // 非法 change（相对／空串／非字符串）跳过该事件继续倒序，不用它顶替。
+  assert.equal(
+    foldSessionCwd({ header: { cwd: 'C:\\orig' } }, [change('C:\\first'), change('rel\\path'), change(''), change(42)]),
+    'C:\\first',
+    '非法 cwd 跳过，继续倒序取更早的合法事件',
+  );
+  // 无合法 change → 会话头承接（同一合法性判定）。
+  assert.equal(foldSessionCwd({ header: { cwd: 'C:\\orig' } }, [change('relative')]), 'C:\\orig');
+  assert.equal(foldSessionCwd({ header: { cwd: 'C:\\orig' } }, []), 'C:\\orig', '无事件时由会话头承接');
+  // 会话头非法（相对路径）→ 会话当前目录缺失，不以猜测值顶替。
+  assert.equal(foldSessionCwd({ header: { cwd: 'relative' } }, []), undefined, '非法会话头不采纳');
+  assert.equal(foldSessionCwd({}, []), undefined, '无头无事件＝缺失');
+  assert.equal(foldSessionCwd(undefined, undefined), undefined, '会话缺失＝缺失');
+});
+
+test('resolveExecutionDir：与宿主 resolveWorkdir 同义——绝对取原值、相对按会话目录折算、缺省即会话目录', () => {
+  // 绝对路径取原值（会话目录缺失也成立）。
+  assert.equal(resolveExecutionDir('C:\\s', 'D:\\abs'), 'D:\\abs');
+  assert.equal(resolveExecutionDir(undefined, 'D:\\abs'), 'D:\\abs', '绝对 workdir 不依赖会话目录');
+  // 相对路径 + 会话目录 → resolve(sessionCwd, workdir)。
+  assert.equal(resolveExecutionDir('C:\\proj', 'sub\\dir'), 'C:\\proj\\sub\\dir');
+  assert.equal(resolveExecutionDir('C:\\proj', '..'), 'C:\\', '相对路径按 node:path 语义归一');
+  // 缺省／空串／非字符串 → 会话当前目录即执行目录（宿主 schema 先拒非字符串，执行不携带它）。
+  assert.equal(resolveExecutionDir('C:\\s', undefined), 'C:\\s');
+  assert.equal(resolveExecutionDir('C:\\s', ''), 'C:\\s');
+  assert.equal(resolveExecutionDir('C:\\s', null), 'C:\\s');
+  assert.equal(resolveExecutionDir('C:\\s', 42), 'C:\\s');
+  // 相对路径而会话目录缺失 → 执行目录缺失，不伪造。
+  assert.equal(resolveExecutionDir(undefined, 'rel\\path'), undefined);
+});
+
+test('locate 两级折算：cwd＝执行目录、sessionCwd＝会话目录，回查与折叠共用同一次事件快照', () => {
+  const change = (cwd) => ({ type: 'working-directory/change', data: { cwd } });
+  const call = (args) => ({ type: 'tool/call', data: { callId: 'k1', arguments: args } });
+  // change 事件覆写会话头，相对 workdir 按覆写后的会话目录折算。
+  const folded = locate({
+    agent: { session: { header: { cwd: 'C:\\orig' }, snapshotEvents: () => [call('{"command":"ls","workdir":"sub"}'), change('C:\\moved')] } },
+    callId: 'k1',
+  });
+  assert.equal(folded.sessionCwd, 'C:\\moved');
+  assert.equal(folded.cwd, 'C:\\moved\\sub');
+  assert.deepEqual(folded.degraded, []);
+  // 绝对 workdir 决定执行目录；会话目录仍随事件流折叠、可缺席并存（design §3.1 两标记可并存）。
+  const absoluteWorkdir = locate({
+    agent: { session: { header: {}, snapshotEvents: () => [call('{"command":"ls","workdir":"D:\\\\abs"}')] } },
+    callId: 'k1',
+  });
+  assert.equal(absoluteWorkdir.cwd, 'D:\\abs');
+  assert.equal(absoluteWorkdir.sessionCwd, undefined);
+  assert.deepEqual(absoluteWorkdir.degraded, ['session-cwd'], '仅会话目录缺失：session-cwd 单独在场');
+  // 相对 workdir 而会话目录缺失 → 执行目录缺失不伪造；两标记并存。
+  const relativeNoSession = locate({
+    agent: { session: { header: {}, snapshotEvents: () => [call('{"command":"ls","workdir":"sub"}')] } },
+    callId: 'k1',
+  });
+  assert.equal(relativeNoSession.cwd, undefined);
+  assert.deepEqual(relativeNoSession.degraded, ['session-cwd', 'cwd']);
+  // 回查与折叠共用同一次事件快照：snapshotEvents 恰被调用一次。
+  let reads = 0;
+  const counted = locate({
+    agent: {
+      session: {
+        header: { cwd: 'C:\\h' },
+        snapshotEvents: () => {
+          reads += 1;
+          return [call('{"command":"ls"}')];
+        },
+      },
+    },
+    callId: 'k1',
+  });
+  assert.equal(reads, 1, 'locate 对事件数组单次快照后折叠（design §3.1 请求快照）');
+  assert.equal(counted.cwd, 'C:\\h');
+  // 派发事件（对象参数）同样折算 workdir——折算对一切工具通用，不限于 pwsh。
+  const dispatched = locate({
+    agent: { session: { header: { cwd: 'C:\\s' }, snapshotEvents: () => [{ type: 'tool/code-dispatch-start', data: { subCallId: 'd1', arguments: { workdir: 'x' } } }] } },
+    callId: 'd1',
+  });
+  assert.equal(dispatched.cwd, 'C:\\s\\x');
+});
+
+test('readEvents：读取服务缺失／抛错／非数组 → undefined，不外抛', () => {
+  assert.equal(readEvents(undefined), undefined);
+  assert.equal(readEvents({}), undefined, '无 snapshotEvents 接口＝缺失');
+  assert.equal(readEvents({ snapshotEvents: () => { throw new Error('boom'); } }), undefined, '读取抛错内部吞');
+  assert.equal(readEvents({ snapshotEvents: () => 'not-array' }), undefined, '非数组＝缺失');
+  assert.deepEqual(readEvents({ snapshotEvents: () => [] }), [], '正常读返回数组');
 });

@@ -584,7 +584,8 @@ async function wiredEnv(options = {}) {
       // 否则按 unknownSubject 拒绝（degraded=command），到不了审查接线。
       session: {
         id: 's-true-wiring',
-        header: { cwd: '<仓库目录>' },
+        // 会话头 cwd 用真实绝对路径（design §3.1 合法目录判定：非绝对路径按缺失折叠）。
+        header: { cwd: process.cwd() },
         snapshotEvents: () => [
           { type: 'tool/call', data: { callId, arguments: '{"command":"Set-Content -Path state-check.txt -Value ok"}' } },
         ],
@@ -760,8 +761,8 @@ test('真接线：分叉会话人工通道在场——fallback=ask 审查失败�
   try {
     // 两种分叉形态各一套装配：内存新建（delegationDepth 缺席，主用例）与持久化回读（depth 0）。
     for (const forkHeader of [
-      { cwd: '<仓库目录>', parentSession: 's-root', isSeeded: true },
-      { cwd: '<仓库目录>', parentSession: 's-root', isSeeded: true, delegationDepth: 0 },
+      { cwd: process.cwd(), parentSession: 's-root', isSeeded: true },
+      { cwd: process.cwd(), parentSession: 's-root', isSeeded: true, delegationDepth: 0 },
     ]) {
       const wired = await wiredEnv({
         config: {

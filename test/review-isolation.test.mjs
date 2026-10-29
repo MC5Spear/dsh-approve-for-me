@@ -319,7 +319,7 @@ test('回查目录缺失：动作证据标注 degraded=cwd，工具按本次 pro
     process.chdir(prev);
   }
   const actionText = w.options[0].messages[1].content[0].text;
-  assert.ok(actionText.includes('degraded=cwd') && actionText.includes('工作目录未知'), '动作证据标注目录缺失');
+  assert.ok(actionText.includes('degraded=cwd') && actionText.includes('本次操作的工作目录未能确定'), '动作证据标注目录缺失（agent.cwdMissing 定稿句）');
   assert.ok(observations.round2.includes('CWD_SNAPSHOT_PROOF'), '相对路径按本次 process.cwd() 快照解析（读到请求期临时目录的 package.json）');
   assert.ok(!observations.round2.includes('dsh-approve-for-me'), '不落装载期实例基线（仓库根），也不冒充会话目录');
   assert.ok(!observations.round2.includes('D:/synthetic'), '不得把进程目录冒充为会话目录');
