@@ -330,6 +330,19 @@ test('可能性与建议不冒充必然义务：保守说明可与原风险同�
   assert.deepEqual(fails('card.presets.missing.remedy', 'en', 'The preset is absent from the current preset table. Check disabled plugins, compatible hosts and custom presets. Re-enabling or restarting may restore it, and may not restore it; pick a standard tier and use the uninstall manual cleanup. The plugin never parses nor rewrites user YAML.'), []);
 });
 
+test('三项可能性的局部否定作用域：可能不与无关cannot邻句不消除原风险', () => {
+  const zh = '审查输出的 token 上限（token 是模型计量文本的单位）；0 不向模型传输出上限，由模型或供应商默认值决定；推理模型可能先把额度用于推理，上限过小可能导致没有有效结论。';
+  const en = 'Review output cap in tokens (a token is the unit models use to measure text); 0 sends no cap, leaving the model or provider default; reasoning models may spend the budget on reasoning first — too small a cap can leave no usable conclusion.';
+  for (const [lang, original, from, to] of [
+    ['zh', zh, '可能先把', '可能不会先把'],
+    ['en', en, 'may spend', 'may not spend'],
+    ['zh', zh, '可能导致', '可能不导致'],
+    ['en', en, 'can leave', 'may or may not leave'],
+  ]) assert.deepEqual(fails('hint.reviewer.maxTokens', lang, original.replace(from, to)), [], '可能发生或可能不发生均不等于不能发生');
+  assert.deepEqual(fails('hint.reviewer.maxTokens', 'zh', zh + '无法识别的操作不能自动批准。'), [], '无关对象否定不反转额度风险');
+  assert.deepEqual(fails('hint.reviewer.maxTokens', 'en', en + ' An unknown action cannot be approved.'), [], 'unrelated cannot does not negate the token event');
+});
+
 test('反例：说明缺失整条报缺失', () => {
   assert.deepEqual(fails('hint.mode', 'zh', ''), ['说明缺失']);
   assert.deepEqual(fails('hint.mode', 'zh', undefined), ['说明缺失']);

@@ -487,9 +487,37 @@ const behaviorPositive = (zhSubject, zhAction, enSubject, enAction) => {
   return { zh: (text) => check(text, 'zh', zhSubject, zhAction), en: (text) => check(text, 'en', enSubject, enAction) };
 };
 const behaviorNegative = (zh, en) => ({ zh, en });
+
+/** 三项可能性事实：检查动作前的情态作用域；“可能不”仍是可能，“不可能”及必然结论不是。 */
+function possibleEvent(text, lang, subject, event) {
+  const maybe = lang === 'zh'
+    ? /(?:(?<!不)可能|或许|也许|或可|可以|可|会)(?:不|不会|无法)?\s*$/u
+    : /\b(?:may|might|could|can)(?:\s+or\s+(?:may|might|could|can))?(?:\s+not)?\s*$/iu;
+  const impossibleOrCertain = lang === 'zh'
+    ? /(?:不可能|不能|不会|无法|从不|绝不|绝不会|不|必然|一定|必定|总会)(?:再|能够|会)?\s*$/u
+    : /\b(?:cannot|can['’]t|could not|couldn['’]t|does not|doesn['’]t|do not|don['’]t|will not|won['’]t|never|always|must|certainly|definitely|not possible to|impossible to|guaranteed to)\s*$/iu;
+  let found = false;
+  for (const clause of text.split(/[。；;，,.!?！？\n—]/u)) {
+    if (!subject.test(clause)) continue;
+    for (const match of clause.matchAll(new RegExp(event.source, event.flags.replace('g', '') + 'g'))) {
+      const prefix = clause.slice(0, match.index);
+      const uncertain = maybe.test(prefix);
+      // 先认不可能，避免把“不会”的尾字“会”误当可能；“可能不会”则保留不确定性。
+      const uncertainNegative = lang === 'zh' ? /(?<!不)(?:可能|或许|也许)(?:不|不会|无法)\s*$/u.test(prefix) : /\b(?:may|might|could)(?:\s+or\s+(?:may|might|could))?\s+not\s*$/iu.test(prefix);
+      if (impossibleOrCertain.test(prefix) && !uncertainNegative || !uncertain) return false;
+      found = true;
+    }
+  }
+  return found;
+}
+const modalFact = (zhSubject, zhEvent, enSubject, enEvent) => ({
+  zh: (text) => possibleEvent(text, 'zh', zhSubject, zhEvent),
+  en: (text) => possibleEvent(text, 'en', enSubject, enEvent),
+});
+
 const BEHAVIOR_FACTS = {
   '采用模型或供应商默认': behaviorPositive(/模型|供应商/u, /由模型或供应商默认|默认/u, /model|provider/iu, /leaving|defaults?/iu),
-  '额度可能先用于推理': { zh: (text) => !/绝不|绝不会/u.test(text) && /先|优先|首先/u.test(text), en: (text) => !/never[^.;]{0,8}spend/iu.test(text) && /first|before/iu.test(text) },
+  '额度可能先用于推理': { zh: (text) => possibleEvent(text, 'zh', /推理/u, /先(?:把|将|用)|先花|优先/u), en: (text) => /first|before/iu.test(text) && possibleEvent(text, 'en', /reasoning/iu, /spend(?:s)?|eat|use/iu) },
   '审查文本和执行通知': behaviorPositive(/文本|通知/u, /发给|给执行助手/u, /text|notice/iu, /sent|shared/iu),
   '审查期间提前人工卡片': { zh: (text) => affirmativeConcept(text, 'zh', /提前|早|抢先/u), en: (text) => /early/iu.test(text) && affirmativeConcept(text, 'en', /appears?|shows?/iu) },
   '阈值依模型和强度': behaviorPositive(/模型|强度/u, /因模型|异|变|不同|决定/u, /model|effort/iu, /varies|depends|differs/iu),
@@ -523,13 +551,13 @@ const BEHAVIOR_FACTS = {
   '确认前兼容读取原值': behaviorPositive(/确认|原值/u, /读取|保留/u, /confirm|value/iu, /read|keeps?/iu),
   '未知按设置': behaviorPositive(/无法识别|不能识别/u, /按|处置/u, /cannot be identified/iu, /follow/iu),
   '检查服务后重试': behaviorPositive(/服务/u, /确认|检查|重试/u, /service/iu, /check|retry/iu),
-  '重新启用或重启可能恢复': { zh: (text) => !/(?:绝不|绝不会|必然|一定)[^。；]{0,6}恢复/u.test(text), en: (text) => !/(?:never|always|certainly)[^.;]{0,8}restore/iu.test(text) },
+  '重新启用或重启可能恢复': modalFact(/重新启用|重启/u, /恢复/u, /re.enabl|restart/iu, /restore|recover/iu),
   '标准档与卸载清理': behaviorPositive(/标准|卸载/u, /可改选|改选|处理|清理/u, /standard|uninstall/iu, /pick|cleanup/iu),
   '记录随会话': behaviorPositive(/记录/u, /跟随|跟着|属于/u, /record/iu, /follow|belong|stay/iu),
   '超四倍轮转留窗口删旧': behaviorPositive(/四倍/u, /轮转|删除/u, /four times/iu, /rewritten|rotation|rotat|delet/iu),
   '超文件上限删最旧': behaviorPositive(/文件/u, /删除|删/u, /file/iu, /deleted|delet|go first|dropped/iu),
   '轮转前备份': behaviorPositive(/轮转/u, /备份/u, /rotation|rotat/iu, /back/iu),
-  '过小上限可能无有效结论': behaviorNegative(/(?:没有|无|得不到|不产生|难以)(?:任何)?(?:有效|可用)(?:的)?(?:结论|结果)/u, /(?:no|without)(?: a)? (?:usable|valid) (?:conclusion|answer)/iu),
+  '过小上限可能无有效结论': { zh: (text) => /(?:没有|无|得不到|不产生|难以)(?:任何)?(?:有效|可用)(?:的)?(?:结论|结果)/u.test(text) && possibleEvent(text, 'zh', /过小|太低|太小|不足/u, /导致|得不到|无可用/u), en: (text) => /(?:no|without)(?: a)? (?:usable|valid) (?:conclusion|answer)/iu.test(text) && possibleEvent(text, 'en', /too small|too low|insufficient/iu, /leave|end/iu) },
   '操作无法识别': behaviorNegative(/(?:无法|不能|难以)(?:辨认|识别|确定)/u, /(?:cannot|unable|can't)[^.;]{0,12}(?:identif|recogniz|recover)/iu),
   '模型人工不能推翻': behaviorNegative(/(?:模型[^。；]{0,12}人工|人工[^。；]{0,12}模型)[^。；]{0,6}(?:都不能|不能|无法|不可|均不)[^。；]{0,3}(?:推翻|改变|反转)/u, /(?:beyond model or human|neither model nor human[^.;]{0,12}(?:override|overturn)|no[^.;]{0,12}(?:model|human)[^.;]{0,12}override)/iu),
   '不是额外授权': behaviorNegative(/(?:不等于|并非|不是)[^。；]{0,8}(?:授予|授权|权限)/u, /(?:grants? no|no extra|no additional)[^.;]{0,12}permission/iu),

@@ -5117,6 +5117,45 @@ test('复合行为事实：独立动作、主体与对象也各自有真实相�
   assert.deepEqual(errors, [], errors.join('\n'));
 });
 
+test('三项可能性事实：不可能与必然类别反转不同于可能不，双语真实字典逐项检出', () => {
+  resetHooks();
+  const original = makeCtx();
+  loadClient().apply(original.ctx);
+  const dicts = original.dictionaries[0].dicts;
+  const cases = [];
+  for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
+    for (const to of ['不会先把', '不能先把', '不可能先把', '不先把', '必然先把']) cases.push([key, 'zh', '额度可能先用于推理', '可能先把', to]);
+    for (const to of ['cannot spend', "can't spend", 'does not spend', "doesn't spend", 'never spend', 'always spend', 'must spend']) cases.push([key, 'en', '额度可能先用于推理', 'may spend', to]);
+    for (const to of ['不会导致', '不能导致', '不可能导致', '不导致', '必然导致']) cases.push([key, 'zh', '过小上限可能无有效结论', '可能导致', to]);
+    cases.push([key, 'zh', '过小上限可能无有效结论', '可能导致没有有效结论', '不可能没有有效结论']);
+    for (const to of ['cannot leave', "can't leave", 'does not leave', "doesn't leave", 'never leave', 'always leave', 'must leave']) cases.push([key, 'en', '过小上限可能无有效结论', 'can leave', to]);
+  }
+  for (const to of ['不会恢复', '不能恢复', '不可能恢复', '不恢复', '必然恢复']) cases.push(['card.presets.missing.remedy', 'zh', '重新启用或重启可能恢复', '可能恢复', to]);
+  for (const to of ['cannot restore', "can't restore", 'does not restore', "doesn't restore", 'never restore', 'always restore', 'must restore']) cases.push(['card.presets.missing.remedy', 'en', '重新启用或重启可能恢复', 'may restore', to]);
+  const errors = [];
+  for (const [key, lang, id, from, to] of cases) {
+    const current = dicts[lang][key].replace(/\u2060/gu, '');
+    assert.ok(current.includes(from), `${key}/${lang} 情态反转目标真实在场：${from}`);
+    const mutated = current.replace(from, to);
+    let count = 0;
+    const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+      if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+      count++;
+      return prefix + JSON.stringify(mutated);
+    });
+    assert.equal(count, 1);
+    resetHooks();
+    const env = makeCtx();
+    loadClient(source).apply(env.ctx);
+    const actual = env.dictionaries[0].dicts[lang][key];
+    assert.equal(actual, mutated);
+    if (!copyFactFailures(key, lang, actual).includes(id)) errors.push(`${key}/${lang}/${id}:${to}`);
+    assert.deepEqual(copyFactFailures(key, lang, dicts[lang][key]), [], '当前可能性说明须保持通过');
+  }
+  assert.equal(cases.length, 62);
+  assert.deepEqual(errors, [], errors.join('\n'));
+});
+
 test('当前token风险显示：原生字典源码错位和部分保护变异必须失败', () => {
   for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
     resetHooks();
