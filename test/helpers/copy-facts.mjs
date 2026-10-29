@@ -356,7 +356,11 @@ export function copyFactFailures(key, lang, text) {
   if (JSON.stringify(actual) !== JSON.stringify(expected)) failures.push('占位符名称或次数');
   return failures;
 }
-/** 中文风险分句中的多字词须有防拆保护；词义由上面的独立事实规则检查。 */
+/** 防拆连续段必须覆盖否定、有效性和结论三个风险片段，不能只保护相邻的额度说明。 */
 export function tokenRiskDisplayProtected(text) {
-  return String(text).split(/[。；;（）()]/u).some((part) => /(?:过小|太低|不足)/u.test(part) && /\p{Script=Han}\u2060\p{Script=Han}\u2060\p{Script=Han}/u.test(part));
+  return String(text).split(/[。；;（）()]/u).some((part) => {
+    if (!/(?:过小|太小|太低|不足)/u.test(normalizeCopy(part))) return false;
+    const protectedRuns = part.match(/\p{Script=Han}(?:\u2060\p{Script=Han})+/gu) ?? [];
+    return protectedRuns.some((run) => /(?:没有|无|得不到|不产生|难以)(?:任何)?(?:有效|可用)(?:的)?(?:结论|结果|答案)/u.test(normalizeCopy(run)));
+  });
 }

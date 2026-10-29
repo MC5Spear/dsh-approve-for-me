@@ -138,6 +138,9 @@ test('token 类：带防拆连接符的换措辞正例事实与显示保护都�
   const rewordedZh = '审查输出最多允许多少 token（token 是模型用来计量文本大小的单位）。上限填 0 时不传任何输出上限，改由所用模型或供应商的默认值决定；推理可能先把额度耗在推理上，上限设得过小可能得\u2060不\u2060到\u2060有\u2060效\u2060结\u2060论。具体阈值随所用模型与推理强度而变。';
   assert.deepEqual(fails('help.reviewer.maxTokens', 'zh', rewordedZh), []);
   assert.equal(tokenRiskDisplayProtected(rewordedZh), true, '换措辞正例保留防拆连接符，显示保护应过');
+  const alternative = rewordedZh.replace('得\u2060不\u2060到\u2060有\u2060效\u2060结\u2060论', '无\u2060可\u2060用\u2060结\u2060论');
+  assert.deepEqual(fails('help.reviewer.maxTokens', 'zh', alternative), []);
+  assert.equal(tokenRiskDisplayProtected(alternative), true, '无可用结论等义表达的整段保护也应通过');
   assert.deepEqual(
     fails(
       'hint.reviewer.maxTokens',
@@ -146,6 +149,19 @@ test('token 类：带防拆连接符的换措辞正例事实与显示保护都�
     ),
     [],
   );
+});
+
+test('显示反例：防拆字符错位或只覆盖风险的一部分都不能通过', () => {
+  const bare = '审查输出的 token 上限（token 是模型计量文本的单位）；0 不向模型传输出上限，由模型或供应商默认值决定；推理模型可能先把额度用于推理，上限过小可能导致没有有效结论。';
+  for (const wrong of [
+    bare.replace('上限过小', '上\u2060限\u2060过小'),
+    bare.replace('没有有效结论', '没\u2060有有效结论'),
+    bare.replace('没有有效结论', '没有有\u2060效\u2060结\u2060论'),
+    bare.replace('没有有效结论', '没\u2060有\u2060有\u2060效结论'),
+  ]) {
+    assert.deepEqual(fails('hint.reviewer.maxTokens', 'zh', wrong), [], '错位显示不应误报语义事实');
+    assert.equal(tokenRiskDisplayProtected(wrong), false, '否定、有效性及结论须位于同一防拆段');
+  }
 });
 
 // ── 反例：同一 copyFactFailures 必须报出对应失败（能失败性） ──────────────────

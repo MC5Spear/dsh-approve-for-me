@@ -4694,6 +4694,36 @@ test('当前零值与拒绝规则提示：直接反转加载副本由同一live�
   }
 });
 
+test('当前token风险显示：原生字典源码错位和部分保护变异必须失败', () => {
+  for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
+    resetHooks();
+    const originalEnv = makeCtx();
+    loadClient().apply(originalEnv.ctx);
+    const bare = originalEnv.dictionaries[0].dicts.zh[key].replace(/\u2060/gu, '');
+    for (const mutated of [
+      bare.replace('上限过小', '上\u2060限\u2060过小'),
+      bare.replace('没有有效结论', '没\u2060有有效结论'),
+      bare.replace('没有有效结论', '没有有\u2060效\u2060结\u2060论'),
+      bare.replace('没有有效结论', '没\u2060有\u2060有\u2060效结论'),
+    ]) {
+      let count = 0;
+      const source = SOURCE.replace(/("(?:hint|help)\.reviewer\.maxTokens":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+        if (!prefix.includes(`"${key}"`) || !/[\u3400-\u9fff]/u.test(body)) return whole;
+        count++;
+        return prefix + JSON.stringify(mutated);
+      });
+      assert.equal(count, 1, '只替换指定的当前中文定义');
+      resetHooks();
+      const env = makeCtx();
+      loadClient(source).apply(env.ctx);
+      const actual = env.dictionaries[0].dicts.zh[key];
+      assert.equal(actual, mutated, '错位连接符确已进入真实加载字典');
+      assert.deepEqual(copyFactFailures(key, 'zh', actual), [], '必要风险事实仍在，不能拿语义失败替代显示检查');
+      assert.equal(tokenRiskDisplayProtected(actual), false, '实际风险三个语义片段未共同防拆必须失败');
+    }
+  }
+});
+
 test('字典按职责保护：稳定名称精确、普通说明事实与占位符', async () => {
   resetHooks();
   const client = loadClient();
