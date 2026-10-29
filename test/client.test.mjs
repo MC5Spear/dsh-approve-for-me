@@ -2,6 +2,18 @@ import assert from 'node:assert/strict';
 import test, { after } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { DEFAULT_RATIONALE } from '../lib/reviewer.js';
+import { COPY_FACTS, copyFactFailures, tokenRiskDisplayProtected } from './helpers/copy-facts.mjs';
+
+/** 渲染期望从真实字典模板组装；事实和固定名称另有独立断言，普通句不再转抄。 */
+function warningText(dict, key, { configured = '', reason = '', layer, model = '' }) {
+  let template = dict[key];
+  if (!model) template = template.split(/(?<=[。.])\s*/u).filter((sentence) => !sentence.includes('{effective}')).join('');
+  const result = template.replace('{configured}', () => configured).replace('{reason}', () => reason)
+    .replace('{effective}', `${dict[`layer.${layer}`]}${/[\u3400-\u9fff]/u.test(dict[`layer.${layer}`]) ? '：' : ': '}${model}`);
+  if (model || ['warn.modelIssue.globalUnset', 'warn.modelIssue.followParent'].includes(key)) return result;
+  const suffix = dict['warn.modelIssue.layer'].replace('{layer}', dict[`layer.${layer}`]);
+  return result + (/[\u3400-\u9fff]/u.test(suffix) ? '' : ' ') + suffix;
+}
 
 /** 文件级收尾：清掉最后一个用例留下的轮询定时器，否则测试进程不退出。 */
 after(() => {
@@ -110,11 +122,11 @@ const primitivesStub = {
  * 求值 client.js 并取回 factory 产物。
  * @returns {object} 模块导出（`apply` / `inject`）。
  */
-function loadClient() {
+function loadClient(source = SOURCE) {
   let definition;
   const sandbox = { __ModuleLoader__: { load: (value) => { definition = value; } } };
   // eslint-disable-next-line no-new-func
-  new Function('window', SOURCE)(sandbox);
+  new Function('window', source)(sandbox);
   return definition.factory((name) => {
     if (name === 'react') return reactStub;
     if (name === 'react/jsx-runtime') return jsxStub;
@@ -527,7 +539,7 @@ test('设置页分置提示（§7.2.0）：global 渲染在表单顶部，rule �
   const topLevel = form.props.children.filter(Boolean);
   assert.equal(topLevel[0].props.className, 'dsafm_warnline', '表单顶层第一个节点应是 global 提示');
   const globalText = JSON.stringify(topLevel[0]);
-  assert.match(globalText, /默认审查模型不可用/, 'global 提示用 warn.modelIssue.global 文案');
+  assert.equal(flatText(topLevel[0]), warningText(dicts.zh, 'warn.modelIssue.global', { reason: '模型不在目录', layer: 'unavailable' }), 'global模板渲染真实原因和终点');
   assert.match(globalText, /模型不在目录/, '提示正文包含不可用原因');
   assert.match(globalText, /当前生效：无可用审查模型（unavailable）。/, '不可用键空串时以 warn.modelIssue.layer 层含义独立成句承接（§7.2.0/§8.5.1）');
   assert.doesNotMatch(globalText, /（unavailable）：/, '层含义句后不得拼「层含义：」悬空冒号');
@@ -617,9 +629,7 @@ test('设置页空全局默认提示（§7.2.0）：globalUnset 键渲染在表�
   const topLevel = form.props.children.filter(Boolean);
   assert.equal(topLevel[0].props.className, 'dsafm_warnline', '空默认提示与不可用提示同位：表单顶部、第一个字段之前');
   const text = JSON.stringify(topLevel[0]);
-  assert.match(text, /默认审查模型未设置/, '用 warn.modelIssue.globalUnset 文案（按 configured 空串选键）');
-  assert.match(text, /审查跟随执行助手的当前模型/, '文案说明所用审查模型');
-  assert.match(text, /独立于执行助手会话.*审查调用/u, '文案说明审查调用与执行助手会话独立');
+  assert.equal(flatText(topLevel[0]), warningText(dicts.zh, 'warn.modelIssue.globalUnset', { layer: 'follow-parent' }), '空 configured 选择globalUnset；事实由独立说明检查保护');
   assert.doesNotMatch(text, /不可用|故障/, '状态语义：空默认提示不含「不可用」「故障」措辞（design §7.2.0）');
   assert.doesNotMatch(text, /实际使用/, 'effectiveModel 为空串时省略「实际使用」句');
   assert.doesNotMatch(text, /全局默认未设置，使用执行助手当前模型（follow-parent）/u, '空默认键不补层含义句——首句已承载层含义（design §7.2.0）');
@@ -1025,25 +1035,10 @@ test('接管工具名单：label 走字典键 field.tools，help.tools 中英同
   const env = makeCtx();
   client.apply(env.ctx);
   const dicts = env.dictionaries[0].dicts;
-  // 关键事实分层断言（不盯整句字面）：文案措辞可调，语义要素缺失即红。
-  const zhFacts = (text) => ({
-    每行一个工具名: text.includes('每行一个工具名'),
-    空清单覆盖所有工具: text.includes('空清单覆盖所有工具'),
-    只处理名单内工具: text.includes('只处理名单内工具'),
-    其余工具保持宿主原流程: text.includes('其余工具保持宿主原流程'),
-  });
-  for (const [fact, ok] of Object.entries(zhFacts(dicts.zh['help.tools']))) {
-    assert.ok(ok, `zh help.tools 缺关键事实：${fact}`);
+  for (const lang of ['zh', 'en']) {
+    assert.deepEqual(copyFactFailures('help.tools', lang, dicts[lang]['help.tools']), [], `${lang} 工具范围必要事实`);
   }
-  // 变异测试：改坏任一事实，分层断言必须能红（防退化成整句存在性检查）。
-  assert.equal(
-    Object.values(zhFacts(dicts.zh['help.tools'].replace('每行一个工具名', '每行若干工具名'))).every(Boolean),
-    false,
-    '改坏「每行一个」事实后断言必须失败',
-  );
-  assert.match(dicts.en['help.tools'], /Tools under auto-approval, one name per line/u);
-  assert.match(dicts.en['help.tools'], /Empty covers every tool's escalations/u, 'en 同步「空清单覆盖全部」事实');
-  assert.match(dicts.en['help.tools'], /the rest keep the host flow/u, 'en 同步「其余走宿主原流程」事实');
+  assert.ok(copyFactFailures('help.tools', 'zh', dicts.zh['help.tools'].replace('每行一个工具名', '每行若干工具名')).length > 0, '每行数量改变必须失败');
   // 字段标签进字典：zh 保留现名，en 有对译；两语言必须同键同在。
   assert.equal(dicts.zh['field.tools'], '纳入自动审批的工具');
   assert.equal(dicts.en['field.tools'], 'Tools under auto-approval');
@@ -1494,7 +1489,7 @@ test('composer 分置提示（§7.2.0）：session 条目渲染在选择控件�
   const warns = findAllByClass(wrap, 'dsafm_warnline');
   assert.equal(warns.length, 1, '应渲染一条 session 提示');
   const text = JSON.stringify(warns[0]);
-  assert.match(text, /本会话选择的审查模型 zai\/gone-9 不可用：provider 不存在/, '用 warn.modelIssue.session 文案，且 {configured} 渲染为条目 configured 原值（design §10.2）');
+  assert.equal(flatText(warns[0]), warningText(dicts.zh, 'warn.modelIssue.session', { configured: 'zai/gone-9', reason: 'provider 不存在', layer: 'follow-parent' }), 'session模板包含所配引用、原因和真实回退层');
   assert.match(text, /provider 不存在/, '正文包含原因');
   assert.match(text, /当前生效：全局默认未设置，使用执行助手当前模型（follow-parent）。/, '不可用键空串时以 warn.modelIssue.layer 层含义独立成句承接（§7.2.0/§8.5.1）');
   assert.match(text, /provider 不存在。当前生效：/, '中文句间直连无空格（design §7.5）');
@@ -1551,7 +1546,7 @@ test('composer 分置提示（§7.2.0/§7.5）：英文空串形态以层含义�
   const text = flatText(warns[0]);
   assert.equal(
     text,
-    "This session's reviewer model zai/gone-9 is unavailable: unknown model. Currently effective: No usable reviewer model (unavailable).",
+    warningText(dicts.en, 'warn.modelIssue.session', { configured: 'zai/gone-9', reason: 'unknown model', layer: 'unavailable' }),
     '剥离「Currently using」句后层含义句承接，句间恰一个半角空格（design §7.2.0/§7.5）',
   );
 });
@@ -1610,7 +1605,8 @@ test('composer 触发器档位随生效层（§7.3.2）：回退形态档位段�
   assert.ok(findByClass(tree, 'dsafm_seatwrap'), '回退形态应渲染包裹层（分置提示在场）');
   const fbWarn = findByClass(tree, 'dsafm_warnline');
   assert.ok(fbWarn, '回退形态应有会话指定不可用提示行');
-  assert.match(flatText(fbWarn), /本会话选择的审查模型 zai\/gone-9 不可用/, '提示句含退回前所配引用原值');
+  assert.ok(flatText(fbWarn).includes('zai/gone-9'), '提示显示退回前所配引用原值');
+  assert.ok(flatText(fbWarn).includes(dicts.zh['warn.modelIssue.session'].split('{configured}')[0]), '提示选用session模板而不是global/rule');
   // 座位模型段引用与提示句实际使用引用逐字一致（design §10.2：条目 effectiveModel 归一，同 state.effective 口径）。
   assert.ok(flatText(fbWarn).includes(`：zai/glm-5.3。`) && flatText(findByClass(anchor, 'dsafm_seat_model')).endsWith('zai/glm-5.3'), '座位与提示句的生效模型引用逐字一致');
 });
@@ -2085,10 +2081,7 @@ test('composer 空全局默认提示（§7.2.0）：会话未选择且全局默�
   const warns = findAllByClass(wrap, 'dsafm_warnline');
   assert.equal(warns.length, 1, '控件附近至多一条（design §7.2.0）');
   const text = JSON.stringify(warns[0]);
-  assert.match(text, /本会话未单独选择审查模型/, '用 warn.modelIssue.followParent 文案');
-  assert.match(text, /按未设置的全局默认跟随执行助手的当前模型/, '文案说明跟随语义');
-  assert.match(text, /独立于执行助手会话.*审查调用/u, '文案说明审查调用与执行助手会话独立');
-  assert.match(text, /实际使用：全局默认未设置，使用执行助手当前模型（follow-parent）：zai\/glm-5\.3/, '有生效引用时按「实际使用：层含义：引用」呈现');
+  assert.equal(flatText(warns[0]), warningText(dicts.zh, 'warn.modelIssue.followParent', { layer: 'follow-parent', model: 'zai/glm-5.3' }), '真实跟随层和生效模型进入对应模板');
   assert.doesNotMatch(text, /不可用|故障/, '状态语义：不含「不可用」「故障」措辞');
 });
 
@@ -2138,7 +2131,7 @@ test('composer 空全局默认提示（§7.2.0）：effectiveModel 空串时省�
   const warns = findAllByClass(wrap, 'dsafm_warnline');
   assert.equal(warns.length, 1, '控件附近至多一条');
   const text = JSON.stringify(warns[0]);
-  assert.match(text, /本会话未单独选择审查模型/, '用 warn.modelIssue.followParent 文案');
+  assert.equal(flatText(warns[0]), warningText(dicts.zh, 'warn.modelIssue.followParent', { layer: 'follow-parent' }), '空生效模型只渲染followParent首段');
   assert.doesNotMatch(text, /实际使用/, 'effectiveModel 为空串时省略「实际使用」句');
   assert.doesNotMatch(text, /全局默认未设置，使用执行助手当前模型（follow-parent）/u, '空默认键不补层含义句——首句已承载层含义（design §7.2.0）');
 });
@@ -2190,8 +2183,8 @@ test('composer 空全局默认提示（§7.2.0/§7.5）：遮蔽键空串形态�
   const warns = findAllByClass(wrap, 'dsafm_warnline');
   assert.equal(warns.length, 1, '控件附近至多一条');
   const warningText = flatText(warns[0]);
-  assert.match(warningText, /仅当解析落到全局默认层/u, '保留跟随执行助手模型的生效条件');
-  assert.match(warningText, /独立于执行助手会话.*审查调用/u, '说明审查调用与执行助手会话独立');
+  assert.deepEqual(copyFactFailures('warn.modelIssue.globalUnsetShadowed', 'zh', dicts.zh['warn.modelIssue.globalUnsetShadowed']), [], '遮蔽提示保留条件与独立调用事实');
+  assert.ok(warningText.startsWith(dicts.zh['warn.modelIssue.globalUnsetShadowed'].split('实际使用：')[0]), '渲染选用遮蔽模板首段');
   assert.match(warningText, /。当前生效：无可用审查模型（unavailable）。$/u, '层含义句承接，中文句间直连无空格');
   assert.doesNotMatch(warningText, /实际使用/u, '生效模型为空时不显示实际使用句');
 });
@@ -2244,8 +2237,7 @@ test('composer 空全局默认提示（§7.2.0）：被有效映射截住（shad
   const warns = findAllByClass(wrap, 'dsafm_warnline');
   assert.equal(warns.length, 1, '控件附近至多一条');
   const text = JSON.stringify(warns[0]);
-  assert.match(text, /默认审查模型未设置：仅当解析落到全局默认层时/, '用 warn.modelIssue.globalUnsetShadowed 文案（条件从句）');
-  assert.match(text, /实际使用：按执行助手的模型映射（parent-map）：zai\/glm-5\.3/, 'shadowed 变体带「实际使用：层含义：引用」尾句（design §7.2.2 定稿表）');
+  assert.equal(flatText(warns[0]), warningText(dicts.zh, 'warn.modelIssue.globalUnsetShadowed', { layer: 'parent-map', model: 'zai/glm-5.3' }), '遮蔽模板渲染真实映射层与引用');
   assert.doesNotMatch(text, /按未设置的全局默认跟随/u, '被映射截住不得声称当前跟随（design §10.2 巡检判据）');
   assert.doesNotMatch(text, /本会话未单独选择审查模型/, '不得误用 followParent 键文案');
 });
@@ -2299,8 +2291,7 @@ test('composer 提示互斥（§7.2.0）：会话已选择且不可用时只渲�
   const warns = findAllByClass(wrap, 'dsafm_warnline');
   assert.equal(warns.length, 1, '互斥：控件附近至多一条（design §7.2.0）');
   const text = JSON.stringify(warns[0]);
-  assert.match(text, /本会话选择的审查模型 zai\/gone-9 不可用：provider 不存在/, '渲染的是 session 不可用条目，含所配引用原值（design §10.2）');
-  assert.match(text, /实际使用：全局默认未设置，使用执行助手当前模型（follow-parent）：zai\/glm-5\.3/, '跟随状态由该条目的回退结果承载');
+  assert.equal(flatText(warns[0]), warningText(dicts.zh, 'warn.modelIssue.session', { configured: 'zai/gone-9', reason: 'provider 不存在', layer: 'follow-parent', model: 'zai/glm-5.3' }), 'session不可用条目独占提示并展示真实跟随结果');
   assert.doesNotMatch(text, /本会话未单独选择审查模型/, '不得另渲染空全局默认行（warn.modelIssue.followParent）');
 });
 
@@ -4659,7 +4650,51 @@ test('审批卡片状态条 §7.4：倒计时按状态锚定，deadlineKind 与�
   }
 });
 
-test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值', async () => {
+/** 当前字典、等义样本和源文本变异使用同一个登记集与事实检查器。 */
+function dictionaryFactFailures(dicts) {
+  return Object.entries(dicts).flatMap(([lang, dict]) => Object.keys(COPY_FACTS)
+    .flatMap((key) => copyFactFailures(key, lang, dict[key]).map((fact) => `${lang}/${key}: ${fact}`)));
+}
+
+test('当前mode帮助确实受测：两语关闭仍接管的加载副本必须失败', () => {
+  assert.ok(Object.hasOwn(COPY_FACTS, 'help.mode'), '专用mode键必须进入真实字典枚举');
+  const badCopy = {
+    zh: '关闭仍正常接管；没有规则检查和模型说明。',
+    en: 'Off still takes over; no rule check or LLM review is needed.',
+  };
+  const source = SOURCE.replace(/("help\.mode":\s*)"(?:[^"\\\\]|\\\\.)*"/gu, (whole, prefix) => {
+    const text = whole.includes('总开关') ? badCopy.zh : badCopy.en;
+    return prefix + JSON.stringify(text);
+  });
+  for (const lang of ['zh', 'en']) {
+    resetHooks();
+    const env = makeCtx();
+    loadClient(source).apply(env.ctx);
+    assert.equal(env.dictionaries[0].dicts[lang]['help.mode'], badCopy[lang], '变异必须进入实际加载字典');
+    assert.ok(dictionaryFactFailures(env.dictionaries[0].dicts).some((failure) => failure.startsWith(`${lang}/help.mode:`)), '同一live检查必须检出关闭反转');
+  }
+});
+
+test('当前零值与拒绝规则提示：直接反转加载副本由同一live检查检出', () => {
+  for (const [key, replacements] of [
+    ['hint.human.timeoutMs', { zh: '等待人工的上限（毫秒）；0 立即不拒绝。', en: "Human-answer wait limit (ms); 0 immediately doesn't reject." }],
+    ['hint.denyPatterns', { zh: '每行一条正则表达式；命中不拒绝，模型与人工都不能推翻。', en: 'One regex per line; a hit does not reject, and neither model nor human can override it.' }],
+  ]) {
+    let index = 0;
+    const pattern = new RegExp(`("${key.replaceAll('.', '\\.')}":\\s*)"[^"\\r\\n]*"`, 'gu');
+    const source = SOURCE.replace(pattern, (whole, prefix) => prefix + JSON.stringify(index++ === 0 ? replacements.zh : replacements.en));
+    assert.equal(index, 2, '必须替换两条真实字典定义');
+    resetHooks();
+    const env = makeCtx();
+    loadClient(source).apply(env.ctx);
+    for (const lang of ['zh', 'en']) {
+      assert.equal(env.dictionaries[0].dicts[lang][key], replacements[lang], '反转值确已加载');
+      assert.ok(dictionaryFactFailures(env.dictionaries[0].dicts).some((failure) => failure.startsWith(`${lang}/${key}:`)), '同一live检查必须检出直接反转');
+    }
+  }
+});
+
+test('字典按职责保护：稳定名称精确、普通说明事实与占位符', async () => {
   resetHooks();
   const client = loadClient();
   const env = makeCtx();
@@ -4667,20 +4702,19 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
   const { zh, en } = env.dictionaries[0].dicts;
   const zhKeys = Object.keys(zh).sort();
   const enKeys = Object.keys(en).sort();
-  assert.deepEqual(zhKeys, enKeys, '中英字典必须同键成对（§10.2 名称表）');
+  assert.deepEqual(zhKeys, enKeys, '中英字典必须同键成对');
+  for (const key of zhKeys) {
+    const names = (text) => [...text.matchAll(/\{([a-zA-Z][\w]*)\}/gu)].map((hit) => hit[1]).sort();
+    assert.deepEqual(names(zh[key]), names(en[key]), `${key} 两语占位符名称与次数一致`);
+  }
   // 状态机与原因（§7.4）。
   assert.equal(zh['cardstate.reviewing'], '正在自动审批');
   assert.equal(zh['cardstate.waiting'], '等待你决定');
-  assert.equal(zh['cardstate.waiting.deny'], '自动审查结论为拒绝：{reason}');
-  assert.equal(zh['cardstate.waiting.timeout'], '自动审查超时，未取得有效结论');
   // 退役键零残留（design §7.5）：countdown.unlimited 与 warn.noLimit 属退役分支的键，不得在册。
   assert.equal(zh['countdown.unlimited'], undefined);
   assert.equal(en['countdown.unlimited'], undefined);
   assert.equal(zh['warn.noLimit'], undefined);
   assert.equal(en['warn.noLimit'], undefined);
-  // 时限零值 hint 定稿（§7.2.2）。
-  assert.equal(zh['hint.reviewer.timeoutMs'], '自动审查的等待上限（毫秒）；0 立即超时。');
-  assert.equal(en['hint.reviewer.timeoutMs'], 'Auto-review wait limit (ms); 0 times out immediately.');
   // 列表双标注主槽与回退（§8.5.1）。
   assert.equal(zh['list.outcome'], '最终审批：{v}');
   assert.equal(zh['list.decision'], '模型结论：{v}');
@@ -4713,16 +4747,29 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
   assert.equal(zh['detail.tokens'], '推理 token 用量');
   assert.ok(zh['view.retention'].length > 0, '保留范围文案应在场');
 
-  // 文案断言分两层（design §10.2 B2 分层口径）：
-  // ① DESIGN_FINAL 逐键精确断言——短文案：字段名、选项、枚举、模板句、占位符键、单行短提示（hint.* 短句）；
-  // ② LONG_COPY_FACTS 关键事实断言——长帮助与提示：help.*、长 warn.*（空全局默认三键）、
-  //    view.retention、card.presets.missing.remedy，以及两条长说明位（hint.reviewer.maxTokens、
-  //    card.presets.unavailable）——长说明不因 hint/card 键前缀整段冻结，等义精简可过、
-  //    删除必要事实、条件或占位符的改动由子串检出。
-  // 两张清单都是手工转抄，不是设计文件解析校验；设计定稿表修订时须同步本清单。
-  // 短文案与本地期望值不符时失败；长文案仅检查下列事实片段，设计表需另行人工核对。
-  const DESIGN_FINAL = [
-    // —— §7.2.2 字段名称与选项文案表 ——
+  // 名称和枚举按职责精确保护，普通说明不属于名称。
+  const STABLE_NAMES = [
+    ['source.rule', '规则（rule）', 'rule'],
+    ['source.hard', '硬性拦截（hard）', 'hard'],
+    ['source.llm', '审查（llm）', 'review (llm)'],
+    ['source.human', '人工（human）', 'human'],
+    ['source.timeout', '超时（timeout）', 'timeout'],
+    ['source.gateway', '通道关闭（gateway）', 'card closed (gateway)'],
+    ['source.signal', '取消（signal）', 'cancelled (signal)'],
+    ['source.error', '异常（error）', 'error'],
+    ['stage.assembly', '装配（assembly）', 'assembly'],
+    ['stage.queue', '排队（queue）', 'queue'],
+    ['stage.review', '审查（review）', 'review'],
+    ['stage.human', '人工（human）', 'human'],
+    ['origin.main', '主会话（main）', 'main session'],
+    ['origin.subagent', '子代理（subagent）', 'subagent'],
+    ['decision.allow', '放行（allow）', 'Allowed (allow)'],
+    ['decision.allowed-once', '放行（allowed-once）', 'Allowed (allowed-once)'],
+    ['decision.deny', '拒绝（deny）', 'Denied (deny)'],
+    ['decision.rejected', '拒绝（rejected）', 'Denied (rejected)'],
+    ['decision.timed-out', '超时（timed-out）', 'Timed out (timed-out)'],
+    ['decision.error', '失败（error）', 'Failed (error)'],
+    ['decision.cancelled', '取消（cancelled）', 'Cancelled (cancelled)'],
     ['card.presets.label', '启用自动审批的权限预设', "Presets that enable auto-approval"],
     ['option.trigger.unknown.skip', '保持宿主原审批流程', "Keep the host approval flow"],
     ['option.trigger.unknown.review', '继续自动审查', "Continue with automatic review"],
@@ -4737,19 +4784,11 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['card.map.col.effort', '推理强度', "Effort"],
     ['card.map.placeholder.parent', '执行助手模型 id', "Agent model id"],
     ['card.map.placeholder.provider', 'provider id', "Provider id"],
-    ['card.map.duplicate', '匹配条件重复：同一作用范围与执行助手模型只能有一条规则。', "Duplicate match condition: one rule per scope and agent model."],
-    ['card.map.incomplete', '本行未选执行助手模型，保存时不保留该行。', "No agent model chosen on this row; it is not kept when saving."],
-    ['card.map.legacy.title', '旧键含斜杠，请确认原意。', "This legacy key contains a slash; confirm its original meaning."],
     ['option.legacy.any', '任意 provider，模型 id 为 {id}', "Any provider, model id {id}"],
     ['option.legacy.named', '指定 provider {provider}，模型 id 为 {id}', "Provider {provider}, model id {id}"],
-    ['card.map.legacy.pending', '确认前按兼容规则读取，原值保留。', "Until confirmed, the key keeps its value and is read per the compatibility rules."],
     ['card.map.backToList', '返回列表选择', "Back to list"],
     ['option.scope.any', '任意 provider', "Any provider"],
     ['option.scope.named', '指定 provider', "Specific provider"],
-    ['warn.modelIssue.global', '默认审查模型不可用：{reason}。实际使用：{effective}。', "The default reviewer model is unavailable: {reason}. Currently using: {effective}."],
-    ['warn.modelIssue.rule', '此规则选择的审查模型不可用：{reason}。实际使用：{effective}。', "The reviewer model picked by this rule is unavailable: {reason}. Currently using: {effective}."],
-    ['warn.modelIssue.session', '本会话选择的审查模型 {configured} 不可用：{reason}。实际使用：{effective}。', "This session's reviewer model {configured} is unavailable: {reason}. Currently using: {effective}."],
-    ['warn.modelIssue.layer', '当前生效：{layer}。', "Currently effective: {layer}."],
     ['field.language.ui', '插件界面语言', "Plugin UI language"],
     ['field.language.agent', '发送给模型的文本语言', "Language of model-facing texts"],
     ['field.reviewer.timeoutMs', '自动审查等待上限（毫秒）', "Auto-review wait limit (ms)"],
@@ -4773,41 +4812,11 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['card.override', '已单独设置', "Set individually"],
     ['effort.default', '自动选择', "Automatic"],
     ['composer.fallbackBadge', '已回退', "Fallback"],
-    // —— §7.2.2 常驻短句表 ——
-    ['hint.trigger.presets', '会话使用清单内权限预设时，由本插件接管升权审批。', "Sessions on a listed permission preset hand escalations to this plugin."],
-    ['hint.trigger.unknown', '读不到会话权限预设时的处置。', "What happens when the session preset cannot be read."],
-    ['hint.trigger.auditEverySkip', '因预设不匹配跳过的审批是否逐条记录。', "Whether approvals skipped for a preset mismatch are each logged."],
-    ['hint.reviewer.model', '全局默认的审查模型与推理强度；未设置时使用执行助手的当前模型。', "Global default reviewer model and effort; unset means the agent's current model."],
-    ['hint.reviewer.parentModelRules', '按执行助手模型匹配的规则表：命中时先于全局默认，会话选择更优先。', "Rules matching the agent's model; a hit beats the global default, a session choice beats both."],
-    ['hint.language.ui', '插件界面文案的语言。', "Language of the plugin's UI copy."],
-    ['hint.language.agent', '发给审查模型的文本与给执行助手的通知，两者使用的语言。', "Language shared by the texts sent to the reviewer and the notices sent to the agent."],
-    ['hint.reviewer.timeoutMs', '自动审查的等待上限（毫秒）；0 立即超时。', "Auto-review wait limit (ms); 0 times out immediately."],
-    ['hint.ui.humanCardDuringReview', '审查期间是否提前显示人工审批卡片。', "Whether the human card appears early during review."],
-    ['hint.human.timeoutMs', '人工作答的等待上限（毫秒）；0 立即拒绝。', "Human-answer wait limit (ms); 0 rejects immediately."],
-    ['hint.human.timeoutFrom', '人工作答从何时开始计时：审批请求发出时，或交人工时。', "Where the human-answer timing starts: at the approval request, or at the handoff."],
-    ['hint.mode', '总开关；关闭后插件完全不接管。', "Master switch; off means no take-over at all."],
-    ['hint.allowEscalationTo', '插件可自动授予的最高权限档；更高的升权不会被自动批准。', "The highest permission tier auto-approval may grant; wider escalations are never auto-approved."],
-    ['hint.unknownSubject', '无法辨认本次实际操作时的处置。', "What happens when the action cannot be identified."],
-    ['hint.fallback', '自动审查未允许时的处置。', "What happens when the review does not approve."],
-    ['hint.ui.inject', '发给执行助手的审批通知范围。', "Which approval notices reach the agent."],
-    ['hint.ui.injectMaxBytes', '单条通知的字节上限；0 不裁剪。', "Byte cap per notice; 0 does not trim."],
-    ['hint.tools', '纳入自动审批的工具，每行一个；空清单覆盖全部工具。', "Tools under auto-approval, one per line; empty covers all."],
-    ['hint.denyPatterns', '每行一条正则表达式；命中即直接拒绝，模型与人工都不能推翻。', "One regex per line; a hit rejects outright, beyond model or human."],
-    // —— §7.2.2 预设多选提示表 ——（presets.none、missing.remedy、presets.unavailable 与 maxTokens 为长文案，
-    //     按 LONG_COPY_FACTS 口径断言，不在本表逐字冻结）
-    ['card.presets.missing', '配置中存在但当前预设表里没有：', "Configured but absent from the current preset table: "],
-    // —— §7.3.1 会话控件表 ——
     ['composer.label', '审查模型', "Reviewer model"],
     ['composer.section.effort', '推理强度', "Effort"],
-    ['composer.title', '本会话的审查模型；独立于执行助手调用，点开可只给这个会话指定', "This session's reviewer model — called independently of the agent; pick one to override it for this session only"],
     ['composer.followGlobal', '跟随全局（清除本会话选择）', "Follow global (clear this session)"],
-    // —— §7.4 状态行文案表 ——
     ['cardstate.reviewing', '正在自动审批', "Auto-reviewing"],
     ['cardstate.waiting', '等待你决定', "Waiting for your decision"],
-    ['cardstate.waiting.deny', '自动审查结论为拒绝：{reason}', "The review concluded deny: {reason}"],
-    ['cardstate.waiting.timeout', '自动审查超时，未取得有效结论', "The review timed out without a conclusion"],
-    ['cardstate.waiting.error', '自动审查未取得有效结论：{reason}', "The review failed without a conclusion: {reason}"],
-    // —— §8.5.1 详情字段名表 ——
     ['detail.outcome', '最终审批结果', "Final approval"],
     ['detail.decision', '模型结论', "Model conclusion"],
     ['detail.source', '决定方式', "Decided by"],
@@ -4818,20 +4827,17 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['detail.tools', '取证工具调用', "Evidence-tool calls"],
     ['detail.tokens', '推理 token 用量', "Reasoning tokens"],
     ['detail.reasoning', '模型返回的推理文本', "Model-returned reasoning"],
-    // —— §8.5.1 列表双标注与旧记录表 ——
     ['list.outcome', '最终审批：{v}', "Final approval: {v}"],
     ['list.decision', '模型结论：{v}', "Model conclusion: {v}"],
     ['view.noOutcome', '未记录最终审批结果', "No final outcome recorded"],
     ['view.reasonDefaulted', '审查器未提供理由', "No rationale provided by the reviewer."],
     ['view.count', '共 {n} 条', "{n} records"],
     ['view.count.one', '共 {n} 条', "{n} record"],
-    // —— §8.5.1 缺段说明表 ——
     ['absent.noContext', '未取上下文', "No context collected"],
     ['absent.noProbes', '未调用取证工具', "No evidence tools called"],
     ['absent.modelNotProvided', '模型未提供', "Not provided by the model"],
     ['absent.notFullCapture', '未开启全文采集', "Full-text capture was off"],
     ['absent.unknown', '本次未记录此项', "Not recorded for this approval"],
-    // —— §8.5.1 枚举文案表 ——
     ['layer.session', '会话选择（session）', "Session choice (session)"],
     ['layer.parent-map', '按执行助手的模型映射（parent-map）', "By the agent's model (parent-map)"],
     ['layer.global', '全局默认（global）', "Global default (global)"],
@@ -4861,170 +4867,18 @@ test('字典定稿（§10.2）：中英同键成对，关键文案取定稿值',
     ['cardcause.timeout', '审查超时（review timeout）', "Review timed out (review timeout)"],
     ['enum.unknown', '{v}（含义未知）', "{v} (unknown meaning)"],
   ];
-  for (const [key, zhText, enText] of DESIGN_FINAL) {
-    assert.equal(zh[key], zhText, `${key} 的中文应等于设计定稿（转抄自 docs/design.md 对应表）`);
-    assert.equal(en[key], enText, `${key} 的英文应等于设计定稿（转抄自 docs/design.md 对应表）`);
+  for (const [key, zhText, enText] of STABLE_NAMES) {
+    assert.equal(zh[key], zhText, key + ' 中文稳定名称');
+    assert.equal(en[key], enText, key + ' 英文稳定名称');
   }
-  // 长文案关键事实断言（design §10.2 B2 分层口径的第二层）：每条列出该说明位承载必要事实、
-  // 条件与占位符的子串（中英各一份），取自 requirements §5.1/§6.1/§6.4 的内容要求与设计定稿。
-  // 子串清单为手工转抄，不是设计文件解析校验——设计定稿表修订时须同步本清单。
-  // 「没有有效结论」在字典原文内嵌 U+2060 词连接符（防中文逐字换行拆词），断言按同一形态拼出。
-  const noConclusion = '没有有效结论'.split('').join('\u2060');
-  const LONG_COPY_FACTS = [
-    ['warn.modelIssue.globalUnset',
-      ['仅当解析实际落到全局默认层（无有效会话选择且无有效映射）', '跟随执行助手的当前模型', '独立于执行助手会话', '审查调用'],
-      ['falls through to the global default', 'no effective session choice and no effective rule', "follow the agent's current model", 'independent call', "separate from the agent's session"]],
-    ['warn.modelIssue.followParent',
-      ['本会话未单独选择审查模型', '按未设置的全局默认跟随执行助手的当前模型', '独立于执行助手会话', '审查调用', '实际使用：{effective}。'],
-      ['This session has no reviewer of its own and the global default is unset', "follow the agent's current model", 'independent call', "separate from the agent's session", 'Currently using: {effective}.']],
-    ['warn.modelIssue.globalUnsetShadowed',
-      ['仅当解析落到全局默认层', '跟随执行助手的当前模型', '独立于执行助手会话', '审查调用', '实际使用：{effective}。'],
-      ['only when resolution falls through to the global default', "follow the agent's current model", 'independent call', "separate from the agent's session", 'Currently using: {effective}.']],
-    ['help.trigger.presets',
-      ['按接管规则处理升权审批', '其他预设保持宿主原审批流程', '清单为空时', '无法识别的预设按「无法识别权限预设时」', '不等于授予任意权限'],
-      ['escalation approvals', 'keep the host flow', 'empty list', '"When the preset cannot be identified"', 'grants no extra permissions']],
-    ['help.trigger.unknown',
-      ['保持宿主原审批流程＝不接管', '继续自动审查＝视为命中接管范围'],
-      ['no take-over', 'treat it as covered']],
-    ['help.trigger.auditEverySkip',
-      ['逐条记录', '同一会话同一原因只记录一条', '不影响接管与审批本身'],
-      ['skip is logged', 'one line per session and reason', 'never the take-over itself']],
-    ['help.reviewer.model',
-      ['provider/model', '推理强度留空表示自动选择', '支持 `low` 就使用 `low`', '由模型默认值决定', '会话选择 → 按执行助手的模型映射 → 全局默认', '全局默认未设置时使用执行助手的当前模型', '独立于执行助手会话', '审查调用'],
-      ['provider/model', 'automatic', 'use `low` when the model supports it', 'otherwise let the model default decide', "session choice, by the agent's model, global default", "an unset default reviews on the agent's current model", 'independent call', "separate from the agent's session"]],
-    ['help.reviewer.parentModelRules',
-      ['任意 provider，或指定 provider 下的完整模型 id', '会话选择更优先', '命中时先于全局默认', '只能有一条规则', '纯模型 id 键按任意 provider 读取', '含斜杠的旧键', '不自动改写'],
-      ['any provider', 'full model id', 'outranks', 'the global default', 'One rule per', 'slash-containing keys', 'rewritten automatically']],
-    ['help.reviewer.timeoutMs',
-      ['涵盖装配与等待本次审查结论的全过程', '排队等待独立计时', '不消耗本预算', '内部重试不另获时限', '超时按拒绝处理并说明发生环节', '不是危险判定', '0 立即超时'],
-      ['covering assembly', 'queue waits are timed separately', 'never consume this budget', 'no fresh time budget', 'rejects with its stage named', 'not a danger verdict', '0 times out immediately']],
-    ['help.reviewer.maxTokens',
-      ['token 是模型计量文本的单位', '由模型或供应商默认值决定', '推理', noConclusion, '具体数值因模型与推理强度而异'],
-      ['measure text', 'model or provider default', 'reasoning', 'no usable conclusion', 'varies by model and effort']],
-    ['hint.reviewer.maxTokens',
-      // 长提示不逐字冻结（design §10.2 B2 第二层）：等义精简可过；以下事实删除必红——
-      // token 单位、0＝不传上限（不是无限）、供应商默认接管、推理额度风险、无有效结论风险。
-      ['token 是模型计量文本的单位', '0 不向模型传输出上限', '由模型或供应商默认值决定', '推理', noConclusion],
-      ['a token is the unit models use to measure text', '0 sends no cap', 'model or provider default', 'reasoning', 'no usable conclusion']],
-    ['help.human.timeoutMs',
-      ['仅在「自动审查未允许时＝交给人工决定」时使用', '0 表示立即拒绝', '到点按拒绝结算'],
-      ['only when the fallback is Ask', '0 rejects immediately', 'settles as a rejection']],
-    ['help.human.timeoutFrom',
-      ['从审批请求起算', '只使用剩余时间', '从交人工起算', '重新开始计时'],
-      ['from the approval request', 'from the handoff']],
-    ['help.mode',
-      ['规则检查＋LLM 审查＝正常接管', '完全不接管＝等同未安装'],
-      ['takes over', 'as if uninstalled']],
-    ['help.allowEscalationTo',
-      ['只限制可送审或允许的升权范围', '仍须通过规则检查与模型审查', '不等于自动批准全部操作'],
-      ['bounds what may be reviewed', 'rule checks and the review', 'not a blanket approval']],
-    ['help.unknownSubject',
-      ['直接拒绝＝不调用模型、立即拒绝', '缺失明确标记'],
-      ['refuses at once without the model', 'missing-action marks']],
-    ['help.fallback',
-      ['直接拒绝＝按拒绝结算', '交给人工决定＝显示人工审批卡片', '到点按拒绝结算', '委派子代理没有人工通道', '分叉会话按主会话对待'],
-      ['settles as a rejection', 'shows the human card', 'reject', 'no human channel', 'main sessions']],
-    ['help.ui.humanCardDuringReview',
-      ['抢先作答', '人工结果优先', '不能由迟到点击推翻'],
-      ['answer first', 'human answer wins', 'late click']],
-    ['help.ui.inject',
-      ['四类都发送', '允许不发送', '一条都不发送', '审查记录视图的显示不受本开关影响'],
-      ['sends all four', 'skips allow notices', 'sends no notices', 'unaffected by this switch']],
-    ['help.ui.injectMaxBytes',
-      ['字节上限', '截断标记', '0 不裁剪', '审查记录按会话独立保留'],
-      ['Byte cap', 'trimmed with a marker', '0 does not trim', 'per session']],
-    ['help.tools',
-      ['每行一个工具名', '空清单覆盖所有工具的升权审批', '其余工具保持宿主原流程'],
-      ['one name per line', 'Empty covers', 'keep the host flow']],
-    ['help.denyPatterns',
-      ['每行一条正则表达式', '全部字符串参数值', '不只命令字段', '/source/flags', '命中即直接拒绝：不调用模型、不交人工', '空清单只关闭这层文本匹配', '不可编译的行跳过'],
-      ['one regex per line', 'string argument', 'not just the command', '/source/flags', 'rejects outright', 'disables only this text check', 'Uncompilable lines are skipped']],
-    ['help.language.ui',
-      ['跟随宿主界面', '保存后下一次渲染生效', '不改变发送给模型的文本语言'],
-      ['follow the host', 'next render', 'never touches model-facing texts']],
-    ['help.language.agent',
-      ['默认英文', '与插件界面语言互不影响'],
-      ['Defaults to English', 'independent']],
-    ['view.retention',
-      ['回读最近一个窗口', '默认 200 条', 'ui.trace.maxRecords', '超过窗口四倍时轮转', '更早记录此时删除', '会话文件数超上限时删除最旧', '轮转前备份', '减少采集不删除已有记录'],
-      ['most recent window', '200 entries by default', 'ui.trace.maxRecords', 'four times the window', 'deleting older entries', 'file cap is exceeded', 'Back up before rotation', 'never deletes existing records']],
-    ['card.presets.missing.remedy',
-      ['插件是否已停用', '重新启用插件或重启宿主可能恢复', '可改选标准权限档', '彻底清理按使用说明的卸载一节', '不解析、不改写用户 YAML'],
-      ['disabled plugin', 'Re-enabling or restarting', 'pick a standard tier', 'uninstall section of the manual', 'never parses or rewrites user YAML']],
-    ['card.presets.none',
-      // 长提示不逐字冻结（design §10.2 B2 第二层）：空清单与未知预设两条事实各自在场即可，
-      // 等义改写通过；逐项删除反例见下方分项块（缺任一项必红）。
-      ['清单为空时', '已知预设', '不会接管', '无法识别的预设', '「无法识别权限预设时」'],
-      ['empty list', 'no known preset', 'taken over', 'cannot be identified', '"When the preset cannot be identified"']],
-    ['card.presets.unavailable',
-      // 长提示不逐字冻结（design §10.2 B2 第二层）：分项事实各自在场即可，等义改写通过；
-      // 三类原因与处置路径的逐项保护见下方分项块（缺任一项必红）。
-      ['读不到预设目录', '可能原因', '服务缺失', '读取失败', '预设信息', '确认权限预设服务可用', '重试'],
-      ['The preset catalog is unavailable', 'Possible causes', 'a missing service', 'a read failure', 'preset information', 'check the permission preset service', 'retry']],
-  ];
-  for (const [key, zhFacts, enFacts] of LONG_COPY_FACTS) {
-    assert.ok(typeof zh[key] === 'string' && zh[key].length > 0, `${key} 的中文应在场`);
-    assert.ok(typeof en[key] === 'string' && en[key].length > 0, `${key} 的英文应在场`);
-    for (const fact of zhFacts) {
-      assert.ok(zh[key].includes(fact), `${key} 的中文须含关键事实「${fact}」`);
-    }
-    for (const fact of enFacts) {
-      assert.ok(en[key].includes(fact), `${key} 的英文须含关键事实「${fact}」`);
-    }
+  assert.deepEqual(dictionaryFactFailures({ zh, en }), [], '当前两语字典的全部登记事实都受测');
+  // 显示判据与语义分开：删除防拆字符后，事实在场但显示保护必须失败。
+  for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
+    assert.equal(tokenRiskDisplayProtected(zh[key]), true, key + ' 风险词应有防拆保护');
+    const unprotected = zh[key].replace(/\u2060/gu, '');
+    assert.deepEqual(copyFactFailures(key, 'zh', unprotected), []);
+    assert.equal(tokenRiskDisplayProtected(unprotected), false);
   }
-  // 长提示分项保护（design §10.2 B2 第二层）：上表条目的等价正例与逐项删除反例——等义改写
-  // （保留三类原因与处置顺序、仅换措辞）必须通过分项检查；从现行文案删去任一原因或处置
-  // 片段后，同一检查必须失败，防止分项退化成无约束力的整段冻结。
-  const unavailableCases = [
-    [zh['card.presets.unavailable'],
-      '读不到预设目录。可能原因：服务缺失、读取失败或预设信息不可用。确认权限预设服务可用，再重试。',
-      ['读不到预设目录', '可能原因', '服务缺失', '读取失败', '预设信息', '确认权限预设服务可用', '重试']],
-    [en['card.presets.unavailable'],
-      'The preset catalog is unavailable. Possible causes: a missing service, a read failure, or unusable preset information; check the permission preset service, then retry.',
-      ['The preset catalog is unavailable', 'Possible causes', 'a missing service', 'a read failure', 'preset information', 'check the permission preset service', 'retry']],
-  ];
-  for (const [copy, equivalent, facts] of unavailableCases) {
-    const factsPresent = (text) => facts.every((fact) => text.includes(fact));
-    assert.ok(factsPresent(copy), 'card.presets.unavailable 现行文案须含全部分项事实');
-    assert.ok(factsPresent(equivalent), 'card.presets.unavailable 等义改写须通过分项检查');
-    for (const fact of facts) {
-      const without = copy.split(fact).join('');
-      assert.ok(!factsPresent(without), `card.presets.unavailable 删除「${fact}」后分项检查须失败`);
-    }
-  }
-  // 长提示分项保护（design §10.2 B2 第二层，与 unavailableCases 同构）：presets.none 的空清单
-  // 与未知预设两条事实、timeoutFrom 的两分支计时事实——等义改写须通过，从现行文案删去任一
-  // 分项后同一检查必须失败，防止分项退化成无约束力的整段冻结。
-  const presetsNoneCases = [
-    [zh['card.presets.none'],
-      '清单为空时不会接管任何已知预设；无法识别的预设按「无法识别权限预设时」的设置处置。',
-      ['清单为空时', '已知预设', '不会接管', '无法识别的预设', '「无法识别权限预设时」']],
-    [en['card.presets.none'],
-      'Presets that cannot be identified follow "When the preset cannot be identified"; with an empty list, no known preset is taken over.',
-      ['empty list', 'no known preset', 'taken over', 'cannot be identified', '"When the preset cannot be identified"']],
-  ];
-  const timeoutFromCases = [
-    [zh['help.human.timeoutFrom'],
-      '人工作答从哪一刻开始计时：从审批请求起算时，交人工阶段只使用剩余时间；从交人工起算时，交人工那一刻重新开始计时。',
-      ['从审批请求起算', '只使用剩余时间', '从交人工起算', '重新开始计时']],
-  ];
-  for (const [copy, equivalent, facts] of [...presetsNoneCases, ...timeoutFromCases]) {
-    const factsPresent = (text) => facts.every((fact) => text.includes(fact));
-    assert.ok(factsPresent(copy), '现行文案须含全部分项事实');
-    assert.ok(factsPresent(equivalent), '等义改写须通过分项检查');
-    for (const fact of facts) {
-      const without = copy.split(fact).join('');
-      assert.ok(!factsPresent(without), `删除「${fact}」后分项检查须失败`);
-    }
-  }
-  // design §7.2.2：仅 session 键携带所配引用占位符；global/rule 键不得含。
-  for (const key of ['warn.modelIssue.global', 'warn.modelIssue.rule']) {
-    assert.ok(!zh[key].includes('{configured}') && !en[key].includes('{configured}'), `${key} 不得含 {configured} 占位符`);
-  }
-  // requirements §6.4/§6.5：必要单位说明与过小额度风险必须常驻在 hint（不展开详细说明也可见），
-  // 不得只出现在折叠的 help 里——以下断言锁该退化形态：任一短语被挪回 help-only 即变红。
-  assert.ok(zh['hint.reviewer.maxTokens'].includes('计量文本的单位') && zh['hint.reviewer.maxTokens'].includes('推理') && zh['hint.reviewer.maxTokens'].includes(noConclusion), 'hint.reviewer.maxTokens 中文须常驻单位说明与过小额度风险');
-  assert.ok(en['hint.reviewer.maxTokens'].includes('measure text') && en['hint.reviewer.maxTokens'].includes('reasoning') && en['hint.reviewer.maxTokens'].includes('no usable conclusion'), 'hint.reviewer.maxTokens 英文须常驻单位说明与过小额度风险');
 });
 
 test('审查视图：详情匹配 PTC 子调用行；truncated 标注已截断；拿不到 useTrajectory 时只显示 Z', async () => {
@@ -5373,8 +5227,8 @@ test('生效值为 0 不渲染退役提醒（保存读回语义）；hint 随处
   const resolved = findAllByClass(line, 'dsafm_sec_resolved')[0];
   assert.equal(resolved.props.children, '生效：0 秒', '生效值读数为 0 秒');
   assert.equal(findAllByClass(line, 'dsafm_sec_warn').length, 0, '生效值为 0 无退役提醒（退役分支）');
-  // 零值语义进入字段 hint（design §7.2.2 定稿）。
-  assert.match(dicts.zh['hint.reviewer.timeoutMs'], /0 立即超时/u);
+  // 零值语义在常驻提示中独立核验。
+  assert.deepEqual(copyFactFailures('hint.reviewer.timeoutMs', 'zh', dicts.zh['hint.reviewer.timeoutMs']), []);
   const marker = findAllNodes(tree, (node) => node.type === primitivesStub.SettingsValueField)
     .find((node) => node.props.id === 'approve-for-me-ctl-reviewer-timeoutMs');
   marker.props.onEdit('120000');

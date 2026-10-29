@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { collectModelIssues, createResolver, normalizeModelChoice, parentModelOf, parseModelRef, pickEffort } from '../lib/model-resolver.js';
 import { SESSION_MODEL_EVENT, sessionModelOf } from '../lib/session-model.js';
+import { checkEmptyGlobalReasonFacts } from './helpers/mode-copy-facts.mjs';
 
 /**
  * 构造会话快照。
@@ -719,7 +720,7 @@ function issuesLlm(options = {}) {
   };
 }
 
-test('空全局默认条目字段逐项：scope=global、follow-parent 层、reason 定稿、有父模型填引用', async () => {
+test('空全局默认条目字段逐项：scope=global、follow-parent 层、reason 独立事实验证、有父模型填引用', async () => {
   const issues = await collectModelIssues({
     llm: issuesLlm(),
     reviewer: {},
@@ -727,19 +728,23 @@ test('空全局默认条目字段逐项：scope=global、follow-parent 层、rea
     parent: { provider: 'zai', model: 'glm-5.3' },
   });
   assert.equal(issues.length, 1, '空全局默认只产生一条 global 条目');
-  assert.deepEqual(
-    issues[0],
-    {
-      scope: 'global',
-      ruleProvider: null,
-      ruleModel: '',
-      configured: '',
-      reason: '全局默认审查模型未设置',
-      effectiveLayer: 'follow-parent',
-      effectiveModel: 'zai/glm-5.3',
-    },
-    '空默认条目七字段逐项（reason 为 design §7.2.0 定稿文案）',
-  );
+  const [entry] = issues;
+  // 除 reason 外逐字段精确；reason 不整句冻结，仅按独立事实规则验证（全局作用域＋审查模型＋未设置；
+  // 反例见下一测试），不与被测源码字面量做同源比较。
+  assert.equal(entry.scope, 'global');
+  assert.equal(entry.ruleProvider, null);
+  assert.equal(entry.ruleModel, '');
+  assert.equal(entry.configured, '');
+  assert.equal(entry.effectiveLayer, 'follow-parent', '全局未设置 → 跟随执行助手当前模型（零值语义）');
+  assert.equal(entry.effectiveModel, 'zai/glm-5.3', '跟随执行助手＝填执行助手当前模型引用');
+  assert.deepEqual(checkEmptyGlobalReasonFacts(entry.reason), [], 'reason 应承载「全局默认审查模型未设置」全部事实');
+});
+
+test('空全局默认 reason 反例：缺作用域／缺对象／缺状态／状态反转都应报缺失（能失败性）', () => {
+  assert.ok(checkEmptyGlobalReasonFacts('默认审查模型未设置').includes('scope-global'), '缺「全局」作用域事实应报缺失');
+  assert.ok(checkEmptyGlobalReasonFacts('全局默认模型未设置').includes('object-reviewer-model'), '缺「审查模型」对象事实应报缺失');
+  assert.ok(checkEmptyGlobalReasonFacts('全局默认审查模型').includes('state-unset'), '缺「未设置」状态事实应报缺失');
+  assert.ok(checkEmptyGlobalReasonFacts('全局默认审查模型已设置').includes('state-set-reversal'), '状态反转（已设置）应报反转');
 });
 
 test('空全局默认条目两态 effectiveModel：无会话父模型时取空串、以层含义呈现', async () => {
@@ -765,7 +770,7 @@ test('空默认条目映射命中：effectiveLayer=parent-map、填目标引用�
   });
   const empty = issues.find((issue) => issue.scope === 'global' && issue.configured === '');
   assert.ok(empty !== undefined, '空默认条目应在场');
-  assert.equal(empty.reason, '全局默认审查模型未设置');
+  assert.deepEqual(checkEmptyGlobalReasonFacts(empty.reason), [], 'reason 按事实验证（全局默认审查模型未设置）');
   assert.equal(empty.effectiveLayer, 'parent-map', '映射命中即被截住，不落到零值语义');
   assert.equal(empty.effectiveModel, 'deepseek-official/deepseek-v4-pro', '填映射目标引用');
 });
@@ -907,7 +912,7 @@ test('空全局默认级联并存：映射规则不可用退到空默认时，�
   const empty = issues.find((issue) => issue.scope === 'global' && issue.configured === '');
   const rule = issues.find((issue) => issue.scope === 'rule');
   assert.ok(empty !== undefined, '空默认条目在场');
-  assert.equal(empty.reason, '全局默认审查模型未设置');
+  assert.deepEqual(checkEmptyGlobalReasonFacts(empty.reason), [], 'reason 按事实验证（全局默认审查模型未设置）');
   assert.ok(rule !== undefined, '规则行条目在场');
   assert.equal(rule.configured, 'ghost/nope');
   // 级联的直退终点推演不受空默认条目影响：父模型可用 → follow-parent＋引用。

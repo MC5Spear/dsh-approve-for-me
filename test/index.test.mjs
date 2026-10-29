@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { AUDIT_VERSION } from '../lib/audit.js';
 import { rmTree } from './helpers/rm-tree.mjs';
+import { agentT } from '../lib/agent-texts.js';
+import { errorCopyFailures } from './helpers/error-copy-facts.mjs';
 
 /**
  * 宿主接线冒烟测试。
@@ -410,19 +412,20 @@ test('逃逸通知走通道故障模板并按 language.agent 切换：zh 中文�
     t.skip('宿主包不可解析（离线环境）');
     return;
   }
-  // zh 档：首行与关键字按字节核对（口径同 requirements §5.4），fail-closed 为 rejected；
-  // 首行是通道故障模板头（§4.4：逃逸通知与内部异常通知同构，不另维护逃逸专用正文）。
+  // 接线比较真实模板首行；模板的故障、单次升权与拒绝事实由独立判据及反例保护。
   const zh = await runEscape({ agent: 'zh' });
   assert.equal(zh.outcome, 'rejected');
   assert.equal(zh.nextCalls, 0, '逃逸发生在 next() 之前');
   assert.equal(zh.texts.length, 1);
-  assert.equal(zh.texts[0].split('\n')[0], '[approve-for-me] 自动审批通道故障，本次升权请求按拒绝处理。');
+  assert.deepEqual(errorCopyFailures('channel', 'zh', agentT('zh', 'gate.error.body').split('\n')[0]), []);
+  assert.equal(zh.texts[0].split('\n')[0], agentT('zh', 'gate.error.body').split('\n')[0]);
   assert.match(zh.texts[0], /原因：应答者逃逸异常：Error: session id boom/u);
-  // en 档：同一逃逸异常下注入英文整句，首行字节核对，且不得含 zh 档短语。
+  // 同一逃逸异常下注入对应英文模板，不转抄普通首句。
   const en = await runEscape({ agent: 'en' });
   assert.equal(en.outcome, 'rejected');
   assert.equal(en.texts.length, 1);
-  assert.equal(en.texts[0].split('\n')[0], '[approve-for-me] Automatic approval channel failure; this escalation request is treated as rejected.');
+  assert.deepEqual(errorCopyFailures('channel', 'en', agentT('en', 'gate.error.body').split('\n')[0]), []);
+  assert.equal(en.texts[0].split('\n')[0], agentT('en', 'gate.error.body').split('\n')[0]);
   assert.match(en.texts[0], /Reason: an exception escaped the answerer: Error: session id boom/u);
   assert.doesNotMatch(en.texts[0], /自动审批通道故障/u, 'en 档不得残留 zh 档短语');
   // 变红判据：若逃逸注入退回硬编码 zh，en 档首行等值断言与

@@ -1,90 +1,116 @@
 # 参与指南
 
-**接受 issue，不接受外部 PR。** 本仓个人维护、按精力更新——issue 欢迎报问题、描述使用场景与提出想法；响应与修复时间视维护者可用时间而定。想改代码请 fork 后在自己的分支上维护，本仓不合并外部改动。下面的运行与验证信息供 fork 维护者和想复现问题的人使用。
+本项目由个人维护，接受 issue，不接受外部 PR。欢迎报告问题、说明用途或提出建议。维护者按可用时间处理。需要自行改动时，请在自己的 fork 或分支维护；本仓不合并外部提交。
 
-## 报 issue
+本页面向复现问题的人和源码维护者。安装与使用见[中文用户参考](<docs/user-reference.md>)或[英文用户参考](<docs/user-reference.en.md>)。
 
-- 给出最小可复现信息：宿主版本、本插件版本（或提交）、权限预设与相关配置片段——**先抹掉凭据与本机路径**。
-- 审计行（`[approve-for-me]` 写宿主 stderr 的单行）是最有用的证据，贴涉事那几行即可，`decision` / `reason` 字段足以定位大多数行为问题。
-- 安全相关的发现同样按普通 issue 提（本仓不设漏洞管理流程）；不要贴真实凭据、真实会话内容或他人部署的地址。
-- 提交前可先核对[使用说明](<README.md>)中的已知边界与[常见问题](<README.md#常见问题与反馈>)，避免把已记录的边界当成新问题。
+## 报告问题
 
-## 环境准备（fork / 复现用）
+先查[用户参考](<docs/user-reference.md>)中的排障和已知边界。仍需帮助时，请在仓库 issue 中提供：
 
-- Node.js（本仓在 Node 24 上开发；`node:test` + ESM，无构建步骤）
-- 一份可用的 DeepSeek Harness 部署（跑真实审查调用链时才需要）
-- 克隆后：
+- DSH 版本、插件完整版本，以及可取得的源码提交或安装件来源。
+- 最少的复现步骤、预期结果和实际结果。
+- 权限预设、有关配置和审查结果。
+- 与这次审批关联的审计行或截图。审计行以 `[approve-for-me]` 开头，写入宿主标准错误日志（stderr）。同一次审批可能有多行，保留关联标识、`decision`、`outcome` 和 `reason` 等必要字段。
+
+安全问题也通过 issue 报告，本仓没有单独的漏洞管理通道。提交前删除密钥、私人路径、会话正文和他人实例地址。用假数据和无害操作复现，不要为证明问题执行危险命令。无法安全公开的内容，先只描述现象与受影响版本，请维护者说明需要哪些脱敏信息。
+
+## 取得匹配的源码
+
+本线面向 DSH `0.2.1-rc.2`，包版本为 `0.2.2+dsh.0.2.1-rc.2`，尚未发布。兼容要求见[需求 1.3](<docs/requirements.md#13-当前兼容基准>)。
+
+维护分支按 `adapt/dsh-<精确宿主版本>` 命名。本线为 `adapt/dsh-0.2.1-rc.2`；宿主 `0.2.0-rc.2` 对应 `adapt/dsh-0.2.0-rc.2`。分支中的提交可以继续变化；分支名不是固定安装件。
+
+请使用维护者交付的匹配源码快照或工作树。取得源码时，先核实完整提交或标签确实存在，再检出该对象。同版本旧包不能代替候选身份，拟创建标签也不能当作已经发布的来源。
+
+在源码根目录核对身份：
 
 ```powershell
-git clone https://github.com/MC5Spear/dsh-approve-for-me.git
-cd dsh-approve-for-me
-npm install --omit=dev
+git rev-parse HEAD
+node -p "JSON.stringify({version:require('./package.json').version,host:require('./package.json').engines.dsh})"
 ```
 
-**宿主解析锚点**：宿主接线用例需要解析六份同版包——`@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-typert-protocol`、`@deepseek-ai/cordis`、`@deepseek-ai/schemastery`，加上套件实际 import 的 `@deepseek-ai/dsh-client-ui-primitives` 与 `@deepseek-ai/dsh-session-format-v3-to-v4`（后两包不在本包依赖图内；六包齐备时 `test/client-primitives.test.mjs` 与 `test/v4-source.test.mjs` 才不按「不可解析」自跳过）。两种给法：
+无 Git 历史的快照，使用交付方提供的提交标识与文件校验信息。版本号相同，不表示文件相同。
 
-1. 在克隆目录里显式安装同版宿主包。宿主和 cordis 版本取[当前兼容基准](<docs/requirements.md#13-当前兼容基准>)，其他依赖取项目已声明的约束；将下列占位符替换为满足约束的实际版本，不直接执行占位命令：
+## 准备开发环境
+
+以下命令需要完整源码。安装包带有维护文档，但没有带齐 `tools/`、`test/` 和 CI 文件。需要运行检查时，从匹配版本源码取得这些目录。
+
+1. 准备 Node.js 和 npm。包声明 Node.js `>=20`，开发推荐 Node.js 24。CI 配置覆盖 Node.js 22 与 24；配置存在不等于本次 CI 已执行。
+2. 进入已核对身份的源码根目录。
+3. 安装锁文件中的依赖：
 
    ```powershell
-   npm install --no-save @deepseek-ai/cordis@<cordis版本> @deepseek-ai/dsh-llm@<宿主版本> @deepseek-ai/dsh-typert-protocol@<宿主版本> @deepseek-ai/schemastery@<项目依赖版本> @deepseek-ai/dsh-client-ui-primitives@<宿主版本> @deepseek-ai/dsh-session-format-v3-to-v4@<宿主版本>
+   npm ci --omit=dev --no-audit --no-fund
    ```
-2. 指向一份已存在的宿主安装树：环境变量 `DSAFM_HOST_MODULES=<宿主安装目录>\node_modules`（取值顺序与配置文件形状见 `tools/local-config.mjs` 与 `tools/local-config.example.mjs`）。
 
-两条都不可用时，宿主接线用例会**自我跳过**——`npm run test:offline` 则是完全不注册宿主钩子的形态。
+依赖安装会访问包源并写入本地依赖目录，需要包源访问权限。它不安装插件、不启动 DSH，也不调用模型。网络、凭据和锁文件问题按 npm 的具体错误处理，不跳过依赖校验来制造通过结果。
 
-## 测试与探针
+源码采用 ESM 和 `node:test`，没有产品构建步骤。客户端入口是宿主模块加载器使用的工厂式 CJS，不使用 JSX。
+
+完整测试还需要匹配的宿主包。可以在独立目录准备宿主解析树，再通过 `DSAFM_HOST_MODULES` 指向其 `node_modules`。需要哪些包、怎样核对版本，以及无宿主钩子的测试边界，见[验证说明](<docs/verification.md>)。只有运行真实宿主验证时才需要启动实例；静态检查和模块测试不需要运行中的 DSH。
+
+## 修改时做什么
+
+先读[产品需求](<docs/requirements.md>)、[设计](<docs/design.md>)和[文档原则](<docs/documentation-principles.md>)中对应的主题。
+
+- 产品行为有变更时，先取得需求决定，再更新对应主题。不能修改需求来掩盖实现缺陷。
+- 设计说明机制、失败处理和必要理由。实现与需求不一致时，报告差异，保留未完成要求。
+- 影响审批判断、权限、取证、记录或故障处理的改动，必须增加能检出退化的测试。
+- 默认值、字段、范围或使用方法有变更时，同时更新两语首页和两语用户参考。不要另建一份人工默认数据表。
+- 用户文案、注释、双语同步、来源和历史的写法，统一遵守[文档原则](<docs/documentation-principles.md>)。
+
+### 代码与配置约定
+
+以下路径均相对源码根目录。
+
+- 依赖以 `package.json` 的 `dependencies` 和 `peerDependencies` 为准。不随意增加运行时依赖。宿主兼容性按[需求 1.3](<docs/requirements.md#13-当前兼容基准>)核对。
+- 不修改宿主源码、不打宿主补丁。插件不解析、改写或自动清理用户 YAML；卸载资料仍须说明宿主可能留下的配置及恢复方法。
+- `client.js` 保持 `window.__ModuleLoader__.load({ id, factory })` 形态。`factory(require)` 通过宿主取得 React 等模块，不增加客户端构建前提。
+- 配置字段在 `lib/config.js` 的 `Config` 中声明。需要宿主热更新时使用 `.volatile()`，并在 `test/config.test.mjs` 增加解析和边界用例。当前 schemastery 下界为 `3.18.4`。有热更新资格不等于页面已提供控件。
+- 客户端中英字典在 `client.js`，面向模型的文案在 `lib/agent-texts.js`。两语键集保持完整，缺键不能静默回退。普通说明检查事实、条件、单位、占位符和显示关系；固定名称、协议、安全原文和法律文本按各自要求精确保护。
+- 修改模型提示或通知时，单独核对授权边界与安全不变块。只改注释时，也要证明运行时字符串未变。
+- 章节引用使用现行稳定主题号，不使用修复批次号。不要据旧注释恢复已经取消的机制。
+
+### 公开内容与本机配置
+
+源码仓保存产品代码、测试、工具、用户资料、需求和设计。凭据、机器配置、维护过程材料和验证产物不进入提交。测试使用假值。
+
+工具通过源码中的 `tools/local-config.mjs` 读取机器配置，形状见 `tools/local-config.example.mjs`。本机文件放在被忽略的 `.local/config.mjs`；也可使用对应环境变量。不要把宿主目录、实例地址、token 文件、浏览器路径或输出位置写死在脚本中。配置加载器、示例和检查器以外的源码不得直接写 `.local/` 字面路径。
+
+## 运行哪些检查
+
+先按风险从低到高验证：
 
 ```powershell
-npm test                    # 全部用例（含宿主接线；宿主不可解析时相关用例自跳过）
-npm run test:offline        # 只跑离线单测
-npm run check               # 语法自检：lib/** + client.js + typert.host.js
-npm run probe:typert        # 离线校验 ./typert 清单
+npm run check
+npm run check:public-surface
+npm run check:docs
+npm run probe:typert
+npm run test:offline
+npm test
+npm run check:docs:pack
 ```
 
-- **跳过不等于通过**：看到 `# skip` 先确认是环境缺失还是真的没跑。
-- 沙箱环境拦 per-file 子进程时，用等价形态：
-  `node --import ./tools/_host-hooks.mjs --test --experimental-test-isolation=none "test/*.test.mjs"`
+前提、宿主解析树、写入副作用和结果解释统一见[验证说明](<docs/verification.md>)。`test:offline` 不注册宿主解析钩子，但仍枚举同一组测试；它不是“完全不需要宿主包”的保证。看到跳过、缺环境或退出码 0，仍要逐项检查实际结果。
 
-运行真实模型探针前，确认允许读取所用实例的凭据并向配置的供应商端点发送请求；不要在未获授权的实例上执行。无凭据或断网时的跳过不是离线协议验证。
+真实实例、浏览器、日志、模型和存储探针不是普通单测。运行前按验证说明取得相应授权，并使用独立环境。不要重启正在执行任务的实例。端到端自动允许的结论，要有真实审批结果、工具执行与审计证据，不能从单测推断。
 
-| 探针 | 需要什么 |
+## 修改、审查与发布由谁负责
+
+| 角色 | 职责 |
 | --- | --- |
-| `npm run probe:typert` | 离线（校验 `./typert` 清单与实现一致） |
-| `npm run probe:llm`（`tools/probe-llm-tools.mjs`） | 需要网络和用户提供的 LLM 凭据；无凭据或网络不可达时打印 `RESULT: SKIP — 未验证`，跳过不算通过 |
-| `npm run probe:reviewer`（`tools/probe-reviewer-live.mjs`） | 需要真实 LLM 凭据（从 `$DSH_HOME/.credentials.yaml` 的 `refs.DEEPSEEK_API_KEY` 读，输出不含密钥） |
+| 需求决定者 | 批准产品目标、行为变化和暂缓事项。 |
+| 设计作者 | 按需求写机制与验证方法，修正设计审查问题。 |
+| 实现或文档作者 | 修改自己的文件，补受影响检查，处理审查和测试问题。 |
+| 独立审查者 | 完整阅读当前成果与上下文，不用实现知识补齐文档遗漏。设计通过后再实现；实现通过后再做独立测试。 |
+| 独立测试者 | 从需求选择任务和方法，不限于已有用例；需要视觉判断时实际查看当前原图。 |
+| 发布维护者 | 核对同一候选的来源、包、版本、验证与未完成项；在取得发布授权后提交、推送、创建标签或发布。 |
 
-涉及真实实例的端到端验证请在你**自己的实例**上跑。那类取证工具（`tools/browser-shot.mjs` 浏览器驱动、`tools/probe-rpc.mjs` 实例 RPC 探针、`tools/probe-composer-dom.mjs` 页面结构探针等）**随本仓发布**：接入坐标（实例地址、token 文件、浏览器路径、输出目录）一律经 `tools/local-config.mjs` 给定或显式传参，脚本不含机器事实，可在你自己的实例上排障取证；**运行产物**（截图、DOM 转储、步骤脚本）落在本机配置的输出目录，不进提交。
+审查发现问题，由原作者修正。修正后由原审查者复查，并安排未参与前轮的新审查者独立阅读。独立测试发现问题后，修正受影响成果并重新测试，不能沿用改动前结论。
 
-会话日志类探针（`tools/probe-sessions.mjs`、`tools/probe-review-coverage.mjs`、`tools/probe-approval-coverage.mjs`、`tools/probe-r28-zh-inject.mjs`、`tools/probe-stderr-shapes.mjs`）读你指定的 home：优先 `DSH_HOME` 环境变量、未设置时回落 `~/.dsh`（历史布局），实际目标打印在输出首行；会话日志的两种命名（`session.jsonl.zstd` 与 `session.vN.jsonl.zstd`）都认、每会话取最高代。按时间分类的口径（如 `probe-approval-coverage.mjs` 的 `--trace-epoch`）由你显式给出，脚本不内置单机日期。
+提交前检查差异，只纳入本次获准文件。逐项写明通过、失败、跳过和未验证范围。发布前检查真实打出的包、两语资料、许可、来源、完整版本和安装地址。需求中的目标标签不是现成发布物；本地验证也不是发布授权。
 
-## 本仓自身约定（fork 维护者参考）
+## AI 制作信息
 
-**公开内容边界**：
-
-- **① 本公开仓只含**：产品代码、测试与工具、对外文档、需求与设计。机器配置、开发过程材料与验证产物不提交到本公开仓。
-- **② 需求与设计分工**：需求定义产品行为、默认值、边界和验收结果；设计定义机制与验证方法，两者允许彼此引用。不依赖其他文档或外部资料补齐必要正文；源码与测试定位只作核验。按主题直接更新，不保留相反版本和完成流水账。增补章节供短期迭代，维护者定期归并。
-- **③ 脚本里不写机器事实**：宿主安装树锚点、实例 URL、token 文件、浏览器路径、输出目录等一律经 `tools/local-config.mjs` 读取（本机配置放 `.local/config.mjs`，形状见 `tools/local-config.example.mjs`），或用对应环境变量临时覆盖。源码里出现 `.local/` 字面（配置加载器与其示例除外）同样算违规。
-
-判据是一条命令，它同时跑在 CI 里：
-
-```powershell
-npm run check:public-surface     # 结构 / 本机指纹 / 内部引用，三类判据零命中即绿（绿＝测试通过）
-```
-
-**改动纪律**：影响判决路径的改动必须带能检出退化的验证；需求变动先修正对应主题，设计和使用说明随后同步。未实施或未验收的事项不能因文档已写而宣称完成。真实凭据、真实会话内容与本机路径不进提交，测试夹具用假值（如 `sk-abc12345`）。
-
-**代码约定**：
-
-- 不随意新增运行时依赖；当前声明以 `package.json` 的 dependencies 与 peerDependencies 为准，宿主版本约束见[当前兼容基准](<docs/requirements.md#13-当前兼容基准>)。实现调整后按实际用途核对依赖，不因某个包存在就保留不需要的功能。
-- 不修改宿主源码、不打源码补丁。当前产品合同不提供插件侧用户 YAML 解析或自动清理；卸载残留风险须如实说明，不能降低用户配置保全要求。
-- `client.js` 是宿主加载器用的工厂式 CJS（`window.__ModuleLoader__.load({ id, factory })`，`factory(require)`，`require('react')` 由加载器提供），**没有 JSX、没有构建步骤**；改它时保持这个形态。
-- 新增配置字段：在 `lib/config.js` 的 `Config` 里声明，需要热改就加 `.volatile()`（`@deepseek-ai/schemastery` ≥ 3.18.4），并在 `test/config.test.mjs` 补解析用例。界面文案分两处维护：设置卡、composer 等客户端界面文案进 `client.js` 内的中英字典（`test/client.test.mjs` 守字典齐备与双语同步）；面向模型的文案见下一条的 `lib/agent-texts.js`（缺键即抛错，不静默回退，`test/agent-texts.test.mjs` 补用例）。
-- 面向模型的文案（系统提示、注入文本）改动请**逐字节**核对是否影响既有判据：本仓有冻结断言守着不可变块。
-- 中文文档与注释保持本仓既有术语；改行为时同步更新 README 里对应的用户可见说明。
-- 代码注释的编号与章节引用以 docs 的现行 § 章节号为准。维护代码时使用稳定主题定位，不能据旧注释恢复已取消的机制，也不新增按修复批次编号的引用。
-
-**运行真机的经验**（不是硬性要求）：
-
-- **别重启正在工作的实例**。宿主服务默认会清理整棵进程树：从服务自身进程树内发起的重启会把自己一起杀掉、服务停在停止态。重启命令要在服务进程树之外执行。
-- 建议备两个 profile（或两个实例）：一个跑日常开发与探针，一个做端到端验证。插件宿主侧改动要重启宿主才装载，客户端侧随页面加载生效——两条调用链分开验，省得互相干扰。
-- 端到端结论（「真的自动放行了」）必须来自真机实测 + 审计行，不能由单测代替；单测证明的是分支正确性，不是宿主接线正确性。
+参与本项目制作的 AI 包括 `gpt-6.1-sol`、`kimi k3`、`glm-5.3` 和 `deepseek-v4.1-flash`。这份名单说明制作信息，不表示这些模型验证了每个版本，也不代替版权归属。许可与第三方来源见 [LICENSE](<LICENSE>) 和 [NOTICE](<NOTICE>)。

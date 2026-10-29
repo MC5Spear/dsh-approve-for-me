@@ -1,7 +1,7 @@
 {
   "name": "dsh-approve-for-me",
   "version": "0.2.2+dsh.0.2.1-rc.2",
-  "description": "Automatic approval answerer for the DSH approval seam — the codex `--approve-for-me` equivalent: a read-only LLM reviewer decides each sandbox escalation, risky ones are rejected with the reason injected for the main model.",
+  "description": "Independent LLM review for DSH sandbox-escalation approvals.",
   "license": "MIT",
   "author": "MC5Spear (https://github.com/MC5Spear)",
   "repository": {
@@ -30,6 +30,9 @@
     "typert.host.js",
     "cordis.patch.yml",
     "README.md",
+    "README.en.md",
+    "CONTRIBUTING.md",
+    "CHANGELOG.md",
     "LICENSE",
     "LICENSES",
     "NOTICE"
@@ -43,6 +46,8 @@
     "test:offline": "node --test \"test/*.test.mjs\"",
     "check": "node tools/check-syntax.mjs",
     "check:public-surface": "node tools/check-public-surface.mjs",
+    "check:docs": "node tools/check-docs.mjs",
+    "check:docs:pack": "node tools/check-docs.mjs --pack",
     "probe:llm": "node tools/probe-llm-tools.mjs",
     "probe:reviewer": "node tools/probe-reviewer-live.mjs",
     "probe:budget": "node tools/probe-budget.mjs",

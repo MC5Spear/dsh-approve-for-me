@@ -3,34 +3,66 @@ NOTICE
 
 dsh-approve-for-me is licensed under the MIT License (see LICENSE).
 
-This product includes text taken from the OpenAI Codex project
-(https://github.com/openai/codex), which is licensed under the
-Apache License, Version 2.0. A copy of that license is included at
-`LICENSES/Apache-2.0.txt`; the authoritative text is maintained by the
-Apache Software Foundation (https://www.apache.org/licenses/LICENSE-2.0).
+This product includes text from OpenAI Codex, licensed under the Apache
+License, Version 2.0. The source identified below is fixed at commit
+03f014564deef528c25e80fe67ec51871cb6ee51:
+https://github.com/openai/codex/tree/03f014564deef528c25e80fe67ec51871cb6ee51
 
-- `lib/agent-texts.js` — the English Guardian system prompt template
-  (`SYSTEM_PROMPT_EN`) is adapted and condensed from the Codex guardian
-  prompt texts (`codex-rs/core/assets/guardian/policy_template.md`
-  lineage, e.g. at upstream commit 03f01456, since moved to
-  `codex-rs/prompts/templates/guardian/`: opening sentence and section
-  structure shared, wording modified for this project); the English
-  rejection instructions (`REJECTION_INSTRUCTIONS_EN`) are taken verbatim
-  from `codex-rs/ext/guardian-reviewer/src/completion.rs` (the
-  `REJECTION_INSTRUCTIONS` constant, lines 19-25; e.g. upstream commit
-  03f01456); the output contract keeps the shape of
-  `codex-rs/ext/guardian-reviewer/src/assessment.rs:107-119` (e.g.
-  upstream commit 03f01456); the untrusted evidence notice is
-  project-written, following the same evidence-grading approach; the
-  Chinese system prompt (`SYSTEM_PROMPT_ZH`) and Chinese rejection
-  instructions are translations of those Codex-derived texts.
-- `assets/tenant-policy.md` — adapted and condensed from the Codex
-  guardian tenant policy: the first five sections keep the upstream
-  section structure, with individual outcome sentences quoted verbatim
-  or near-verbatim and the rest rewritten for this project; the last two
-  sections ("URL Opening via System Entries", "Resubmission Guidance")
-  are project additions not present upstream. `assets/tenant-policy.zh.md`
-  is a Chinese translation of the resulting document.
+The applicable upstream NOTICE attribution is:
 
-The corresponding file headers carry per-item attribution. All other
-content in this repository is original to the dsh-approve-for-me project.
+OpenAI Codex
+Copyright 2025 OpenAI
+
+A copy of Apache-2.0 is included at LICENSES/Apache-2.0.txt. The
+Apache Software Foundation maintains the authoritative license text:
+https://www.apache.org/licenses/LICENSE-2.0
+
+Text used and changes made
+-------------------------
+
+- lib/agent-texts.js: the English Guardian system prompt
+  (SYSTEM_PROMPT_EN) is adapted and condensed from
+  codex-rs/core/assets/guardian/policy_template.md. The opening three
+  sentences and several instructions retain the upstream wording,
+  apart from line wrapping. Other passages are condensed, rewritten,
+  or added for this project. The transcript-source labels and
+  four-tool restrictions are project modifications or additions.
+  Fixed source:
+  https://github.com/openai/codex/blob/03f014564deef528c25e80fe67ec51871cb6ee51/codex-rs/core/assets/guardian/policy_template.md
+
+- REJECTION_INSTRUCTIONS_EN in lib/agent-texts.js is copied verbatim
+  from the REJECTION_INSTRUCTIONS constant in
+  codex-rs/ext/guardian-reviewer/src/completion.rs, lines 19-25.
+  docs/requirements.md, section 4.3, quotes the same English text.
+  Fixed source:
+  https://github.com/openai/codex/blob/03f014564deef528c25e80fe67ec51871cb6ee51/codex-rs/ext/guardian-reviewer/src/completion.rs#L19-L25
+
+- OUTPUT_CONTRACT in lib/agent-texts.js uses the text of
+  guardian_output_contract_prompt() in
+  codex-rs/ext/guardian-reviewer/src/assessment.rs, lines 107-119.
+  The only change is a line break in place of the space between
+  the first two sentences. Fixed source:
+  https://github.com/openai/codex/blob/03f014564deef528c25e80fe67ec51871cb6ee51/codex-rs/ext/guardian-reviewer/src/assessment.rs#L107-L119
+
+- The untrusted evidence notice in lib/agent-texts.js was written
+  for this project, following the same evidence-grading approach.
+  The Chinese system prompt and rejection instructions translate
+  or summarize the corresponding Codex-derived English text,
+  including this project's changes. The shared output contract
+  remains in English.
+
+- assets/tenant-policy.md adapts and condenses the five risk-category
+  subsections under "Risk Taxonomy and Allow/Deny Rules" in
+  codex-rs/core/assets/guardian/policy.md. Some outcome sentences
+  retain the upstream wording after removal of the "Outcome rule:"
+  prefix and capitalization changes. Other passages are near-verbatim
+  or rewritten. The last two sections, "URL Opening via System Entries"
+  and "Resubmission Guidance", are project additions not present in
+  that source. assets/tenant-policy.zh.md translates the complete
+  resulting English policy, including those additions. Fixed source:
+  https://github.com/openai/codex/blob/03f014564deef528c25e80fe67ec51871cb6ee51/codex-rs/core/assets/guardian/policy.md
+
+The corresponding implementation and policy file headers also identify
+their sources and changes. The project's MIT license does not replace
+the Apache-2.0 terms and attribution requirements applicable to the
+Codex-derived text identified above.

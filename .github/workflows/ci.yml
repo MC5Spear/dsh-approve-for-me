@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: ['adapt/dsh-0.2.1-rc.2']
   pull_request:
   workflow_dispatch:
 
@@ -30,6 +30,10 @@ jobs:
         run: npm install --no-save --no-package-lock --no-audit --no-fund @deepseek-ai/cordis@4.0.5 @deepseek-ai/dsh-llm@0.2.1-rc.2 @deepseek-ai/dsh-typert-protocol@0.2.1-rc.2 @deepseek-ai/schemastery@3.18.5 @deepseek-ai/dsh-client-ui-primitives@0.2.1-rc.2 @deepseek-ai/dsh-session-format-v3-to-v4@0.2.1-rc.2
       - name: 语法自检
         run: npm run check
+      - name: 文档事实与链接检查
+        run: npm run check:docs
+      - name: 实际安装包文档与分发检查
+        run: npm run check:docs:pack
       - name: typert 清单校验
         run: npm run probe:typert
       - name: 离线单测（不依赖宿主）

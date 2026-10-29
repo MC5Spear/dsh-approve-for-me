@@ -4,6 +4,8 @@ import { mkdtemp, mkdir, readFile, readdir, realpath, symlink, writeFile } from 
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { assertSafePattern, createReadonlyTools, globToRegExp, isDeniedPath } from '../lib/readonly-tools.js';
+import { agentT } from '../lib/agent-texts.js';
+import { errorCopyFailures } from './helpers/error-copy-facts.mjs';
 
 /**
  * 建一棵临时目录树。
@@ -269,8 +271,9 @@ test('setLang 两档驱动结果模板语言（requirements §5.4：工具失败
   const zh = await tools.run('list_dir', { path: 'src/a.txt' });
   assert.equal(en.isError, true);
   assert.equal(zh.isError, true);
-  const enHead = 'Tool list_dir failed: ';
-  const zhHead = '工具 list_dir 失败：';
+  for (const lang of ['zh', 'en']) assert.deepEqual(errorCopyFailures('tool', lang, agentT(lang, 'tool.failed')), []);
+  const enHead = agentT('en', 'tool.failed').replace('{name}', 'list_dir').split('{error}')[0];
+  const zhHead = agentT('zh', 'tool.failed').replace('{name}', 'list_dir').split('{error}')[0];
   assert.ok(en.text.startsWith(enHead), `en 档回喂须以英文模板开头：${en.text}`);
   assert.ok(zh.text.startsWith(zhHead), `zh 档回喂须以中文模板开头：${zh.text}`);
   // 同一错误的主体两档逐字节一致：语言只切换模板句身，错误文本与语言无关。

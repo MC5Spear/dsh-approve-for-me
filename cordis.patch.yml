@@ -19,8 +19,8 @@
 # bundle 层按 id 替换前行字段，同样不做深合并）。三个标准档位与 dsh-base 的
 # 逐字节一致；`auto-approve` 加在 workspace-write 与 danger-full-access 之间。
 # 本 patch 随包分发，装卸改变的只是包层的这一行贡献；宿主可能把预设选择
-# 持久化进用户层配置，卸载后的用户配置与运行数据残留按公开需求的卸载条款
-# 处理（docs/requirements.md），包内不提供也不承诺任何 YAML 清理。`derive`
+# 持久化进用户层配置；卸载后的用户配置与运行数据保留、手工清理及恢复方法
+# 见 docs/user-reference.md 的卸载说明。`derive`
 # 按声明顺序取首个匹配档位，auto-approve 必须排在与其等值的 workspace-write
 # 之后。
 - insert:

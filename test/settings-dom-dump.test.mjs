@@ -18,6 +18,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { normalizeConfig } from '../lib/config.js';
+import { checkModeHelpFacts } from './helpers/mode-copy-facts.mjs';
 
 const DUMP_PATH = join(import.meta.dirname, 'fixtures', 'settings-dom-dump.txt');
 const dump = readFileSync(DUMP_PATH, 'utf8');
@@ -145,10 +146,26 @@ test('说明入口（§7.2.1）：20 个按钮带可见文字，aria 成对，�
   assert.match(dump, /按钮带可见文字「说明／收起说明」（`\.dsafm_helpbtn_text`）/u, '说明按钮应带可见文字');
   assert.match(dump, /`aria-label`＝「字段名：说明」、Enter\/Space 键盘可达/u, '无障碍名格式与键盘可达应在档');
   assert.match(dump, /点击 mode 字段后：aria-expanded=`true`、展开区在场=`true`、同屏展开区数量=1/u, '点击后应展开且仅展开一个');
-  // 展开文本只断关键事实（mode 的接管语义），不逐字冻结普通帮助全文：重新采集换等义措辞不应
-  // 让本测试变红；删掉任一关键事实（正常接管含规则检查与 LLM 审查、关闭＝不接管且等同未安装、
-  // 宿主审批流程不受影响）由下列子串检出。历史档 fixture 保持原句不动（档案不改历史值）。
-  assert.match(dump, /展开文本首段＝「总开关：[^\n]*规则检查[^\n]*LLM 审查[^\n]*正常接管；完全不接管＝等同未安装，宿主审批流程不受影响。」/u, '展开文本应承载总开关关键事实（design §7.2.1）');
+  // 展开文本按关键事实验证，不逐字冻结普通帮助全文（与 mode-copy-facts 的正反例共用同一检查器）：
+  // 历史档 fixture 保持原句不动（档案不改历史值）；真正换措辞的中英文正例（非原句顺序变化）
+  // 应通过同一检查器；逐项缺事实或反转关闭含义的反例必须让检查器变红。
+  // 检查器只证明所列明确事实与下列正反例，不声称判定任意等义改写，也不证明自然语言全等义。
+  const firstPara = /展开文本首段＝「([^」]+)」/u.exec(dump)?.[1] ?? '';
+  assert.ok(firstPara.length > 0, '展开文本首段应在档（缺失＝帮助折叠回潮）');
+  assert.deepEqual(checkModeHelpFacts(firstPara), [], '历史档首段应承载总开关全部关键事实（fixture 原句不动）');
+  const rewordedZh = '开启后由插件接管审批：先做规则筛查，再交模型独立审查。关闭时插件不进行任何接管，效果与未安装它相同；宿主自身的审批流程保持原样。';
+  const rewordedEn = 'When on, the plugin takes over approvals: a rule screen first, then an independent LLM review. When off, it does not take over at all — the effect is the same as if it were not installed, and the host approval flow is left untouched.';
+  assert.deepEqual(checkModeHelpFacts(rewordedZh), [], '真正换措辞的等义中文正例应通过同一事实检查');
+  assert.deepEqual(checkModeHelpFacts(rewordedEn), [], '真正换措辞的等义英文正例应通过同一事实检查');
+  // 反例（能失败性）：逐项缺事实、反转关闭含义，任一出现即检查器必须报缺失。
+  assert.ok(checkModeHelpFacts('总开关：LLM 审查＝正常接管；完全不接管＝等同未安装，宿主审批流程不受影响。').includes('on-rule-check'), '缺「规则检查」事实应报缺失');
+  assert.ok(checkModeHelpFacts('总开关：规则检查＝正常接管；完全不接管＝等同未安装，宿主审批流程不受影响。').includes('on-llm-review'), '缺「LLM 审查」事实应报缺失');
+  assert.ok(checkModeHelpFacts('总开关：规则审查＝正常接管；完全不接管＝等同未安装，宿主审批流程不受影响。').includes('on-llm-review'), '仅规则审查（无 LLM／模型参与）不算模型事实，应报缺失');
+  assert.ok(checkModeHelpFacts('总开关：规则检查＋LLM 审查＝正常接管；关闭＝等同未安装，宿主审批流程不受影响。').includes('off-no-takeover'), '缺「关闭＝不接管」事实应报缺失');
+  assert.ok(checkModeHelpFacts('总开关：规则检查＋LLM 审查＝正常接管；完全不接管，宿主审批流程不受影响。').includes('off-equivalent-to-uninstalled'), '缺「等同未安装」事实应报缺失');
+  assert.ok(checkModeHelpFacts('总开关：规则检查＋LLM 审查＝正常接管；完全不接管＝等同未安装。').includes('host-flow-unaffected'), '缺「宿主审批流程不受影响」事实应报缺失');
+  assert.ok(checkModeHelpFacts('关闭后插件仍正常接管审批；开启时规则检查与 LLM 审查照常进行，宿主审批流程不受影响，等同未安装。').includes('off-reversal'), '反转关闭含义（关闭仍接管）应报反转');
+  assert.ok(checkModeHelpFacts('When off, the plugin takes over every approval; the host approval flow is affected.').includes('off-reversal'), '英文反转关闭含义应报反转');
   assert.match(dump, /开合不触碰草稿\/保存计划（纯展示状态）/u, '开合纯展示语义应在档');
   // §1 逐字文本：每个字段名行后紧跟「说明」按钮文字（20 处＝20 字段）。
   assert.equal((pageText.split('\n').filter((l) => l.trim() === '说明').length), 20, '§1 中「说明」按钮文字应恰 20 处');

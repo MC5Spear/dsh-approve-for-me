@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createReviewer, finishDegraded, finishTag, parseAssessment, retryableOutcome, REVIEW_MAX_ATTEMPTS } from '../lib/reviewer.js';
 import { REVIEW_SUPERSEDED, REVIEW_TIMEOUT_ABORT_MESSAGE } from '../lib/gate.js';
+import { agentT } from '../lib/agent-texts.js';
+import { errorCopyFailures } from './helpers/error-copy-facts.mjs';
 
 /**
  * 假组装器：模拟 `BlockAssembler` 的对外行为，含 `finish` / `usage` 访问器（design §3.7）。
@@ -242,19 +244,21 @@ test('review：回喂错误文本按 language.agent 切换——参数非法与�
     return h.requests[1].messages.filter((message) => message.role === 'tool-result');
   };
 
-  // zh 档：整句字节核对（模板前缀＋被透传的错误消息）。
   const zh = await resultsOf({ agent: 'zh' });
   assert.equal(zh[0].isError, true);
-  assert.equal(zh[0].content[0].text, '工具 read_file 失败：tool exploded');
+  assert.deepEqual(errorCopyFailures('tool', 'zh', agentT('zh', 'tool.execFailed')), []);
+  assert.equal(zh[0].content[0].text, agentT('zh', 'tool.execFailed').replace('{name}', 'read_file').replace('{error}', 'tool exploded'));
   assert.equal(zh[1].isError, true);
-  assert.match(zh[1].content[0].text, /^工具参数不是合法 JSON：/u, 'zh 档参数非法回喂须为中文整句');
+  assert.deepEqual(errorCopyFailures('args', 'zh', agentT('zh', 'tool.argsJsonInvalid')), []);
+  assert.ok(zh[1].content[0].text.startsWith(agentT('zh', 'tool.argsJsonInvalid').split('{error}')[0]), '中文参数非法回喂来自语言模板');
 
-  // en 档：同一轮输入下回喂为对应英文整句，且不含 zh 档短语。
   const en = await resultsOf({ agent: 'en' });
   assert.equal(en[0].isError, true);
-  assert.equal(en[0].content[0].text, 'Tool read_file failed: tool exploded');
+  assert.deepEqual(errorCopyFailures('tool', 'en', agentT('en', 'tool.execFailed')), []);
+  assert.equal(en[0].content[0].text, agentT('en', 'tool.execFailed').replace('{name}', 'read_file').replace('{error}', 'tool exploded'));
   assert.equal(en[1].isError, true);
-  assert.match(en[1].content[0].text, /^Tool arguments are not valid JSON: /u, 'en 档参数非法回喂须为英文整句');
+  assert.deepEqual(errorCopyFailures('args', 'en', agentT('en', 'tool.argsJsonInvalid')), []);
+  assert.ok(en[1].content[0].text.startsWith(agentT('en', 'tool.argsJsonInvalid').split('{error}')[0]), '英文参数非法回喂来自语言模板');
   for (const message of en) {
     assert.doesNotMatch(message.content[0].text, /不是合法 JSON/u, 'en 档不得残留 zh 档短语');
     assert.doesNotMatch(message.content[0].text, /失败：/u, 'en 档不得残留 zh 档模板');
