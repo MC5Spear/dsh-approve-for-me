@@ -4706,10 +4706,18 @@ test('当前拒绝关系：真实帮助命中否定失败，等待卡否定最�
       ['zh', '命中即直接拒绝', '命中不会直接拒绝'],
       ['en', 'hit rejects outright', 'hit does not directly reject'],
       ['en', 'hit rejects outright', 'hit may immediately reject'],
+      ['zh', '命中即直接拒绝', '未命中即直接拒绝'],
+      ['en', 'hit rejects outright', 'no hit rejects outright'],
     ]) {
       assert.ok(dicts[lang][key].includes(from), '变异目标须真实在场');
       cases.push([key, lang, dicts[lang][key].replace(from, wrong), false]);
     }
+  }
+  for (const key of ['hint.denyPatterns', 'help.denyPatterns']) {
+    cases.push([key, 'zh', '未命中继续审查；' + dicts.zh[key], true]);
+    cases.push([key, 'en', 'No match continues review; ' + dicts.en[key], true]);
+    cases.push([key, 'zh', dicts.zh[key].replace('命中即直接拒绝', '命中后立即拒绝'), true]);
+    cases.push([key, 'en', dicts.en[key].replace('hit rejects outright', 'match immediately rejects'), true]);
   }
   for (const [lang, suffix, valid] of [
     ['zh', '。这不是最终审批结果，仍等待人工作答。', true],

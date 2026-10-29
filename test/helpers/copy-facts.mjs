@@ -27,15 +27,31 @@ const AND = (...predicates) => (text) => predicates.every((predicate) => (typeof
 const rule = (id, zh, en) => ({ id, zh, en });
 const r = rule;
 
-/** 仅核文本规则的命中→拒绝关系；否定及不确定动作不能当作确定拒绝。 */
+/** 仅核文本规则的命中→拒绝关系；条件和动作的否定只绑定各自局部分句。 */
 function hitRejects(text, lang) {
-  const relations = lang === 'zh'
-    ? [...text.matchAll(/(?:命中|匹配到)([^。；;]*?)拒绝/gu)]
-    : [...text.matchAll(/\b(?:hit|match)\b([^.;]*?)\b(?:rejects?|rejected|deny|denies|denied)\b/giu)];
-  const negatedOrUncertain = lang === 'zh'
+  const actionNegative = lang === 'zh'
     ? /不|未|无需|无须|可能|也许|或许|有时/u
     : /\b(?:not|no|never|may|might|could|can|sometimes)\b|n['’]t/iu;
-  return relations.length > 0 && relations.every((relation) => !negatedOrUncertain.test(relation[1]));
+  const conditionNegative = lang === 'zh'
+    ? /(?:未|不|没有|并未|未能|不曾)(?:发生)?\s*$/u
+    : /\b(?:no|not(?:\s+a)?|without(?:\s+a)?|non[- ]?)\s*$/iu;
+  let affirmative = 0;
+  for (const clause of text.split(/[。；;，,:：.!?！？\n—]/u)) {
+    const relations = lang === 'zh'
+      ? clause.matchAll(/(?:命中|匹配到)(.*?)拒绝/gu)
+      : clause.matchAll(/\b(?:hit|match)\b(.*?)\b(?:rejects?|rejected|deny|denies|denied)\b/giu);
+    for (const relation of relations) {
+      const negativeCondition = conditionNegative.test(clause.slice(0, relation.index));
+      const negativeAction = actionNegative.test(relation[1]);
+      if (negativeCondition) {
+        if (!negativeAction) return false; // 未命中即拒绝是条件反转；未命中不拒绝不作肯定依据。
+      } else {
+        if (negativeAction) return false;
+        affirmative++;
+      }
+    }
+  }
+  return affirmative > 0;
 }
 
 /** 等待人工的文案可明确说“不是最终结果”；拒绝的是肯定最终结算或无需人工的关系。 */
@@ -237,7 +253,7 @@ export const COPY_FACTS = {
     r('匹配所有字符串参数非仅命令', S(/字符串|参数/u, /全部|所有|不只|不仅/u, /命令/u), S(/string argument|argument|string/iu, /every|not just|all/iu, /command/iu)),
     r('标志格式', T(/\/source\/flags/u), T(/\/source\/flags/u)),
     r('命中拒绝', (text) => hitRejects(text, 'zh'), (text) => hitRejects(text, 'en')),
-    r('拒绝无模型人工', S(/命中/u, /拒绝/u, /模型/u, /人工/u, /不|无/u), S(/\bhit\b/iu, /reject/iu, /model/iu, /human/iu, /no|without/iu)),
+    r('拒绝无模型人工', S(/命中|匹配到/u, /拒绝/u, /模型/u, /人工/u, /不|无/u), S(/\b(?:hit|match)\b/iu, /reject/iu, /model/iu, /human/iu, /no|without/iu)),
     r('空只关本层', S(/空/u, /只|仅/u, /本层|这层|文本匹配|这一层/u), S(/empty/iu, /only/iu, /this text check|text check|layer/iu)),
     r('坏正则跳过', S(/不可编译|无法编译/u, /跳过/u), S(/uncompilable|cannot compile/iu, /skip/iu)),
   ],

@@ -258,6 +258,21 @@ test('关系正反例：否定最终结果允许，肯定最终或命中不拒�
   }
 });
 
+test('命中条件正反例：未命中不能充当肯定条件，邻句继续审查不误拒', () => {
+  for (const key of ['hint.denyPatterns', 'help.denyPatterns']) {
+    for (const [lang, text] of [
+      ['zh', '未命中即直接拒绝'], ['zh', '不匹配到即直接拒绝'],
+      ['en', 'no hit rejects outright'], ['en', 'no match rejects outright'], ['en', 'a non-match rejects outright'],
+    ]) assert.ok(fails(key, lang, text).includes('命中拒绝'), `${key}/${lang} 否定命中不能成为肯定关系`);
+  }
+  for (const [lang, text] of [
+    ['zh', '每行写一条正则表达式；未命中不代表安全，命中后立即拒绝，模型和人工都不能推翻。'],
+    ['zh', '每行一条正则；未命中继续审查；匹配到就直接拒绝，模型与人工无法推翻。'],
+    ['en', 'One regex on each line; no match does not establish safety. A hit immediately rejects, and neither model nor human can override it.'],
+    ['en', 'One regex per line; no hit continues review, but a match rejects outright, beyond model or human.'],
+  ]) assert.deepEqual(fails('hint.denyPatterns', lang, text), [], '独立肯定命中关系不受邻句未命中说明影响');
+});
+
 test('反例：说明缺失整条报缺失', () => {
   assert.deepEqual(fails('hint.mode', 'zh', ''), ['说明缺失']);
   assert.deepEqual(fails('hint.mode', 'zh', undefined), ['说明缺失']);
