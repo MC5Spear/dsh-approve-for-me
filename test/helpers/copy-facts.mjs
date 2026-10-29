@@ -290,14 +290,14 @@ export const COPY_FACTS = {
     ...shared.independent,
   ],
   'help.reviewer.parentModelRules': [
-    r('完整id作用范围', S(/任意 provider|provider/iu, /完整.{0,4}模型|模型 id/u, /作用范围|范围/u), S(/any provider|scope/iu, /full model id|model id/iu, /scope|provider/iu)),
+    r('完整id作用范围', S(/任意 provider|provider/iu, /完整.{0,4}模型|模型 id/u, /作用范围|范围/u), S(/any provider|scope/iu, /full model id|complete model id|model id/iu, /scope|provider/iu)),
     r(
       '会话高于映射高于全局',
       // 方向性共现：主语在前、优先词居中、宾语在后，反转顺序必红。
       AND(/会话选择[^。；]{0,8}更优先|会话选择[^。；]{0,6}最高/u, /命中[^。；]{0,8}(?:先于|优先于|高于)[^。；]{0,8}全局/u, (text) => affirmativeConcept(text, 'zh', /更优先|最高|先于|优先于|高于/u)),
       AND(/session choice[^.;]{0,30}(?:outranks|beats)/iu, /\bhit\b[^.;]{0,40}(?:outranks|beats)[^.;]{0,40}global/iu, (text) => affirmativeConcept(text, 'en', /beats?|outranks?/iu)),
     ),
-    r('唯一条件', S(/只能有一条|唯一/u, /规则|条/u), S(/one rule/iu, /per|scope/iu)),
+    r('唯一条件', S(/只能有一条|只允许一条|唯一/u, /规则|条/u), S(/one rule/iu, /per|scope/iu)),
     r('旧纯id任意provider', S(/纯模型 id|纯 id/u, /任意 provider|任意/u), S(/plain.id/iu, /any.provider|any/iu)),
     r(
       '斜杠确认且不自动改写',
@@ -463,7 +463,7 @@ export const COPY_FACTS = {
       S(/文件/u, /上限/u, /删除|删/u, /最旧/u),
       S(/files?/iu, /cap/iu, /delet|go first|dropped/iu, /oldest/iu),
     ),
-    r('轮转前备份', S(/轮转/u, /前/u, /备份/u), S(/rotation|rotat/iu, /before/u, /back/iu)),
+    r('轮转前备份', S(/轮转/u, /前/u, /备份/u), AND(T(/rotation|rotat/iu, /before/iu, /back/iu), /before[^.;]{0,16}rotat/iu)),
     r('减少采集不删', S(/减少|调低|降低/u, /采集|capture|collect/u, /不|不会|并不/u, /删除|删|delet/u), S(/reduc|turning.{0,12}down|lower|cut/iu, /capture|collect/iu, /not|never|no/u, /delet|remove/iu)),
   ],
 };
@@ -515,6 +515,66 @@ const modalFact = (zhSubject, zhEvent, enSubject, enEvent) => ({
   en: (text) => possibleEvent(text, 'en', enSubject, enEvent),
 });
 
+/** 阈值与动作极性须配对；未达到阈值且不执行是正确邻句，但不能替代达到阈值时执行的事实。 */
+function thresholdEvent(text, lang, boundary, action, joinComma = false) {
+  const parts = text.split(joinComma ? /[。；;.!?！？\n—]/u : /[。；;，,.!?！？\n—]/u).filter((part) => boundary.test(part) && action.test(part));
+  let found = false;
+  for (const part of parts) {
+    const reached = affirmativeConcept(part, lang, boundary);
+    const executes = affirmativeConcept(part, lang, action);
+    if (reached !== executes) return false;
+    if (reached) found = true;
+  }
+  return found;
+}
+
+/** 内部前置、阈值、范围与时序独立于主分类；只核已登记事实当前承载的短关系。 */
+const SUBCONDITION_FACTS = {
+  '强度自动低档': {
+    zh: (text) => sents(text).some((part) => /模型支持\s*`?low`?[^。；]{0,5}(?:使用|选用)\s*`?low`?/iu.test(part) && !/(?:不|未)支持\s*`?low`?[^。；]{0,5}(?:使用|选用)/iu.test(part)),
+    en: (text) => sents(text).some((part) => /(?:use\s*`?low`?\s+when the model supports it|when the model supports\s*`?low`?[^.;]{0,4}use\s*`?low`?)/iu.test(part) && !/(?:does not|doesn't|cannot|can't) support[^.;]{0,8}(?:it|`?low`?)/iu.test(part)),
+  },
+  '否则模型默认': { zh: (text) => /否则|不然|若不支持/u.test(text), en: (text) => /otherwise|else|if not/iu.test(text) },
+  '填写后只处理名单内': {
+    zh: (text) => conditionRelation(text, /填写|填入|填/u, null, /(?:只|仅)[^。；]{0,8}(?:名单|清单|列表)(?:之)?内/u, (part) => !/(?:不只|不仅)[^。；]{0,8}(?:名单|清单|列表)(?:之)?内/u.test(part)),
+    en: (text) => conditionRelation(text, /filled/iu, null, /(?:only|just) (?:the )?listed tools/iu, (part) => !/not (?:only|just) (?:the )?listed tools/iu.test(part)),
+  },
+  '完整id作用范围': { zh: (text) => /完整.{0,4}模型/u.test(text) && !/(?:不完整|部分).{0,4}模型/u.test(text), en: (text) => /(?:full|complete) model id/iu.test(text) && !/(?:not full|not complete|partial) model id/iu.test(text) },
+  '唯一条件': { zh: (text) => /同一作用范围(?:与|和|加)(?:同一)?执行助手模型[^。；]{0,8}(?:一条|唯一)/u.test(text), en: (text) => /one rule (?:per|for each) scope (?:and|plus) agent model|(?:each )?scope plus (?:one )?agent model[^.;]{0,20}one rule/iu.test(text) },
+  '每条件唯一': { zh: (text) => /同一作用范围(?:与|加|和)(?:同一)?执行助手模型[^。；]{0,8}(?:一条|唯一)/u.test(text), en: (text) => /one rule (?:per|for each) scope (?:and|plus) agent model|(?:each )?scope plus (?:one )?agent model[^.;]{0,20}one rule/iu.test(text) },
+  '旧纯id任意provider': { zh: (text) => /纯(?:模型 )?\s*id[^。；]{0,8}任意 provider/iu.test(text), en: (text) => /plain.id[^.;]{0,20}any.provider/iu.test(text) },
+  '斜杠确认且不自动改写': { zh: (text) => sents(text).some((part) => /确认前|未确认/u.test(part) && /原值/u.test(part) && /读取/u.test(part)), en: (text) => sents(text).some((part) => /until confirmed|before confirm(?:ation)?/iu.test(part) && /as.is/iu.test(part)) },
+  '请求起算用剩余': { zh: (text) => sents(text).some((part) => /审批请求[^。；]{0,6}(?:起算|开始计时)/u.test(part) && /剩余|余下/u.test(part)), en: (text) => sents(text).some((part) => /(?:from|at) the approval request/iu.test(part) && /remainder|remaining/iu.test(part)) },
+  '交人工重新起算': { zh: (text) => sents(text).some((part) => /从交人工(?:起算|开始计时)/u.test(part) && /重新|重起|另起/u.test(part)), en: (text) => /(?:from|at) the handoff itself|handoff[^.;]{0,16}(?:fresh|restart|begins again)/iu.test(text) },
+  '范围仍审查': { zh: (text) => /范围内/u.test(text) && !/范围外[^。；]{0,8}(?:仍须|仍要|必须)[^。；]{0,12}(?:规则检查|模型审查)/u.test(text), en: (text) => /in range|in scope/iu.test(text) && !/(?:out of|outside) (?:range|scope)[^.;]{0,32}(?:rule|review)/iu.test(text) },
+  '完全访问最宽': { zh: (text) => /完全访问[^。；]{0,12}最宽/u.test(text), en: (text) => /full access[^.;]{0,24}widest/iu.test(text) },
+  '工作区不放行更宽': { zh: (text) => affirmativeConcept(text, 'zh', /超出|更高|更宽|以上/u) && /(?:超出|更高|更宽|以上)[^。；]{0,16}(?:升权|写入)/u.test(text), en: (text) => /wider escalations|escalation beyond workspace/iu.test(text) },
+  '已结算不可迟改': { zh: (text) => /(?:已完成|已结算)的?结果/u.test(text) && !/(?:未完成|未结算)的?结果[^。；]{0,24}(?:推翻|改变)/u.test(text), en: (text) => /\bsettled result\b/iu.test(text) && !/\b(?:unsettled|not settled) result\b/iu.test(text) },
+  '关闭后真交人工才显示': { zh: (text) => !/(?:不只|不仅)[^。；]{0,18}(?:交给人工|交人工)/u.test(text), en: (text) => !/not only[^.;]{0,50}handed over/iu.test(text) },
+  '全部四类': { zh: (text) => /四类|全部/u.test(text) && !/非四类|不全/u.test(text), en: (text) => /all four/iu.test(text) && !/not all four/iu.test(text) },
+  '仅失败不发允许': { zh: (text) => /仅拒绝|只[^。；]{0,6}拒绝/u.test(text) && !/不仅拒绝|不只[^。；]{0,6}拒绝/u.test(text), en: (text) => !/deny[^.;]{0,40}(?:not only|and allow)/iu.test(text) },
+  '字节上限及截断标记': {
+    zh: (text) => thresholdEvent(text, 'zh', /超出|超过/u, /截断|裁剪/u),
+    en: (text) => thresholdEvent(text, 'en', /longer|exceeds?|exceeding/iu, /trim(?:med)?/iu),
+  },
+  '匹配所有字符串参数非仅命令': { zh: (text) => /全部字符串|所有字符串/u.test(text) && !/(?<!不)(?:仅|只)命令字段/u.test(text), en: (text) => /every string argument|all string argument/iu.test(text) && !/(?<!not )only (?:the )?command|not every string argument/iu.test(text) },
+  '空只关本层': { zh: (text) => !/(?:不只|不仅)关闭/u.test(text), en: (text) => !/disables? not only|not only this text check/iu.test(text) },
+  '坏正则跳过': { zh: (text) => /不可编译|无法编译/u.test(text) && !/(?<!不)可编译的行跳过/u.test(text), en: (text) => /uncompilable|cannot compile/iu.test(text) },
+  '下一渲染生效': { zh: (text) => /下一次|下次|随后/u.test(text), en: (text) => /next render/iu.test(text) },
+  '未选模型不保存': { zh: (text) => /未选|没有选/u.test(text), en: (text) => /no agent model|not chosen/iu.test(text) },
+  '确认前兼容读取原值': { zh: (text) => /确认前|未确认/u.test(text), en: (text) => /until confirmed|before confirm(?:ation)?/iu.test(text) },
+  '仅本会话选择': { zh: (text) => /只给这个会话|只给这一个会话|仅本会话/u.test(text) && !/不只给|不仅本会话/u.test(text), en: (text) => /this session only|only (?:for )?this session/iu.test(text) && !/not only (?:for )?this session|not this session only/iu.test(text) },
+  '回读窗口及默认': { zh: (text) => /默认\s*200\s*条/u.test(text) && !/默认非\s*200|默认不(?:是|为)\s*200/u.test(text), en: (text) => /\b200 entries by default|default[^.;]{0,10}\b200\b/iu.test(text) && !/not\s+200|non[- ]?200/iu.test(text) },
+  '超四倍轮转留窗口删旧': {
+    zh: (text) => thresholdEvent(text, 'zh', /超过|超出/u, /轮转/u) && /(?:超过|超出)[^。；]{0,12}四倍/u.test(text) && /最近(?:一个)?窗口|最近窗口/u.test(text) && !/不是最近|非最近|保留最旧/u.test(text),
+    en: (text) => thresholdEvent(text, 'en', /exceeds?|passes|pass/iu, /rewritten|rotat/iu, true) && /four times/iu.test(text) && /latest|recent/iu.test(text) && !/not (?:the )?latest|keep only (?:the )?oldest one/iu.test(text),
+  },
+  '超文件上限删最旧': { zh: (text) => thresholdEvent(text, 'zh', /超上限|超过上限/u, /文件/u) && /最旧/u.test(text), en: (text) => thresholdEvent(text, 'en', /exceeded|pass/iu, /file|cap/iu) && /oldest/iu.test(text) },
+  '轮转前备份': { zh: (text) => /轮转前|轮转之前/u.test(text), en: (text) => /before rotation/iu.test(text) },
+  '过小上限可能无有效结论': { zh: (text) => affirmativeConcept(text, 'zh', /过小|太小|太低|不足/u), en: (text) => affirmativeConcept(text, 'en', /too small|too low|insufficient/iu) },
+};
+export const SUBCONDITION_IDS = Object.keys(SUBCONDITION_FACTS);
+
 const BEHAVIOR_FACTS = {
   '采用模型或供应商默认': behaviorPositive(/模型|供应商/u, /由模型或供应商默认|默认/u, /model|provider/iu, /leaving|defaults?/iu),
   '额度可能先用于推理': { zh: (text) => possibleEvent(text, 'zh', /推理/u, /先(?:把|将|用)|先花|优先/u), en: (text) => /first|before/iu.test(text) && possibleEvent(text, 'en', /reasoning/iu, /spend(?:s)?|eat|use/iu) },
@@ -538,7 +598,7 @@ const BEHAVIOR_FACTS = {
   '人工卡片和超时拒绝': behaviorPositive(/人工作答|人工/u, /按拒绝结算|拒绝/u, /human/iu, /reject/iu),
   '分叉按主会话': behaviorPositive(/分叉/u, /按主会话/u, /forked/iu, /main session/iu),
   '全部四类': behaviorPositive(/四类/u, /发送|发给/u, /all four/iu, /sends? all|reach/iu),
-  '字节上限及截断标记': behaviorPositive(/通知|字节|超出/u, /截断|标记/u, /text|notice|byte/iu, /trimmed|marker/iu),
+  '字节上限及截断标记': { zh: (text) => thresholdEvent(text, 'zh', /超出|超过/u, /截断|裁剪/u), en: (text) => thresholdEvent(text, 'en', /longer|exceeds?|exceeding/iu, /trim(?:med)?/iu) },
   '匹配所有字符串参数非仅命令': behaviorPositive(/字符串|参数/u, /匹配/u, /string argument/iu, /matched/iu),
   '坏正则跳过': behaviorPositive(/不可编译|无法编译/u, /跳过/u, /uncompilable|cannot compile/iu, /skip/iu),
   '跟随宿主': behaviorPositive(/宿主/u, /跟随/u, /host/iu, /follow/iu),
@@ -554,9 +614,9 @@ const BEHAVIOR_FACTS = {
   '重新启用或重启可能恢复': modalFact(/重新启用|重启/u, /恢复/u, /re.enabl|restart/iu, /restore|recover/iu),
   '标准档与卸载清理': behaviorPositive(/标准|卸载/u, /可改选|改选|处理|清理/u, /standard|uninstall/iu, /pick|cleanup/iu),
   '记录随会话': behaviorPositive(/记录/u, /跟随|跟着|属于/u, /record/iu, /follow|belong|stay/iu),
-  '超四倍轮转留窗口删旧': behaviorPositive(/四倍/u, /轮转|删除/u, /four times/iu, /rewritten|rotation|rotat|delet/iu),
+  '超四倍轮转留窗口删旧': { zh: (text) => thresholdEvent(text, 'zh', /超过|超出/u, /轮转/u), en: (text) => thresholdEvent(text, 'en', /exceeds?|passes|pass/iu, /rewritten|rotat/iu, true) },
   '超文件上限删最旧': behaviorPositive(/文件/u, /删除|删/u, /file/iu, /deleted|delet|go first|dropped/iu),
-  '轮转前备份': behaviorPositive(/轮转/u, /备份/u, /rotation|rotat/iu, /back/iu),
+  '轮转前备份': { zh: (text) => /轮转/u.test(text) && affirmativeConcept(text, 'zh', /备份/u), en: (text) => /rotation|rotat/iu.test(text) && affirmativeConcept(text, 'en', /back/iu) },
   '过小上限可能无有效结论': { zh: (text) => /(?:没有|无|得不到|不产生|难以)(?:任何)?(?:有效|可用)(?:的)?(?:结论|结果)/u.test(text) && possibleEvent(text, 'zh', /过小|太低|太小|不足/u, /导致|得不到|无可用/u), en: (text) => /(?:no|without)(?: a)? (?:usable|valid) (?:conclusion|answer)/iu.test(text) && possibleEvent(text, 'en', /too small|too low|insufficient/iu, /leave|end/iu) },
   '操作无法识别': behaviorNegative(/(?:无法|不能|难以)(?:辨认|识别|确定)/u, /(?:cannot|unable|can't)[^.;]{0,12}(?:identif|recogniz|recover)/iu),
   '模型人工不能推翻': behaviorNegative(/(?:模型[^。；]{0,12}人工|人工[^。；]{0,12}模型)[^。；]{0,6}(?:都不能|不能|无法|不可|均不)[^。；]{0,3}(?:推翻|改变|反转)/u, /(?:beyond model or human|neither model nor human[^.;]{0,12}(?:override|overturn)|no[^.;]{0,12}(?:model|human)[^.;]{0,12}override)/iu),
@@ -616,7 +676,8 @@ export function copyFactFailures(key, lang, text) {
     const present = typeof check === 'function' ? check(normalized) : check.test(normalized);
     const behavior = BEHAVIOR_FACTS[fact.id]?.[lang];
     const polarity = !behavior || (typeof behavior === 'function' ? behavior(normalized) : behavior.test(normalized));
-    return !present || !polarity;
+    const subcondition = SUBCONDITION_FACTS[fact.id]?.[lang];
+    return !present || !polarity || subcondition && !subcondition(normalized);
   }).map((fact) => fact.id);
   failures.push(...conditionFactFailures(key, lang, normalized));
   if (key === 'help.fallback' && !(lang === 'zh' ? /(?:未允许|未通过|不允许)(?:一律|均|都)?拒绝/u : /(?:not allowed|not approved)[^.;]{0,24}(?:reject|denied)/iu).test(normalized)) failures.push('委派未允许拒绝');

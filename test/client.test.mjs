@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test, { after } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { DEFAULT_RATIONALE } from '../lib/reviewer.js';
-import { COPY_FACTS, FACT_KINDS, copyFactFailures, tokenRiskDisplayProtected } from './helpers/copy-facts.mjs';
+import { COPY_FACTS, FACT_KINDS, SUBCONDITION_IDS, copyFactFailures, tokenRiskDisplayProtected } from './helpers/copy-facts.mjs';
 
 /** 渲染期望从真实字典模板组装；事实和固定名称另有独立断言，普通句不再转抄。 */
 function warningText(dict, key, { configured = '', reason = '', layer, model = '' }) {
@@ -5153,6 +5153,160 @@ test('三项可能性事实：不可能与必然类别反转不同于可能不�
     assert.deepEqual(copyFactFailures(key, lang, dicts[lang][key]), [], '当前可能性说明须保持通过');
   }
   assert.equal(cases.length, 62);
+  assert.deepEqual(errors, [], errors.join('\n'));
+});
+
+test('登记事实内部子条件：前置阈值范围时序的实际相反值逐id失败', () => {
+  const roster = {
+    '强度自动低档': [['模型支持 `low` 就使用', '模型不支持 `low` 就使用'], ['when the model supports it', 'when the model does not support it']],
+    '否则模型默认': [['否则不指定', '同时不指定'], ['otherwise let', 'also let']],
+    '填写后只处理名单内': [['填写后只处理名单内', '填写后不只处理名单内'], ['only listed tools', 'not only listed tools']],
+    '完整id作用范围': [['完整模型 id', '不完整模型 id'], ['full model id', 'partial model id']],
+    '唯一条件': [['作用范围与执行助手模型', '作用范围或执行助手模型'], ['per scope and agent model', 'per scope or agent model']],
+    '每条件唯一': [['作用范围与执行助手模型', '作用范围或执行助手模型'], ['per scope and agent model', 'per scope or agent model']],
+    '旧纯id任意provider': [['任意 provider 读取', '指定 provider 读取'], ['read as any-provider', 'read as specific-provider']],
+    '斜杠确认且不自动改写': [['确认前按原值读取', '确认后按原值读取'], ['as-is until confirmed', 'as-is after confirmed']],
+    '请求起算用剩余': [['从审批请求起算', '从交人工起算'], ['from the approval request', 'from the handoff']],
+    '交人工重新起算': [['从交人工起算', '从审批请求起算'], ['from the handoff itself', 'from the approval request itself']],
+    '范围仍审查': [['范围内仍须', '范围外仍须'], ['everything in range', 'everything outside range']],
+    '完全访问最宽': [['＝最宽', '＝最窄'], ['is widest', 'is narrowest']],
+    '工作区不放行更宽': [['超出工作区写入', '未超出工作区写入'], ['wider escalations', 'narrower escalations']],
+    '已结算不可迟改': [['已完成的结果', '未完成的结果'], ['a settled result', 'an unsettled result']],
+    '关闭后真交人工才显示': [['仅在确实交给人工', '不仅在确实交给人工'], ['only once the request', 'not only once the request']],
+    '全部四类': [['四类都发送', '非四类都发送'], ['sends all four', 'sends not all four']],
+    '仅失败不发允许': [['仅拒绝、超时和故障', '不仅拒绝、超时和故障'], ['deny, timeout and failures skips', 'deny, timeout and failures and allow skips']],
+    '字节上限及截断标记': [['超出截断', '未超出截断'], ['longer text is trimmed', 'not longer text is trimmed']],
+    '匹配所有字符串参数非仅命令': [['全部字符串参数值', '部分字符串参数值'], ['Every string argument', 'Not every string argument']],
+    '空只关本层': [['只关闭这层', '不只关闭这层'], ['disables only this', 'disables not only this']],
+    '坏正则跳过': [['不可编译的行', '可编译的行'], ['Uncompilable lines', 'Compilable lines']],
+    '下一渲染生效': [['下一次渲染', '上一次渲染'], ['next render', 'previous render']],
+    '未选模型不保存': [['未选执行助手模型', '已选执行助手模型'], ['No agent model chosen', 'An agent model chosen']],
+    '确认前兼容读取原值': [['确认前', '确认后'], ['Until confirmed', 'After confirmed']],
+    '仅本会话选择': [['只给这个会话', '不只给这个会话'], ['this session only', 'not this session only']],
+    '回读窗口及默认': [['默认 200 条', '默认非 200 条'], ['200 entries by default', 'not 200 entries by default']],
+    '超四倍轮转留窗口删旧': [['超过窗口四倍', '未超过窗口四倍'], ['exceeds four times', 'does not exceed four times']],
+    '超文件上限删最旧': [['文件数超上限', '文件数未超上限'], ['file cap is exceeded', 'file cap is not exceeded']],
+    '轮转前备份': [['轮转前备份', '轮转后备份'], ['Back up before rotation', 'Back up after rotation']],
+    '过小上限可能无有效结论': [['上限过小', '上限不过小'], ['too small a cap', 'not too small a cap']],
+  };
+  const paraphrases = {
+    '强度自动低档': [['模型支持 `low` 就使用 `low`', '模型支持 `low` 时选用 `low`'], ['use `low` when the model supports it', 'when the model supports `low`, use `low`']],
+    '否则模型默认': [['否则不指定', '不然不指定'], ['otherwise let', 'else let']],
+    '填写后只处理名单内': [['填写后只处理名单内', '填入后仅处理清单内'], ['once filled, only listed tools', 'once filled in, just the listed tools']],
+    '完整id作用范围': [['完整模型 id', '完整的模型 id'], ['full model id', 'complete model id']],
+    '唯一条件': [['同一作用范围与执行助手模型只能有一条规则', '同一作用范围加同一执行助手模型只允许一条规则'], ['One rule per scope and agent model', 'Each scope plus agent model allows only one rule']],
+    '每条件唯一': [['同一作用范围与执行助手模型只能有一条规则', '同一作用范围加同一执行助手模型只能有一条规则'], ['one rule per scope and agent model', 'one rule for each scope plus agent model']],
+    '旧纯id任意provider': [['纯模型 id 键按任意 provider 读取', '纯 id 键按任意 provider 读取'], ['plain-id keys read as any-provider', 'plain-id entries read as any provider']],
+    '斜杠确认且不自动改写': [['确认前按原值读取', '未确认时仍读取原值'], ['are read as-is until confirmed', 'before confirmation they are read as-is']],
+    '请求起算用剩余': [['从审批请求起算＝交人工只使用剩余时间', '从审批请求开始计时，交人工仅使用剩余时间'], ['from the approval request (the handoff only gets the remainder)', 'the timer starts at the approval request, so the handoff gets the remaining time']],
+    '交人工重新起算': [['从交人工起算＝交人工时重新开始计时', '从交人工开始计时，交人工时重新起算'], ['from the handoff itself', 'a fresh timer starts at the handoff itself']],
+    '范围仍审查': [['范围内仍须通过', '范围内依然要通过'], ['everything in range still passes', 'anything in scope still passes']],
+    '完全访问最宽': [['完全访问（默认）＝最宽', '完全访问默认最宽'], ['Full access (default) is widest', 'Full access is the widest default']],
+    '工作区不放行更宽': [['超出工作区写入的升权不放行', '更高的工作区写入升权一律不放行'], ['rejects wider escalations', 'never approves wider escalations']],
+    '已结算不可迟改': [['已完成的结果不能由迟到点击推翻', '已结算的结果无法被迟到点击推翻'], ['a settled result cannot be overturned by a late click', 'a settled result cannot be undone by a late click']],
+    '关闭后真交人工才显示': [['仅在确实交给人工后显示卡片', '只在真正交人工后显示卡片'], ['appears only once the request is truly handed over', 'shows only when the request is actually handed over']],
+    '全部四类': [['四类都发送', '四类全部发送'], ['sends all four', 'all four reach the agent']],
+    '仅失败不发允许': [['仅拒绝、超时和故障', '只发送拒绝、超时和故障'], ['skips allow notices', 'omits allow notices']],
+    '字节上限及截断标记': [['超出截断并附截断标记', '超过上限就截断并带截断标记'], ['longer text is trimmed with a marker', 'text exceeding the cap is trimmed with a marker']],
+    '匹配所有字符串参数非仅命令': [['全部字符串参数值', '所有字符串参数值'], ['Every string argument', 'All string arguments']],
+    '空只关本层': [['空清单只关闭这层文本匹配', '空清单仅关闭这层文本匹配'], ['disables only this text check', 'only disables this text check']],
+    '坏正则跳过': [['不可编译的行跳过', '无法编译的行会跳过'], ['Uncompilable lines are skipped', 'Lines that cannot compile are skipped']],
+    '下一渲染生效': [['下一次渲染生效', '下次渲染时生效'], ['on the next render', 'at the next render']],
+    '未选模型不保存': [['未选执行助手模型', '没有选执行助手模型'], ['No agent model chosen', 'The agent model is not chosen']],
+    '确认前兼容读取原值': [['确认前按兼容规则读取，原值保留', '未确认时兼容读取，原值保留'], ['Until confirmed, the key keeps its value', 'Before confirmation, the key keeps its value']],
+    '仅本会话选择': [['只给这个会话指定', '只给这一个会话指定'], ['for this session only', 'only for this session']],
+    '回读窗口及默认': [['默认 200 条', '默认200条'], ['200 entries by default', 'by default 200 entries']],
+    '超四倍轮转留窗口删旧': [['超过窗口四倍时轮转', '超出窗口的四倍就轮转'], ['exceeds four times the window', 'passes four times the window']],
+    '超文件上限删最旧': [['文件数超上限时删除最旧', '文件数量超过上限时删最旧'], ['the file cap is exceeded', 'files pass the cap']],
+    '轮转前备份': [['轮转前备份', '轮转之前备份'], ['Back up before rotation', 'Before rotation, back up']],
+    '过小上限可能无有效结论': [['上限过小', '上限太小'], ['too small a cap', 'too low a cap']],
+  };
+  assert.deepEqual(Object.keys(roster).sort(), SUBCONDITION_IDS.slice().sort(), '每个有限子条件必须有独立反例');
+  assert.deepEqual(Object.keys(paraphrases).sort(), Object.keys(roster).sort(), '每个新子条件都需独立等义正例');
+  resetHooks();
+  const original = makeCtx();
+  loadClient().apply(original.ctx);
+  const dicts = original.dictionaries[0].dicts;
+  const errors = [];
+  let checked = 0;
+  for (const [id, pair] of Object.entries(roster)) {
+    const keys = Object.entries(COPY_FACTS).filter(([, facts]) => facts.some((fact) => fact.id === id)).map(([key]) => key);
+    for (const key of keys) for (const [index, lang] of ['zh', 'en'].entries()) {
+      let [from, to] = pair[index];
+      const current = dicts[lang][key];
+      assert.deepEqual(copyFactFailures(key, lang, current), [], `${key}/${lang} 当前原文仍应过`);
+      if (!current.includes(from)) { errors.push(`${key}/${lang}/${id}:目标不存在:${from}`); continue; }
+      const mutated = current.replace(from, to);
+      let count = 0;
+      const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+        if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+        count++;
+        return prefix + JSON.stringify(mutated);
+      });
+      assert.equal(count, 1);
+      resetHooks();
+      const env = makeCtx();
+      loadClient(source).apply(env.ctx);
+      const actual = env.dictionaries[0].dicts[lang][key];
+      assert.equal(actual, mutated);
+      if (!copyFactFailures(key, lang, actual).includes(id)) errors.push(`${key}/${lang}/${id}:反转仍通过`);
+      const [positiveFrom, positiveTo] = paraphrases[id][index];
+      if (!current.includes(positiveFrom)) errors.push(`${key}/${lang}/${id}:正例目标不存在:${positiveFrom}`);
+      else {
+        const rewritten = current.replace(positiveFrom, positiveTo);
+        const positiveFailures = copyFactFailures(key, lang, rewritten);
+        if (positiveFailures.length) errors.push(`${key}/${lang}/${id}:等义误拒:${positiveFailures.join(',')}`);
+      }
+      checked++;
+    }
+  }
+  for (const [lang, suffix] of [
+    ['zh', '。未超过窗口四倍时保持原文件。'],
+    ['en', ' A session file that does not exceed four times the window stays unchanged.'],
+    ['zh', '。文件未超过窗口四倍时不轮转。'],
+    ['en', ' When a session file does not exceed four times the window it is not rewritten.'],
+  ]) {
+    const current = dicts[lang]['view.retention'];
+    assert.deepEqual(copyFactFailures('view.retention', lang, current), [], '轮转当前原文必须通过');
+    assert.deepEqual(copyFactFailures('view.retention', lang, current + suffix), [], '无轮转动作的正确阈值邻句不参与轮转关系');
+  }
+  for (const [lang, suffix] of [
+    ['zh', '未超出上限时不裁剪。'],
+    ['en', ' Text that does not exceed the cap is not trimmed.'],
+  ]) assert.deepEqual(copyFactFailures('help.ui.injectMaxBytes', lang, dicts[lang]['help.ui.injectMaxBytes'] + suffix), [], '未超限不裁剪是正确相反分支');
+  const boundaryVariants = [
+    ['help.reviewer.model', 'zh', '强度自动低档', '模型支持 `low`', '模型未支持 `low`'],
+    ['help.reviewer.model', 'en', '强度自动低档', 'when the model supports it', "when the model doesn't support it"],
+    ['view.retention', 'zh', '超四倍轮转留窗口删旧', '超过窗口四倍', '不超过窗口四倍'],
+    ['view.retention', 'en', '超四倍轮转留窗口删旧', 'exceeds four times', "doesn't exceed four times"],
+    ['view.retention', 'zh', '超四倍轮转留窗口删旧', '只保留最近一个窗口', '只保留最旧一个窗口'],
+    ['view.retention', 'en', '超四倍轮转留窗口删旧', 'only the latest one', 'only the oldest one'],
+    ['view.retention', 'zh', '超文件上限删最旧', '文件数超上限时删除最旧', '文件数超上限时删除最新'],
+    ['view.retention', 'en', '超文件上限删最旧', 'oldest session files', 'newest session files'],
+    ['help.ui.injectMaxBytes', 'zh', '字节上限及截断标记', '超出截断', '不超出截断'],
+    ['help.ui.injectMaxBytes', 'en', '字节上限及截断标记', 'longer text is trimmed', 'no longer text is trimmed'],
+    ['help.tools', 'zh', '填写后只处理名单内', '填写后只处理名单内', '填写后不仅处理名单内'],
+    ['help.tools', 'en', '填写后只处理名单内', 'only listed tools', 'not just listed tools'],
+  ];
+  for (const [key, lang, id, from, to] of boundaryVariants) {
+    const current = dicts[lang][key];
+    assert.ok(current.includes(from), `${key}/${lang} 子边界目标在场:${from}`);
+    const mutated = current.replace(from, to);
+    let count = 0;
+    const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+      if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+      count++;
+      return prefix + JSON.stringify(mutated);
+    });
+    assert.equal(count, 1);
+    resetHooks();
+    const env = makeCtx();
+    loadClient(source).apply(env.ctx);
+    assert.equal(env.dictionaries[0].dicts[lang][key], mutated);
+    assert.ok(copyFactFailures(key, lang, mutated).includes(id), `${key}/${lang}/${id} 次级边界反转须失败`);
+  }
+  assert.equal(checked, 62);
+  assert.equal(boundaryVariants.length, 12);
   assert.deepEqual(errors, [], errors.join('\n'));
 });
 

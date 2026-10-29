@@ -343,6 +343,17 @@ test('三项可能性的局部否定作用域：可能不与无关cannot邻句�
   assert.deepEqual(fails('hint.reviewer.maxTokens', 'en', en + ' An unknown action cannot be approved.'), [], 'unrelated cannot does not negate the token event');
 });
 
+test('内部子条件等义正例：相反类别邻句不替代支持、阈值及only关系', () => {
+  const modelZh = '全局默认的审查模型与推理强度。模型引用为 provider/model；推理强度留空即自动：模型支持 `low` 时选用 `low`，否则不指定、由模型默认值决定。解析顺序为会话选择 → 按执行助手的模型映射 → 全局默认；全局默认未设置时使用执行助手的当前模型，独立于执行助手会话发起审查调用。';
+  const modelEn = 'Global default reviewer model and effort. Model reference is provider/model; empty effort is automatic: when the model supports `low`, use `low`, otherwise let the model default decide. Resolution: session choice, by the agent\'s model, global default; an unset default reviews on the agent\'s current model in an independent call.';
+  assert.deepEqual(fails('help.reviewer.model', 'zh', modelZh), []);
+  assert.deepEqual(fails('help.reviewer.model', 'en', modelEn), []);
+  assert.deepEqual(fails('help.tools', 'zh', '纳入自动审批的工具，每行一个。空清单覆盖所有工具；填写后只处理名单内工具，其余工具保持宿主流程。不是名单内的工具仍交宿主处理。'), []);
+  assert.deepEqual(fails('help.tools', 'en', 'One tool per line. Empty covers all tools; once filled, only listed tools are handled and the rest keep the host flow. Unlisted tools are not intercepted.'), []);
+  assert.deepEqual(fails('help.ui.injectMaxBytes', 'zh', '发给执行助手的单条通知的字节上限；超过上限时截断并带标记，0 不裁剪。审查记录按会话独立保存，与该上限无关。未超过上限的通知保持原样。'), []);
+  assert.deepEqual(fails('help.ui.injectMaxBytes', 'en', 'Byte cap for one notice; text exceeding the cap is trimmed with a marker, 0 does not trim. Review records are kept per session and ignore this limit. A shorter notice is unchanged.'), []);
+});
+
 test('反例：说明缺失整条报缺失', () => {
   assert.deepEqual(fails('hint.mode', 'zh', ''), ['说明缺失']);
   assert.deepEqual(fails('hint.mode', 'zh', undefined), ['说明缺失']);
