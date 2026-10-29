@@ -273,6 +273,25 @@ test('命中条件正反例：未命中不能充当肯定条件，邻句继续�
   ]) assert.deepEqual(fails('hint.denyPatterns', lang, text), [], '独立肯定命中关系不受邻句未命中说明影响');
 });
 
+test('已登记正向关系有限自查：紧邻不/not不能保留优先、独立和零立即含义', () => {
+  for (const [key, lang, text] of [
+    ['hint.reviewer.parentModelRules', 'zh', '按执行助手模型匹配的规则表：命中时不先于全局默认，会话选择更优先。'],
+    ['hint.reviewer.parentModelRules', 'en', "Rules matching the agent's model; a hit does not beat the global default, a session choice beats both."],
+    ['hint.reviewer.parentModelRules', 'zh', '按执行助手模型匹配的规则表：命中时先于全局默认，会话选择不更优先。'],
+    ['hint.reviewer.parentModelRules', 'en', "Rules matching the agent's model; a hit beats the global default, a session choice does not beat both."],
+    ['composer.title', 'zh', '本会话的审查模型；不独立于执行助手调用，点开可只给这个会话指定'],
+    ['composer.title', 'en', "This session's reviewer model — not called independently of the agent; pick one to override it for this session only"],
+    ['hint.human.timeoutMs', 'zh', '人工作答的等待上限（毫秒）；0 不会立即拒绝。'],
+    ['hint.human.timeoutMs', 'en', 'Human-answer wait limit (ms); 0 does not immediately reject.'],
+  ]) assert.ok(fails(key, lang, text).length > 0, `${key}/${lang} 正向关系紧邻否定必须失败`);
+  for (const [key, lang, text] of [
+    ['hint.reviewer.parentModelRules', 'zh', '按执行助手模型匹配的规则表：命中时先于全局默认，会话选择更优先；未命中不代表安全。'],
+    ['hint.reviewer.parentModelRules', 'en', "Rules matching the agent's model; a hit beats the global default, a session choice beats both. No match does not establish safety."],
+    ['composer.title', 'zh', '本会话的审查模型；独立于执行助手调用，点开可只给这个会话指定；这不是最终审批结果。'],
+    ['composer.title', 'en', "This session's reviewer model — called independently of the agent; pick one to override it for this session only. This is not the final outcome."],
+  ]) assert.deepEqual(fails(key, lang, text), [], '无关邻句否定不反转已登记正向关系');
+});
+
 test('反例：说明缺失整条报缺失', () => {
   assert.deepEqual(fails('hint.mode', 'zh', ''), ['说明缺失']);
   assert.deepEqual(fails('hint.mode', 'zh', undefined), ['说明缺失']);

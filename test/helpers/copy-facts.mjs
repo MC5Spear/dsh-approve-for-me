@@ -64,6 +64,22 @@ function claimsFinalOutcome(text, lang) {
     : /\b(?:is|as|becomes?|constitutes?)\s+(?:(?:the|a)\s+)?(?:final|conclusive)\s+(?:approval\s+)?(?:outcome|result|decision|conclusion)\b|\bno human (?:is )?(?:needed|required)\b|\bcannot be overturned\b/iu.test(withoutNegatedFinal);
 }
 
+/** 已登记正向关系的紧邻否定；只查看关系词前缀，不把其他分句的否定当作反转。 */
+function affirmativeConcept(text, lang, concept) {
+  const negativePrefix = lang === 'zh'
+    ? /(?:不|未|非|没有|并非|不是|无需|不能|无法|不再)(?:会|再|更|直接|立即|单独|保持|被)?\s*$/u
+    : /\b(?:not|no|never|without|cannot|can't|doesn't|don't|isn't|aren't)(?:\s+(?:be|a|an|the|as|called|used|run|act|acts|counted|timed|remain|remains|more|directly|immediately))*\s*$/iu;
+  let found = false;
+  for (const clause of text.split(/[。；;，,:：.!?！？\n—]/u)) {
+    const matches = clause.matchAll(new RegExp(concept.source, concept.flags.replace('g', '') + 'g'));
+    for (const match of matches) {
+      if (negativePrefix.test(clause.slice(0, match.index))) return false;
+      found = true;
+    }
+  }
+  return found;
+}
+
 // ── 跨键共用事实组 ──
 
 const shared = {
@@ -90,7 +106,7 @@ const shared = {
     ),
   ],
   independent: [
-    r('审查独立调用', S(/独立|另行|单独/u, /调用|审查|发起/u), S(/independent|separately|on its own/iu, /call|review|issued/iu)),
+    r('审查独立调用', AND(S(/独立|另行|单独/u, /调用|审查|发起/u), (text) => affirmativeConcept(text, 'zh', /独立|(?:另行|单独)(?=(?:进行|作出|发起)?(?:调用|审查))/u)), AND(S(/independent|separately|on its own/iu, /call|review|issued/iu), (text) => affirmativeConcept(text, 'en', /independent(?:ly)?|separately|on its own/iu))),
   ],
 };
 
@@ -129,8 +145,8 @@ export const COPY_FACTS = {
   'hint.reviewer.parentModelRules': [
     r('执行模型匹配', S(/执行助手/u, /模型/u, /匹配|规则/u), S(/agent/iu, /model/iu, /match|rule/iu)),
     // 方向性共现（主语→优先词→宾语同子句按序），防「全局先于命中」式反转误过。
-    r('映射先于全局', /(?:命中|映射|规则)[^。；]{0,8}(?:先于|优先于|高于)[^。；]{0,8}全局/u, /\bhit\b[^.;]{0,40}(?:beats|outranks)[^.;]{0,40}global/iu),
-    r('会话更优先', /会话选择[^。；]{0,8}更优先|会话选择[^。；]{0,6}最高/u, /session choice[^.;]{0,30}(?:beats|outranks|tops)/iu),
+    r('映射先于全局', AND(/(?:命中|映射|规则)[^。；]{0,8}(?:先于|优先于|高于)[^。；]{0,8}全局/u, (text) => affirmativeConcept(text, 'zh', /先于|优先于|高于/u)), AND(/\bhit\b[^.;]{0,40}(?:beats|outranks)[^.;]{0,40}global/iu, (text) => affirmativeConcept(text, 'en', /beats?|outranks?/iu))),
+    r('会话更优先', AND(/会话选择[^。；]{0,8}更优先|会话选择[^。；]{0,6}最高/u, (text) => affirmativeConcept(text, 'zh', /更优先|最高/u)), AND(/session choice[^.;]{0,30}(?:beats|outranks|tops)/iu, (text) => affirmativeConcept(text, 'en', /beats?|outranks?|tops?/iu))),
   ],
   'hint.language.ui': [r('插件界面语言', S(/插件/u, /界面/u, /语言/u), S(/plugin/iu, /UI|interface/iu, /language/iu))],
   'hint.language.agent': [r('审查文本和执行通知', S(/审查|发给/u, /文本/u, /执行助手|通知/u, /通知|执行助手/u), S(/text/iu, /reviewer/iu, /notice/iu, /agent/iu))],
@@ -186,8 +202,8 @@ export const COPY_FACTS = {
     r(
       '会话高于映射高于全局',
       // 方向性共现：主语在前、优先词居中、宾语在后，反转顺序必红。
-      AND(/会话选择[^。；]{0,8}更优先|会话选择[^。；]{0,6}最高/u, /命中[^。；]{0,8}(?:先于|优先于|高于)[^。；]{0,8}全局/u),
-      AND(/session choice[^.;]{0,30}(?:outranks|beats)/iu, /\bhit\b[^.;]{0,40}(?:outranks|beats)[^.;]{0,40}global/iu),
+      AND(/会话选择[^。；]{0,8}更优先|会话选择[^。；]{0,6}最高/u, /命中[^。；]{0,8}(?:先于|优先于|高于)[^。；]{0,8}全局/u, (text) => affirmativeConcept(text, 'zh', /更优先|最高|先于|优先于|高于/u)),
+      AND(/session choice[^.;]{0,30}(?:outranks|beats)/iu, /\bhit\b[^.;]{0,40}(?:outranks|beats)[^.;]{0,40}global/iu, (text) => affirmativeConcept(text, 'en', /beats?|outranks?/iu)),
     ),
     r('唯一条件', S(/只能有一条|唯一/u, /规则|条/u), S(/one rule/iu, /per|scope/iu)),
     r('旧纯id任意provider', S(/纯模型 id|纯 id/u, /任意 provider|任意/u), S(/plain.id/iu, /any.provider|any/iu)),
@@ -200,7 +216,7 @@ export const COPY_FACTS = {
   'help.reviewer.timeoutMs': [
     ...shared.timeout,
     r('装配结论全程', S(/装配/u, /结论/u, /全程|全过程|整个|从.{0,12}到/u), S(/assembly/iu, /conclusion/iu, /whole|entire|all the way|start to finish/iu)),
-    r('排队不占预算', S(/排队|队列/u, /独立|单独|另行/u, /计时|另计/u, /不消耗|不占用|不算|不占/u), S(/queue/iu, /separate|independent|on its own/iu, /timed|clocked|counted/iu, /not consume|never consume|does not consume|consume nothing/iu)),
+    r('排队不占预算', AND(S(/排队|队列/u, /独立|单独|另行/u, /计时|另计/u, /不消耗|不占用|不算|不占/u), (text) => affirmativeConcept(text, 'zh', /独立|单独|另行/u)), AND(S(/queue/iu, /separate|independent|on its own/iu, /timed|clocked|counted/iu, /not consume|never consume|does not consume|consume nothing/iu), (text) => affirmativeConcept(text, 'en', /separately|separate|independent|on its own/iu))),
     r('重试不重赠', S(/重试/u, /不|无|没/u, /时限|预算|时间预算/u), S(/retr(y|ies)/iu, /no|not|never/iu, /budget|time/iu)),
     r('超时拒绝报环节不是危险', S(/超时/u, /拒绝/u, /环节/u, /不是|并非|非|不算/u), S(/timeout/iu, /reject/iu, /stage/iu, /not a danger|no danger|not danger/iu)),
     r('零立即到点', S(/\b0\b/u, /立即|马上|即刻/u, /超时/u), S(/\b0\b/u, /immediately|at once|right away/iu, /times? out|timeout/iu)),
@@ -233,7 +249,7 @@ export const COPY_FACTS = {
     r('分叉按主会话', S(/分叉/u, /主会话/u), S(/forked/iu, /main session/iu)),
   ],
   'help.ui.humanCardDuringReview': [
-    r('抢先人工优先', S(/抢先|先/u, /人工/u, /优先/u), S(/answer first|first/iu, /human/iu, /wins|beats|prevails/iu)),
+    r('抢先人工优先', AND(S(/抢先|先/u, /人工/u, /优先/u), (text) => affirmativeConcept(text, 'zh', /优先/u)), AND(S(/answer first|first/iu, /human/iu, /wins|beats|prevails/iu), (text) => affirmativeConcept(text, 'en', /wins?|beats?|prevails?/iu))),
     r('已结算不可迟改', S(/已完成|已结算/u, /不能|无法|不可/u, /迟到|晚|迟/u, /推翻|改变|撤销/u), S(/settled/iu, /cannot|can.t|not/iu, /late/iu, /overturned|overturn|undo/iu)),
     r('关闭后真交人工才显示', S(/关闭/u, /仅|只/u, /确实|真正|真的/u, /交给人工|交人工/u, /显示/u), S(/\boff\b/iu, /only/iu, /truly|actually|really/iu, /handed over|handoff/iu, /appears|shows|card/iu)),
   ],
@@ -382,6 +398,7 @@ export function copyFactFailures(key, lang, text) {
     return typeof check === 'function' ? !check(normalized) : !check.test(normalized);
   }).map((fact) => fact.id);
   const zeroClause = sents(normalized).find((clause) => /\b0\b/u.test(clause));
+  if (zeroClause && /timeoutMs$/u.test(key) && !affirmativeConcept(zeroClause, lang, lang === 'zh' ? /立即|马上|即刻|拒绝|超时/u : /immediately|at once|right away|rejects?|times? out|timeout/iu)) failures.push('零值正向关系被否定');
   if (zeroClause && /timeoutMs$/u.test(key) && /(?:不|不会|并非|不是).{0,3}立即|(?:不|不会|并非|不是)\s*(?:拒绝|超时)|\b(?:does not|do not|doesn't|don't|not|never)\b.{0,15}(?:immediate|at once|reject|time out)|\b(?:reject|timeout)\b.{0,8}\b(?:not|never)\b/iu.test(zeroClause)) failures.push('零值含义反转');
   if (/^(?:hint|help)\.denyPatterns$/u.test(key) && !hitRejects(normalized, lang)) failures.push('命中拒绝含义反转');
   if (zeroClause && /injectMaxBytes$/u.test(key) && /不是不|并非不|not untrimmed|not without trimming/iu.test(zeroClause)) failures.push('零值含义反转');

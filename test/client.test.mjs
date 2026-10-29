@@ -4743,6 +4743,53 @@ test('当前拒绝关系：真实帮助命中否定失败，等待卡否定最�
   }
 });
 
+test('当前关键正向事实：逐项在真实关系前插不/not必须由live检查检出', () => {
+  resetHooks();
+  const originalEnv = makeCtx();
+  loadClient().apply(originalEnv.ctx);
+  const dicts = originalEnv.dictionaries[0].dicts;
+  const mutations = [
+    ['hint.reviewer.parentModelRules', 'zh', '先于', '不先于'],
+    ['help.reviewer.parentModelRules', 'zh', '先于', '不先于'],
+    ['hint.reviewer.parentModelRules', 'zh', '更优先', '不更优先'],
+    ['help.reviewer.parentModelRules', 'zh', '更优先', '不更优先'],
+    ['hint.reviewer.parentModelRules', 'en', 'hit beats', 'hit does not beat'],
+    ['help.reviewer.parentModelRules', 'en', 'hit outranks', 'hit does not outrank'],
+    ['hint.reviewer.parentModelRules', 'en', 'session choice beats', 'session choice does not beat'],
+    ['help.reviewer.parentModelRules', 'en', 'session choice outranks', 'session choice does not outrank'],
+    ['help.reviewer.timeoutMs', 'zh', '独立计时', '不独立计时'],
+    ['help.reviewer.timeoutMs', 'en', 'timed separately', 'not timed separately'],
+    ['help.ui.humanCardDuringReview', 'zh', '人工结果优先', '人工结果不优先'],
+    ['help.ui.humanCardDuringReview', 'en', 'human answer wins', 'human answer does not win'],
+    ['hint.human.timeoutMs', 'zh', '立即拒绝', '不立即拒绝'],
+    ['hint.human.timeoutMs', 'en', 'rejects immediately', 'does not reject immediately'],
+    ['help.human.timeoutMs', 'zh', '立即拒绝', '立即不拒绝'],
+    ['help.human.timeoutMs', 'en', 'rejects immediately', 'does not reject immediately'],
+    ['hint.reviewer.timeoutMs', 'zh', '立即超时', '不立即超时'],
+    ['hint.reviewer.timeoutMs', 'en', 'times out immediately', 'does not time out immediately'],
+  ];
+  for (const key of ['help.reviewer.model', 'warn.modelIssue.globalUnset', 'warn.modelIssue.followParent', 'warn.modelIssue.globalUnsetShadowed', 'composer.title']) {
+    mutations.push([key, 'zh', '独立', '不独立']);
+    mutations.push([key, 'en', key === 'composer.title' ? 'called independently' : 'an independent call', key === 'composer.title' ? 'not called independently' : 'not an independent call']);
+  }
+  for (const [key, lang, from, to] of mutations) {
+    assert.ok(dicts[lang][key].includes(from), `${key}/${lang} 真实目标关系应在场`);
+    const mutated = dicts[lang][key].replace(from, to);
+    let count = 0;
+    const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+      if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+      count++;
+      return prefix + JSON.stringify(mutated);
+    });
+    assert.equal(count, 1);
+    resetHooks();
+    const env = makeCtx();
+    loadClient(source).apply(env.ctx);
+    assert.equal(env.dictionaries[0].dicts[lang][key], mutated, '否定确已进入真实字典');
+    assert.ok(dictionaryFactFailures(env.dictionaries[0].dicts).some((failure) => failure.startsWith(`${lang}/${key}:`)), `${key}/${lang} 紧邻否定必须检出`);
+  }
+});
+
 test('当前token风险显示：原生字典源码错位和部分保护变异必须失败', () => {
   for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
     resetHooks();
