@@ -24,11 +24,29 @@ const T = (...patterns) => (text) => patterns.every((pattern) => pattern.test(te
 /** 多个谓词／正则全部成立（用于「同文多条独立子句事实」）。 */
 const AND = (...predicates) => (text) => predicates.every((predicate) => (typeof predicate === 'function' ? predicate(text) : predicate.test(text)));
 
-/** 断言不成立（反转守卫：命中即失败）。 */
-const NOT = (pattern) => (text) => !pattern.test(text);
-
 const rule = (id, zh, en) => ({ id, zh, en });
 const r = rule;
+
+/** 仅核文本规则的命中→拒绝关系；否定及不确定动作不能当作确定拒绝。 */
+function hitRejects(text, lang) {
+  const relations = lang === 'zh'
+    ? [...text.matchAll(/(?:命中|匹配到)([^。；;]*?)拒绝/gu)]
+    : [...text.matchAll(/\b(?:hit|match)\b([^.;]*?)\b(?:rejects?|rejected|deny|denies|denied)\b/giu)];
+  const negatedOrUncertain = lang === 'zh'
+    ? /不|未|无需|无须|可能|也许|或许|有时/u
+    : /\b(?:not|no|never|may|might|could|can|sometimes)\b|n['’]t/iu;
+  return relations.length > 0 && relations.every((relation) => !negatedOrUncertain.test(relation[1]));
+}
+
+/** 等待人工的文案可明确说“不是最终结果”；拒绝的是肯定最终结算或无需人工的关系。 */
+function claimsFinalOutcome(text, lang) {
+  const withoutNegatedFinal = lang === 'zh'
+    ? text.replace(/(?:不是|并非|不属于|不算|尚非)(?:本次|当前|这次)?的?(?:最终|最后)(?:审批)?(?:结果|结论|决定)/gu, '')
+    : text.replace(/\b(?:not|never)\s+(?:(?:the|a|any)\s+)?(?:final|conclusive)\s+(?:approval\s+)?(?:outcome|result|decision|conclusion)\b/giu, '');
+  return lang === 'zh'
+    ? /(?:即为|就是|为|是|属于|成为|构成|视为)的?(?:最终|最后)(?:审批)?(?:结果|结论|决定)|无需人工|不用人工|不可更改/u.test(withoutNegatedFinal)
+    : /\b(?:is|as|becomes?|constitutes?)\s+(?:(?:the|a)\s+)?(?:final|conclusive)\s+(?:approval\s+)?(?:outcome|result|decision|conclusion)\b|\bno human (?:is )?(?:needed|required)\b|\bcannot be overturned\b/iu.test(withoutNegatedFinal);
+}
 
 // ── 跨键共用事实组 ──
 
@@ -117,7 +135,7 @@ export const COPY_FACTS = {
   'hint.tools': [...shared.tools],
   'hint.denyPatterns': [
     r('每行正则', S(/每行|一行/u, /正则/u), S(/\bone\b/iu, /regex|regular expression/iu, /per line|each line|line/iu)),
-    r('命中拒绝', S(/命中|匹配到/u, /拒绝/u), S(/\bhit\b|match/iu, /reject|deny/iu)),
+    r('命中拒绝', (text) => hitRejects(text, 'zh'), (text) => hitRejects(text, 'en')),
     r('模型人工不能推翻', S(/模型/u, /人工/u, /不能|无法|不可|均不|都不能/u, /推翻|改变|反转/u), S(/model/iu, /human/iu, /no|not|cannot|beyond|neither/iu, /override|overturn|overrule|beyond/iu)),
   ],
   'help.reviewer.maxTokens': [...shared.token, r('阈值依模型和强度', S(/数值|阈值|门槛/u, /模型/u, /推理强度|强度/u, /异|变|不同|决定/u), S(/threshold|cap|number/iu, /varies|depends|differs/iu, /model/iu, /effort|strength/iu))],
@@ -218,6 +236,7 @@ export const COPY_FACTS = {
     r('每行正则', S(/每行|一行/u, /正则/u), S(/\bone\b/iu, /regex|regular expression/iu, /per line|each line|line/iu)),
     r('匹配所有字符串参数非仅命令', S(/字符串|参数/u, /全部|所有|不只|不仅/u, /命令/u), S(/string argument|argument|string/iu, /every|not just|all/iu, /command/iu)),
     r('标志格式', T(/\/source\/flags/u), T(/\/source\/flags/u)),
+    r('命中拒绝', (text) => hitRejects(text, 'zh'), (text) => hitRejects(text, 'en')),
     r('拒绝无模型人工', S(/命中/u, /拒绝/u, /模型/u, /人工/u, /不|无/u), S(/\bhit\b/iu, /reject/iu, /model/iu, /human/iu, /no|without/iu)),
     r('空只关本层', S(/空/u, /只|仅/u, /本层|这层|文本匹配|这一层/u), S(/empty/iu, /only/iu, /this text check|text check|layer/iu)),
     r('坏正则跳过', S(/不可编译|无法编译/u, /跳过/u), S(/uncompilable|cannot compile/iu, /skip/iu)),
@@ -276,7 +295,7 @@ export const COPY_FACTS = {
     r('仅本会话选择', S(/只|仅/u, /会话/u), S(/only/iu, /session/iu)),
     ...shared.independent,
   ],
-  'cardstate.waiting.deny': [r('模型拒绝非最终结果', AND(S(/自动审查|审查/u, /拒绝/u), T(/\{reason\}/u), NOT(/最终|无需人工|不可更改|final|no human needed|conclusive/iu)), AND(S(/review/iu, /deny/iu), T(/\{reason\}/u), NOT(/final|conclusive|no human needed|cannot be overturned/iu)))],
+  'cardstate.waiting.deny': [r('模型拒绝非最终结果', AND(S(/自动审查|审查/u, /拒绝/u), T(/\{reason\}/u), (text) => !claimsFinalOutcome(text, 'zh')), AND(S(/review/iu, /deny/iu), T(/\{reason\}/u), (text) => !claimsFinalOutcome(text, 'en')))],
   'cardstate.waiting.timeout': [r('超时无结论', S(/审查/u, /超时/u, /未|无/u, /结论/u), S(/review/iu, /timed out|timeout/iu, /without|no|not/iu, /conclusion/iu))],
   'cardstate.waiting.error': [r('故障无有效结论', AND(S(/审查/u, /未取得|无/u, /结论/u), T(/\{reason\}/u)), AND(S(/review/iu, /failed|error|without/iu, /conclusion/iu), T(/\{reason\}/u)))],
   'card.presets.none': [
@@ -348,7 +367,7 @@ export function copyFactFailures(key, lang, text) {
   }).map((fact) => fact.id);
   const zeroClause = sents(normalized).find((clause) => /\b0\b/u.test(clause));
   if (zeroClause && /timeoutMs$/u.test(key) && /(?:不|不会|并非|不是).{0,3}立即|(?:不|不会|并非|不是)\s*(?:拒绝|超时)|\b(?:does not|do not|doesn't|don't|not|never)\b.{0,15}(?:immediate|at once|reject|time out)|\b(?:reject|timeout)\b.{0,8}\b(?:not|never)\b/iu.test(zeroClause)) failures.push('零值含义反转');
-  if (key === 'hint.denyPatterns' && /(?:命中|匹配到)[^。；;]{0,12}(?:不|不会|并非|无需)\s*拒绝|\b(?:hit|match)\b[^.;]{0,20}\b(?:does not|do not|doesn't|don't|not|never)\b[^.;]{0,12}\b(?:reject|deny)\b/iu.test(normalized)) failures.push('命中拒绝含义反转');
+  if (/^(?:hint|help)\.denyPatterns$/u.test(key) && !hitRejects(normalized, lang)) failures.push('命中拒绝含义反转');
   if (zeroClause && /injectMaxBytes$/u.test(key) && /不是不|并非不|not untrimmed|not without trimming/iu.test(zeroClause)) failures.push('零值含义反转');
   if (/tools$/u.test(key) && /空.{0,15}(?:不覆盖|不处理|零工具)|empty[^.;]{0,30}(?:no tools|not cover|excludes all)/iu.test(normalized)) failures.push('空清单含义反转');
   const actual = [...text.matchAll(/\{([a-zA-Z][\w]*)\}/gu)].map((hit) => hit[1]).sort();

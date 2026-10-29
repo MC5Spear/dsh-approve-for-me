@@ -239,6 +239,25 @@ test('直接反转：零立即不拒绝与命中不拒绝的中英样本必须�
   ]) assert.ok(fails(key, lang, text).includes(expected), `${key}/${lang} 直接反转必须检出`);
 });
 
+test('关系正反例：否定最终结果允许，肯定最终或命中不拒绝失败', () => {
+  for (const [lang, text] of [
+    ['zh', '自动审查结论为拒绝：{reason}。这不是最终审批结果，仍等待人工作答。'],
+    ['zh', '自动审查已拒绝：{reason}。这并非最后决定，人工仍可作答。'],
+    ['en', 'The review concluded deny: {reason}. This is not the final approval outcome; a human answer is still pending.'],
+    ['en', 'Review verdict: deny ({reason}); this is not a conclusive decision while waiting for you.'],
+  ]) assert.deepEqual(fails('cardstate.waiting.deny', lang, text), [], '明确否定最终关系不是禁词命中');
+  for (const [lang, text] of [
+    ['zh', '自动审查结论为拒绝：{reason}。这就是最终审批结果，无需人工。'],
+    ['en', 'The review concluded deny: {reason}. This is the final approval outcome; no human is needed.'],
+  ]) assert.ok(fails('cardstate.waiting.deny', lang, text).includes('模型拒绝非最终结果'));
+  for (const key of ['hint.denyPatterns', 'help.denyPatterns']) {
+    for (const [lang, fragment] of [
+      ['zh', '命中不拒绝'], ['zh', '命中不会直接拒绝'], ['zh', '命中可能立即拒绝'],
+      ['en', 'a hit does not directly reject'], ['en', 'a hit may immediately reject'],
+    ]) assert.ok(fails(key, lang, fragment).includes('命中拒绝'), `${key} 共用确定命中拒绝关系`);
+  }
+});
+
 test('反例：说明缺失整条报缺失', () => {
   assert.deepEqual(fails('hint.mode', 'zh', ''), ['说明缺失']);
   assert.deepEqual(fails('hint.mode', 'zh', undefined), ['说明缺失']);

@@ -4694,6 +4694,47 @@ test('当前零值与拒绝规则提示：直接反转加载副本由同一live�
   }
 });
 
+test('当前拒绝关系：真实帮助命中否定失败，等待卡否定最终结果允许', () => {
+  resetHooks();
+  const baseline = makeCtx();
+  loadClient().apply(baseline.ctx);
+  const dicts = baseline.dictionaries[0].dicts;
+  const cases = [];
+  for (const key of ['hint.denyPatterns', 'help.denyPatterns']) {
+    for (const [lang, from, wrong] of [
+      ['zh', '命中即直接拒绝', '命中不拒绝'],
+      ['zh', '命中即直接拒绝', '命中不会直接拒绝'],
+      ['en', 'hit rejects outright', 'hit does not directly reject'],
+      ['en', 'hit rejects outright', 'hit may immediately reject'],
+    ]) {
+      assert.ok(dicts[lang][key].includes(from), '变异目标须真实在场');
+      cases.push([key, lang, dicts[lang][key].replace(from, wrong), false]);
+    }
+  }
+  for (const [lang, suffix, valid] of [
+    ['zh', '。这不是最终审批结果，仍等待人工作答。', true],
+    ['en', '. This is not the final approval outcome; a human answer is still pending.', true],
+    ['zh', '。这就是最终审批结果，无需人工。', false],
+    ['en', '. This is the final approval outcome; no human is needed.', false],
+  ]) cases.push(['cardstate.waiting.deny', lang, dicts[lang]['cardstate.waiting.deny'] + suffix, valid]);
+  for (const [key, lang, value, valid] of cases) {
+    let count = 0;
+    const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+      if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+      count++;
+      return prefix + JSON.stringify(value);
+    });
+    assert.equal(count, 1, '只替换目标语言的实际字典条目');
+    resetHooks();
+    const env = makeCtx();
+    loadClient(source).apply(env.ctx);
+    assert.equal(env.dictionaries[0].dicts[lang][key], value, '关系变异实际加载');
+    const failures = dictionaryFactFailures(env.dictionaries[0].dicts);
+    if (valid) assert.deepEqual(failures, [], '否定最终结果的等义补充须通过同一live检查');
+    else assert.ok(failures.some((failure) => failure.startsWith(`${lang}/${key}:`)), '直接反转须在live检查失败');
+  }
+});
+
 test('当前token风险显示：原生字典源码错位和部分保护变异必须失败', () => {
   for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
     resetHooks();
