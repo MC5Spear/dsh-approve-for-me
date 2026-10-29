@@ -569,6 +569,82 @@ const SUBCONDITION_FACTS = {
 };
 export const SUBCONDITION_IDS = Object.keys(SUBCONDITION_FACTS);
 
+/** 明确取消只绑定登记负关系的局部匹配；原关系自身的not/不是不算外层取消。 */
+function negativeRelationCancelled(text, lang, relation) {
+  const cancel = lang === 'zh'
+    ? /并非|不是|不属于?|不能说|不能认为|不再|这一说法不成立/gu
+    : /\bit is not true that\b|\bit is not the case that\b|\bcannot say(?: that)?\b|\bcan['’]t say(?: that)?\b|\bno longer\b|\bnot\b|\bis false\b|\bis not true\b/giu;
+  // 独立转折另起作用域；“configured but absent”共用主语的短关系不拆。
+  const parts = text.split(/[。；;.!?！？\n—]/iu).flatMap((sentence) =>
+    sentence.split(/\bbut\b(?=\s+(?:the|a|an|this|that|it|internal)\b)|但是/iu).flatMap((independent) => {
+      if (lang === 'en' && /\b(?:it is not true that|it is not the case that|cannot say(?: that)?|can['’]t say(?: that)?)\b/iu.test(independent)) return [independent];
+      return independent.split(/[，,:：]|\bbut\b/iu);
+    }));
+  for (const part of parts) {
+    for (const outer of part.matchAll(cancel)) {
+      const stripped = part.slice(0, outer.index) + part.slice(outer.index + outer[0].length);
+      for (const match of stripped.matchAll(new RegExp(relation.source, relation.flags.replace('g', '') + 'g'))) {
+        const start = match.index;
+        const end = start + match[0].length;
+        if (outer.index >= start && outer.index <= end) return true;
+        if (outer.index < start && (start - outer.index <= (lang === 'zh' ? 28 : 64) || lang === 'en' && /true that|case that|say(?: that)?/iu.test(outer[0]))
+          && (!/^not$/iu.test(outer[0]) || /^\s*$/u.test(stripped.slice(outer.index, start)))) return true;
+        if (outer.index > end && /^(?:这一|该)?说法\s*$|^(?:\s*(?:this claim|that statement))?\s*$/iu.test(stripped.slice(end, outer.index))) return true;
+      }
+    }
+  }
+  return false;
+}
+const NEGATIVE_RELATIONS = {
+  '模型人工不能推翻': [/(?:都)?不能推翻|无法推翻|不可推翻/u, /beyond model or human|neither model nor human[^.;]{0,12}(?:override|overturn)|no override/iu],
+  '不是额外授权': [/不等于授予|并非授予|不是额外授权/u, /grants no extra permission|no additional permission/iu],
+  '不影响审批': [/不影响(?:接管|审批)/u, /never the take.over|not[^.;]{0,12}approval/iu],
+  '斜杠确认且不自动改写': [/不自动改写|不会自动改写/u, /never rewritten|not rewritten/iu],
+  '重试不重赠': [/不另获时限|不会再获得|不获新预算/u, /get no fresh time budget|never handed a fresh time budget/iu],
+  '超时拒绝报环节不是危险': [/不是危险判定|并非危险判定/u, /not a danger verdict|no danger verdict/iu],
+  '不是全批': [/不等于自动批准|并非全批|不是无条件|绝不是无条件/u, /not a blanket approval|never a blanket approval/iu],
+  '工作区不放行更宽': [/不放行|一律不批/u, /rejects wider|never lets[^.;]{0,32}through/iu],
+  '拒绝不调模型': [/不调用模型|不调模型/u, /without the model|no model/iu],
+  '缺失标记不作安全': [/不把缺失当作安全|不会视为安全|并非安全/u, /never counts as safe|not safe/iu],
+  '委派无人工': [/没有人工通道|无人工通道/u, /have no human channel|without a human channel/iu],
+  '已结算不可迟改': [/不能由迟到[^。；]{0,4}推翻|无法被迟到[^。；]{0,4}推翻/u, /cannot be overturned|cannot be undone/iu],
+  '仅失败不发允许': [/允许不发送|允许那一类不发送/u, /skips allow notices|allow notices are not sent|omits allow notices/iu],
+  '记录视图独立': [/不受本开关影响|与此开关无关/u, /unaffected by this switch|nothing to do with this switch|not affected by this switch/iu],
+  '记录独立': [/与该上限无关|不受该上限/u, /ignore this limit|regardless of this limit/iu],
+  '拒绝无模型人工': [/不调用模型|不交人工|(?:都)?不能推翻/u, /no model|no human|no override/iu],
+  '不影响模型语言': [/不改变发送|不影响模型|不触碰文本/u, /never touches|not affect[^.;]{0,8}model/iu],
+  '独立界面语言': [/互不影响|独立/u, /independent(?: of| from)?|is independent/iu],
+  '默认模型不可用': [/不可用/u, /unavailable/iu],
+  '规则模型不可用': [/不可用/u, /unavailable/iu],
+  '会话配置不可用': [/不可用/u, /unavailable/iu],
+  '未选模型不保存': [/不保留该行|不留该行|丢弃/u, /not kept|dropped/iu],
+  '超时无结论': [/未取得有效结论|无结论/u, /without a conclusion|no conclusion/iu],
+  '故障无有效结论': [/未取得有效结论|无有效结论/u, /without a conclusion|no valid conclusion/iu],
+  '目录不可读': [/读不到|无法读取|不可用/u, /unavailable|cannot be read|unreadable/iu],
+  '服务缺失': [/服务缺失/u, /missing service/iu],
+  '读取失败': [/读取失败/u, /read failure|a read that failed/iu],
+  '信息不可用': [/没有可用预设信息|无可用预设信息/u, /no preset information|without preset information/iu],
+  '配置在场但当前表缺失': [/当前预设表里没有|不在当前预设表/u, /absent from[^.;]{0,20}current table|absent from|missing from/iu],
+  '插件不改YAML': [/不解析|不改写/u, /never parses|never rewrites/iu],
+  '减少采集不删': [/不删除已有记录|并不会删除已有记录/u, /never deletes|never removes/iu],
+  '未设置跟随当前模型': [/未设置|没有设置/u, /unset|not set/iu],
+  '零不传上限': [/不向模型传输出上限/u, /sends no cap|no cap is sent/iu],
+  '关闭完全不接管': [/不接管/u, /no take.over|not take over/iu],
+  '最高权限及更高不批': [/不会被自动批准|不会批准|不批准/u, /never auto.approved|never approved|not approved/iu],
+  '零不裁剪': [/不裁剪|不截断/u, /does not trim|no trimming|not trimmed/iu],
+  '空清单已知不接管': [/不接管|不会接管/u, /no known preset|not taken over/iu],
+  '不接管与继续两分支': [/不接管/u, /no take.over|not take over/iu],
+  '未设跟随当前模型': [/未设置|没有设置/u, /unset|not set/iu],
+  '排队不占预算': [/不消耗本预算|不消耗这份预算|不占用/u, /never consume|does not consume|consume nothing/iu],
+  '零拒绝非无限': [/不是无限等待|并非无限等待/u, /not an endless wait|not unlimited/iu],
+  '关闭零通知': [/一条都不发送|不发任何通知/u, /sends no notices|sends nothing/iu],
+  '默认未设置': [/未设置/u, /not set|unset/iu],
+  '无会话及映射条件': [/无有效会话选择|无有效映射/u, /no effective session choice|no effective rule/iu],
+  '会话未选且默认未设': [/未单独选择|未设置/u, /no reviewer|unset|not set/iu],
+  '全局未设且仅此层跟随': [/未设置/u, /not set|unset/iu],
+};
+export const NEGATIVE_RELATION_IDS = Object.keys(NEGATIVE_RELATIONS);
+
 const BEHAVIOR_FACTS = {
   '采用模型或供应商默认': behaviorPositive(/模型|供应商/u, /由模型或供应商默认|默认/u, /model|provider/iu, /leaving|defaults?/iu),
   '额度可能先用于推理': { zh: (text) => possibleEvent(text, 'zh', /推理/u, /先(?:把|将|用)|先花|优先/u), en: (text) => /first|before/iu.test(text) && possibleEvent(text, 'en', /reasoning/iu, /spend(?:s)?|eat|use/iu) },
@@ -671,7 +747,9 @@ export function copyFactFailures(key, lang, text) {
     const behavior = BEHAVIOR_FACTS[fact.id]?.[lang];
     const polarity = !behavior || (typeof behavior === 'function' ? behavior(normalized) : behavior.test(normalized));
     const subcondition = SUBCONDITION_FACTS[fact.id]?.[lang];
-    return !present || !polarity || subcondition && !subcondition(normalized);
+    const negativeRelation = NEGATIVE_RELATIONS[fact.id]?.[lang === 'zh' ? 0 : 1];
+    const cancelled = negativeRelation && negativeRelationCancelled(normalized, lang, negativeRelation);
+    return !present || !polarity || subcondition && !subcondition(normalized) || cancelled;
   }).map((fact) => fact.id);
   failures.push(...conditionFactFailures(key, lang, normalized));
   if (key === 'help.fallback' && !(lang === 'zh' ? /(?:未允许|未通过|不允许)(?:一律|均|都)?拒绝/u : /(?:not allowed|not approved)[^.;]{0,24}(?:reject|denied)/iu).test(normalized)) failures.push('委派未允许拒绝');

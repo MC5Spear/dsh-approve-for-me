@@ -405,6 +405,34 @@ test('mode有限关系正反例：开关分支与两个审查动作各自绑定�
   ]) assert.ok(checkModeHelpFacts(samples.find(([language]) => language === lang)[1] + suffix).includes(id), '另一正确关系不能掩盖同对象相反关系');
 });
 
+test('负关系取消作用域有限正反例：真实负关系等义与无关取消不冲突', () => {
+  const samples = [
+    ['hint.denyPatterns', 'zh', '每行一条正则；命中即拒绝，模型与人工都不能推翻。', '都不能推翻', '都无法推翻'],
+    ['hint.denyPatterns', 'en', 'One regex per line; a hit rejects outright, beyond model or human.', 'beyond model or human', 'beyond model or human override'],
+    ['help.ui.inject', 'zh', '允许、拒绝、超时和故障＝四类都发送；仅拒绝、超时和故障＝允许不发送；选择「不发送」＝一条都不发送。审查记录视图的显示不受本开关影响。', '不受本开关影响', '与此开关无关'],
+    ['help.ui.inject', 'en', 'Allow, deny, timeout and failures sends all four; deny, timeout and failures skips allow notices; send none sends no notices. The review-log view is unaffected by this switch.', 'unaffected by this switch', 'independent of this switch'],
+    ['help.reviewer.timeoutMs', 'zh', '自动审查等待上限（毫秒）涵盖装配和取得结论的全过程；排队独立计时，不消耗本预算；内部重试不另获时限。超时拒绝并注明环节，不是危险判定。0 立即超时。', '不另获时限', '不会再获得新的时限'],
+    ['help.reviewer.timeoutMs', 'en', 'Auto-review wait limit (ms), covering assembly and the whole wait for this conclusion; queue waits are timed separately and never consume this budget, internal retries get no fresh time budget. A timeout rejects with its stage named, not a danger verdict. 0 times out immediately.', 'get no fresh time budget', 'are never handed a fresh time budget'],
+  ];
+  for (const [key, lang, original, from, to] of samples) {
+    assert.deepEqual(fails(key, lang, original), []);
+    assert.deepEqual(fails(key, lang, original.replace(from, to)), [], '真正负关系等义须保持');
+    assert.deepEqual(fails(key, lang, original + (lang === 'zh' ? '这并非最终审批结果。' : ' This is not the final approval outcome.')), [], '无关对象取消不影响登记负义务');
+  }
+  for (const [key, lang, text, id] of [
+    ['hint.denyPatterns', 'zh', '每行一条正则；命中即拒绝，模型与人工不属于都不能推翻。', '模型人工不能推翻'],
+    ['hint.denyPatterns', 'en', 'One regex per line; a hit rejects outright, no longer beyond model or human.', '模型人工不能推翻'],
+    ['help.ui.inject', 'zh', samples[2][2].replace('不受本开关影响', '不能说不受本开关影响'), '记录视图独立'],
+    ['help.reviewer.timeoutMs', 'zh', samples[4][2].replace('不另获时限', '不再不另获时限'), '重试不重赠'],
+    ['hint.denyPatterns', 'zh', '每行一条正则；命中即拒绝，模型与人工都不能推翻这一说法不成立。', '模型人工不能推翻'],
+    ['hint.denyPatterns', 'en', 'One regex per line; a hit rejects outright, beyond model or human this claim is false.', '模型人工不能推翻'],
+  ]) assert.ok(fails(key, lang, text).includes(id), '有限前后置取消须指向对应事实');
+  for (const [text, id] of [
+    ['总开关：规则检查＋LLM 审查＝正常接管；关闭时并非不接管＝等同未安装，宿主审批流程不受影响。', 'off-no-takeover'],
+    ['On: rule check plus LLM review takes over. When off, it is not true that it does not take over; it is like uninstalled, host approvals untouched.', 'off-no-takeover'],
+  ]) assert.ok(checkModeHelpFacts(text).includes(id));
+});
+
 test('反例：说明缺失整条报缺失', () => {
   assert.deepEqual(fails('hint.mode', 'zh', ''), ['说明缺失']);
   assert.deepEqual(fails('hint.mode', 'zh', undefined), ['说明缺失']);

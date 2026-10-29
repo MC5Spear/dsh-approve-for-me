@@ -31,8 +31,10 @@ function takeoverStates(text) {
   return [...text.matchAll(new RegExp(AFF_TAKEOVER.source, 'giu'))].map((match) => {
     const before = text.slice(0, match.index);
     const after = text.slice(match.index + match[0].length);
-    return !/(?:不|无|未|没有)(?:进行|任何|正常|再|会){0,2}\s*$|\b(?:not|never|no|without)\s*$/iu.test(before)
-      && !/^\s*(?:nothing|no\b)/iu.test(after);
+    const negative = /(?:不|无|未|没有)(?:进行|任何|正常|再|会){0,2}\s*$|\b(?:not|never|no|without)\s*$/iu.test(before)
+      || /^\s*(?:nothing|no\b)/iu.test(after);
+    const cancelled = /(?:并非|不是|不能说|不再)[^，。；;]{0,10}(?:不|无|未|没有)(?:进行|任何|正常|再|会){0,2}\s*$|\b(?:it is not true that|it is not the case that|cannot say that|no longer)[^,.;]{0,48}(?:not|no|without)\s*$/iu.test(before);
+    return !negative || cancelled;
   });
 }
 

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test, { after } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { DEFAULT_RATIONALE } from '../lib/reviewer.js';
-import { COPY_FACTS, FACT_KINDS, SUBCONDITION_IDS, copyFactFailures, tokenRiskDisplayProtected } from './helpers/copy-facts.mjs';
+import { COPY_FACTS, FACT_KINDS, SUBCONDITION_IDS, NEGATIVE_RELATION_IDS, copyFactFailures, tokenRiskDisplayProtected } from './helpers/copy-facts.mjs';
 import { checkModeHelpFacts } from './helpers/mode-copy-facts.mjs';
 
 /** 渲染期望从真实字典模板组装；事实和固定名称另有独立断言，普通句不再转抄。 */
@@ -5360,6 +5360,183 @@ test('登记事实内部子条件：前置阈值范围时序的实际相反值�
   }
   assert.equal(checked, 62);
   assert.equal(boundaryVariants.length, 12);
+  assert.deepEqual(errors, [], errors.join('\n'));
+});
+
+test('负关系明确取消：逐事实实际否定概念中英外层取消必须失败，无关取消邻句保持通过', () => {
+  const roster = {
+    '模型人工不能推翻': ['都不能推翻', 'beyond model or human'],
+    '不是额外授权': ['不等于授予', 'grants no extra permission'],
+    '不影响审批': ['不影响接管', 'never the take-over'],
+    '斜杠确认且不自动改写': ['不自动改写', 'never rewritten'],
+    '重试不重赠': ['不另获时限', 'get no fresh time budget'],
+    '超时拒绝报环节不是危险': ['不是危险判定', 'not a danger verdict'],
+    '不是全批': ['不等于自动批准', 'not a blanket approval'],
+    '工作区不放行更宽': ['不放行', 'rejects wider'],
+    '拒绝不调模型': ['不调用模型', 'without the model'],
+    '缺失标记不作安全': ['不把缺失当作安全', 'never counts as safe'],
+    '委派无人工': ['没有人工通道', 'have no human channel'],
+    '已结算不可迟改': ['不能由迟到点击推翻', 'cannot be overturned'],
+    '仅失败不发允许': ['允许不发送', 'skips allow notices'],
+    '记录视图独立': ['不受本开关影响', 'unaffected by this switch'],
+    '记录独立': ['与该上限无关', 'ignore this limit'],
+    '拒绝无模型人工': ['不交人工', 'no human'],
+    '不影响模型语言': ['不改变发送', 'never touches'],
+    '独立界面语言': ['互不影响', 'is independent'],
+    '默认模型不可用': ['不可用', 'unavailable'],
+    '规则模型不可用': ['不可用', 'unavailable'],
+    '会话配置不可用': ['不可用', 'unavailable'],
+    '未选模型不保存': ['不保留该行', 'not kept'],
+    '超时无结论': ['未取得有效结论', 'without a conclusion'],
+    '故障无有效结论': ['未取得有效结论', 'without a conclusion'],
+    '目录不可读': ['读不到', 'unavailable'],
+    '服务缺失': ['服务缺失', 'missing service'],
+    '读取失败': ['读取失败', 'read failure'],
+    '信息不可用': ['没有可用预设信息', 'no preset information'],
+    '配置在场但当前表缺失': ['当前预设表里没有', 'absent from'],
+    '插件不改YAML': ['不解析', 'never parses'],
+    '减少采集不删': ['不删除已有记录', 'never deletes'],
+    '未设置跟随当前模型': ['未设置', 'unset'],
+    '零不传上限': ['不向模型传输出上限', 'sends no cap'],
+    '关闭完全不接管': ['不接管', 'no take-over'],
+    '最高权限及更高不批': ['不会被自动批准', 'never auto-approved'],
+    '零不裁剪': ['不裁剪', 'does not trim'],
+    '空清单已知不接管': ['不接管', 'no known preset'],
+    '不接管与继续两分支': ['不接管', 'no take-over'],
+    '未设跟随当前模型': ['未设置', 'unset'],
+    '排队不占预算': ['不消耗本预算', 'never consume'],
+    '零拒绝非无限': ['不是无限等待', 'not an endless wait'],
+    '关闭零通知': ['一条都不发送', 'sends no notices'],
+    '默认未设置': ['未设置', 'not set'],
+    '无会话及映射条件': ['无有效会话选择', 'no effective session choice'],
+    '会话未选且默认未设': ['未单独选择', 'no reviewer'],
+    '全局未设且仅此层跟随': ['未设置', 'not set'],
+  };
+  const propositions = {
+    '模型人工不能推翻': ['The hit result is beyond model or human.', 'A hit has no override by a model or a human.'],
+    '不影响审批': ['The changed quantity concerns skip lines, never the take-over itself.', 'The changed quantity concerns skip lines, never the take-over itself.'],
+    '超时拒绝报环节不是危险': ['The timeout is not a danger verdict.', 'The timeout is not a danger verdict.'],
+    '未设置跟随当前模型': ['An unset default means the agent uses its current model.', 'An unset default means the agent uses its current model.'],
+    '未设跟随当前模型': ['An unset default reviews on the agent’s current model.', 'An unset default reviews on the agent’s current model.'],
+    '最高权限及更高不批': ['Wider escalations are never auto-approved.', 'Wider escalations are never auto-approved.'],
+    '不接管与继续两分支': ['Keeping the host flow means no take-over.', 'Keeping the host flow means no take-over.'],
+    '配置在场但当前表缺失': ['The configured preset is absent from the current preset table.', 'The configured preset is absent from the current preset table.'],
+    '服务缺失': ['A possible cause is a missing service.', 'A possible cause is a missing service.'],
+    '读取失败': ['A possible cause is a read failure.', 'A possible cause is a read failure.'],
+    '信息不可用': ['There is no preset information.', 'There is no preset information.'],
+    '不是额外授权': ['Choosing the take-over range grants no extra permissions.', 'Choosing the take-over range grants no extra permissions.'],
+    '不是全批': ['The bounded range is not a blanket approval.', 'The bounded range is not a blanket approval.'],
+  };
+  assert.deepEqual(Object.keys(roster).sort(), NEGATIVE_RELATION_IDS.slice().sort(), '每个明确负关系必须独立有取消反例');
+  resetHooks();
+  const original = makeCtx();
+  loadClient().apply(original.ctx);
+  const dicts = original.dictionaries[0].dicts;
+  let tested = 0;
+  const errors = [];
+  for (const [id, pair] of Object.entries(roster)) {
+    const keys = Object.entries(COPY_FACTS).filter(([, facts]) => facts.some((fact) => fact.id === id)).map(([key]) => key);
+    for (const key of keys) for (const [index, lang] of ['zh', 'en'].entries()) {
+      let from = pair[index];
+      const current = dicts[lang][key];
+      if (id === '空清单已知不接管' && lang === 'zh' && key === 'card.presets.none') from = '不会接管';
+      if (id === '关闭零通知' && key === 'help.fallback') from = lang === 'zh' ? '不发任何通知' : 'sends nothing';
+      if (!current.includes(from)) { errors.push(`${key}/${lang}/${id}:目标不存在:${from}`); continue; }
+      assert.deepEqual(copyFactFailures(key, lang, current), [], '真实原值仍通过');
+      const suffix = lang === 'zh' ? '。这并非最终审批结果。' : ' This is not the final approval outcome.';
+      assert.deepEqual(copyFactFailures(key, lang, current + suffix), [], `${key}/${lang} 无关取消不能误伤`);
+      if (propositions[id]) assert.deepEqual(copyFactFailures(key, lang, current + (lang === 'en' ? ' ' + propositions[id][key === 'help.denyPatterns' ? 1 : 0] : '')), [], '明确补充命题与原负关系一致');
+      const variants = lang === 'zh' ? ['并非', '不是', '不能说'] : ['it is not true that ', 'it is not the case that ', 'we cannot say that '];
+      for (const outer of variants) {
+        let mutated;
+        if (lang === 'zh') mutated = current.replace(from, outer + from);
+        else {
+          const position = current.indexOf(from);
+          const previous = current.slice(0, position);
+          const boundary = Math.max(...['.', ';', '—'].map((mark) => previous.lastIndexOf(mark)));
+          const start = boundary + 1;
+          const rest = current.slice(start);
+          const next = rest.search(/[.;—]/u);
+          const end = next < 0 ? current.length : start + next;
+          const clause = current.slice(start, end).trim();
+          const proposition = propositions[id]?.[key === 'help.denyPatterns' ? 1 : 0]?.replace(/\.$/u, '') ?? clause;
+          if (propositions[id]) mutated = current + ' ' + outer + proposition + '.';
+          else mutated = current.slice(0, start) + ' ' + outer + proposition + current.slice(end);
+        }
+        let count = 0;
+        const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+          if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+          count++;
+          return prefix + JSON.stringify(mutated);
+        });
+        assert.equal(count, 1);
+        resetHooks();
+        const env = makeCtx();
+        loadClient(source).apply(env.ctx);
+        const actual = env.dictionaries[0].dicts[lang][key];
+        assert.equal(actual, mutated);
+        if (!copyFactFailures(key, lang, actual).includes(id)) errors.push(`${key}/${lang}/${id}:取消仍通过:${outer}${from}`);
+        tested++;
+      }
+    }
+  }
+  const controlled = [
+    ['hint.denyPatterns', 'zh', '都不能推翻', '并非都不能推翻', '模型人工不能推翻'],
+    ['help.denyPatterns', 'zh', '都不能推翻', '并非都不能推翻', '拒绝无模型人工'],
+    ['help.ui.inject', 'zh', '显示不受本开关影响', '显示并非不受本开关影响', '记录视图独立'],
+    ['help.reviewer.timeoutMs', 'zh', '内部重试不另获时限', '内部重试并非不另获时限', '重试不重赠'],
+    ['help.denyPatterns', 'zh', '不调用模型', '不属于不调用模型', '拒绝无模型人工'],
+    ['help.denyPatterns', 'en', 'no model', 'no longer no model', '拒绝无模型人工'],
+    ['help.denyPatterns', 'en', 'no human', 'no longer no human', '拒绝无模型人工'],
+    ['help.denyPatterns', 'en', 'no override', 'no longer no override', '拒绝无模型人工'],
+    ['help.reviewer.timeoutMs', 'en', 'get no fresh time budget', 'no longer get no fresh time budget', '重试不重赠'],
+    ['help.ui.inject', 'en', 'is unaffected by this switch', 'is no longer unaffected by this switch', '记录视图独立'],
+    ['card.presets.missing.remedy', 'zh', '不改写', '并非不改写', '插件不改YAML'],
+  ];
+  for (const [key, lang, from, to, id] of controlled) {
+    const current = dicts[lang][key];
+    assert.ok(current.includes(from), `${key}/${lang} 受控反例真实定位`);
+    const mutated = current.replace(from, to);
+    let count = 0;
+    const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+      if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+      count++;
+      return prefix + JSON.stringify(mutated);
+    });
+    assert.equal(count, 1);
+    resetHooks();
+    const env = makeCtx();
+    loadClient(source).apply(env.ctx);
+    assert.equal(env.dictionaries[0].dicts[lang][key], mutated);
+    assert.ok(copyFactFailures(key, lang, mutated).includes(id), `${key}/${lang}/${id}受控取消应失败`);
+  }
+  const localPositive = [
+    ['help.denyPatterns', 'zh', '模型和人工都不能推翻', '模型和人工都无法推翻'],
+    ['hint.denyPatterns', 'zh', '模型与人工都不能推翻', '模型与人工都无法推翻'],
+    ['help.ui.inject', 'zh', '不受本开关影响', '与此开关无关'],
+    ['help.reviewer.timeoutMs', 'zh', '不另获时限', '不会再获得新的时限'],
+    ['help.reviewer.timeoutMs', 'en', 'get no fresh time budget', 'are never handed a fresh time budget'],
+    ['help.ui.inject', 'en', 'unaffected by this switch', 'independent of this switch'],
+  ];
+  for (const [key, lang, from, to] of localPositive) {
+    const current = dicts[lang][key];
+    assert.ok(current.includes(from));
+    assert.deepEqual(copyFactFailures(key, lang, current.replace(from, to)), [], '原取消关系对应真正负等义保持');
+  }
+  for (const [key, lang, suffix, id, cancelled] of [
+    ['hint.denyPatterns', 'en', ' It is not true that this is a final approval outcome, but the hit result is beyond model or human.', '模型人工不能推翻', ' It is not true that the hit result is beyond model or human.'],
+    ['help.ui.inject', 'en', ' It is not true that this is a final approval outcome, but the review-log view is unaffected by this switch.', '记录视图独立', ' It is not true that the review-log view is unaffected by this switch.'],
+    ['help.reviewer.timeoutMs', 'en', ' It is not true that this is a final approval outcome, but internal retries get no fresh time budget.', '重试不重赠', ' It is not true that internal retries get no fresh time budget.'],
+    ['hint.denyPatterns', 'zh', '这并非最终审批结果，但是模型与人工都不能推翻。', '模型人工不能推翻', '模型与人工并非都不能推翻。'],
+    ['help.ui.inject', 'zh', '这并非最终审批结果，但是审查记录视图的显示不受本开关影响。', '记录视图独立', '审查记录视图的显示并非不受本开关影响。'],
+    ['help.reviewer.timeoutMs', 'zh', '这并非最终审批结果，但是内部重试不另获时限。', '重试不重赠', '内部重试并非不另获时限。'],
+  ]) {
+    const current = dicts[lang][key];
+    assert.deepEqual(copyFactFailures(key, lang, current + suffix), [], '明确独立转折后正确负命题不继承外层取消');
+    assert.ok(copyFactFailures(key, lang, current + cancelled).includes(id), '直接取消同一负命题仍须对应id失败');
+  }
+  assert.equal(controlled.length, 11);
+  assert.equal(tested, 294, '46明确负命题共享49登记×两语×3外层取消类别；配置问题标题不冒充断言');
   assert.deepEqual(errors, [], errors.join('\n'));
 });
 
