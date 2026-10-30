@@ -99,10 +99,14 @@ export function checkModeHelpFacts(text) {
 export function checkEmptyGlobalReasonFacts(text) {
   const value = String(text ?? '');
   const missing = [];
-  if (!/(全局|global)/iu.test(value)) missing.push('scope-global');
-  if (!/(审查模型|审查用的模型|reviewer model|review model)/iu.test(value)) missing.push('object-reviewer-model');
-  if (!/(未设置|没有设置|尚未设置|not set|unset)/iu.test(value)) missing.push('state-unset');
-  // 反转守卫：声称已设置＝状态事实反转。
-  if (/(已设置|已经设置|is set|already set)/iu.test(value)) missing.push('state-set-reversal');
+  const global = /全局|\bglobal\b/iu;
+  const object = /审查模型|审查用的模型|reviewer model|review model/iu;
+  const parts = clausesOf(value).flatMap((part) => part.split(/[，,]|(?=会话|\bsession\b)/iu));
+  const relevant = parts.filter((part) => global.test(part) && object.test(part));
+  if (!parts.some((part) => global.test(part))) missing.push('scope-global');
+  if (!relevant.length) missing.push('object-reviewer-model');
+  if (!relevant.some((part) => /未设置|没有设置|尚未设置|\bnot set\b|\bunset\b/iu.test(part))) missing.push('state-unset');
+  // 状态只绑定同一全局审查模型，另一会话模型已设置不构成反转。
+  if (relevant.some((part) => /已设置|已经设置|\bis set\b|\balready set\b/iu.test(part))) missing.push('state-set-reversal');
   return missing;
 }

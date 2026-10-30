@@ -8,8 +8,9 @@ export function errorCopyFailures(kind, lang, text) {
   if (JSON.stringify(placeholders) !== JSON.stringify(expected)) failures.push('placeholders');
   if (kind === 'tool') {
     has('tool', /工具/u, /\btool\b/iu);
-    has('failure', /失败|出错|未能完成/u, /failed|failure|could not complete/iu);
-    if (/(?:并非|不是|没有).{0,5}(?:失败|出错)|\b(?:not|no|never)\s+(?:a\s+)?(?:failed|failure)|\bdid not fail\b/iu.test(value)) failures.push('failure-reversal');
+    const currentTool = value.split(/[。；;，,.\n]|(?=另一个|\banother\b)/iu).filter((part) => /\{name\}|该工具|本工具|\bthis tool\b|\bthe same tool\b/iu.test(part));
+    if (!currentTool.some((part) => (lang === 'zh' ? /失败|出错|未能完成/u : /failed|failure|could not complete/iu).test(part))) failures.push('failure');
+    if (currentTool.some((part) => /(?:并非|不是|没有).{0,5}(?:失败|出错)|\b(?:not|no|never)\s+(?:a\s+)?(?:failed|failure)|\bdid not fail\b/iu.test(part))) failures.push('failure-reversal');
   } else if (kind === 'args') {
     has('arguments', /参数/u, /arguments?|parameters?/iu);
     has('invalid-json', /(?:不是|非|无效|不合法).{0,8}JSON|JSON.{0,6}(?:无效|非法|不合法)/iu, /(?:not\s+(?:a\s+)?valid|invalid|malformed)\s+JSON|JSON.{0,10}(?:invalid|malformed)/iu);
@@ -21,7 +22,9 @@ export function errorCopyFailures(kind, lang, text) {
     has('one-escalation', /本次.{0,5}升权/u, /this.{0,15}escalation/iu);
     has('rejected', /(?:按|予以|作).{0,5}拒绝|拒绝处理/u, /\brejected\b|\breject\b.{0,30}request/iu);
     if (/(?:不|不会|并非|不是|无需).{0,5}拒绝|\b(?:not|never)\s+(?:be\s+)?rejected\b|\b(?:do|does|will|shall)\s+not\s+reject\b/iu.test(value)) failures.push('rejection-reversal');
-    if (/危险判定|判定.{0,4}危险|danger verdict|judged dangerous/iu.test(value)) failures.push('failure-not-danger');
+    const danger = /危险判定|判定.{0,4}危险|danger verdict|judged dangerous/giu;
+    const affirmedDanger = value.split(/[。；;，,.\n]/u).some((part) => [...part.matchAll(danger)].some((match) => !/(?:不是|并非|不属于|不算)\s*$|\b(?:not|never)\s+(?:(?:a|the)\s+)?$/iu.test(part.slice(0, match.index))));
+    if (affirmedDanger) failures.push('failure-not-danger');
   }
   return failures;
 }

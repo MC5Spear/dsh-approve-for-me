@@ -10,7 +10,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { COPY_FACTS, FACT_KINDS, copyFactFailures, tokenRiskDisplayProtected } from './helpers/copy-facts.mjs';
-import { checkModeHelpFacts } from './helpers/mode-copy-facts.mjs';
+import { checkModeHelpFacts, checkEmptyGlobalReasonFacts } from './helpers/mode-copy-facts.mjs';
 
 const fails = (key, lang, text) => copyFactFailures(key, lang, text);
 
@@ -567,6 +567,27 @@ test('清单外不接管与开态不只人工交接显示：正确另一条件�
   const on = '开启时，不只在确实交给人工后显示卡片。';
   assert.deepEqual(fails('help.ui.humanCardDuringReview', 'zh', card + on), []);
   assert.ok(fails('help.ui.humanCardDuringReview', 'zh', card + '关闭时，不只在确实交给人工后显示卡片。' + on).includes('关闭后真交人工才显示'));
+});
+
+test('空全局reason状态只绑定全局审查模型，会话已设置不反转全局未设置', () => {
+  for (const correct of [
+    '全局审查模型未设置；会话审查模型已设置。',
+    '会话审查模型已设置。全局默认审查模型尚未设置。',
+    'The global reviewer model is not set; the session reviewer model is set.',
+    'The session reviewer model is set. The global review model remains unset.',
+  ]) assert.deepEqual(checkEmptyGlobalReasonFacts(correct), []);
+  for (const reversed of [
+    '全局审查模型未设置；全局审查模型已设置。',
+    'The global reviewer model is not set; the global reviewer model is set.',
+  ]) assert.ok(checkEmptyGlobalReasonFacts(reversed).includes('state-set-reversal'));
+  for (const unrelated of [
+    '全局默认已设置；会话审查模型未设置。',
+    'The global default is set; the session reviewer model is not set.',
+  ]) {
+    const failures = checkEmptyGlobalReasonFacts(unrelated);
+    assert.ok(failures.includes('object-reviewer-model'));
+    assert.ok(failures.includes('state-unset'));
+  }
 });
 
 test('反例：说明缺失整条报缺失', () => {

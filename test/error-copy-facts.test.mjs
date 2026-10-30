@@ -18,6 +18,27 @@ test('普通错误说明：真实模板和改换措辞的中英正例共用有�
   }
 });
 
+test('错误对象与危险判定局部极性：另一工具未失败和不是危险判定保持', () => {
+  for (const [lang, current, other, sameNegative] of [
+    ['zh', '工具 {name} 失败：{error}', '另一个工具没有失败。', '该工具没有失败。'],
+    ['en', 'Tool {name} failed: {error}', 'Another tool did not fail.', 'This tool did not fail.'],
+  ]) {
+    assert.deepEqual(errorCopyFailures('tool', lang, current + '；' + other), []);
+    assert.deepEqual(errorCopyFailures('tool', lang, other + ' ' + current), []);
+    assert.ok(errorCopyFailures('tool', lang, current + '；' + sameNegative).includes('failure-reversal'));
+    assert.ok(errorCopyFailures('tool', lang, current.replace(lang === 'zh' ? '失败' : 'failed', lang === 'zh' ? '并非失败' : 'did not fail')).includes('failure-reversal'));
+  }
+  for (const [lang, current, negative, positive] of [
+    ['zh', '[approve-for-me] 自动审批通道故障，本次升权请求按拒绝处理。', '这不是危险判定。', '这是危险判定。'],
+    ['en', '[approve-for-me] Channel failure; this escalation request is rejected.', 'This is not a danger verdict.', 'This is a danger verdict.'],
+  ]) {
+    assert.deepEqual(errorCopyFailures('channel', lang, current + ' ' + negative), []);
+    assert.ok(errorCopyFailures('channel', lang, current + ' ' + positive).includes('failure-not-danger'));
+    assert.ok(errorCopyFailures('channel', lang, current + ' ' + negative + ' ' + positive).includes('failure-not-danger'));
+    assert.ok(errorCopyFailures('channel', lang, current + ' ' + positive + ' ' + negative).includes('failure-not-danger'));
+  }
+});
+
 test('普通错误说明：缺失败事实、错误对象、占位符或单次拒绝事实必须失败', () => {
   const cases = [
     ['tool', 'zh', '工具 {name}：{error}'], ['tool', 'en', 'Tool {name}: {error}'],
