@@ -5950,6 +5950,54 @@ test('确定优先不作未必：局部弱化与中文默认来源双供必需�
   assert.equal(checked, 18, '12确定优先弱化＋6中文双来源必要条件，含报告2原例');
 });
 
+test('分叉按主会话：treated/classified谓词局部极性，不借另一对象或否定错误断言', () => {
+  assert.deepEqual(Object.entries(COPY_FACTS).filter(([, facts]) => facts.some((fact) => fact.id === '分叉按主会话')).map(([key]) => key), ['help.fallback']);
+  resetHooks();
+  const original = makeCtx();
+  loadClient().apply(original.ctx);
+  const dicts = original.dictionaries[0].dicts;
+  const key = 'help.fallback';
+  const wrong = [
+    ['en', 'forked sessions are treated as main sessions', 'forked sessions are not treated as main sessions'],
+    ['en', 'forked sessions are treated as main sessions', 'forked sessions are never treated as main sessions'],
+    ['en', 'forked sessions are treated as main sessions', 'forked sessions are not classified as main sessions'],
+    ['zh', '分叉会话按主会话对待', '分叉会话不按主会话对待'],
+    ['zh', '分叉会话按主会话对待', '分叉会话不算主会话'],
+  ];
+  for (const [lang, from, to] of wrong) {
+    const current = dicts[lang][key];
+    assert.ok(current.includes(from));
+    const mutated = current.replace(from, to);
+    let replacements = 0;
+    const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+      if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+      replacements++;
+      return prefix + JSON.stringify(mutated);
+    });
+    assert.equal(replacements, 1);
+    resetHooks();
+    const env = makeCtx();
+    loadClient(source).apply(env.ctx);
+    const actual = env.dictionaries[0].dicts[lang][key];
+    assert.equal(actual, mutated);
+    assert.ok(copyFactFailures(key, lang, actual).includes('分叉按主会话'), `${lang}分叉分类谓词否定须报原事实`);
+  }
+  for (const [lang, from, to] of [
+    ['en', 'forked sessions are treated as main sessions', 'forked sessions are classified as main sessions'],
+    ['en', 'forked sessions are treated as main sessions', 'forked sessions are handled as main sessions'],
+    ['zh', '分叉会话按主会话对待', '分叉会话算作主会话'],
+  ]) assert.deepEqual(copyFactFailures(key, lang, dicts[lang][key].replace(from, to)), [], '同对象分类等义不冻treated-as全文');
+  for (const [lang, suffix] of [
+    ['en', ' Other requests are not treated as main sessions.'],
+    ['en', ' Delegated subagents are not treated as main sessions.'],
+    ['en', ' It is not true that forked sessions are not treated as main sessions.'],
+    ['en', ' It is not the case that forked sessions are not classified as main sessions.'],
+    ['zh', '其他请求不按主会话对待。'],
+    ['zh', '并非分叉会话不按主会话对待。'],
+  ]) assert.deepEqual(copyFactFailures(key, lang, dicts[lang][key] + suffix), [], '另一对象及否定错误断言不能误拒正确分叉分类');
+  assert.equal(wrong.length, 5);
+});
+
 test('当前token风险显示：原生字典源码错位和部分保护变异必须失败', () => {
   for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
     resetHooks();

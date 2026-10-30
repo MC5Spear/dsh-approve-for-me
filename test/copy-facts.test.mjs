@@ -509,6 +509,17 @@ test('优先确定性与默认来源条件：不以未必弱化确定关系，�
   assert.deepEqual(fails('hint.reviewer.maxTokens', 'zh', token.replace('模型或供应商', '供应商或模型')), []);
 });
 
+test('分叉主会话分类谓词：not treated局部反转，classified等义与否定错误断言保留', () => {
+  const current = 'If the review does not approve, reject settles as a rejection. Ask shows the human card until the human limit rejects. Delegated subagents have no human channel — not allowed always means rejected; forked sessions are treated as main sessions.';
+  assert.deepEqual(fails('help.fallback', 'en', current), []);
+  for (const predicate of ['are not treated as', 'are never treated as', 'are not classified as']) assert.ok(fails('help.fallback', 'en', current.replace('are treated as', predicate)).includes('分叉按主会话'));
+  assert.deepEqual(fails('help.fallback', 'en', current.replace('are treated as', 'are classified as')), []);
+  assert.deepEqual(fails('help.fallback', 'en', current.replace('are treated as', 'are handled as')), []);
+  assert.deepEqual(fails('help.fallback', 'en', current + ' Delegated subagents are not treated as main sessions.'), []);
+  assert.deepEqual(fails('help.fallback', 'en', current + ' Other requests are not treated as main sessions.'), []);
+  assert.deepEqual(fails('help.fallback', 'en', current + ' It is not true that forked sessions are not treated as main sessions.'), []);
+});
+
 test('反例：说明缺失整条报缺失', () => {
   assert.deepEqual(fails('hint.mode', 'zh', ''), ['说明缺失']);
   assert.deepEqual(fails('hint.mode', 'zh', undefined), ['说明缺失']);

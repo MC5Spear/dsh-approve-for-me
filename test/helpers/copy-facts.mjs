@@ -498,6 +498,26 @@ const behaviorPositive = (zhSubject, zhAction, enSubject, enAction) => {
 };
 const behaviorNegative = (zh, en) => ({ zh, en });
 
+/** 分叉的分类谓词绑定主会话对象；其他对象的not treated不借为本关系否定。 */
+function forkedAsMainSession(text, lang) {
+  const relation = lang === 'zh'
+    ? /分叉会话\s*(不|未|并非)?(?:按|算作?|视为)主会话(?:对待)?/gu
+    : /\bforked sessions?\s+(?:(?:are|is)\s+)?(?:(not|never)\s+)?(?:treated|classified|handled)\s+as\s+(?:(not)\s+)?(?:(?:a|the)\s+)?main sessions?\b/giu;
+  let found = false;
+  for (const part of text.split(/[。；;，,.\n]|\bbut\b/iu)) {
+    for (const match of part.matchAll(relation)) {
+      const before = part.slice(0, match.index);
+      const outerNegative = lang === 'zh'
+        ? /(?:并非|不是|不能说)\s*$/u.test(before)
+        : /\bit is not (?:true|the case) that\s*$/iu.test(before);
+      const predicateNegative = Boolean(match[1] || match[2]);
+      if (predicateNegative !== outerNegative) return false;
+      found = true;
+    }
+  }
+  return found;
+}
+
 /** 三项可能性事实：检查动作前的情态作用域；“可能不”仍是可能，“不可能”及必然结论不是。 */
 function possibleEvent(text, lang, subject, event) {
   const maybe = lang === 'zh'
@@ -791,7 +811,7 @@ const BEHAVIOR_FACTS = {
   '完全访问最宽': behaviorPositive(/完全访问/u, /最宽/u, /full access/iu, /widest/iu),
   '拒绝结算': behaviorPositive(/直接拒绝/u, /结算/u, /reject/iu, /settles?/iu),
   '人工卡片和超时拒绝': behaviorPositive(/人工作答|人工/u, /按拒绝结算|拒绝/u, /human/iu, /reject/iu),
-  '分叉按主会话': behaviorPositive(/分叉/u, /按主会话/u, /forked/iu, /main session/iu),
+  '分叉按主会话': { zh: (text) => forkedAsMainSession(text, 'zh'), en: (text) => forkedAsMainSession(text, 'en') },
   '全部四类': behaviorPositive(/四类/u, /发送|发给/u, /all four/iu, /sends? all|reach/iu),
   '字节上限及截断标记': { zh: (text) => thresholdEvent(text, 'zh', /超出|超过/u, /截断|裁剪/u), en: (text) => thresholdEvent(text, 'en', /longer|exceeds?|exceeding/iu, /trim(?:med)?/iu) },
   '匹配所有字符串参数非仅命令': behaviorPositive(/字符串|参数/u, /匹配/u, /string argument/iu, /matched/iu),
