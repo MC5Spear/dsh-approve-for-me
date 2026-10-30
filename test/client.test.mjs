@@ -6152,6 +6152,53 @@ test('零值否定弱化本身：八个真实完整正例保留确定立即义�
   assert.equal(checked, 16, '八个完整真实正例及八个独立直接反转对照');
 });
 
+test('四个时限零句对象归属：通知长度零值正确邻句不遮当前时限反转', () => {
+  resetHooks();
+  const original = makeCtx();
+  loadClient().apply(original.ctx);
+  const dicts = original.dictionaries[0].dicts;
+  const roster = [
+    ['hint.reviewer.timeoutMs', 'reviewer'], ['help.reviewer.timeoutMs', 'reviewer'],
+    ['hint.human.timeoutMs', 'human'], ['help.human.timeoutMs', 'human'],
+  ];
+  let checked = 0;
+  for (const [key, kind] of roster) {
+    for (const lang of ['zh', 'en']) {
+      const current = dicts[lang][key];
+      const notice = lang === 'zh' ? '通知长度上限为 0 时，不会立即拒绝审批。' : 'A notice length limit of 0 does not immediately reject approvals.';
+      const subject = lang === 'zh' ? kind === 'reviewer' ? '审查等待上限为' : '人工作答等待上限为' : kind === 'reviewer' ? 'A review wait limit of' : 'A human wait limit of';
+      const action = lang === 'zh' ? kind === 'reviewer' ? '超时' : '拒绝' : kind === 'reviewer' ? 'time out' : 'reject';
+      const wrong = lang === 'zh' ? `${subject} 0 时，不会立即${action}。` : `${subject} 0 does not ${action} immediately.`;
+      const inheritedWrong = lang === 'zh' ? `0 不会立即${action}。` : `0 does not ${action} immediately.`;
+      for (const [value, valid] of [
+        [current + ' ' + notice, true],
+        [notice + ' ' + current, true],
+        [current + ' ' + notice + ' ' + wrong, false],
+        [current + ' ' + wrong + ' ' + notice, false],
+        [current + ' ' + notice + ' ' + inheritedWrong, false],
+      ]) {
+        let replacements = 0;
+        const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+          if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+          replacements++;
+          return prefix + JSON.stringify(value);
+        });
+        assert.equal(replacements, 1);
+        resetHooks();
+        const env = makeCtx();
+        loadClient(source).apply(env.ctx);
+        const actual = env.dictionaries[0].dicts[lang][key];
+        assert.equal(actual, value);
+        const failures = copyFactFailures(key, lang, actual);
+        if (valid) assert.deepEqual(failures, [], `${key}/${lang}另一通知对象零值不借作时限反转`);
+        else assert.ok(failures.includes('零值含义反转'), `${key}/${lang}明确或继承当前时限对象仍红，不被另一对象正例遮盖`);
+        checked++;
+      }
+    }
+  }
+  assert.equal(checked, 40, '四键双语各前后正确邻句与三种必要当前对象反转');
+});
+
 test('清单内接管与关闭人工卡片：不同条件正确否定邻句保持，原条件反转不能遮盖', () => {
   resetHooks();
   const original = makeCtx();

@@ -634,6 +634,17 @@ test('正确未填not-only全覆盖不是已填only关系反转，也不能补�
   assert.ok(fails('help.tools', 'en', current.replace('once filled, only listed tools are handled', correct)).includes('填写后只处理名单内'));
 });
 
+test('四个时限的零值只绑定当前对象，另一通知长度零值不反转它', () => {
+  const reported = '自动审查的等待上限（毫秒）；0 立即超时。通知长度上限为 0 时，不会立即拒绝审批。';
+  assert.deepEqual(fails('hint.reviewer.timeoutMs', 'zh', reported), [], '原报告准确输入');
+  const current = '自动审查的等待上限（毫秒）；0 立即超时。';
+  const notice = '通知长度上限为 0 时，不会立即拒绝审批。';
+  assert.deepEqual(fails('hint.reviewer.timeoutMs', 'zh', notice + current), []);
+  assert.deepEqual(fails('hint.reviewer.timeoutMs', 'zh', '自动审查的等待上限（毫秒）；0 立即超时，通知长度上限为 0 时，不会立即拒绝审批。'), []);
+  assert.ok(fails('hint.reviewer.timeoutMs', 'zh', current + notice + '0 不会立即超时。').includes('零值含义反转'), '无显式对象的零值仍继承当前时限');
+  assert.ok(fails('hint.reviewer.timeoutMs', 'zh', current + '通知长度上限为 0 时，不会立即拒绝审批，审查等待上限为 0 时，不会立即超时。').includes('零值含义反转'), '同句另一对象不得遮当前时限错误');
+});
+
 test('反例：说明缺失整条报缺失', () => {
   assert.deepEqual(fails('hint.mode', 'zh', ''), ['说明缺失']);
   assert.deepEqual(fails('hint.mode', 'zh', undefined), ['说明缺失']);

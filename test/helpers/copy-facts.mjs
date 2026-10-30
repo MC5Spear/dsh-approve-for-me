@@ -86,6 +86,25 @@ function affirmativeConcept(text, lang, concept, definite = false) {
   return found;
 }
 
+/** 四个时限键逐次绑定零值对象；未标对象仍属当前键，另一通知长度对象不能取消本项动作。 */
+function timeoutZeroRelations(clause, key, lang) {
+  const current = /\.human\./u.test(key) ? 'human' : 'reviewer';
+  const object = lang === 'zh'
+    ? /((?:自动)?审查(?:的)?等待上限)|(人工作答等待上限|人工等待上限)|(通知(?:长度|字节)上限)/gu
+    : /\b((?:auto-review|reviewer|review) wait limit)\b|\b((?:human-answer|human) wait limit)\b|\b(notice (?:length|byte) (?:limit|cap))\b/giu;
+  const objects = [...clause.matchAll(object)];
+  const zeros = [...clause.matchAll(/\b0\b/gu)];
+  return zeros.flatMap((zero, index) => {
+    const previousEnd = index ? zeros[index - 1].index + 1 : 0;
+    const subject = objects.filter((match) => match.index >= previousEnd && match.index < zero.index).at(-1);
+    const owner = subject ? subject[1] ? 'reviewer' : subject[2] ? 'human' : 'notice' : current;
+    if (owner !== current) return [];
+    const nextObject = objects.find((match) => match.index > zero.index)?.index ?? clause.length;
+    const end = Math.min(nextObject, zeros[index + 1]?.index ?? clause.length);
+    return [clause.slice(zero.index, end)];
+  });
+}
+
 /** 四个零时限键的局部等义：否定可能性而肯定同一立即动作，再交回原事实判据。 */
 function normalizeZeroActionCertainty(text, key, lang) {
   if (!/^(?:hint|help)\.(?:reviewer|human)\.timeoutMs$/u.test(key)) return text;
@@ -988,8 +1007,10 @@ export function copyFactFailures(key, lang, text) {
   if (/^(?:hint|help)\.(?:reviewer|human)\.timeoutMs$/u.test(key)) for (const clause of zeroParts.filter((part) => /\b0\b/u.test(part))) {
     // 人工预算只在Ask启用；仅此明确Reject分支不承诺启动人工零计时，别处Ask直接反转仍逐句检查。
     if (/\.human\.timeoutMs$/u.test(key) && (lang === 'zh' ? /^\s*直接拒绝模式下[，,]/u : /^\s*with fallback\s*=\s*reject\s*,/iu).test(clause)) continue;
-    if (!affirmativeConcept(clause, lang, lang === 'zh' ? /立即|马上|即刻|拒绝|超时/u : /immediately|at once|right away|rejects?|times? out|timeout/iu, 'zero')) failures.push('零值正向关系被否定');
-    if (/(?:不|不会|并非|不是).{0,3}立即|(?:不|不会|并非|不是)\s*(?:拒绝|超时)|\b(?:does not|do not|doesn't|don't|not|never)\b.{0,15}(?:immediate|at once|reject|time out)|\b(?:reject|timeout)\b.{0,8}\b(?:not|never)\b/iu.test(clause)) failures.push('零值含义反转');
+    for (const relation of timeoutZeroRelations(clause, key, lang)) {
+      if (!affirmativeConcept(relation, lang, lang === 'zh' ? /立即|马上|即刻|拒绝|超时/u : /immediately|at once|right away|rejects?|times? out|timeout/iu, 'zero')) failures.push('零值正向关系被否定');
+      if (/(?:不|不会|并非|不是).{0,3}立即|(?:不|不会|并非|不是)\s*(?:拒绝|超时)|\b(?:does not|do not|doesn't|don't|not|never)\b.{0,15}(?:immediate|at once|reject|time out)|\b(?:reject|timeout)\b.{0,8}\b(?:not|never)\b/iu.test(relation)) failures.push('零值含义反转');
+    }
   }
   if (/^(?:hint|help)\.denyPatterns$/u.test(key) && !hitRejects(normalized, lang)) failures.push('命中拒绝含义反转');
   if (zeroClause && /injectMaxBytes$/u.test(key) && /不是不|并非不|not untrimmed|not without trimming/iu.test(zeroClause)) failures.push('零值含义反转');
