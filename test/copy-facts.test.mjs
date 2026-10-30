@@ -558,6 +558,17 @@ test('零值的不是可能而是立即按同动作归一，保留后来直接�
   }
 });
 
+test('清单外不接管与开态不只人工交接显示：正确另一条件不污染登记条件', () => {
+  const presets = 'Sessions on a listed preset hand escalation approvals to this plugin; other presets keep the host flow. An empty list takes over no known preset; unidentifiable presets follow the setting. Choosing the take-over range grants no extra permissions.';
+  const unlisted = ' Unlisted presets do not hand escalation approvals to this plugin.';
+  assert.deepEqual(fails('help.trigger.presets', 'en', presets + unlisted), []);
+  assert.ok(fails('help.trigger.presets', 'en', presets.replace('listed preset hand', 'listed preset do not hand') + unlisted).includes('接管升权'));
+  const card = '开启时，审查期间提前显示人工卡片，抢先的人工结果优先；已完成结果不能被迟到点击推翻。关闭时，仅在确实交给人工后显示卡片。';
+  const on = '开启时，不只在确实交给人工后显示卡片。';
+  assert.deepEqual(fails('help.ui.humanCardDuringReview', 'zh', card + on), []);
+  assert.ok(fails('help.ui.humanCardDuringReview', 'zh', card + '关闭时，不只在确实交给人工后显示卡片。' + on).includes('关闭后真交人工才显示'));
+});
+
 test('反例：说明缺失整条报缺失', () => {
   assert.deepEqual(fails('hint.mode', 'zh', ''), ['说明缺失']);
   assert.deepEqual(fails('hint.mode', 'zh', undefined), ['说明缺失']);

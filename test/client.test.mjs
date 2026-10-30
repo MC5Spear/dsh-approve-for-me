@@ -6152,6 +6152,48 @@ test('零值否定弱化本身：八个真实完整正例保留确定立即义�
   assert.equal(checked, 16, '八个完整真实正例及八个独立直接反转对照');
 });
 
+test('清单内接管与关闭人工卡片：不同条件正确否定邻句保持，原条件反转不能遮盖', () => {
+  resetHooks();
+  const original = makeCtx();
+  loadClient().apply(original.ctx);
+  const dicts = original.dictionaries[0].dicts;
+  const samples = [
+    ['help.trigger.presets', 'en', ' Unlisted presets do not hand escalation approvals to this plugin.', 'listed preset hand escalation approvals', 'listed preset do not hand escalation approvals', '接管升权'],
+    ['help.ui.humanCardDuringReview', 'zh', '开启时，不只在确实交给人工后显示卡片。', '关闭时，仅在确实交给人工后显示卡片', '关闭时，不只在确实交给人工后显示卡片', '关闭后真交人工才显示'],
+  ];
+  let checked = 0;
+  for (const [key, lang, neighbor, from, to, id] of samples) {
+    const current = dicts[lang][key];
+    assert.ok(current.includes(from));
+    for (const [value, valid] of [
+      [current, true],
+      [current + neighbor, true],
+      [neighbor + ' ' + current, true],
+      [current.replace(from, to), false],
+      [current.replace(from, to) + neighbor, false],
+      [current + ' ' + to + '。', false],
+    ]) {
+      let replacements = 0;
+      const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+        if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+        replacements++;
+        return prefix + JSON.stringify(value);
+      });
+      assert.equal(replacements, 1);
+      resetHooks();
+      const env = makeCtx();
+      loadClient(source).apply(env.ctx);
+      const actual = env.dictionaries[0].dicts[lang][key];
+      assert.equal(actual, value);
+      const failures = copyFactFailures(key, lang, actual);
+      if (valid) assert.deepEqual(failures, [], `${key}不同条件正确否定不冒充原条件动作`);
+      else assert.ok(failures.includes(id), `${key}原条件反转须报${id}，其他正确关系不能遮盖`);
+      checked++;
+    }
+  }
+  assert.equal(checked, 12, '两当前登记各3正3反，包含报告原邻句与另一错误同条件');
+});
+
 test('当前token风险显示：原生字典源码错位和部分保护变异必须失败', () => {
   for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
     resetHooks();

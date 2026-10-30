@@ -618,7 +618,10 @@ const SUBCONDITION_FACTS = {
   '完全访问最宽': { zh: (text) => /完全访问[^。；]{0,12}最宽/u.test(text), en: (text) => /full access[^.;]{0,24}widest/iu.test(text) },
   '工作区不放行更宽': { zh: (text) => affirmativeConcept(text, 'zh', /超出|更高|更宽|以上/u) && /(?:超出|更高|更宽|以上)[^。；]{0,16}(?:升权|写入)/u.test(text), en: (text) => /wider escalations|escalation beyond workspace/iu.test(text) },
   '已结算不可迟改': { zh: (text) => /(?:已完成|已结算)的?结果/u.test(text) && !/(?:未完成|未结算)的?结果[^。；]{0,24}(?:推翻|改变)/u.test(text), en: (text) => /\bsettled result\b/iu.test(text) && !/\b(?:unsettled|not settled) result\b/iu.test(text) },
-  '关闭后真交人工才显示': { zh: (text) => !/(?:不只|不仅)[^。；]{0,18}(?:交给人工|交人工)/u.test(text), en: (text) => !/not only[^.;]{0,50}handed over/iu.test(text) },
+  '关闭后真交人工才显示': {
+    zh: (text) => sents(text).flatMap((part) => part.split(/(?=开启|关闭)/u)).filter((part) => /关闭/u.test(part)).every((part) => !/(?:不只|不仅)[^。；]{0,18}(?:交给人工|交人工)/u.test(part)),
+    en: (text) => sents(text).flatMap((part) => part.split(/(?=\bon\b|\boff\b)/iu)).filter((part) => /\boff\b/iu.test(part)).every((part) => !/not only[^.;]{0,50}handed over/iu.test(part)),
+  },
   '全部四类': { zh: (text) => /四类|全部/u.test(text) && !/非四类|不全/u.test(text), en: (text) => /all four/iu.test(text) && !/not all four/iu.test(text) },
   '仅失败不发允许': { zh: (text) => /仅拒绝|只[^。；]{0,6}拒绝/u.test(text) && !/不仅拒绝|不只[^。；]{0,6}拒绝/u.test(text), en: (text) => sents(text).filter((part) => /skips? allow|omits? allow|allow notices are not sent/iu.test(part)).every((part) => !/deny[^.;]{0,40}(?:not only|and allow)/iu.test(part)) },
   '字节上限及截断标记': {
@@ -832,7 +835,7 @@ const BEHAVIOR_FACTS = {
   '审查期间提前人工卡片': { zh: (text) => affirmativeConcept(text, 'zh', /提前|早|抢先/u), en: (text) => /early/iu.test(text) && affirmativeConcept(text, 'en', /appears?|shows?/iu) },
   '阈值依模型和强度': behaviorPositive(/模型|强度/u, /因模型|异|变|不同|决定/u, /model|effort/iu, /varies|depends|differs/iu),
   '清单外宿主流程': behaviorPositive(/其余|其他|名单外|清单外/u, /保持|走/u, /rest|unlisted|others/iu, /keep|retain|flow/iu),
-  '接管升权': behaviorPositive(/清单内/u, /接管|处理/u, /listed preset/iu, /hand|take/iu),
+  '接管升权': behaviorPositive(/清单内/u, /接管|处理/u, /(?<!not )\blisted presets?\b/iu, /hand|take/iu),
   '其他预设保留流程': behaviorPositive(/其他|其余|别的/u, /保持|流程/u, /other/iu, /keep|retain/iu),
   '未知预设按设置': behaviorPositive(/无法识别|不能识别/u, /按|处置/u, /unidentifiable|cannot be identified/iu, /follow/iu),
   '强度自动低档': behaviorPositive(/low/iu, /使用|用|选/u, /low/iu, /use|pick/iu),
