@@ -953,7 +953,11 @@ export function copyFactFailures(key, lang, text) {
   if (key === 'help.fallback' && !(lang === 'zh' ? /(?:未允许|未通过|不允许)(?:一律|均|都)?拒绝/u : /(?:not allowed|not approved)[^.;]{0,24}(?:reject|denied)/iu).test(normalized)) failures.push('委派未允许拒绝');
   if (key === 'help.denyPatterns' && !(lang === 'zh' ? /模型[^。；]{0,4}人工[^。；]{0,6}(?:不能|无法|不可)[^。；]{0,4}(?:推翻|改变|反转)/u : /no override|neither model nor human[^.;]{0,16}(?:override|overturn)/iu).test(normalized)) failures.push('命中结果不可推翻');
   const zeroClause = sents(normalized).find((clause) => /\b0\b/u.test(clause));
-  if (/^(?:hint|help)\.(?:reviewer|human)\.timeoutMs$/u.test(key)) for (const clause of sents(normalized).filter((part) => /\b0\b/u.test(part))) {
+  const zeroParts = sents(normalized).flatMap((part) => /\.human\.timeoutMs$/u.test(key)
+    ? part.split(/(?=直接拒绝模式下|交给人工决定模式下|with fallback\s*=\s*(?:reject|ask))/iu) : [part]);
+  if (/^(?:hint|help)\.(?:reviewer|human)\.timeoutMs$/u.test(key)) for (const clause of zeroParts.filter((part) => /\b0\b/u.test(part))) {
+    // 人工预算只在Ask启用；仅此明确Reject分支不承诺启动人工零计时，别处Ask直接反转仍逐句检查。
+    if (/\.human\.timeoutMs$/u.test(key) && (lang === 'zh' ? /^\s*直接拒绝模式下[，,]/u : /^\s*with fallback\s*=\s*reject\s*,/iu).test(clause)) continue;
     if (!affirmativeConcept(clause, lang, lang === 'zh' ? /立即|马上|即刻|拒绝|超时/u : /immediately|at once|right away|rejects?|times? out|timeout/iu, 'zero')) failures.push('零值正向关系被否定');
     if (/(?:不|不会|并非|不是).{0,3}立即|(?:不|不会|并非|不是)\s*(?:拒绝|超时)|\b(?:does not|do not|doesn't|don't|not|never)\b.{0,15}(?:immediate|at once|reject|time out)|\b(?:reject|timeout)\b.{0,8}\b(?:not|never)\b/iu.test(clause)) failures.push('零值含义反转');
   }

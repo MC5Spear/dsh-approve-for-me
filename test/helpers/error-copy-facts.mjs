@@ -10,7 +10,7 @@ export function errorCopyFailures(kind, lang, text) {
     has('tool', /工具/u, /\btool\b/iu);
     const currentTool = value.split(/[。；;，,.\n]|(?=另一个|\banother\b)/iu).filter((part) => /\{name\}|该工具|本工具|\bthis tool\b|\bthe same tool\b/iu.test(part));
     if (!currentTool.some((part) => (lang === 'zh' ? /失败|出错|未能完成/u : /failed|failure|could not complete/iu).test(part))) failures.push('failure');
-    if (currentTool.some((part) => /(?:并非|不是|没有).{0,5}(?:失败|出错)|\b(?:not|no|never)\s+(?:a\s+)?(?:failed|failure)|\bdid not fail\b/iu.test(part))) failures.push('failure-reversal');
+    if (currentTool.some((part) => /(?:并非|不是|没有).{0,5}(?:失败|出错)|(?:并未|未|不)\s*(?:失败|出错)|\b(?:not|no|never)\s+(?:a\s+)?(?:failed|failure)|\bdid not fail\b/iu.test(part))) failures.push('failure-reversal');
   } else if (kind === 'args') {
     has('arguments', /参数/u, /arguments?|parameters?/iu);
     has('invalid-json', /(?:不是|非|无效|不合法).{0,8}JSON|JSON.{0,6}(?:无效|非法|不合法)/iu, /(?:not\s+(?:a\s+)?valid|invalid|malformed)\s+JSON|JSON.{0,10}(?:invalid|malformed)/iu);

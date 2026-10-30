@@ -590,6 +590,19 @@ test('空全局reason状态只绑定全局审查模型，会话已设置不反�
   }
 });
 
+test('人工零预算只核Ask启用分支，Reject不启动人工时限不污染而不能遮Ask反转', () => {
+  const samples = [
+    ['zh', '人工作答等待上限（毫秒），仅在交给人工决定时使用。0 表示立即拒绝，不是无限等待。到点按拒绝结算。', '直接拒绝模式下，人工作答等待上限 0 不会立即拒绝。', '交给人工决定模式下，人工作答等待上限 0 不会立即拒绝。'],
+    ['en', 'Human-answer wait limit (ms), used only when the fallback is Ask. 0 rejects immediately, not an endless wait. Expiry settles as a rejection citing the human timeout.', 'With fallback=reject, a human wait limit of 0 does not immediately reject.', 'With fallback=ask, a human wait limit of 0 does not immediately reject.'],
+  ];
+  for (const [lang, current, reject, askWrong] of samples) {
+    assert.deepEqual(fails('help.human.timeoutMs', lang, current + ' ' + reject), []);
+    assert.deepEqual(fails('help.human.timeoutMs', lang, reject + ' ' + current), []);
+    assert.ok(fails('help.human.timeoutMs', lang, current + ' ' + askWrong).includes('零值含义反转'));
+    assert.ok(fails('help.human.timeoutMs', lang, current + ' ' + reject + ' ' + askWrong).includes('零值含义反转'));
+  }
+});
+
 test('反例：说明缺失整条报缺失', () => {
   assert.deepEqual(fails('hint.mode', 'zh', ''), ['说明缺失']);
   assert.deepEqual(fails('hint.mode', 'zh', undefined), ['说明缺失']);

@@ -39,6 +39,14 @@ test('错误对象与危险判定局部极性：另一工具未失败和不是�
   }
 });
 
+test('当前工具紧邻未不失败直接反转，不借另一工具的未失败', () => {
+  for (const negative of ['未失败', '不失败', '并未失败']) {
+    assert.ok(errorCopyFailures('tool', 'zh', `工具 {name} ${negative}：{error}`).includes('failure-reversal'));
+    assert.ok(errorCopyFailures('tool', 'zh', `工具 {name} 失败：{error}；该工具${negative}。`).includes('failure-reversal'));
+    assert.deepEqual(errorCopyFailures('tool', 'zh', `工具 {name} 失败：{error}；另一个工具${negative}。`), []);
+  }
+});
+
 test('普通错误说明：缺失败事实、错误对象、占位符或单次拒绝事实必须失败', () => {
   const cases = [
     ['tool', 'zh', '工具 {name}：{error}'], ['tool', 'en', 'Tool {name}: {error}'],
