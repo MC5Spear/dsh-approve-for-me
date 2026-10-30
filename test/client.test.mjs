@@ -5998,6 +5998,59 @@ test('分叉按主会话：treated/classified谓词局部极性，不借另一�
   assert.equal(wrong.length, 5);
 });
 
+test('文件上限淘汰：只绑定会话最旧文件动作，备份与其他目录不删邻句保持', () => {
+  assert.deepEqual(Object.entries(COPY_FACTS).filter(([, facts]) => facts.some((fact) => fact.id === '超文件上限删最旧')).map(([key]) => key), ['view.retention']);
+  resetHooks();
+  const original = makeCtx();
+  loadClient().apply(original.ctx);
+  const dicts = original.dictionaries[0].dicts;
+  const key = 'view.retention';
+  for (const [lang, neighbor] of [
+    ['zh', '备份文件不删除。'],
+    ['en', 'Backup files are not deleted.'],
+    ['zh', '另一个目录的文件不删除。'],
+    ['en', 'Files in another directory are not deleted.'],
+    ['zh', '保存在其他目录的备份文件不删除。'],
+    ['en', 'Backup files stored in another directory are not deleted.'],
+    ['zh', '会话文件数未超上限时不删除最旧。'],
+    ['en', 'The oldest session files are not deleted when the file cap is not exceeded.'],
+  ]) {
+    const current = dicts[lang][key];
+    assert.deepEqual(copyFactFailures(key, lang, current), []);
+    assert.deepEqual(copyFactFailures(key, lang, current + ' ' + neighbor), [], '不同对象不删在后不污染会话淘汰');
+    assert.deepEqual(copyFactFailures(key, lang, neighbor + ' ' + current), [], '不同对象不删在前不替代会话淘汰');
+  }
+  const wrong = [
+    ['zh', '文件数超上限时删除最旧', '文件数超上限时不删除最旧'],
+    ['zh', '文件数超上限时删除最旧', '文件数未超上限时删除最旧'],
+    ['en', 'oldest session files are deleted', 'oldest session files are not deleted'],
+    ['en', 'the file cap is exceeded', 'the file cap is not exceeded'],
+  ];
+  let checked = 0;
+  for (const [lang, from, to] of wrong) {
+    const current = dicts[lang][key];
+    assert.ok(current.includes(from));
+    for (const suffix of ['', lang === 'zh' ? '备份文件不删除。' : ' Backup files are not deleted.']) {
+      const mutated = current.replace(from, to) + suffix;
+      let replacements = 0;
+      const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+        if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+        replacements++;
+        return prefix + JSON.stringify(mutated);
+      });
+      assert.equal(replacements, 1);
+      resetHooks();
+      const env = makeCtx();
+      loadClient(source).apply(env.ctx);
+      const actual = env.dictionaries[0].dicts[lang][key];
+      assert.equal(actual, mutated);
+      assert.ok(copyFactFailures(key, lang, actual).includes('超文件上限删最旧'), '真实会话淘汰反转仍红，备份邻句不作全文豁免');
+      checked++;
+    }
+  }
+  assert.equal(checked, 8, '两语触发与删除动作各反转，带正确备份邻句也不能遮盖');
+});
+
 test('当前token风险显示：原生字典源码错位和部分保护变异必须失败', () => {
   for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
     resetHooks();

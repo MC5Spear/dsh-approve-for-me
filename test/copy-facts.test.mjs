@@ -520,6 +520,20 @@ test('分叉主会话分类谓词：not treated局部反转，classified等义�
   assert.deepEqual(fails('help.fallback', 'en', current + ' It is not true that forked sessions are not treated as main sessions.'), []);
 });
 
+test('会话文件上限只绑定最旧文件淘汰，其他文件不删除不污染', () => {
+  const samples = [
+    ['zh', '记录跟随产生它的会话。界面回读最近窗口，默认 200 条，可用 ui.trace.maxRecords 配置；单会话文件超过窗口四倍时轮转，只保留最近一个窗口，更早记录此时删除；会话文件数超上限时删除最旧。轮转前备份；减少采集不删除已有记录。', '备份文件不删除。', '时删除最旧', '时不删除最旧'],
+    ['en', 'Records follow the session that produced them. Read-back shows a window of 200 entries by default via ui.trace.maxRecords; when a session file exceeds four times the window it is rewritten to keep only the latest one, deleting older entries; the oldest session files are deleted when the file cap is exceeded. Back up before rotation; reducing capture never deletes existing records.', 'Backup files are not deleted.', 'files are deleted', 'files are not deleted'],
+  ];
+  for (const [lang, current, neighbor, from, to] of samples) {
+    assert.deepEqual(fails('view.retention', lang, current + ' ' + neighbor), []);
+    assert.deepEqual(fails('view.retention', lang, neighbor + ' ' + current), []);
+    const notReached = lang === 'zh' ? '会话文件数未超上限时不删除最旧。' : ' The oldest session files are not deleted when the file cap is not exceeded.';
+    assert.deepEqual(fails('view.retention', lang, current + notReached), [], '正确未超限且不删除分支不污染已达上限的淘汰义务');
+    assert.ok(fails('view.retention', lang, current.replace(from, to) + ' ' + neighbor).includes('超文件上限删最旧'));
+  }
+});
+
 test('反例：说明缺失整条报缺失', () => {
   assert.deepEqual(fails('hint.mode', 'zh', ''), ['说明缺失']);
   assert.deepEqual(fails('hint.mode', 'zh', undefined), ['说明缺失']);

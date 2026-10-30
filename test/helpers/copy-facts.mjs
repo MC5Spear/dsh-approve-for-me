@@ -498,6 +498,28 @@ const behaviorPositive = (zhSubject, zhAction, enSubject, enAction) => {
 };
 const behaviorNegative = (zh, en) => ({ zh, en });
 
+/** 会话文件淘汰只配对自身上限与最旧文件动作，备份／其他目录的不删不作该动作否定。 */
+function oldestSessionFileEviction(text, lang) {
+  const subject = lang === 'zh' ? /会话文件/u : /session files?/iu;
+  const limit = lang === 'zh' ? /上限/u : /\bcap\b/iu;
+  const boundary = lang === 'zh' ? /超上限|超过上限/u : /exceeded|pass/iu;
+  const targetAction = lang === 'zh'
+    ? /(?:(?:不|未|并非)\s*)?(?:删除|删)最旧/gu
+    : /\boldest (?:session files|ones)\s+(?:are\s+)?(?:(?:not|never)\s+)?(?:deleted|dropped|go first)\b/giu;
+  const action = lang === 'zh' ? /删除|删/u : /deleted|dropped|go first/iu;
+  let found = false;
+  for (const part of sents(text)) {
+    if (!subject.test(part) || !limit.test(part)) continue;
+    for (const match of part.matchAll(targetAction)) {
+      const reached = affirmativeConcept(part, lang, boundary);
+      const executes = affirmativeConcept(match[0], lang, action);
+      if (reached !== executes) return false;
+      if (reached) found = true;
+    }
+  }
+  return found;
+}
+
 /** 分叉的分类谓词绑定主会话对象；其他对象的not treated不借为本关系否定。 */
 function forkedAsMainSession(text, lang) {
   const relation = lang === 'zh'
@@ -599,7 +621,7 @@ const SUBCONDITION_FACTS = {
     zh: (text) => thresholdEvent(text, 'zh', /超过|超出/u, /轮转/u) && /(?:超过|超出)[^。；]{0,12}四倍/u.test(text) && /最近(?:一个)?窗口|最近窗口/u.test(text) && !/不是最近|非最近|保留最旧/u.test(text),
     en: (text) => thresholdEvent(text, 'en', /exceeds?|passes|pass/iu, /rewritten|rotat/iu, true) && /four times/iu.test(text) && /latest|recent/iu.test(text) && !/not (?:the )?latest|keep only (?:the )?oldest one/iu.test(text),
   },
-  '超文件上限删最旧': { zh: (text) => thresholdEvent(text, 'zh', /超上限|超过上限/u, /文件/u) && /最旧/u.test(text), en: (text) => thresholdEvent(text, 'en', /exceeded|pass/iu, /file|cap/iu) && /oldest/iu.test(text) },
+  '超文件上限删最旧': { zh: (text) => oldestSessionFileEviction(text, 'zh'), en: (text) => oldestSessionFileEviction(text, 'en') },
   '轮转前备份': { zh: (text) => /轮转前|轮转之前/u.test(text), en: (text) => /before rotation/iu.test(text) },
   '过小上限可能无有效结论': { zh: (text) => affirmativeConcept(text, 'zh', /过小|太小|太低|不足/u), en: (text) => affirmativeConcept(text, 'en', /too small|too low|insufficient/iu) },
 };
@@ -830,7 +852,7 @@ const BEHAVIOR_FACTS = {
   '标准档与卸载清理': behaviorPositive(/标准|卸载/u, /可改选|改选|处理|清理/u, /standard|uninstall/iu, /pick|cleanup/iu),
   '记录随会话': behaviorPositive(/记录/u, /跟随|跟着|属于/u, /record/iu, /follow|belong|stay/iu),
   '超四倍轮转留窗口删旧': { zh: (text) => thresholdEvent(text, 'zh', /超过|超出/u, /轮转/u), en: (text) => thresholdEvent(text, 'en', /exceeds?|passes|pass/iu, /rewritten|rotat/iu, true) },
-  '超文件上限删最旧': behaviorPositive(/文件/u, /删除|删/u, /file/iu, /deleted|delet|go first|dropped/iu),
+  '超文件上限删最旧': { zh: (text) => oldestSessionFileEviction(text, 'zh'), en: (text) => oldestSessionFileEviction(text, 'en') },
   '轮转前备份': { zh: (text) => /轮转/u.test(text) && affirmativeConcept(text, 'zh', /备份/u), en: (text) => /rotation|rotat/iu.test(text) && affirmativeConcept(text, 'en', /back/iu) },
   '过小上限可能无有效结论': { zh: (text) => /(?:没有|无|得不到|不产生|难以)(?:任何)?(?:有效|可用)(?:的)?(?:结论|结果)/u.test(text) && possibleEvent(text, 'zh', /过小|太低|太小|不足/u, /导致|得不到|无可用/u), en: (text) => /(?:no|without)(?: a)? (?:usable|valid) (?:conclusion|answer)/iu.test(text) && possibleEvent(text, 'en', /too small|too low|insufficient/iu, /leave|end/iu) },
   '操作无法识别': behaviorNegative(/(?:无法|不能|难以)(?:辨认|识别|确定)/u, /(?:cannot|unable|can't)[^.;]{0,12}(?:identif|recogniz|recover)/iu),
