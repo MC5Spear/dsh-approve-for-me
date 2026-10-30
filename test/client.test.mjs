@@ -5760,6 +5760,53 @@ test('默认来源组合关系：只检明确双来源必要条件，中性并�
   assert.equal(checked, 10, '两真实键×五类明确双来源必要条件（含报告两原例）');
 });
 
+test('负关系含义取消：send-none和两个零值对象分别绑定mean取消，不借无关关系', () => {
+  const roster = [
+    ['help.ui.inject', 'send none sends no notices', 'send none', 'no notices', '关闭零通知'],
+    ['hint.reviewer.maxTokens', '0 sends no cap', '0', 'no cap', '零不传上限'],
+    ['help.reviewer.maxTokens', '0 sends no cap', '0', 'no cap', '零不传上限'],
+    ['hint.ui.injectMaxBytes', '0 does not trim', '0', 'no trimming', '零不裁剪'],
+    ['help.ui.injectMaxBytes', '0 does not trim', '0', 'no trimming', '零不裁剪'],
+  ];
+  resetHooks();
+  const original = makeCtx();
+  loadClient().apply(original.ctx);
+  const dicts = original.dictionaries[0].dicts;
+  let count = 0;
+  for (const [key, from, subject, predicate, id] of roster) {
+    const current = dicts.en[key];
+    assert.ok(current.includes(from), `${key}当前含义关系真实定位`);
+    assert.deepEqual(copyFactFailures(key, 'en', current), []);
+    assert.deepEqual(copyFactFailures(key, 'en', current.replace(from, `${subject} means ${predicate}`)), [], `${key}肯定means负谓词是等义`);
+    for (const cancel of ['does not mean', "doesn't mean", 'no longer means']) {
+      const mutated = current.replace(from, `${subject} ${cancel} ${predicate}`);
+      let replacements = 0;
+      const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+        if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body)) return whole;
+        replacements++;
+        return prefix + JSON.stringify(mutated);
+      });
+      assert.equal(replacements, 1);
+      resetHooks();
+      const env = makeCtx();
+      loadClient(source).apply(env.ctx);
+      const actual = env.dictionaries[0].dicts.en[key];
+      assert.equal(actual, mutated);
+      assert.ok(copyFactFailures(key, 'en', actual).includes(id), `${key}:局部取消负谓词必须报${id}`);
+      count++;
+    }
+    for (const suffix of [
+      ' This setting does not disable recording.',
+      ' This is not the final approval outcome.',
+      ` Another label does not mean ${predicate}.`,
+      ` Another label does not mean a final approval outcome, but ${subject} means ${predicate}.`,
+      ` It is not true that ${subject} does not mean ${predicate}.`,
+      ` It is not the case that ${subject} does not mean ${predicate}.`,
+    ]) assert.deepEqual(copyFactFailures(key, 'en', current + suffix), [], `${key}独立否定或另一主语不能借为本关系取消`);
+  }
+  assert.equal(count, 15, '3负关系5登记×3自然mean取消，包含报告原值反转');
+});
+
 test('当前token风险显示：原生字典源码错位和部分保护变异必须失败', () => {
   for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
     resetHooks();

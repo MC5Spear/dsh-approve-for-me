@@ -570,18 +570,33 @@ const SUBCONDITION_FACTS = {
 export const SUBCONDITION_IDS = Object.keys(SUBCONDITION_FACTS);
 
 /** 明确取消只绑定登记负关系的局部匹配；原关系自身的not/不是不算外层取消。 */
-function negativeRelationCancelled(text, lang, relation) {
+function negativeRelationCancelled(text, lang, spec) {
+  const relation = spec.assertion ?? spec;
   const cancel = lang === 'zh'
     ? /并非|不是|不属于?|不能说|不能认为|不再|这一说法不成立/gu
-    : /\bit is not true that\b|\bit is not the case that\b|\bcannot say(?: that)?\b|\bcan['’]t say(?: that)?\b|\bno longer\b|\bnot\b|\bis false\b|\bis not true\b/giu;
+    : /\bit is not true that\b|\bit is not the case that\b|\bcannot say(?: that)?\b|\bcan['’]t say(?: that)?\b|\bdoes not mean\b|\bdoesn['’]t mean\b|\bno longer means\b|\bno longer\b|\bnot\b|\bis false\b|\bis not true\b/giu;
   // 独立转折另起作用域；“configured but absent”共用主语的短关系不拆。
   const parts = text.split(/[。；;.!?！？\n—]/iu).flatMap((sentence) =>
     sentence.split(/\bbut\b(?=\s+(?:the|a|an|this|that|it|internal)\b)|但是/iu).flatMap((independent) => {
       if (lang === 'en' && /\b(?:it is not true that|it is not the case that|cannot say(?: that)?|can['’]t say(?: that)?)\b/iu.test(independent)) return [independent];
       return independent.split(/[，,:：]|\bbut\b/iu);
     }));
-  for (const part of parts) {
+  for (const original of parts) {
+    let part = original;
+    if (spec.meaning) for (const meaning of original.matchAll(/\b(?:does not mean|doesn['’]t mean|no longer means)\b/giu)) {
+      const before = original.slice(0, meaning.index);
+      const subject = before.match(spec.meaning.subject);
+      const predicate = original.slice(meaning.index + meaning[0].length).match(spec.meaning.predicate);
+      if (!subject || !predicate) continue;
+      const enclosing = before.slice(0, subject.index).match(/\bit is not (?:true|the case) that\s*$/iu);
+      if (!enclosing) return true;
+      // 外层否定取消meaning取消本身；只屏蔽此关系，其他直接取消仍独立受检。
+      const start = enclosing.index;
+      const end = meaning.index + meaning[0].length + predicate[0].length;
+      part = part.slice(0, start) + ' '.repeat(end - start) + part.slice(end);
+    }
     for (const outer of part.matchAll(cancel)) {
+      if (/mean/iu.test(outer[0])) continue;
       const stripped = part.slice(0, outer.index) + part.slice(outer.index + outer[0].length);
       for (const match of stripped.matchAll(new RegExp(relation.source, relation.flags.replace('g', '') + 'g'))) {
         const start = match.index;
@@ -628,16 +643,16 @@ const NEGATIVE_RELATIONS = {
   '插件不改YAML': [/不解析|不改写/u, /never parses|never rewrites/iu],
   '减少采集不删': [/不删除已有记录|并不会删除已有记录/u, /never deletes|never removes/iu],
   '未设置跟随当前模型': [/未设置|没有设置/u, /unset|not set/iu],
-  '零不传上限': [/不向模型传输出上限/u, /sends no cap|no cap is sent/iu],
+  '零不传上限': [/不向模型传输出上限/u, { assertion: /sends no cap|no cap is sent/iu, meaning: { subject: /\b0\s*$/u, predicate: /^\s+no (?:output )?cap\b/iu } }],
   '关闭完全不接管': [/不接管/u, /no take.over|not take over/iu],
   '最高权限及更高不批': [/不会被自动批准|不会批准|不批准/u, /never auto.approved|never approved|not approved/iu],
-  '零不裁剪': [/不裁剪|不截断/u, /does not trim|no trimming|not trimmed/iu],
+  '零不裁剪': [/不裁剪|不截断/u, { assertion: /does not trim|no trimming|not trimmed/iu, meaning: { subject: /\b0\s*$/u, predicate: /^\s+no trimming\b/iu } }],
   '空清单已知不接管': [/不接管|不会接管/u, /no known preset|not taken over/iu],
   '不接管与继续两分支': [/不接管/u, /no take.over|not take over/iu],
   '未设跟随当前模型': [/未设置|没有设置/u, /unset|not set/iu],
   '排队不占预算': [/不消耗本预算|不消耗这份预算|不占用/u, /never consume|does not consume|consume nothing/iu],
   '零拒绝非无限': [/不是无限等待|并非无限等待/u, /not an endless wait|not unlimited/iu],
-  '关闭零通知': [/一条都不发送|不发任何通知/u, /sends no notices|sends nothing/iu],
+  '关闭零通知': [/一条都不发送|不发任何通知/u, { assertion: /sends no notices|sends nothing/iu, meaning: { subject: /\bsend none["'”]?\s*$/iu, predicate: /^\s+(?:no notices|nothing)\b/iu } }],
   '默认未设置': [/未设置/u, /not set|unset/iu],
   '无会话及映射条件': [/无有效会话选择|无有效映射/u, /no effective session choice|no effective rule/iu],
   '会话未选且默认未设': [/未单独选择|未设置/u, /no reviewer|unset|not set/iu],

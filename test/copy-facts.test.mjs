@@ -461,6 +461,20 @@ test('默认来源必要条件有限保护：unless双来源不是or枚举，not
   ]) assert.deepEqual(fails('hint.reviewer.maxTokens', 'en', original.replace(from, replacement)), [], '只判同一默认来源的肯定必要条件，不把or当互斥');
 });
 
+test('mean只取消同一send-none负谓词，不以无关recording或最终结果否定误拒', () => {
+  const original = 'Allow, deny, timeout and failures sends all four; deny, timeout and failures skips allow notices; send none sends no notices. The review-log view is unaffected by this switch.';
+  for (const cancel of ['does not mean', "doesn't mean", 'no longer means']) assert.ok(fails('help.ui.inject', 'en', original.replace('send none sends no notices', `send none ${cancel} no notices`)).includes('关闭零通知'));
+  for (const suffix of [
+    ' This setting does not disable recording.',
+    ' This is not the final approval outcome.',
+    ' Another label does not mean no notices.',
+    ' Another label does not mean a final approval outcome, but send none means no notices.',
+    ' It is not true that send none does not mean no notices.',
+    ' It is not the case that send none does not mean no notices.',
+  ]) assert.deepEqual(fails('help.ui.inject', 'en', original + suffix), [], '无关对象与独立转折不误伤零通知关系');
+  assert.deepEqual(fails('help.ui.inject', 'en', original.replace('send none sends no notices', 'send none means no notices')), []);
+});
+
 test('反例：说明缺失整条报缺失', () => {
   assert.deepEqual(fails('hint.mode', 'zh', ''), ['说明缺失']);
   assert.deepEqual(fails('hint.mode', 'zh', undefined), ['说明缺失']);
