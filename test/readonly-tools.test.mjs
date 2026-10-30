@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, mkdir, readFile, readdir, realpath, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, realpath, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, dirname, join } from 'node:path';
+import { basename, join } from 'node:path';
 import { assertSafePattern, createReadonlyTools, globToRegExp, isDeniedPath } from '../lib/readonly-tools.js';
 import { agentT } from '../lib/agent-texts.js';
 import { errorCopyFailures } from './helpers/error-copy-facts.mjs';
@@ -373,23 +373,30 @@ test('对照：注入根独立生效、工作区同名目录不误伤', async ()
 });
 
 test('home 根为别名拼写时围栏仍拒止（8.3 短名；不自证别名则明示跳过）', async (t) => {
-  const home = await mkdtemp(join(tmpdir(), 'dsafm-sn-'));
+  // 全新父目录＋长名子目录：父目录里没有同干兄弟名，NTFS 对首个目录按顺序后缀（~1 起）
+  // 生成短名，可确定性取得。会话临时目录里既有 dsafm-* 夹具会占尽 ~1..~4，迫使 NTFS 改用
+  // 哈希形态短名（非「前缀＋~n」），按规则构造不出——不在拥挤目录里做该构造。
+  const parent = await mkdtemp(join(tmpdir(), 'dsafm-sn-'));
+  const home = join(parent, 'dsafm-sn-tail');
   await mkdir(join(home, 'sessions'), { recursive: true });
   await writeFile(join(home, 'sessions', 'session-1.jsonl'), 'transcript\n');
   const canonical = await realpath(home);
   let alias = null;
   if (home.toLowerCase() !== canonical.toLowerCase()) {
-    // 临时目录本身就是别名拼写（TEMP 可能含 8.3 短名前缀；macOS 的 /var→/private/var
-    // 同属 home 侧别名），同样接受。
+    // home 拼写本身就是别名（TEMP 含 8.3 短名前缀；macOS 的 /var→/private/var 等
+    // realpath 会归一的平台侧别名），同样接受。
     alias = home;
-  } else {
-    // NTFS 短名生成规则给候选：大写、滤非法字符、取前 6 字符＋~n；realpath 等值即自证，零子进程。
-    const parent = dirname(canonical);
+  } else if (process.platform === 'win32') {
+    // 8.3 短名自证用 stat().ino 跨拼写等值：同一目录长短拼写的卷内文件号相同、不同目录
+    // 不同。不依赖 realpath 的归一行为——个别目录经 realpath 可能仍返回短名拼写，
+    // realpath 字符串等值判据在那种目录上会漏（ino 判据不受影响）。候选按 NTFS 规则
+    // 构造：大写、滤非法字符、取前 6 字符＋~n，n 回退扫描 ~1..~4。
     const stem = basename(canonical).toUpperCase().replace(/[^A-Z0-9_-]/gu, '').slice(0, 6);
-    for (let n = 1; n <= 99; n += 1) {
+    const homeIno = (await stat(canonical)).ino;
+    for (let n = 1; n <= 4; n += 1) {
       const candidate = join(parent, `${stem}~${n}`);
       try {
-        if ((await realpath(candidate)).toLowerCase() === canonical.toLowerCase()) {
+        if ((await stat(candidate)).ino === homeIno) {
           alias = candidate;
           break;
         }
@@ -397,9 +404,9 @@ test('home 根为别名拼写时围栏仍拒止（8.3 短名；不自证别名�
     }
   }
   if (alias === null) {
-    // 跳过原因写实：顺序后缀形态（~1..~4）被既有目录占尽后，NTFS 转为哈希形态短名，
-    // 无法按规则构造；本环境下别名分支未被本用例执行，不计为通过。
-    t.skip('未取得可自证的 8.3 别名：临时目录无别名前缀，且短名后缀形态不可构造');
+    // 跳过原因写实：卷禁用 8.3（候选全部 stat 失败）或平台无该别名形态；本环境下别名分支
+    // 未被本用例执行，不计为通过。
+    t.skip('未取得可自证的 8.3 别名：卷未启用 8.3 短名、顺序后缀不可构造或平台无该别名形态');
     return;
   }
   assert.notEqual(alias.toLowerCase(), canonical.toLowerCase(), '别名拼写须与真实路径不同（防恒真）');

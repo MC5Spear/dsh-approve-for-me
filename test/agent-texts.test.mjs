@@ -157,29 +157,74 @@ test('超时文案（两语言）都不含「绕过拒绝」末句（requirement
   }
 });
 
-test('通道故障模板：两语言结构一致、含防风暴指引、不含拒绝末句；errorText 渲染 {reason}', () => {
-  const zh = agentT('zh', 'gate.error.body');
-  const en = agentT('en', 'gate.error.body');
-  // 结构与超时模板平行：首行前缀＋原因行＋说明行＋末行处置指引（四行）。
-  for (const [lang, body] of [['zh', zh], ['en', en]]) {
-    assert.ok(body.startsWith('[approve-for-me] '), `${lang} 首行须为 [approve-for-me] 前缀`);
-    assert.equal(body.split('\n').length, 4, `${lang} 四行结构与超时模板平行`);
-    assert.ok(!body.includes(REJECTION_INSTRUCTIONS_EN), `${lang} 通道故障文案不得含 en 拒绝末句`);
-    assert.ok(!/不要用等价手段绕过该拒绝/u.test(body), `${lang} 通道故障文案不得含 zh 拒绝末句`);
-    assert.match(body, /重试|retry/ui, `${lang} 通道故障文案要点明可重试`);
+// 通道故障模板的事实判定器（T1–T7，两语）：保护 requirements §4.3 点名的事实，不冻结普通措辞
+// 与排版。T4/T5 是方向性判定：T4 要求「停止词＋重试」同分句共现（反转句如「可以连续重试」
+// 不命中）；T5 命中「报告…用户」的分句不得带否定框架——否定框架检查按分句（逗号/分号/句号
+// 切分的最小分句）进行，整句口径会把末句「不要」误判进 T5 框架。
+const clausesOf = (text) => text.split(/[,，;；.。]/u).filter((clause) => clause.trim() !== '');
+const zhNegationFrame = /(不必|无需|不要)/u;
+const enNegationFrame = /(no need to|not necessary to|without|do not|don't)/iu;
+const factChecks = {
+  T1: (_lang, body) => body.startsWith('[approve-for-me] '),
+  T2: (lang, body) => (lang === 'zh'
+    ? /(不是|并非)[^。]*(判定为危险|危险判定)/u.test(body)
+    : /not a[^.\n]*(judged dangerous|safety|dangerous)/iu.test(body) || /reached no conclusion/iu.test(body)),
+  T3: (lang, body) => (lang === 'zh'
+    ? /直接重试|重新发起[^。]*审查|重新申请[^。]*审查/u.test(body)
+    : /(may|can)\b[^.;\n]{0,60}\bretr(?:y|ies|ying)|retry the same|fresh automatic review/iu.test(body)),
+  T4: (lang, body) => (lang === 'zh'
+    ? /(停止|不要|别|避免)[^。；]*重试/u.test(body)
+    : /(stop|do not keep|avoid)\b[^.;\n]*\b(?:retr(?:y|ies)|retrying)/iu.test(body)),
+  T5: (lang, body) => {
+    const hit = lang === 'zh' ? /(报告|告知|通知)[^，。；]*用户/u : /(inform|report|tell)\b[^,;.\n]*\buser/iu;
+    const neg = lang === 'zh' ? zhNegationFrame : enNegationFrame;
+    return clausesOf(body).some((clause) => hit.test(clause) && !neg.test(clause));
+  },
+  T6: (_lang, body) => [...body.matchAll(/\{(\w+)\}/gu)].map((m) => m[1]).sort().join(',') === 'reason',
+  T7: (_lang, body) => !body.includes(REJECTION_INSTRUCTIONS_EN) && !/不要用等价手段绕过该拒绝/u.test(body),
+};
+/** 逐项判定并返回缺失的事实项列表；空数组＝七项全过。 */
+const missingFacts = (lang, body) => Object.entries(factChecks)
+  .filter(([, check]) => !check(lang, body))
+  .map(([id]) => id);
+
+test('通道故障模板（两语）必要事实判定全过：前缀、故障≠危险、可重试、防风暴、占位集、无拒绝末句', () => {
+  for (const lang of ['zh', 'en']) {
+    const body = agentT(lang, 'gate.error.body');
+    assert.deepEqual(missingFacts(lang, body), [], `${lang} 通道故障模板七项必要事实须全过`);
+    // errorText 渲染：reason 原文进 {reason} 位、占位符消失；缺省渲染＝gate.noReason 词条
+    //（词条引用而非逐字标签，行首标签措辞可改）。
+    const rendered = errorText('attempt 2/2: empty payload', lang);
+    assert.ok(rendered.includes('attempt 2/2: empty payload'), `${lang} 渲染值应出现在正文`);
+    assert.ok(!rendered.includes('{reason}'), `${lang} 渲染后 {reason} 应消失`);
+    const defaulted = errorText(undefined, lang);
+    assert.ok(defaulted.includes(agentT(lang, 'gate.noReason')), `${lang} 缺省渲染应含 gate.noReason 词条`);
+    assert.ok(!defaulted.includes('{reason}'), `${lang} 缺省渲染后 {reason} 应消失`);
   }
-  // 占位集两语言一致（换占位名会在对侧丢词）。
-  const placeholders = (text) => [...text.matchAll(/\{(\w+)\}/gu)].map((m) => m[1]).sort().join(',');
-  assert.equal(placeholders(zh), placeholders(en), 'gate.error.body 占位集两语言必须一致');
-  assert.equal(placeholders(zh), 'reason');
-  // 防风暴指引（不可裁剪项）：末行不得写成无限重试许可。
-  assert.match(zh, /不要连续反复重试.*把故障报告用户/u);
-  assert.match(en, /do not keep retrying in a row; report the failure to the user/u);
-  // errorText 渲染：reason 原文进 {reason} 位，缺省落 gate.noReason，两语言各自成句。
-  assert.match(errorText('attempt 2/2: empty payload', 'zh'), /^原因：attempt 2\/2: empty payload$/mu);
-  assert.match(errorText('x', 'en'), /^Reason: x$/mu);
-  assert.match(errorText(undefined, 'zh'), /原因：未提供原因/u);
-  assert.doesNotMatch(errorText('x', 'zh'), /风险：/u, '通道故障模板不带 deny 的风险/授权行');
+});
+
+test('通道故障事实判定器：等义改写（含空行、超四行、英文等义末句）全过；删事实/反转反例挂', () => {
+  const equivalentZh = '[approve-for-me] 自动审批通道故障，本次升权按拒绝处理。\n\n原因：{reason}\n这并非危险判定：自动审查没有得出结论。你可以直接重试，重试会重新发起一次自动审查。\n\n若故障持续：请停止连续重试，并把故障报告给用户。';
+  const equivalentEn = '[approve-for-me] The automatic approval channel failed; this escalation request is treated as rejected.\n\nReason: {reason}\nThis is not a safety verdict - the review reached no conclusion. You may retry the same operation directly; a retry starts a fresh automatic review.\n\nIf failures continue: stop repeated retries and inform the user of the failure.';
+  // 等义正例含段落空行、行数超四、末句换成等义措辞——证明判定器保护事实而非排版。
+  assert.deepEqual(missingFacts('zh', equivalentZh), [], 'zh 等义正例（含空行、超四行）应全过');
+  assert.deepEqual(missingFacts('en', equivalentEn), [], 'en 等义正例（问题单点名的等义末句）应全过');
+  // 反例：删事实或反转语义必须挂，且缺失项正是被删/被反转的事实。
+  const dropZh = equivalentZh.replace('\n\n若故障持续：请停止连续重试，并把故障报告给用户。', '');
+  assert.deepEqual(missingFacts('zh', dropZh), ['T4', 'T5'], 'zh 删防风暴末句 → 缺停止连续重试与报告用户');
+  const reversedZh = `${dropZh}\n\n若故障持续：故障持续时可以连续重试，不必把故障报告用户。`;
+  assert.deepEqual(missingFacts('zh', reversedZh), ['T4', 'T5'], 'zh 反转末句（许可连续重试、免报告）→ T4 不命中、T5 命中句在否定框架内');
+  const dropEn = equivalentEn.replace('\n\nIf failures continue: stop repeated retries and inform the user of the failure.', '');
+  const reversedEn = `${dropEn}\n\nIf failures continue: you may keep retrying in a row; no need to inform the user.`;
+  assert.deepEqual(missingFacts('en', reversedEn), ['T4', 'T5'], 'en 反转末句 → T4 无停止词不命中；T5 唯一命中句被否定框架排除');
+  const dangerZh = equivalentZh.replace('这并非危险判定', '这判定为危险');
+  assert.deepEqual(missingFacts('zh', dangerZh), ['T2'], 'zh 删「非危险判定」事实 → 缺 T2');
+  const noRetryEn = equivalentEn.replace(' You may retry the same operation directly; a retry starts a fresh automatic review.', '');
+  assert.deepEqual(missingFacts('en', noRetryEn), ['T3'], 'en 删可重试句 → 缺 T3');
+  const badPlaceholderEn = equivalentEn.replaceAll('{reason}', '{failure}');
+  assert.deepEqual(missingFacts('en', badPlaceholderEn), ['T6'], 'en 换占位名 → 占位集断言挂');
+  const rejectTailZh = `${equivalentZh}\n${REJECTION_INSTRUCTIONS_ZH}`;
+  assert.deepEqual(missingFacts('zh', rejectTailZh), ['T7'], 'zh 拼拒绝末句 → T7 挂');
 });
 
 test('轮次用尽指令：两语言各自成句且互不残留；兼容导出＝zh 现行', () => {

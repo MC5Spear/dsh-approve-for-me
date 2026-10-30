@@ -102,7 +102,7 @@ function makeRt(cfg, options = {}) {
         settle(value);
       }, ms);
       const entry = { ms, label, promise, cleared: false };
-      // 手动触发缝：装配计时器取先验时限（缺省 90 s），测试里手动提前到点。
+      // 手动触发缝：不等真实到点，测试里手动提前触发。
       entry.fire = () => {
         let value;
         try {
@@ -989,22 +989,33 @@ test('G9 预算耗尽立即结算后，迟到的 allow 不改判、不重复通�
 
 // ── 装配并入审查时限 ──────────────────────────────────────────────
 
-test('装配挂死：装配计时器按先验真实时限到点 → rejected/timeout，环节记装配，与真实超时同路计数', async () => {
+test('装配挂死：装配计时器按剩余预算武装并到点 → rejected/timeout，环节记装配，与真实超时同路计数', async () => {
   const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 30000 } }), {
+    locateDelayMs: 200,
     configForNever: true,
     verdict: { decision: 'allow', reason: 'never reached', toolCalls: 0, fields: {} },
   });
   const promise = onApprovalRequest(request(), next, rt);
+  // locate 的 200 ms 延迟落在计时器武装之前（同步筛选计入装配预算，design §4.3）；
+  // 250 ms 只等延迟结束与武装完成，不真实到点。
+  await delay(250);
   await tick();
   const assemblyTimer = state.timers.find((entry) => entry.label === 'assembly' && entry.cleared === false);
+  if (assemblyTimer === undefined) {
+    // 不在场形态先拆全部已武装计时器（label 改名时 30 s 计时器可能已在挂），失败不留给进程。
+    state.timers.forEach((entry) => entry.clear?.());
+  }
   assert.ok(assemblyTimer, '装配计时器在场');
-  assert.equal(assemblyTimer.ms, 30000, '装配计时器取先验真实时限（非固定内部上限，design §4.3）');
+  // 先手动到点再取值断言：fire 后 gate 收尾已清理全部真实计时器，预算回归变红不挂 30 s。
   assemblyTimer.fire();
   const outcome = await promise;
   assert.equal(outcome, 'rejected');
+  // 武装值＝先验真实时限减已耗部分：200 ms 筛选耗时被扣、不补回（requirements §4.2）。
+  // 上界同时红「固定内部默认 90 s」与「向生产重赠全额」两种回归，下界红「入口即耗尽」。
+  assert.ok(assemblyTimer.ms > 0 && assemblyTimer.ms <= 30000 - 200, `装配计时器按剩余预算武装（实测 ${assemblyTimer.ms} ms，应 > 0 且 ≤ 29800）`);
+  assert.match(state.injections[0], new RegExp(`超时环节：装配超时 ${assemblyTimer.ms} ms`, 'u'), '注入文案毫秒数与武装值一致（生产用武装时剩余值）');
   assert.equal(state.reviewSignals.length, 0, '审查从未开始');
   assert.equal(state.nextCalls, 0, '卡片未弹（装配期无人工）');
-  assert.match(state.injections[0], /超时环节：装配超时 30000 ms/u);
   assert.equal(state.countTimeouts, 1, '装配超时与真实审查超时同一路径计数（design §5.3）');
   const decide = state.audits.find((entry) => entry.phase === 'decide');
   assert.equal(decide.source, 'timeout');
