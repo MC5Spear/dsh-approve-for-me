@@ -487,6 +487,18 @@ test('人工时点触发极性：未到点拒绝失败，到点才拒绝和未�
   assert.deepEqual(fails('help.human.timeoutMs', 'en', en.replace('Expiry settles as a rejection', 'Before expiry the request does not settle as a rejection; at expiry it settles as a rejection')), []);
 });
 
+test('空工具清单反转只看肯定空条件，非空不覆盖的正确邻句保留', () => {
+  const samples = [
+    ['zh', '每行一个工具；空清单覆盖所有工具。', '非空清单不覆盖全部工具。', '空清单不覆盖全部工具。'],
+    ['en', 'One tool per line; empty covers all.', 'A non-empty list does not cover every tool.', 'An empty list does not cover every tool.'],
+  ];
+  for (const [lang, current, correct, wrong] of samples) {
+    assert.deepEqual(fails('hint.tools', lang, current + correct), []);
+    assert.deepEqual(fails('hint.tools', lang, correct + current), []);
+    assert.ok(fails('hint.tools', lang, current + wrong).includes('空清单含义反转'));
+  }
+});
+
 test('反例：说明缺失整条报缺失', () => {
   assert.deepEqual(fails('hint.mode', 'zh', ''), ['说明缺失']);
   assert.deepEqual(fails('hint.mode', 'zh', undefined), ['说明缺失']);

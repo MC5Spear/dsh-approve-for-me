@@ -5850,6 +5850,54 @@ test('人工到点拒绝：时点触发与拒绝动作局部配对，未到点�
   assert.equal(wrong.length, 3);
 });
 
+test('空工具清单：non-empty/not empty只绑定非空分支，不误作空清单反转', () => {
+  resetHooks();
+  const original = makeCtx();
+  loadClient().apply(original.ctx);
+  const dicts = original.dictionaries[0].dicts;
+  const keys = ['hint.tools', 'help.tools'];
+  let negatives = 0;
+  for (const key of keys) {
+    for (const [lang, suffix] of [
+      ['en', ' A non-empty list does not cover every tool.'],
+      ['en', ' A list that is not empty does not cover every tool.'],
+      ['en', ' A nonempty list does not cover every tool.'],
+      ['zh', '非空清单不覆盖全部工具。'],
+      ['zh', '清单不为空时不覆盖全部工具。'],
+    ]) {
+      const current = dicts[lang][key];
+      assert.deepEqual(copyFactFailures(key, lang, current), []);
+      assert.deepEqual(copyFactFailures(key, lang, current + suffix), [], `${key}/${lang}正确非空否定分支不反转空清单`);
+      const split = current.search(lang === 'zh' ? /(?:空清单|清单留空)/u : /\bempty\b/iu);
+      assert.ok(split >= 0, '实际空清单条件定位');
+      const prefixed = current.slice(0, split) + suffix.trim() + ' ' + current.slice(split);
+      assert.deepEqual(copyFactFailures(key, lang, prefixed), [], `${key}/${lang}正确非空在前仍保肯定空条件`);
+    }
+    for (const [lang, suffix] of [
+      ['en', ' An empty list does not cover every tool.'],
+      ['zh', '空清单不覆盖全部工具。'],
+    ]) {
+      const current = dicts[lang][key];
+      const mutated = current + suffix;
+      let replacements = 0;
+      const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+        if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+        replacements++;
+        return prefix + JSON.stringify(mutated);
+      });
+      assert.equal(replacements, 1);
+      resetHooks();
+      const env = makeCtx();
+      loadClient(source).apply(env.ctx);
+      const actual = env.dictionaries[0].dicts[lang][key];
+      assert.equal(actual, mutated);
+      assert.ok(copyFactFailures(key, lang, actual).includes('空清单含义反转'), `${key}/${lang}真正空条件否定覆盖仍红`);
+      negatives++;
+    }
+  }
+  assert.equal(negatives, 4, '两键两语真实空条件反转，不以另一正确空关系遮掩');
+});
+
 test('当前token风险显示：原生字典源码错位和部分保护变异必须失败', () => {
   for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
     resetHooks();

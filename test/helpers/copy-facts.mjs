@@ -93,6 +93,20 @@ function conditionRelation(text, condition, opposite, action, validate = () => t
 
 const EMPTY = { zh: /空|留空/u, en: /\bempt(?:y|ied)\b/iu };
 const NONEMPTY = { zh: /非空|不为空|不留空|不是空/u, en: /\bnon[- ]?empty\b|\bnot (?:an? )?empty\b/iu };
+
+/** 空工具清单的明确反转只绑定本分句肯定的空条件，非空／not empty不作空条件。 */
+function emptyToolsReversed(text, lang) {
+  const condition = lang === 'zh' ? /留空|空/gu : /\bempt(?:y|ied)\b/giu;
+  const negatedCondition = lang === 'zh' ? /(?:非|不为|不留|不是)\s*$/u : /\bnon[- ]?$|\bnot\s+(?:an?\s+)?$/iu;
+  const reversal = lang === 'zh' ? /^[^。；，]{0,15}(?:不覆盖|不处理|零工具)/u : /^[^.;,]{0,30}(?:no tools|not cover|excludes all)/iu;
+  for (const part of text.split(/[。；;，,.\n]|\b(?:but|while)\b/iu)) {
+    for (const match of part.matchAll(condition)) {
+      if (negatedCondition.test(part.slice(0, match.index))) continue;
+      if (reversal.test(part.slice(match.index + match[0].length))) return true;
+    }
+  }
+  return false;
+}
 const UNSET = { zh: /未设置|没有设置|尚未设置|为空/u, en: /\bunset\b|\bnot set\b/iu };
 const SET = { zh: /已设置|已经设置|不为空/u, en: /\b(?:is|already) set\b|(?<!not )\bset(?: means| default| reviews)/iu };
 
@@ -871,7 +885,7 @@ export function copyFactFailures(key, lang, text) {
   if (zeroClause && /timeoutMs$/u.test(key) && /(?:不|不会|并非|不是).{0,3}立即|(?:不|不会|并非|不是)\s*(?:拒绝|超时)|\b(?:does not|do not|doesn't|don't|not|never)\b.{0,15}(?:immediate|at once|reject|time out)|\b(?:reject|timeout)\b.{0,8}\b(?:not|never)\b/iu.test(zeroClause)) failures.push('零值含义反转');
   if (/^(?:hint|help)\.denyPatterns$/u.test(key) && !hitRejects(normalized, lang)) failures.push('命中拒绝含义反转');
   if (zeroClause && /injectMaxBytes$/u.test(key) && /不是不|并非不|not untrimmed|not without trimming/iu.test(zeroClause)) failures.push('零值含义反转');
-  if (/tools$/u.test(key) && /空.{0,15}(?:不覆盖|不处理|零工具)|empty[^.;]{0,30}(?:no tools|not cover|excludes all)/iu.test(normalized)) failures.push('空清单含义反转');
+  if (/tools$/u.test(key) && emptyToolsReversed(normalized, lang)) failures.push('空清单含义反转');
   const actual = [...text.matchAll(/\{([a-zA-Z][\w]*)\}/gu)].map((hit) => hit[1]).sort();
   const expected = [...(PLACEHOLDERS[key] ?? [])].sort();
   if (JSON.stringify(actual) !== JSON.stringify(expected)) failures.push('占位符名称或次数');
