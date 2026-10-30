@@ -603,6 +603,15 @@ test('人工零预算只核Ask启用分支，Reject不启动人工时限不污�
   }
 });
 
+test('名单内处理动作不能被not handled否定，其他工具正确否定保持', () => {
+  const en = 'Tools under auto-approval, one name per line. Empty covers every tool; once filled, only listed tools are handled and the rest keep the host flow.';
+  const zh = '纳入自动审批的工具名单，每行一个工具名。空清单覆盖所有工具的升权审批；填写后只处理名单内工具的升权请求，其余工具保持宿主原流程。';
+  assert.ok(fails('help.tools', 'en', en.replace('are handled', 'are not handled')).includes('填写后只处理名单内'));
+  assert.ok(fails('help.tools', 'zh', zh.replace('只处理', '只不处理')).includes('填写后只处理名单内'));
+  assert.deepEqual(fails('help.tools', 'en', en + ' Unlisted tools are not handled by this plugin.'), []);
+  assert.deepEqual(fails('help.tools', 'zh', zh + '其他工具不由本插件处理。'), []);
+});
+
 test('反例：说明缺失整条报缺失', () => {
   assert.deepEqual(fails('hint.mode', 'zh', ''), ['说明缺失']);
   assert.deepEqual(fails('hint.mode', 'zh', undefined), ['说明缺失']);

@@ -604,8 +604,10 @@ const SUBCONDITION_FACTS = {
   },
   '否则模型默认': { zh: (text) => /否则|不然|若不支持/u.test(text), en: (text) => /otherwise|else|if not/iu.test(text) },
   '填写后只处理名单内': {
-    zh: (text) => conditionRelation(text, /填写|填入|填/u, null, /(?:只|仅)[^。；]{0,8}(?:名单|清单|列表)(?:之)?内/u, (part) => !/(?:不只|不仅)[^。；]{0,8}(?:名单|清单|列表)(?:之)?内/u.test(part)),
-    en: (text) => conditionRelation(text, /filled/iu, null, /(?:only|just) (?:the )?listed tools/iu, (part) => !/not (?:only|just) (?:the )?listed tools/iu.test(part)),
+    zh: (text) => conditionRelation(text, /填写|填入|填/u, null, /(?:只|仅)[^。；]{0,8}(?:名单|清单|列表)(?:之)?内/u, (part) => !/(?:不只|不仅)[^。；]{0,8}(?:名单|清单|列表)(?:之)?内/u.test(part))
+      && !sents(text).some((part) => /填写|填入|填/u.test(part) && /(?:只|仅)\s*(?:不|未)\s*处理(?:名单|清单|列表)(?:之)?内工具/u.test(part)),
+    en: (text) => conditionRelation(text, /filled/iu, null, /(?:only|just) (?:the )?listed tools/iu, (part) => !/not (?:only|just) (?:the )?listed tools/iu.test(part))
+      && !sents(text).some((part) => /filled/iu.test(part) && /\b(?:only|just)\s+(?:the\s+)?listed tools\s+are\s+(?:not|never)\s+handled\b/iu.test(part)),
   },
   '完整id作用范围': { zh: (text) => /完整.{0,4}模型/u.test(text) && !/(?:不完整|部分).{0,4}模型/u.test(text), en: (text) => /(?:full|complete) model id/iu.test(text) && !/(?:not full|not complete|partial) model id/iu.test(text) },
   '唯一条件': { zh: (text) => /同一作用范围(?:与|和|加)(?:同一)?执行助手模型[^。；]{0,8}(?:一条|唯一)/u.test(text), en: (text) => /one rule (?:per|for each) scope (?:and|plus) agent model|(?:each )?scope plus (?:one )?agent model[^.;]{0,20}one rule/iu.test(text) },

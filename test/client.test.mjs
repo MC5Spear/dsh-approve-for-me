@@ -6194,6 +6194,51 @@ test('清单内接管与关闭人工卡片：不同条件正确否定邻句保�
   assert.equal(checked, 12, '两当前登记各3正3反，包含报告原邻句与另一错误同条件');
 });
 
+test('填写后名单内工具动作：not handled不冒充处理，空表与其他工具否定邻句保持', () => {
+  resetHooks();
+  const original = makeCtx();
+  loadClient().apply(original.ctx);
+  const dicts = original.dictionaries[0].dicts;
+  const key = 'help.tools';
+  const wrong = [
+    ['en', 'only listed tools are handled', 'only listed tools are not handled'],
+    ['en', 'only listed tools are handled', 'only listed tools are never handled'],
+    ['zh', '填写后只处理名单内工具', '填写后只不处理名单内工具'],
+    ['zh', '填写后只处理名单内工具', '填写后只未处理名单内工具'],
+  ];
+  let checked = 0;
+  for (const [lang, from, to] of wrong) {
+    const current = dicts[lang][key];
+    assert.ok(current.includes(from));
+    assert.deepEqual(copyFactFailures(key, lang, current), []);
+    for (const value of [current.replace(from, to), current + ' ' + (lang === 'zh' ? '填写后只不处理名单内工具。' : 'Once filled, only listed tools are not handled.')]) {
+      let replacements = 0;
+      const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+        if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+        replacements++;
+        return prefix + JSON.stringify(value);
+      });
+      assert.equal(replacements, 1);
+      resetHooks();
+      const env = makeCtx();
+      loadClient(source).apply(env.ctx);
+      const actual = env.dictionaries[0].dicts[lang][key];
+      assert.equal(actual, value);
+      assert.ok(copyFactFailures(key, lang, actual).includes('填写后只处理名单内'), `${lang}原条件动作否定仍红，另一正确说明不遮盖`);
+      checked++;
+    }
+  }
+  for (const [lang, neighbor] of [
+    ['en', ' Unlisted tools are not handled by this plugin.'],
+    ['en', ' When empty, tools are not limited to the listed ones.'],
+    ['zh', '其他工具不由本插件处理。'],
+    ['zh', '空清单时不限于名单内工具。'],
+  ]) assert.deepEqual(copyFactFailures(key, lang, dicts[lang][key] + neighbor), [], '不同对象或空条件不能借作填写后处理反转');
+  assert.deepEqual(copyFactFailures(key, 'en', dicts.en[key].replace('once filled, only listed tools', 'once filled in, just the listed tools')), []);
+  assert.deepEqual(copyFactFailures(key, 'zh', dicts.zh[key].replace('填写后只处理名单内', '填入后仅处理清单内')), []);
+  assert.equal(checked, 8);
+});
+
 test('当前token风险显示：原生字典源码错位和部分保护变异必须失败', () => {
   for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
     resetHooks();
