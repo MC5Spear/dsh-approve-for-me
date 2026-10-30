@@ -446,6 +446,21 @@ test('量与候选只绑定所属关系：不同对象数字和排除邻句不�
   ]) assert.ok(fails('hint.reviewer.maxTokens', lang, text).includes('采用模型或供应商默认'));
 });
 
+test('默认来源必要条件有限保护：unless双来源不是or枚举，not required和中性both仍通过', () => {
+  const original = 'Review output cap in tokens (a token is the unit models use to measure text); 0 sends no cap, leaving the model or provider default; reasoning models may spend the budget on reasoning first — too small a cap can leave no usable conclusion.';
+  const from = 'leaving the model or provider default';
+  for (const replacement of [
+    'leaving no usable conclusion unless both the model and provider supply defaults',
+    'leaving a usable conclusion only if both the provider and model provide defaults',
+  ]) assert.ok(fails('hint.reviewer.maxTokens', 'en', original.replace(from, replacement)).includes('采用模型或供应商默认'));
+  for (const replacement of [
+    'leaving either the provider default or the model default',
+    'leaving both the model and provider defaults in effect together',
+    'leaving the model and provider defaults; both are not required to supply defaults',
+    'leaving the model or provider default; a separate setting works only if both sources supply defaults',
+  ]) assert.deepEqual(fails('hint.reviewer.maxTokens', 'en', original.replace(from, replacement)), [], '只判同一默认来源的肯定必要条件，不把or当互斥');
+});
+
 test('反例：说明缺失整条报缺失', () => {
   assert.deepEqual(fails('hint.mode', 'zh', ''), ['说明缺失']);
   assert.deepEqual(fails('hint.mode', 'zh', undefined), ['说明缺失']);

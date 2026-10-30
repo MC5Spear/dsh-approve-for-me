@@ -688,8 +688,26 @@ const QUANTITY_FACTS = {
   },
 };
 export const QUANTITY_IDS = Object.keys(QUANTITY_FACTS);
+/** 只拒默认来源被加上双来源必需条件；中性and/both枚举不表示两个来源都必需。 */
+function requiresBothDefaultSources(text) {
+  const sources = /(?:the\s+)?(?:model\s+and\s+(?:the\s+)?provider|provider\s+and\s+(?:the\s+)?model)/iu;
+  for (const part of text.split(/[。；;.,，:：\n—]|\bbut\b/iu)) {
+    if (!/\bleaving\b/iu.test(part) || !/\bdefaults?\b/iu.test(part)) continue;
+    for (const necessary of part.matchAll(/\b(?:unless|only if|only when|requires?)\s+both\s+|\bboth\s+/giu)) {
+      if (/\b(?:not|never)\s*$/iu.test(part.slice(0, necessary.index))) continue;
+      const after = part.slice(necessary.index + necessary[0].length);
+      const pair = after.match(sources);
+      if (!pair || pair.index !== 0) continue;
+      const provision = after.slice(pair[0].length);
+      const prerequisite = /^(?:unless|only if|only when|requires?)\b/iu.test(necessary[0]);
+      if (prerequisite && /^\s+(?:(?:must|need to|have to|to)\s+)?(?:supply|provide)\s+defaults?\b/iu.test(provision)) return true;
+      if (/^\s+(?:are\s+)?(?:required|necessary)\s+to\s+(?:supply|provide)\s+defaults?\b/iu.test(provision)) return true;
+    }
+  }
+  return false;
+}
 const PARTICIPANT_FACTS = {
-  '采用模型或供应商默认': { zh: (text) => includedParticipants(text.replace(/[，,]/gu, '；'), 'zh', /(?:由|采用|使用|改用|取用)[^。；]{0,24}(?:模型|供应商)[^。；]{0,12}默认(?:值)?[^。；]{0,8}(?:决定|提供|生效)?/u, [/模型/u, /供应商/u]), en: (text) => includedParticipants(text, 'en', /leaving|defaults? (?:appl(?:y|ies)|decide)|default provided/iu, [/model/iu, /provider/iu]) },
+  '采用模型或供应商默认': { zh: (text) => includedParticipants(text.replace(/[，,]/gu, '；'), 'zh', /(?:由|采用|使用|改用|取用)[^。；]{0,24}(?:模型|供应商)[^。；]{0,12}默认(?:值)?[^。；]{0,8}(?:决定|提供|生效)?/u, [/模型/u, /供应商/u]), en: (text) => includedParticipants(text, 'en', /leaving|defaults? (?:appl(?:y|ies)|decide)|default provided/iu, [/model/iu, /provider/iu]) && !requiresBothDefaultSources(text) },
   '默认模型与强度': participantFact(/默认/u, [/审查模型/u, /推理强度|强度/u], /default/iu, [/reviewer model/iu, /effort|strength/iu]),
   '审查文本和执行通知': participantFact(/文本|通知/u, [/审查/u, /文本/u, /执行助手/u, /通知/u], /text|notice/iu, [/text/iu, /reviewer/iu, /notice/iu, /agent/iu]),
   '请求和交人工两个起点': participantFact(/计时|起算/u, [/审批请求|请求/u, /交人工|转人工/u], /timing|timer/iu, [/approval request|request/iu, /handoff/iu]),

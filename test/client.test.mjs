@@ -5708,6 +5708,58 @@ test('登记数量与并列参与者：每个原子独立真实反例，数字�
   assert.deepEqual(errors, [], errors.join('\n'));
 });
 
+test('默认来源组合关系：只检明确双来源必要条件，中性并列与无关条件保持通过', () => {
+  resetHooks();
+  const original = makeCtx();
+  loadClient().apply(original.ctx);
+  const dicts = original.dictionaries[0].dicts;
+  const from = 'leaving the model or provider default';
+  const wrong = [
+    'leaving no usable conclusion unless both the model and provider supply defaults',
+    'leaving a usable conclusion only if both the model and provider provide defaults',
+    'leaving a usable conclusion only when both the provider and model supply defaults',
+    'leaving a usable conclusion that requires both the model and provider to supply defaults',
+    'leaving no usable conclusion because both the model and provider are required to provide defaults',
+  ];
+  const equivalent = [
+    'leaving the provider or model default',
+    'leaving either the model default or the provider default',
+    'leaving the model and provider defaults',
+    'leaving both the model and provider defaults in effect together',
+  ];
+  let checked = 0;
+  for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
+    const current = dicts.en[key];
+    assert.ok(current.includes(from));
+    assert.deepEqual(copyFactFailures(key, 'en', current), []);
+    for (const to of wrong) {
+      const mutated = current.replace(from, to);
+      let count = 0;
+      const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+        if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body)) return whole;
+        count++;
+        return prefix + JSON.stringify(mutated);
+      });
+      assert.equal(count, 1);
+      resetHooks();
+      const env = makeCtx();
+      loadClient(source).apply(env.ctx);
+      const actual = env.dictionaries[0].dicts.en[key];
+      assert.equal(actual, mutated);
+      assert.ok(copyFactFailures(key, 'en', actual).includes('采用模型或供应商默认'), `${key}:明确双来源供给必要条件须报来源事实`);
+      checked++;
+    }
+    for (const to of equivalent) assert.deepEqual(copyFactFailures(key, 'en', current.replace(from, to)), [], `${key}:or不作互斥XOR也不拒中性并列`);
+    assert.deepEqual(copyFactFailures(key, 'en', current + ' Both model and provider defaults exist.'), [], '来源在场不是必须同时供给');
+    assert.deepEqual(copyFactFailures(key, 'en', current + ' A separate setup completes only if both the model and provider supply defaults.'), [], '另一设置的双来源条件不借为本项来源关系');
+    assert.deepEqual(copyFactFailures(key, 'en', current + ' This separate retry report is leaving no trace unless both log writers are enabled.'), [], '同一leaving词不改变另一对象');
+    const chinese = dicts.zh[key];
+    assert.deepEqual(copyFactFailures(key, 'zh', chinese.replace('模型或供应商默认值', '模型和供应商默认值')), [], '和枚举两个来源本身不作反转');
+    assert.deepEqual(copyFactFailures(key, 'zh', chinese + '模型与供应商的默认值都在场。另一项设置只有两者同时在场才可使用。'), [], '中性both与无关必要条件不误拒');
+  }
+  assert.equal(checked, 10, '两真实键×五类明确双来源必要条件（含报告两原例）');
+});
+
 test('当前token风险显示：原生字典源码错位和部分保护变异必须失败', () => {
   for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
     resetHooks();
