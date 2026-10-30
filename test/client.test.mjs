@@ -5898,6 +5898,58 @@ test('空工具清单：non-empty/not empty只绑定非空分支，不误作空�
   assert.equal(negatives, 4, '两键两语真实空条件反转，不以另一正确空关系遮掩');
 });
 
+test('确定优先不作未必：局部弱化与中文默认来源双供必需条件须报对应事实', () => {
+  resetHooks();
+  const original = makeCtx();
+  loadClient().apply(original.ctx);
+  const dicts = original.dictionaries[0].dicts;
+  let checked = 0;
+  const verify = (key, lang, from, to, id) => {
+    const current = dicts[lang][key];
+    assert.ok(current.includes(from), `${key}/${lang}真实局部关系:${from}`);
+    const mutated = current.replace(from, to);
+    let replacements = 0;
+    const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+      if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+      replacements++;
+      return prefix + JSON.stringify(mutated);
+    });
+    assert.equal(replacements, 1);
+    resetHooks();
+    const env = makeCtx();
+    loadClient(source).apply(env.ctx);
+    const actual = env.dictionaries[0].dicts[lang][key];
+    assert.equal(actual, mutated);
+    assert.ok(copyFactFailures(key, lang, actual).includes(id), `${key}/${lang}确定关系反转须报${id}`);
+    checked++;
+  };
+  const priorities = [
+    ['hint.reviewer.parentModelRules', 'zh', '会话选择更优先', '会话选择', '更优先', '会话更优先'],
+    ['hint.reviewer.parentModelRules', 'zh', '命中时先于全局默认', '命中时', '先于全局默认', '映射先于全局'],
+    ['help.reviewer.parentModelRules', 'zh', '会话选择更优先', '会话选择', '更优先', '会话高于映射高于全局'],
+    ['help.reviewer.parentModelRules', 'zh', '命中时先于全局默认', '命中时', '先于全局默认', '会话高于映射高于全局'],
+    ['hint.reviewer.parentModelRules', 'en', 'a session choice beats both', 'a session choice ', 'beats both', '会话更优先'],
+    ['hint.reviewer.parentModelRules', 'en', 'a hit beats the global default', 'a hit ', 'beats the global default', '映射先于全局'],
+    ['help.reviewer.parentModelRules', 'en', 'A session choice outranks a hit', 'A session choice ', 'outranks a hit', '会话高于映射高于全局'],
+    ['help.reviewer.parentModelRules', 'en', 'a hit outranks the global default', 'a hit ', 'outranks the global default', '会话高于映射高于全局'],
+  ];
+  for (const [key, lang, from, subject, predicate, id] of priorities) {
+    for (const weak of lang === 'zh' ? ['未必', '不一定'] : ['not necessarily ']) verify(key, lang, from, subject + weak + predicate, id);
+    assert.deepEqual(copyFactFailures(key, lang, dicts[lang][key] + (lang === 'zh' ? '其他模型未必可用。' : ' Another model is not necessarily available.')), [], '另一对象弱化不改变确定优先关系');
+  }
+  for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
+    const from = '由模型或供应商默认值决定';
+    for (const both of ['两者', '二者', '模型和供应商']) verify(key, 'zh', from, `${from}，只有${both}都提供默认值时才生效`, '采用模型或供应商默认');
+    for (const suffix of [
+      '。只有另一个设置启用时才显示帮助。',
+      '。模型和供应商的默认值都可能在场。',
+      '。另一个默认设置只有两者都提供默认值时才生效。',
+      '，另一个设置只有两者都提供默认值时才生效',
+    ]) assert.deepEqual(copyFactFailures(key, 'zh', dicts.zh[key].replace(from, from + suffix)), [], '中文只有/both需同来源紧邻照应，不借另一设置');
+  }
+  assert.equal(checked, 18, '12确定优先弱化＋6中文双来源必要条件，含报告2原例');
+});
+
 test('当前token风险显示：原生字典源码错位和部分保护变异必须失败', () => {
   for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
     resetHooks();

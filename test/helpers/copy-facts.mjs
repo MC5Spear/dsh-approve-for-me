@@ -65,7 +65,7 @@ function claimsFinalOutcome(text, lang) {
 }
 
 /** 已登记正向关系的紧邻否定；只查看关系词前缀，不把其他分句的否定当作反转。 */
-function affirmativeConcept(text, lang, concept) {
+function affirmativeConcept(text, lang, concept, definite = false) {
   const negativePrefix = lang === 'zh'
     ? /(?:不|未|非|没有|并非|不是|无需|不能|无法|不再)(?:会|再|更|直接|立即|单独|保持|被|逐条|只|按拒绝|由|因|按|使用|可改选|按拒绝)?\s*$/u
     : /\b(?:not|no|never|without|cannot|can't|doesn't|don't|isn't|aren't)(?:\s+(?:be|a|an|the|as|called|used|run|act|acts|counted|timed|remain|remains|more|directly|immediately))*\s*$/iu;
@@ -73,7 +73,9 @@ function affirmativeConcept(text, lang, concept) {
   for (const clause of text.split(/[。；;，,:：.!?！？\n—]/u)) {
     const matches = clause.matchAll(new RegExp(concept.source, concept.flags.replace('g', '') + 'g'));
     for (const match of matches) {
-      if (negativePrefix.test(clause.slice(0, match.index))) return false;
+      const before = clause.slice(0, match.index);
+      if (negativePrefix.test(before)) return false;
+      if (definite && (lang === 'zh' ? /(?:未必|不一定)\s*$/u : /\bnot necessarily\s*$/iu).test(before)) return false;
       found = true;
     }
   }
@@ -245,8 +247,8 @@ export const COPY_FACTS = {
   'hint.reviewer.parentModelRules': [
     r('执行模型匹配', S(/执行助手/u, /模型/u, /匹配|规则/u), S(/agent/iu, /model/iu, /match|rule/iu)),
     // 方向性共现（主语→优先词→宾语同子句按序），防「全局先于命中」式反转误过。
-    r('映射先于全局', AND(/(?:命中|映射|规则)[^。；]{0,8}(?:先于|优先于|高于)[^。；]{0,8}全局/u, (text) => affirmativeConcept(text, 'zh', /先于|优先于|高于/u)), AND(/\bhit\b[^.;]{0,40}(?:beats|outranks)[^.;]{0,40}global/iu, (text) => affirmativeConcept(text, 'en', /beats?|outranks?/iu))),
-    r('会话更优先', AND(/会话选择[^。；]{0,8}更优先|会话选择[^。；]{0,6}最高/u, (text) => affirmativeConcept(text, 'zh', /更优先|最高/u)), AND(/session choice[^.;]{0,30}(?:beats|outranks|tops)/iu, (text) => affirmativeConcept(text, 'en', /beats?|outranks?|tops?/iu))),
+    r('映射先于全局', AND(/(?:命中|映射|规则)[^。；]{0,8}(?:先于|优先于|高于)[^。；]{0,8}全局/u, (text) => affirmativeConcept(text, 'zh', /先于|优先于|高于/u, true)), AND(/\bhit\b[^.;]{0,40}(?:beats|outranks)[^.;]{0,40}global/iu, (text) => affirmativeConcept(text, 'en', /beats?|outranks?/iu, true))),
+    r('会话更优先', AND(/会话选择[^。；]{0,8}更优先|会话选择[^。；]{0,6}最高/u, (text) => affirmativeConcept(text, 'zh', /更优先|最高/u, true)), AND(/session choice[^.;]{0,30}(?:beats|outranks|tops)/iu, (text) => affirmativeConcept(text, 'en', /beats?|outranks?|tops?/iu, true))),
   ],
   'hint.language.ui': [r('插件界面语言', S(/插件/u, /界面/u, /语言/u), S(/plugin/iu, /UI|interface/iu, /language/iu))],
   'hint.language.agent': [r('审查文本和执行通知', S(/审查|发给/u, /文本/u, /执行助手|通知/u, /通知|执行助手/u), S(/text/iu, /reviewer/iu, /notice/iu, /agent/iu))],
@@ -302,8 +304,8 @@ export const COPY_FACTS = {
     r(
       '会话高于映射高于全局',
       // 方向性共现：主语在前、优先词居中、宾语在后，反转顺序必红。
-      AND(/会话选择[^。；]{0,8}更优先|会话选择[^。；]{0,6}最高/u, /命中[^。；]{0,8}(?:先于|优先于|高于)[^。；]{0,8}全局/u, (text) => affirmativeConcept(text, 'zh', /更优先|最高|先于|优先于|高于/u)),
-      AND(/session choice[^.;]{0,30}(?:outranks|beats)/iu, /\bhit\b[^.;]{0,40}(?:outranks|beats)[^.;]{0,40}global/iu, (text) => affirmativeConcept(text, 'en', /beats?|outranks?/iu)),
+      AND(/会话选择[^。；]{0,8}更优先|会话选择[^。；]{0,6}最高/u, /命中[^。；]{0,8}(?:先于|优先于|高于)[^。；]{0,8}全局/u, (text) => affirmativeConcept(text, 'zh', /更优先|最高|先于|优先于|高于/u, true)),
+      AND(/session choice[^.;]{0,30}(?:outranks|beats)/iu, /\bhit\b[^.;]{0,40}(?:outranks|beats)[^.;]{0,40}global/iu, (text) => affirmativeConcept(text, 'en', /beats?|outranks?/iu, true)),
     ),
     r('唯一条件', S(/只能有一条|只允许一条|唯一/u, /规则|条/u), S(/one rule/iu, /per|scope/iu)),
     r('旧纯id任意provider', S(/纯模型 id|纯 id/u, /任意 provider|任意/u), S(/plain.id/iu, /any.provider|any/iu)),
@@ -718,7 +720,16 @@ const QUANTITY_FACTS = {
 };
 export const QUANTITY_IDS = Object.keys(QUANTITY_FACTS);
 /** 只拒默认来源被加上双来源必需条件；中性and/both枚举不表示两个来源都必需。 */
-function requiresBothDefaultSources(text) {
+function requiresBothDefaultSources(text, lang = 'en') {
+  if (lang === 'zh') {
+    for (const part of sents(text)) {
+      const source = part.match(/(?:由|采用|使用|改用|取用)[^，,。；]{0,24}(?:模型[^，,。；]{0,8}供应商|供应商[^，,。；]{0,8}模型)[^，,。；]{0,8}默认值(?:决定)?/u);
+      if (!source) continue;
+      const continuation = part.slice(source.index + source[0].length);
+      if (/^[，,]\s*只有(?:两者|二者|模型和供应商|供应商和模型)都(?:提供|供给)默认值时才(?:生效|得到有效结论)/u.test(continuation)) return true;
+    }
+    return false;
+  }
   const sources = /(?:the\s+)?(?:model\s+and\s+(?:the\s+)?provider|provider\s+and\s+(?:the\s+)?model)/iu;
   for (const part of text.split(/[。；;.,，:：\n—]|\bbut\b/iu)) {
     if (!/\bleaving\b/iu.test(part) || !/\bdefaults?\b/iu.test(part)) continue;
@@ -736,7 +747,7 @@ function requiresBothDefaultSources(text) {
   return false;
 }
 const PARTICIPANT_FACTS = {
-  '采用模型或供应商默认': { zh: (text) => includedParticipants(text.replace(/[，,]/gu, '；'), 'zh', /(?:由|采用|使用|改用|取用)[^。；]{0,24}(?:模型|供应商)[^。；]{0,12}默认(?:值)?[^。；]{0,8}(?:决定|提供|生效)?/u, [/模型/u, /供应商/u]), en: (text) => includedParticipants(text, 'en', /leaving|defaults? (?:appl(?:y|ies)|decide)|default provided/iu, [/model/iu, /provider/iu]) && !requiresBothDefaultSources(text) },
+  '采用模型或供应商默认': { zh: (text) => includedParticipants(text.replace(/[，,]/gu, '；'), 'zh', /(?:由|采用|使用|改用|取用)[^。；]{0,24}(?:模型|供应商)[^。；]{0,12}默认(?:值)?[^。；]{0,8}(?:决定|提供|生效)?/u, [/模型/u, /供应商/u]) && !requiresBothDefaultSources(text, 'zh'), en: (text) => includedParticipants(text, 'en', /leaving|defaults? (?:appl(?:y|ies)|decide)|default provided/iu, [/model/iu, /provider/iu]) && !requiresBothDefaultSources(text) },
   '默认模型与强度': participantFact(/默认/u, [/审查模型/u, /推理强度|强度/u], /default/iu, [/reviewer model/iu, /effort|strength/iu]),
   '审查文本和执行通知': participantFact(/文本|通知/u, [/审查/u, /文本/u, /执行助手/u, /通知/u], /text|notice/iu, [/text/iu, /reviewer/iu, /notice/iu, /agent/iu]),
   '请求和交人工两个起点': participantFact(/计时|起算/u, [/审批请求|请求/u, /交人工|转人工/u], /timing|timer/iu, [/approval request|request/iu, /handoff/iu]),

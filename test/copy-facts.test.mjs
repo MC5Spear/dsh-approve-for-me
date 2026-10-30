@@ -499,6 +499,16 @@ test('空工具清单反转只看肯定空条件，非空不覆盖的正确邻�
   }
 });
 
+test('优先确定性与默认来源条件：不以未必弱化确定关系，不向其他设置借只有条件', () => {
+  const priority = '按执行助手模型匹配的规则表：命中时先于全局默认，会话选择更优先。';
+  for (const weak of ['未必', '不一定']) assert.ok(fails('hint.reviewer.parentModelRules', 'zh', priority.replace('会话选择更优先', `会话选择${weak}更优先`)).includes('会话更优先'));
+  assert.deepEqual(fails('hint.reviewer.parentModelRules', 'zh', priority + '其他模型未必可用。'), []);
+  const token = '审查输出的 token 上限（token 是模型计量文本的单位）；0 不向模型传输出上限，由模型或供应商默认值决定；推理模型可能先把额度用于推理，上限过小可能导致没有有效结论。';
+  assert.ok(fails('hint.reviewer.maxTokens', 'zh', token.replace('默认值决定', '默认值决定，只有两者都提供默认值时才生效')).includes('采用模型或供应商默认'));
+  assert.deepEqual(fails('hint.reviewer.maxTokens', 'zh', token + '另一个默认设置只有两者都提供默认值时才生效。'), []);
+  assert.deepEqual(fails('hint.reviewer.maxTokens', 'zh', token.replace('模型或供应商', '供应商或模型')), []);
+});
+
 test('反例：说明缺失整条报缺失', () => {
   assert.deepEqual(fails('hint.mode', 'zh', ''), ['说明缺失']);
   assert.deepEqual(fails('hint.mode', 'zh', undefined), ['说明缺失']);
