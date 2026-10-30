@@ -475,6 +475,18 @@ test('mean只取消同一send-none负谓词，不以无关recording或最终结�
   assert.deepEqual(fails('help.ui.inject', 'en', original.replace('send none sends no notices', 'send none means no notices')), []);
 });
 
+test('人工时点触发极性：未到点拒绝失败，到点才拒绝和未到点不拒绝保持', () => {
+  const zh = '人工作答等待上限（毫秒），仅在自动审查未允许时交给人工决定时使用。0 立即拒绝，不是无限等待。到点按拒绝结算，原因写明人工作答超时。';
+  const en = 'Human-answer wait limit (ms), used only when the fallback is Ask. 0 rejects immediately, not an endless wait. Expiry settles as a rejection citing the human timeout.';
+  for (const [lang, from, to, original] of [
+    ['zh', '到点按拒绝结算', '未到点按拒绝结算', zh],
+    ['en', 'Expiry settles as a rejection', 'Before expiry the request settles as a rejection', en],
+    ['en', 'Expiry settles as a rejection', 'When it is not expiry the request settles as a rejection', en],
+  ]) assert.ok(fails('help.human.timeoutMs', lang, original.replace(from, to)).includes('到点拒绝'));
+  assert.deepEqual(fails('help.human.timeoutMs', 'zh', zh.replace('到点按拒绝结算', '未到点不按拒绝结算；到点才按拒绝结算')), []);
+  assert.deepEqual(fails('help.human.timeoutMs', 'en', en.replace('Expiry settles as a rejection', 'Before expiry the request does not settle as a rejection; at expiry it settles as a rejection')), []);
+});
+
 test('反例：说明缺失整条报缺失', () => {
   assert.deepEqual(fails('hint.mode', 'zh', ''), ['说明缺失']);
   assert.deepEqual(fails('hint.mode', 'zh', undefined), ['说明缺失']);

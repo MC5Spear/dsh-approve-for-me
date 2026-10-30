@@ -5807,6 +5807,49 @@ test('负关系含义取消：send-none和两个零值对象分别绑定mean取�
   assert.equal(count, 15, '3负关系5登记×3自然mean取消，包含报告原值反转');
 });
 
+test('人工到点拒绝：时点触发与拒绝动作局部配对，未到点不拒绝的邻句保持', () => {
+  assert.deepEqual(Object.entries(COPY_FACTS).filter(([, facts]) => facts.some((fact) => fact.id === '到点拒绝')).map(([key]) => key), ['help.human.timeoutMs'], '只核当前共享登记，不增其他时限义务');
+  resetHooks();
+  const original = makeCtx();
+  loadClient().apply(original.ctx);
+  const dicts = original.dictionaries[0].dicts;
+  const key = 'help.human.timeoutMs';
+  const wrong = [
+    ['zh', '到点按拒绝结算', '未到点按拒绝结算'],
+    ['en', 'Expiry settles as a rejection', 'Before expiry the request settles as a rejection'],
+    ['en', 'Expiry settles as a rejection', 'When it is not expiry the request settles as a rejection'],
+  ];
+  for (const [lang, from, to] of wrong) {
+    const current = dicts[lang][key];
+    assert.ok(current.includes(from));
+    assert.deepEqual(copyFactFailures(key, lang, current), []);
+    const mutated = current.replace(from, to);
+    let replacements = 0;
+    const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+      if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+      replacements++;
+      return prefix + JSON.stringify(mutated);
+    });
+    assert.equal(replacements, 1);
+    resetHooks();
+    const env = makeCtx();
+    loadClient(source).apply(env.ctx);
+    const actual = env.dictionaries[0].dicts[lang][key];
+    assert.equal(actual, mutated);
+    assert.ok(copyFactFailures(key, lang, actual).includes('到点拒绝'), `${lang}时点反转须报对应事实`);
+  }
+  const positive = [
+    ['zh', '到点按拒绝结算', '到点才按拒绝结算'],
+    ['zh', '到点按拒绝结算', '未到点不按拒绝结算；到点才按拒绝结算'],
+    ['en', 'Expiry settles as a rejection', 'At expiry the request settles as a rejection'],
+    ['en', 'Expiry settles as a rejection', 'Before expiry the request does not settle as a rejection; at expiry it settles as a rejection'],
+  ];
+  for (const [lang, from, to] of positive) assert.deepEqual(copyFactFailures(key, lang, dicts[lang][key].replace(from, to)), [], `${lang}正确未到点分支与到点才拒绝不误拒`);
+  assert.deepEqual(copyFactFailures(key, 'zh', dicts.zh[key] + '另一个提醒未到点也会显示。'), [], '另一对象未到点不是拒绝时点反转');
+  assert.deepEqual(copyFactFailures(key, 'en', dicts.en[key] + ' A separate reminder may appear before expiry.'), [], '另一动作的before expiry不借为拒绝触发');
+  assert.equal(wrong.length, 3);
+});
+
 test('当前token风险显示：原生字典源码错位和部分保护变异必须失败', () => {
   for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
     resetHooks();

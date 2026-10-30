@@ -756,7 +756,10 @@ const BEHAVIOR_FACTS = {
   '否则模型默认': behaviorPositive(/否则|不然|若不支持/u, /由模型默认|默认/u, /otherwise|else|if not/iu, /default|decide/iu),
   '旧纯id任意provider': behaviorPositive(/纯模型 id|纯 id/u, /任意/u, /plain.id/iu, /any.provider|any/iu),
   '装配结论全程': behaviorPositive(/装配/u, /涵盖|覆盖/u, /assembly/iu, /cover/iu),
-  '到点拒绝': behaviorPositive(/到点|到期|超时/u, /按拒绝结算|拒绝/u, /expiry|expire|times? out/iu, /settle|reject/iu),
+  '到点拒绝': {
+    zh: (text) => thresholdEvent(text, 'zh', /到点|到期|超时/u, /(?:按)?拒绝(?:结算)?/u),
+    en: (text) => thresholdEvent(text.replace(/\b(?:before|prior to)\s+(?:the\s+)?expiry\b/giu, 'not expiry'), 'en', /\bexpiry\b|expires?|times? out/iu, /settles? as (?:a )?rejection|reject(?:s|ed|ion)?/iu),
+  },
   '请求起算用剩余': behaviorPositive(/请求/u, /使用剩余|剩余|余下/u, /request/iu, /gets?|remainder|remaining/iu),
   '交人工重新起算': behaviorPositive(/交人工|转人工/u, /重新|重起|另起/u, /handoff/iu, /handoff itself|fresh|restart|begins again|new|itself/iu),
   '范围仍审查': { zh: (text) => !/(?:无需|不必|不用|不须)(?:通过)?[^。；]{0,18}(?:规则|模型审查)/u.test(text) && affirmativeConcept(text, 'zh', /通过|过规则/u), en: (text) => !/(?:need not|does not|do not|not required to)[^.;]{0,18}pass/iu.test(text) && affirmativeConcept(text, 'en', /pass(?:es)?/iu) },
