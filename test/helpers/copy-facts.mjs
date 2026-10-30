@@ -604,10 +604,12 @@ const SUBCONDITION_FACTS = {
   },
   '否则模型默认': { zh: (text) => /否则|不然|若不支持/u.test(text), en: (text) => /otherwise|else|if not/iu.test(text) },
   '填写后只处理名单内': {
-    zh: (text) => conditionRelation(text, /填写|填入|填/u, null, /(?:只|仅)[^。；]{0,8}(?:名单|清单|列表)(?:之)?内/u, (part) => !/(?:不只|不仅)[^。；]{0,8}(?:名单|清单|列表)(?:之)?内/u.test(part))
-      && !sents(text).some((part) => /填写|填入|填/u.test(part) && /(?:只|仅)\s*(?:不|未)\s*处理(?:名单|清单|列表)(?:之)?内工具/u.test(part)),
-    en: (text) => conditionRelation(text, /filled/iu, null, /(?:only|just) (?:the )?listed tools/iu, (part) => !/not (?:only|just) (?:the )?listed tools/iu.test(part))
-      && !sents(text).some((part) => /filled/iu.test(part) && /\b(?:only|just)\s+(?:the\s+)?listed tools\s+are\s+(?:not|never)\s+handled\b/iu.test(part)),
+    zh: (text) => conditionRelation(text, /填写|填入|填/u, /(?:未|没有)(?:填写|填入|填)/u, /(?:只|仅)[^。；]{0,8}(?:名单|清单|列表)(?:之)?内/u, (part) => !/(?:不只|不仅)[^。；]{0,8}(?:名单|清单|列表)(?:之)?内/u.test(part))
+      && !sents(text).some((part) => /填写|填入|填/u.test(part) && /(?:只|仅)\s*(?:不|未)\s*处理(?:名单|清单|列表)(?:之)?内工具/u.test(part))
+      && !/(?:未|没有)(?:填写|填入|填)[^。；]{0,12}(?:只|仅)处理(?:名单|清单|列表)(?:之)?内工具/u.test(text),
+    en: (text) => conditionRelation(text, /\bfilled\b/iu, /\bnot filled\b|\bunfilled\b/iu, /(?:only|just) (?:the )?listed tools/iu, (part) => !/not (?:only|just) (?:the )?listed tools/iu.test(part))
+      && !sents(text).some((part) => /filled/iu.test(part) && /\b(?:only|just)\s+(?:the\s+)?listed tools\s+are\s+(?:not|never)\s+handled\b/iu.test(part))
+      && !/\b(?:not filled|unfilled)\b[^.;]{0,16}\b(?:only|just)\s+(?:the\s+)?listed tools\s+are\s+handled\b/iu.test(text),
   },
   '完整id作用范围': { zh: (text) => /完整.{0,4}模型/u.test(text) && !/(?:不完整|部分).{0,4}模型/u.test(text), en: (text) => /(?:full|complete) model id/iu.test(text) && !/(?:not full|not complete|partial) model id/iu.test(text) },
   '唯一条件': { zh: (text) => /同一作用范围(?:与|和|加)(?:同一)?执行助手模型[^。；]{0,8}(?:一条|唯一)/u.test(text), en: (text) => /one rule (?:per|for each) scope (?:and|plus) agent model|(?:each )?scope plus (?:one )?agent model[^.;]{0,20}one rule/iu.test(text) },
@@ -782,6 +784,13 @@ const QUANTITY_FACTS = {
   },
 };
 export const QUANTITY_IDS = Object.keys(QUANTITY_FACTS);
+/** 默认来源的明确整体取消只绑定该供给短句，不把其他对象的no借作取消。 */
+function defaultSourceCancelled(text, lang) {
+  return lang === 'zh'
+    ? /(?:不由|不采用|不使用)(?:模型或供应商|供应商或模型)默认值(?:决定)?/u.test(text)
+    : /\bleaving\s+no\s+(?:model\s+or\s+provider|provider\s+or\s+model)\s+defaults?\b/iu.test(text);
+}
+
 /** 只拒默认来源被加上双来源必需条件；中性and/both枚举不表示两个来源都必需。 */
 function requiresBothDefaultSources(text, lang = 'en') {
   if (lang === 'zh') {
@@ -810,7 +819,7 @@ function requiresBothDefaultSources(text, lang = 'en') {
   return false;
 }
 const PARTICIPANT_FACTS = {
-  '采用模型或供应商默认': { zh: (text) => includedParticipants(text.replace(/[，,]/gu, '；'), 'zh', /(?:由|采用|使用|改用|取用)[^。；]{0,24}(?:模型|供应商)[^。；]{0,12}默认(?:值)?[^。；]{0,8}(?:决定|提供|生效)?/u, [/模型/u, /供应商/u]) && !requiresBothDefaultSources(text, 'zh'), en: (text) => includedParticipants(text, 'en', /leaving|defaults? (?:appl(?:y|ies)|decide)|default provided/iu, [/model/iu, /provider/iu]) && !requiresBothDefaultSources(text) },
+  '采用模型或供应商默认': { zh: (text) => includedParticipants(text.replace(/[，,]/gu, '；'), 'zh', /(?:由|采用|使用|改用|取用)[^。；]{0,24}(?:模型|供应商)[^。；]{0,12}默认(?:值)?[^。；]{0,8}(?:决定|提供|生效)?/u, [/模型/u, /供应商/u]) && !requiresBothDefaultSources(text, 'zh') && !defaultSourceCancelled(text, 'zh'), en: (text) => includedParticipants(text, 'en', /leaving|defaults? (?:appl(?:y|ies)|decide)|default provided/iu, [/model/iu, /provider/iu]) && !requiresBothDefaultSources(text) && !defaultSourceCancelled(text, 'en') },
   '默认模型与强度': participantFact(/默认/u, [/审查模型/u, /推理强度|强度/u], /default/iu, [/reviewer model/iu, /effort|strength/iu]),
   '审查文本和执行通知': participantFact(/文本|通知/u, [/审查/u, /文本/u, /执行助手/u, /通知/u], /text|notice/iu, [/text/iu, /reviewer/iu, /notice/iu, /agent/iu]),
   '请求和交人工两个起点': participantFact(/计时|起算/u, [/审批请求|请求/u, /交人工|转人工/u], /timing|timer/iu, [/approval request|request/iu, /handoff/iu]),

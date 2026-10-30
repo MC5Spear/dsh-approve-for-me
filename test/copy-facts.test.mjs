@@ -612,6 +612,15 @@ test('名单内处理动作不能被not handled否定，其他工具正确否定
   assert.deepEqual(fails('help.tools', 'zh', zh + '其他工具不由本插件处理。'), []);
 });
 
+test('已填条件与来源供给直接反转，未填正确全覆盖和其他对象no不污染', () => {
+  const tools = 'Tools under auto-approval, one name per line. Empty covers every tool; once filled, only listed tools are handled and the rest keep the host flow.';
+  assert.ok(fails('help.tools', 'en', tools.replace('once filled', 'when not filled')).includes('填写后只处理名单内'));
+  assert.deepEqual(fails('help.tools', 'en', tools + ' When not filled, all tools are covered.'), []);
+  const token = 'Review output cap in tokens (a token is the unit models use to measure text); 0 sends no cap, leaving the model or provider default; reasoning models may spend the budget on reasoning first — too small a cap can leave no usable conclusion.';
+  assert.ok(fails('hint.reviewer.maxTokens', 'en', token.replace('leaving the model', 'leaving no model')).includes('采用模型或供应商默认'));
+  assert.deepEqual(fails('hint.reviewer.maxTokens', 'en', token + ' Another setting has no model or provider default.'), []);
+});
+
 test('反例：说明缺失整条报缺失', () => {
   assert.deepEqual(fails('hint.mode', 'zh', ''), ['说明缺失']);
   assert.deepEqual(fails('hint.mode', 'zh', undefined), ['说明缺失']);

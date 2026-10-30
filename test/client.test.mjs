@@ -6239,6 +6239,51 @@ test('填写后名单内工具动作：not handled不冒充处理，空表与其
   assert.equal(checked, 8);
 });
 
+test('填写触发与默认来源取消：未填写不借filled，no来源不冒充保留来源', () => {
+  resetHooks();
+  const original = makeCtx();
+  loadClient().apply(original.ctx);
+  const dicts = original.dictionaries[0].dicts;
+  const wrong = [
+    ['help.tools', 'zh', '填写后只处理名单内工具', '未填写时只处理名单内工具', '填写后只处理名单内'],
+    ['help.tools', 'en', 'once filled, only listed tools are handled', 'when not filled, only listed tools are handled', '填写后只处理名单内'],
+  ];
+  for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
+    wrong.push([key, 'en', 'leaving the model or provider default', 'leaving no model or provider default', '采用模型或供应商默认']);
+    wrong.push([key, 'zh', '由模型或供应商默认值决定', '不由模型或供应商默认值决定', '采用模型或供应商默认']);
+  }
+  let checked = 0;
+  for (const [key, lang, from, to, id] of wrong) {
+    const current = dicts[lang][key];
+    assert.ok(current.includes(from));
+    for (const value of [current.replace(from, to), current + ' ' + to + '。']) {
+      let replacements = 0;
+      const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+        if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+        replacements++;
+        return prefix + JSON.stringify(value);
+      });
+      assert.equal(replacements, 1);
+      resetHooks();
+      const env = makeCtx();
+      loadClient(source).apply(env.ctx);
+      const actual = env.dictionaries[0].dicts[lang][key];
+      assert.equal(actual, value);
+      assert.ok(copyFactFailures(key, lang, actual).includes(id), `${key}/${lang}局部触发或来源取消报对应事实，另一正确关系不遮`);
+      checked++;
+    }
+  }
+  for (const [lang, neighbor] of [
+    ['zh', '未填写时覆盖所有工具。'],
+    ['en', ' When not filled, all tools are covered.'],
+  ]) assert.deepEqual(copyFactFailures('help.tools', lang, dicts[lang]['help.tools'] + neighbor), [], '正确未填写全覆盖分支保持');
+  for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
+    assert.deepEqual(copyFactFailures(key, 'en', dicts.en[key] + ' Another setting has no model or provider default.'), [], '另一设置no来源不污染本项');
+    assert.deepEqual(copyFactFailures(key, 'zh', dicts.zh[key] + '另一个设置没有模型或供应商默认值。'), [], '不同对象没有默认不作本项供给取消');
+  }
+  assert.equal(checked, 12, '两填写条件及四共享来源登记各直接反转和另句不遮对照');
+});
+
 test('当前token风险显示：原生字典源码错位和部分保护变异必须失败', () => {
   for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
     resetHooks();
