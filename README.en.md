@@ -17,7 +17,7 @@ This is a third-party community plugin, unaffiliated with DeepSeek.
 | Plugin Node declaration | `>=20`; this is not the minimum for the complete host |
 | Recommended toolchain | Node 24, used for this project's development and CI |
 
-**The current candidate has known security problems. Keep automatic approval off until they are fixed; do not use it for unattended work.** After installation, set Mode to “Do not take over” (`mode=off`) and save. See [known problems and action](<docs/user-reference.en.md#known-issues>).
+**Release acceptance has not passed: the real rejection path and human pre-emption have not been exercised on a real instance, and concurrency, multiple sessions, and long runs are untested. Keep automatic approval off until acceptance passes and the maintainer confirms; do not use it for unattended work.** After installation, set Mode to “Do not take over” (`mode=off`) and save. See [current status and action](<docs/user-reference.en.md#known-issues>).
 
 ## Installation
 
@@ -45,11 +45,11 @@ For source-directory dependencies, installation, and updates, see the [installat
 3. Find “自动审批” (`auto-approve`) in the session permission list. This is the plugin's Auto approval preset, not the host's “Auto review” (`auto`). Keep a standard preset selected for this candidate.
 4. Check that an ordinary session works. If settings or presets are missing, follow [troubleshooting](<docs/user-reference.en.md#troubleshooting>); do not widen version requirements to force loading.
 
-A successful installation does not establish that automatic approval is safe to use. Keep this candidate off until the maintainer supplies and confirms a fixed version.
+A successful installation does not establish that automatic approval is safe to use. Keep this candidate off until release acceptance passes and the maintainer confirms.
 
 ## Before enabling
 
-These precautions also apply to a future fixed version:
+These precautions also apply to versions that pass acceptance:
 
 - Only covered sandbox-escalation requests are reviewed. Operations under Full access that do not trigger approval are outside this protection.
 - An approval covers one operation only. Repeating the same command still needs a valid approval for that new operation.
@@ -60,7 +60,7 @@ These precautions also apply to a future fixed version:
 
 ## Settings and use
 
-**For the current version, first save `mode=off`. Use the enabling steps below only after the maintainer confirms a fixed version.**
+**First save `mode=off` for now. Use the enabling steps below after release acceptance passes and the maintainer confirms.**
 
 1. On the plugin details page, choose the reviewer model, covered tools, and permission ceiling, then save.
 2. Change Mode to “Rule check + LLM review” and save.

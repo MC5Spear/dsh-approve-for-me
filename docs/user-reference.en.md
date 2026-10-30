@@ -5,18 +5,13 @@
 This reference covers installation, settings, approval results, failures, and removal. DSH is the host application that loads the plugin and runs the acting Agent. The reviewer model independently decides whether to allow this particular escalation.
 
 <a id="known-issues"></a>
-## Known problems: keep takeover off
+## Current status: keep takeover off
 
-The current candidate, `0.2.2+dsh.0.2.1-rc.2`, is not released and has these security problems:
+The current candidate, `0.2.2+dsh.0.2.1-rc.2`, is not released. The two earlier read-only evidence defects (directory junctions bypassing sensitive-name denial, and `grep` exhausting its directory budget without a notice) are fixed in this candidate, and its 20-case synthetic regression passes fully; real-instance verification has covered one automatic approval (model-reviewed allow with records and UI readback), settings save and readback, and a full install/uninstall/reinstall cycle.
 
-| Problem | Consequence | What to do now |
-| --- | --- | --- |
-| Some directory-junction aliases bypass sensitive-path name restrictions | A sensitive name redirected through a junction to an ordinary name may let a read-only tool read content that should be blocked and send it to the model provider | Keep `mode=off`. Do not enable automatic approval; ask the maintainer to confirm a fixed version first |
-| When `grep` reaches its 4000-directory traversal budget, it can return empty text without an incomplete-search notice | An empty result establishes neither absence of matches nor absence of risk | Do not use an empty search as safety evidence. Keep automatic approval off until fixed |
+Release acceptance has not passed: the real rejection path (model deciding to deny) and human pre-emption have not been exercised on a real instance; concurrency, multiple sessions, and long runs are untested; and the verification above was done only on a single Windows machine with DSH `0.2.1-rc.2`. Keep takeover off until acceptance passes and the maintainer confirms: on the plugin details page set Mode to “Do not take over” (`mode=off`) and save, and switch the default permission preset and sessions you need to standard, such as Workspace write. If settings are unavailable, ask the deployment administrator to turn takeover off through the [configuration entry](<#settings>) and reload safely. Do not test with real secrets or dangerous commands.
 
-If installed, set Mode to “Do not take over” on the plugin details page and save. Switch the default permission preset and sessions you need to continue to a standard preset, such as Workspace write. If settings are unavailable, ask the deployment administrator to turn takeover off through the [configuration entry](<#settings>) and reload safely. Do not reproduce these problems with real secrets or dangerous commands.
-
-The complete configuration and operation instructions remain below. **Do not follow the enabling steps with this candidate.** First obtain a version the maintainer confirms is fixed.
+The complete configuration and operation instructions remain below. **Do not follow the enabling steps before release acceptance passes.**
 
 <a id="installation"></a>
 ## 1. Obtain an artifact, install, and update
@@ -76,14 +71,14 @@ After installation, restart safely through your host management method, then rel
 3. Find “自动审批” (`auto-approve`) in the session permission list. This is the plugin's Auto approval preset, not the host's “Auto review” (`auto`). Retain a standard preset for this candidate.
 4. Check that an ordinary session works. An installation command succeeding does not establish that settings and client contributions loaded.
 
-Only after a fixed version is confirmed should you enable it under [section 2](<#coverage>) and test approval and records with a harmless escalation. An operation that needs no escalation produces no approval and cannot establish that automatic approval works.
+Only after release acceptance passes and the maintainer confirms should you enable it under [section 2](<#coverage>) and test approval and records with a harmless escalation. An operation that needs no escalation produces no approval and cannot establish that automatic approval works.
 
 For updates, recheck host and delivery identity, back up user configuration and needed records, add the new artifact through the same host channel, and reload safely. Keep the previous artifact and configuration backup. If problems occur, turn takeover off first and ask the maintainer about rollback. An existing `reviewer.timeoutMs=0` configuration immediately rejects as a timeout; save a positive value if you need review time.
 
 <a id="coverage"></a>
 ## 2. Select coverage, not unrestricted permission
 
-Read the [known problems](<#known-issues>) first. Keep this candidate off until a fix is confirmed.
+Read the [current status](<#known-issues>) first. Keep this candidate off until acceptance passes.
 
 ### 2.1 Four separate choices
 
@@ -98,7 +93,7 @@ The preset displayed as “自动审批” (`auto-approve`, this plugin's Auto a
 
 Only requests entering the host approval channel can be handled. Full-access operations that need no approval are outside protection. If a host `never` policy prevents approval dispatch, the plugin cannot see the request. Each allow is for one operation; a previous allow cannot replace a new request.
 
-### 2.2 Enable only after a confirmed fix
+### 2.2 Enable only after acceptance passes and is confirmed
 
 1. Keep the sandbox, back up important data, and state the task's permitted modifications and external transfers.
 2. Configure the reviewer, tool list, and ceiling on the plugin details page and save.
@@ -114,7 +109,7 @@ By default only `auto-approve` is covered. Other presets retain the host approva
 - Delegated subagents have no human channel. Even with `fallback=ask`, a request not allowed is rejected. Notices go to the child that requested the operation.
 - A user-forked session is treated as a main session, using its own preset and retaining a human channel.
 - A child page may still show Workspace write. That label alone does not establish whether takeover applies; inspect actual approvals and records.
-- Delegated children created during `mode=off` are not retroactively covered when mode is enabled again. If automatic approval is needed, create a new delegated task after a fix is confirmed.
+- Delegated children created during `mode=off` are not retroactively covered when mode is enabled again. If automatic approval is needed, create a new delegated task after acceptance passes and takeover is enabled.
 
 <a id="settings"></a>
 ## 3. Edit, save, and reset settings
@@ -400,10 +395,10 @@ The reviewer has `read_file`, `list_dir`, `glob`, and `grep`. They do not modify
 | `list_dir` | Up to 200 entries, no recursion |
 | `glob` | Up to 200 entries; traversal does not follow links |
 | `grep` | Up to 100 matches; 1 MiB per file; 200 candidates; 256-character pattern; lines longer than 500 characters are skipped whole |
-| Traversal | Up to 4000 directories; grep currently has the budget-exhaustion notice defect stated above |
+| Traversal | Up to 4000 directories; when the budget is exhausted, grep reports the incomplete search |
 | Individual tool limit | Default 5000 ms; failure or timeout returns missing evidence to the model |
 
-Credential names, DSH sessions, authentication, and plugin records have read restrictions. Directory listings may still expose sensitive names. Name detection does not identify renamed copies or hard links, and the current junction problem also applies. **Do not assume sensitive content is fully isolated. Keep this candidate off until fixed.**
+Credential names, DSH sessions, authentication, and plugin records have read restrictions. Directory listings may still expose sensitive names. Name detection does not identify renamed copies or hard links. **Do not assume sensitive content is fully isolated.**
 
 An unknown working directory is marked missing. Read-only relative paths may start from the plugin process directory; that is not the verified operation directory. Evidence there cannot establish that the actual target is safe.
 
@@ -442,10 +437,10 @@ Host stderr contains `[approve-for-me]` audit lines. One approval may have sever
 | --- | --- | --- |
 | Settings and “自动审批” (`auto-approve`) are both absent | Full plugin version, exact host version, enabled state | After tasks finish, reload safely and refresh the page. Inspect `skipping profile bundle "dsh-approve-for-me"` or other loading errors and use a matching version |
 | Save fails or settings are read-only | Local loopback access and valid fields | Retain the draft; fix access or validation and save again. For failed configuration loading, ask an administrator to repair and reload |
-| Session reviewer control is absent | Session id, `mode=off`, and coverage | This candidate should stay off. After a fix, check coverage; do not widen permissions just to show the control |
+| Session reviewer control is absent | Session id, `mode=off`, and coverage | This candidate should stay off. After takeover is enabled, check coverage; do not widen permissions just to show the control |
 | An operation rejects immediately | Rule, ceiling, missing action, or model judgment | Follow section 6. Emptying custom rules does not disable built-in checks |
 | Unavailable model, empty/truncated output, or repeated timeouts | The chosen model and fallback, zero budgets, cooldown | Turn takeover off and repair model or budget. Wait during cooldown. Stop repeated requests and report persistent failure |
-| Search is empty | The known grep problem above, skipped candidates, or evidence failure | Empty does not prove a complete no-match search or safety; keep takeover off until fixed |
+| Search is empty | Skipped candidates, truncation, or evidence failure | Empty does not prove a complete no-match search or safety; check the incomplete-search notice before concluding |
 | Records are missing | Producing session, capture level, I/O errors, and rotation | Preserve evidence before reporting. Do not delete records to “repair” the issue |
 | Permission row is absent or logs say `unknown preset` | Default still references a missing `auto-approve` | Restore the reference or backup under the next section; do not delete all configuration |
 
