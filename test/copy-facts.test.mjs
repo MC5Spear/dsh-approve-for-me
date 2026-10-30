@@ -534,6 +534,30 @@ test('会话文件上限只绑定最旧文件淘汰，其他文件不删除不�
   }
 });
 
+test('拒绝不能只当对立动作宾语，零立即动作不能被可能性弱化', () => {
+  const rule = '每行一条正则表达式；命中即直接拒绝，模型与人工都不能推翻。';
+  assert.ok(fails('hint.denyPatterns', 'zh', rule.replace('命中即直接拒绝', '命中即直接允许而非拒绝')).includes('命中拒绝'));
+  assert.deepEqual(fails('hint.denyPatterns', 'zh', rule + '其他规则允许而非拒绝。'), []);
+  assert.ok(fails('hint.denyPatterns', 'en', 'One regex per line; a hit permits instead of rejects outright, beyond model or human.').includes('命中拒绝'));
+  for (const [key, action] of [['hint.human.timeoutMs', 'reject'], ['hint.reviewer.timeoutMs', 'time out']]) {
+    assert.ok(fails(key, 'en', `Wait limit (ms); 0 may ${action} immediately.`).includes('零值正向关系被否定'));
+    assert.deepEqual(fails(key, 'en', `Wait limit (ms); 0 ${action === 'reject' ? 'rejects' : 'times out'} immediately. Another operation may reject later.`), []);
+  }
+});
+
+test('零值的不是可能而是立即按同动作归一，保留后来直接反转', () => {
+  const samples = [
+    ['hint.human.timeoutMs', 'zh', '等待人工上限（毫秒）；0 不是可能立即拒绝，而是立即拒绝。', '0 不立即拒绝。'],
+    ['hint.reviewer.timeoutMs', 'zh', '审查等待上限（毫秒）；0 不是可能立即超时，而是立即超时。', '0 不立即超时。'],
+    ['hint.human.timeoutMs', 'en', 'Human-answer wait limit (ms); 0 does not mean it may reject immediately; it means it rejects immediately.', ' 0 does not reject immediately.'],
+    ['hint.reviewer.timeoutMs', 'en', 'Auto-review wait limit (ms); 0 does not mean it may time out immediately; it means it times out immediately.', ' 0 does not time out immediately.'],
+  ];
+  for (const [key, lang, correct, contradiction] of samples) {
+    assert.deepEqual(fails(key, lang, correct), []);
+    assert.ok(fails(key, lang, correct + contradiction).includes('零值含义反转'));
+  }
+});
+
 test('反例：说明缺失整条报缺失', () => {
   assert.deepEqual(fails('hint.mode', 'zh', ''), ['说明缺失']);
   assert.deepEqual(fails('hint.mode', 'zh', undefined), ['说明缺失']);

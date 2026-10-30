@@ -42,7 +42,10 @@ function hitRejects(text, lang) {
       : clause.matchAll(/\b(?:hit|match)\b(.*?)\b(?:rejects?|rejected|deny|denies|denied)\b/giu);
     for (const relation of relations) {
       const negativeCondition = conditionNegative.test(clause.slice(0, relation.index));
-      const negativeAction = actionNegative.test(relation[1]);
+      const rejectionReplaced = lang === 'zh'
+        ? /(?:允许|批准)(?:而非|而不是)\s*$/u.test(relation[1])
+        : /\b(?:permits?|allows?|approves?)\s+(?:instead of|rather than)\s*$/iu.test(relation[1]);
+      const negativeAction = actionNegative.test(relation[1]) || rejectionReplaced;
       if (negativeCondition) {
         if (!negativeAction) return false; // 未命中即拒绝是条件反转；未命中不拒绝不作肯定依据。
       } else {
@@ -75,11 +78,24 @@ function affirmativeConcept(text, lang, concept, definite = false) {
     for (const match of matches) {
       const before = clause.slice(0, match.index);
       if (negativePrefix.test(before)) return false;
-      if (definite && (lang === 'zh' ? /(?:未必|不一定)\s*$/u : /\bnot necessarily\s*$/iu).test(before)) return false;
+      if (definite === true && (lang === 'zh' ? /(?:未必|不一定)\s*$/u : /\bnot necessarily\s*$/iu).test(before)) return false;
+      if (definite === 'zero' && (lang === 'zh' ? /\b0\b\s*(?:表示|意味着)?\s*(?:可能|也许|或许|未必|不一定)(?:会)?(?:立即|马上|即刻)?\s*$/u : /\b0\b\s*(?:may|might|could|not necessarily)(?:\s+(?:immediately|at once|right away))?\s*$/iu).test(before)) return false;
       found = true;
     }
   }
   return found;
+}
+
+/** 四个零时限键的局部等义：否定可能性而肯定同一立即动作，再交回原事实判据。 */
+function normalizeZeroActionCertainty(text, key, lang) {
+  if (!/^(?:hint|help)\.(?:reviewer|human)\.timeoutMs$/u.test(key)) return text;
+  if (lang === 'zh') {
+    const action = /\.human\./u.test(key) ? '拒绝' : '超时';
+    return text.replace(new RegExp(`\\b0\\b\\s*(?:表示)?不是可能立即${action}[，,]\\s*而是立即${action}`, 'gu'), `0 立即${action}`);
+  }
+  const action = /\.human\./u.test(key) ? 'reject' : 'time out';
+  const definiteAction = /\.human\./u.test(key) ? 'rejects' : 'times out';
+  return text.replace(new RegExp(`\\b0\\b does not mean it may ${action} immediately;\\s*it means it ${definiteAction} immediately`, 'giu'), `0 ${definiteAction} immediately`);
 }
 
 /** 有限条件关系：只在同一动作分句判断指定条件类别，邻句的相反类别不作全文禁词。 */
@@ -917,7 +933,7 @@ function normalizeFactCounts(key, text) {
  */
 export function copyFactFailures(key, lang, text) {
   if (typeof text !== 'string' || !text.trim()) return ['说明缺失'];
-  const normalized = normalizeFactCounts(key, normalizeCopy(text));
+  const normalized = normalizeZeroActionCertainty(normalizeFactCounts(key, normalizeCopy(text)), key, lang);
   const failures = key === 'help.mode' ? helpModeFailures(normalized) : (COPY_FACTS[key] ?? []).filter((fact) => {
     const check = fact[lang];
     const present = typeof check === 'function' ? check(normalized) : check.test(normalized);
@@ -934,8 +950,10 @@ export function copyFactFailures(key, lang, text) {
   if (key === 'help.fallback' && !(lang === 'zh' ? /(?:未允许|未通过|不允许)(?:一律|均|都)?拒绝/u : /(?:not allowed|not approved)[^.;]{0,24}(?:reject|denied)/iu).test(normalized)) failures.push('委派未允许拒绝');
   if (key === 'help.denyPatterns' && !(lang === 'zh' ? /模型[^。；]{0,4}人工[^。；]{0,6}(?:不能|无法|不可)[^。；]{0,4}(?:推翻|改变|反转)/u : /no override|neither model nor human[^.;]{0,16}(?:override|overturn)/iu).test(normalized)) failures.push('命中结果不可推翻');
   const zeroClause = sents(normalized).find((clause) => /\b0\b/u.test(clause));
-  if (zeroClause && /timeoutMs$/u.test(key) && !affirmativeConcept(zeroClause, lang, lang === 'zh' ? /立即|马上|即刻|拒绝|超时/u : /immediately|at once|right away|rejects?|times? out|timeout/iu)) failures.push('零值正向关系被否定');
-  if (zeroClause && /timeoutMs$/u.test(key) && /(?:不|不会|并非|不是).{0,3}立即|(?:不|不会|并非|不是)\s*(?:拒绝|超时)|\b(?:does not|do not|doesn't|don't|not|never)\b.{0,15}(?:immediate|at once|reject|time out)|\b(?:reject|timeout)\b.{0,8}\b(?:not|never)\b/iu.test(zeroClause)) failures.push('零值含义反转');
+  if (/^(?:hint|help)\.(?:reviewer|human)\.timeoutMs$/u.test(key)) for (const clause of sents(normalized).filter((part) => /\b0\b/u.test(part))) {
+    if (!affirmativeConcept(clause, lang, lang === 'zh' ? /立即|马上|即刻|拒绝|超时/u : /immediately|at once|right away|rejects?|times? out|timeout/iu, 'zero')) failures.push('零值正向关系被否定');
+    if (/(?:不|不会|并非|不是).{0,3}立即|(?:不|不会|并非|不是)\s*(?:拒绝|超时)|\b(?:does not|do not|doesn't|don't|not|never)\b.{0,15}(?:immediate|at once|reject|time out)|\b(?:reject|timeout)\b.{0,8}\b(?:not|never)\b/iu.test(clause)) failures.push('零值含义反转');
+  }
   if (/^(?:hint|help)\.denyPatterns$/u.test(key) && !hitRejects(normalized, lang)) failures.push('命中拒绝含义反转');
   if (zeroClause && /injectMaxBytes$/u.test(key) && /不是不|并非不|not untrimmed|not without trimming/iu.test(zeroClause)) failures.push('零值含义反转');
   if (/tools$/u.test(key) && emptyToolsReversed(normalized, lang)) failures.push('空清单含义反转');

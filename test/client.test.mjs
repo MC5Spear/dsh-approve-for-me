@@ -6051,6 +6051,107 @@ test('文件上限淘汰：只绑定会话最旧文件动作，备份与其他�
   assert.equal(checked, 8, '两语触发与删除动作各反转，带正确备份邻句也不能遮盖');
 });
 
+test('命中取代拒绝与零立即弱化：同条件动作绑定，不以无关allow/may邻句误拒', () => {
+  resetHooks();
+  const original = makeCtx();
+  loadClient().apply(original.ctx);
+  const dicts = original.dictionaries[0].dicts;
+  let checked = 0;
+  const verify = (key, lang, from, to, id) => {
+    const current = dicts[lang][key];
+    assert.ok(current.includes(from));
+    const mutated = current.replace(from, to);
+    let replacements = 0;
+    const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+      if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+      replacements++;
+      return prefix + JSON.stringify(mutated);
+    });
+    assert.equal(replacements, 1);
+    resetHooks();
+    const env = makeCtx();
+    loadClient(source).apply(env.ctx);
+    const actual = env.dictionaries[0].dicts[lang][key];
+    assert.equal(actual, mutated);
+    assert.ok(copyFactFailures(key, lang, actual).includes(id), `${key}/${lang}相反动作或不确定零值必须报${id}`);
+    checked++;
+  };
+  for (const key of ['hint.denyPatterns', 'help.denyPatterns']) {
+    for (const [lang, from, to] of [
+      ['zh', '命中即直接拒绝', '命中即直接允许而非拒绝'],
+      ['zh', '命中即直接拒绝', '命中即直接批准而不是拒绝'],
+      ['en', 'hit rejects outright', 'hit permits instead of rejects outright'],
+      ['en', 'hit rejects outright', 'hit allows rather than rejects outright'],
+    ]) verify(key, lang, from, to, '命中拒绝');
+    for (const [lang, suffix] of [
+      ['zh', '未命中继续审查，不代表允许。'],
+      ['zh', '其他规则允许而非拒绝。'],
+      ['en', ' No match continues review; it does not establish allowance.'],
+      ['en', ' Another rule permits instead of rejects.'],
+    ]) assert.deepEqual(copyFactFailures(key, lang, dicts[lang][key] + ' ' + suffix), [], '未命中或另一对象的allow不替代肯定命中拒绝');
+    assert.deepEqual(copyFactFailures(key, 'zh', dicts.zh[key].replace('命中即直接拒绝', '命中即直接拒绝而非允许')), [], '拒绝而非允许不是允许取代拒绝');
+    assert.deepEqual(copyFactFailures(key, 'en', dicts.en[key].replace('hit rejects outright', 'hit rejects outright instead of permits')), [], '拒绝动作保持肯定');
+  }
+  const zeros = [
+    ['hint.human.timeoutMs', '0 rejects immediately', '0 立即拒绝', 'reject', '拒绝'],
+    ['help.human.timeoutMs', '0 rejects immediately', '0 表示立即拒绝', 'reject', '拒绝'],
+    ['hint.reviewer.timeoutMs', '0 times out immediately', '0 立即超时', 'time out', '超时'],
+    ['help.reviewer.timeoutMs', '0 times out immediately', '0 立即超时', 'time out', '超时'],
+  ];
+  for (const [key, enFrom, zhFrom, enAction, zhAction] of zeros) {
+    for (const modal of ['may', 'might', 'could']) verify(key, 'en', enFrom, `0 ${modal} ${enAction} immediately`, '零值正向关系被否定');
+    for (const modal of ['可能', '未必', '不一定']) verify(key, 'zh', zhFrom, `0 ${modal}立即${zhAction}`, '零值正向关系被否定');
+    assert.deepEqual(copyFactFailures(key, 'en', dicts.en[key].replace(enFrom, `0 ${enAction === 'reject' ? 'rejects' : 'times out'} at once`)), [], '确定零值立即等义保持');
+    assert.deepEqual(copyFactFailures(key, 'en', dicts.en[key] + ' Another operation may reject later.'), [], '无关may不弱化零值');
+    assert.deepEqual(copyFactFailures(key, 'zh', dicts.zh[key] + '其他操作可能稍后拒绝。'), [], '另一对象可能不污染确定零值');
+  }
+  assert.equal(checked, 32, '8命中对立动作＋24四键双语零时限弱化，含报告原例');
+});
+
+test('零值否定弱化本身：八个真实完整正例保留确定立即义，另一直接反转不被遮盖', () => {
+  resetHooks();
+  const original = makeCtx();
+  loadClient().apply(original.ctx);
+  const dicts = original.dictionaries[0].dicts;
+  const roster = [
+    ['hint.human.timeoutMs', '0 rejects immediately', '0 立即拒绝', 'reject', 'rejects', '拒绝'],
+    ['help.human.timeoutMs', '0 rejects immediately', '0 表示立即拒绝', 'reject', 'rejects', '拒绝'],
+    ['hint.reviewer.timeoutMs', '0 times out immediately', '0 立即超时', 'time out', 'times out', '超时'],
+    ['help.reviewer.timeoutMs', '0 times out immediately', '0 立即超时', 'time out', 'times out', '超时'],
+  ];
+  let checked = 0;
+  for (const [key, enFrom, zhFrom, action, definite, zhAction] of roster) {
+    for (const [lang, from, to, contradiction] of [
+      ['en', enFrom, `0 does not mean it may ${action} immediately; it means it ${definite} immediately`, ` 0 does not ${action} immediately.`],
+      ['zh', zhFrom, `0 不是可能立即${zhAction}，而是立即${zhAction}`, `0 不立即${zhAction}。`],
+    ]) {
+      const current = dicts[lang][key];
+      assert.ok(current.includes(from));
+      const rewritten = current.replace(from, to);
+      for (const [suffix, valid] of [['', true], [contradiction, false]]) {
+        const mutated = rewritten + suffix;
+        let replacements = 0;
+        const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+          if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+          replacements++;
+          return prefix + JSON.stringify(mutated);
+        });
+        assert.equal(replacements, 1);
+        resetHooks();
+        const env = makeCtx();
+        loadClient(source).apply(env.ctx);
+        const actual = env.dictionaries[0].dicts[lang][key];
+        assert.equal(actual, mutated);
+        const failures = copyFactFailures(key, lang, actual);
+        if (valid) assert.deepEqual(failures, [], `${key}/${lang}否定可能而肯定立即，原其余非无限等事实保留`);
+        else assert.ok(failures.includes('零值含义反转'), `${key}/${lang}同主体另一直接反转不能被正确说明遮盖`);
+        checked++;
+      }
+    }
+  }
+  assert.equal(checked, 16, '八个完整真实正例及八个独立直接反转对照');
+});
+
 test('当前token风险显示：原生字典源码错位和部分保护变异必须失败', () => {
   for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
     resetHooks();
