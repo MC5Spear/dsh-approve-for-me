@@ -14,8 +14,9 @@ export function errorCopyFailures(kind, lang, text) {
   } else if (kind === 'args') {
     has('arguments', /参数/u, /arguments?|parameters?/iu);
     has('invalid-json', /(?:不是|非|无效|不合法).{0,8}JSON|JSON.{0,6}(?:无效|非法|不合法)/iu, /(?:not\s+(?:a\s+)?valid|invalid|malformed)\s+JSON|JSON.{0,10}(?:invalid|malformed)/iu);
-    // 仅排除这些错误类型的直接反转，不尝试一般自然语言推理。
-    if (/(?:并非|不是|不属于|没有).{0,5}(?:无效|非法|不合法)|\b(?:not|never)\s+(?:invalid|malformed)\s+JSON|JSON\s+(?:is\s+)?not\s+(?:invalid|malformed)/iu.test(value)) failures.push('invalid-json-reversal');
+    // 只在当前参数对象核无效JSON关系及其外层取消，另一对象的否定不借入。
+    const currentArgs = value.split(/[。；;，,.\n]|(?=另一个|\banother\b)/iu).filter((part) => /参数|arguments?|parameters?/iu.test(part) && !/^\s*(?:另一个|another\b)/iu.test(part));
+    if (currentArgs.some((part) => /(?:并非|不是|不属于|没有).{0,5}(?:无效|非法|不合法)|(?:并非|不是)\s*不是\s*(?:合法|有效)\s*JSON|\b(?:not|never)\s+(?:invalid|malformed)\s+JSON|JSON\s+(?:is\s+)?not\s+(?:invalid|malformed)|\bnot not valid\s+JSON|\bit is not (?:true|the case) that\s+(?:the\s+)?(?:arguments?|parameters?)\s+(?:are|is)\s+(?:invalid|malformed|not valid)\s+JSON/iu.test(part))) failures.push('invalid-json-reversal');
   } else if (kind === 'channel') {
     has('prefix', /^\[approve-for-me\]/u, /^\[approve-for-me\]/u);
     has('channel-failure', /通道.{0,5}(?:故障|失败|异常)/u, /channel.{0,10}(?:failure|failed|error)/iu);

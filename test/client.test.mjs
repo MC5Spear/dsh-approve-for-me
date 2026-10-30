@@ -6293,6 +6293,7 @@ test('已填与未填名单关系配对：正确未填not-only全覆盖不遮已
   const roster = [
     ['zh', '未填写时，不只处理名单内工具，而是覆盖所有工具的升权审批。', '填写后只处理名单内工具', '未填写时只处理名单内工具', '填写后不只处理名单内工具', '填写后只不处理名单内工具'],
     ['en', "When unfilled, not only listed tools are handled: every tool's escalations are covered.", 'once filled, only listed tools are handled', 'when not filled, only listed tools are handled', 'once filled, not only listed tools are handled', 'once filled, only listed tools are not handled'],
+    ['en', "When not filled, not only listed tools are handled; all tools' escalations are covered.", 'once filled, only listed tools are handled', 'when not filled, only listed tools are handled', 'once filled, not only listed tools are handled', 'once filled, only listed tools are not handled'],
   ];
   let checked = 0;
   for (const [lang, correct, from, wrongCondition, wrongOnly, wrongAction] of roster) {
@@ -6325,7 +6326,7 @@ test('已填与未填名单关系配对：正确未填not-only全覆盖不遮已
       checked++;
     }
   }
-  assert.equal(checked, 14, '两语准确正确分支前后4正与10必要相反关系边界');
+  assert.equal(checked, 21, '两语及英文分号正例前后6正与15必要相反关系边界');
 });
 
 test('当前token风险显示：原生字典源码错位和部分保护变异必须失败', () => {

@@ -47,6 +47,26 @@ test('当前工具紧邻未不失败直接反转，不借另一工具的未失�
   }
 });
 
+test('无效JSON外层取消只核当前参数对象，另一对象并非不能污染', () => {
+  const wrong = [
+    ['zh', '工具参数并非不是合法 JSON：{error}'],
+    ['zh', '工具参数不是不是有效 JSON：{error}'],
+    ['en', 'Arguments are not not valid JSON: {error}'],
+    ['en', 'It is not true that the arguments are invalid JSON: {error}'],
+    ['en', 'It is not the case that the arguments are not valid JSON: {error}'],
+  ];
+  for (const [lang, value] of wrong) assert.ok(errorCopyFailures('args', lang, value).includes('invalid-json-reversal'));
+  for (const [lang, current, neighbor] of [
+    ['zh', '工具参数不是合法 JSON：{error}', '另一个参数并非不是合法 JSON。'],
+    ['en', 'Arguments are invalid JSON: {error}', 'Another parameter is not invalid JSON.'],
+  ]) {
+    assert.deepEqual(errorCopyFailures('args', lang, current), []);
+    assert.deepEqual(errorCopyFailures('args', lang, current + '；' + neighbor), []);
+    const sameWrong = lang === 'zh' ? '该参数并非不是合法 JSON。' : 'The arguments are not invalid JSON.';
+    assert.ok(errorCopyFailures('args', lang, current + '；' + sameWrong).includes('invalid-json-reversal'));
+  }
+});
+
 test('普通错误说明：缺失败事实、错误对象、占位符或单次拒绝事实必须失败', () => {
   const cases = [
     ['tool', 'zh', '工具 {name}：{error}'], ['tool', 'en', 'Tool {name}: {error}'],

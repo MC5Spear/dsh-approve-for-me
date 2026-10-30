@@ -626,6 +626,10 @@ test('正确未填not-only全覆盖不是已填only关系反转，也不能补�
   const correct = "When unfilled, not only listed tools are handled: every tool's escalations are covered.";
   assert.deepEqual(fails('help.tools', 'en', current + ' ' + correct), []);
   assert.deepEqual(fails('help.tools', 'en', correct + ' ' + current), []);
+  const split = "When not filled, not only listed tools are handled; all tools' escalations are covered.";
+  assert.deepEqual(fails('help.tools', 'en', current + ' ' + split), []);
+  assert.deepEqual(fails('help.tools', 'en', split + ' ' + current), []);
+  assert.ok(fails('help.tools', 'en', current.replace('once filled', 'when not filled') + ' ' + split).includes('填写后只处理名单内'));
   assert.ok(fails('help.tools', 'en', current.replace('once filled', 'when not filled') + ' ' + correct).includes('填写后只处理名单内'));
   assert.ok(fails('help.tools', 'en', current.replace('once filled, only listed tools are handled', correct)).includes('填写后只处理名单内'));
 });

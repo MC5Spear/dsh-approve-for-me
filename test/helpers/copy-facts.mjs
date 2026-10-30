@@ -596,7 +596,7 @@ function thresholdEvent(text, lang, boundary, action, joinComma = false) {
   return found;
 }
 
-/** 已填＋仅名单内处理是依据；未填＋不只名单内且全覆盖是正确相反分支，但不能补足已填义务。 */
+/** 已填＋仅名单内处理是依据；未填＋不只名单内不反转它，也不能补足已填义务。 */
 function filledToolsRelation(text, lang) {
   const marker = lang === 'zh' ? /填写|填入|填/u : /\bfilled\b|\bunfilled\b/iu;
   const opposite = lang === 'zh' ? /(?:未|没有)(?:填写|填入|填)/u : /\bnot filled\b|\bunfilled\b/iu;
@@ -617,7 +617,6 @@ function filledToolsRelation(text, lang) {
         if (!onlyListed || !handled) return false;
         found = true;
       } else if (onlyListed && handled) return false;
-      else if (!onlyListed && handled && !(lang === 'zh' ? /覆盖(?:全部|所有)工具/u : /(?:every|all) tools?(?:['’]s)?[^.;]{0,24}(?:covered|handled)/iu).test(part)) return false;
     }
   }
   return found;
