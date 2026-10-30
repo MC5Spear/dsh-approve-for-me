@@ -6284,6 +6284,50 @@ test('填写触发与默认来源取消：未填写不借filled，no来源不冒
   assert.equal(checked, 12, '两填写条件及四共享来源登记各直接反转和另句不遮对照');
 });
 
+test('已填与未填名单关系配对：正确未填not-only全覆盖不遮已填义务或直接反转', () => {
+  resetHooks();
+  const original = makeCtx();
+  loadClient().apply(original.ctx);
+  const dicts = original.dictionaries[0].dicts;
+  const key = 'help.tools';
+  const roster = [
+    ['zh', '未填写时，不只处理名单内工具，而是覆盖所有工具的升权审批。', '填写后只处理名单内工具', '未填写时只处理名单内工具', '填写后不只处理名单内工具', '填写后只不处理名单内工具'],
+    ['en', "When unfilled, not only listed tools are handled: every tool's escalations are covered.", 'once filled, only listed tools are handled', 'when not filled, only listed tools are handled', 'once filled, not only listed tools are handled', 'once filled, only listed tools are not handled'],
+  ];
+  let checked = 0;
+  for (const [lang, correct, from, wrongCondition, wrongOnly, wrongAction] of roster) {
+    const current = dicts[lang][key];
+    assert.ok(current.includes(from));
+    for (const [value, valid] of [
+      [current + ' ' + correct, true],
+      [correct + ' ' + current, true],
+      [current.replace(from, wrongCondition) + ' ' + correct, false],
+      [current.replace(from, wrongOnly) + ' ' + correct, false],
+      [current.replace(from, wrongAction) + ' ' + correct, false],
+      [current + ' ' + correct + ' ' + wrongCondition + '。', false],
+      [current.replace(from, correct), false],
+    ]) {
+      let replacements = 0;
+      const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+        if (!prefix.includes(`"${key}"`) || /[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+        replacements++;
+        return prefix + JSON.stringify(value);
+      });
+      assert.equal(replacements, 1);
+      resetHooks();
+      const env = makeCtx();
+      loadClient(source).apply(env.ctx);
+      const actual = env.dictionaries[0].dicts[lang][key];
+      assert.equal(actual, value);
+      const failures = copyFactFailures(key, lang, actual);
+      if (valid) assert.deepEqual(failures, [], '正确未填不只名单内并全覆盖不反转已填事实');
+      else assert.ok(failures.includes('填写后只处理名单内'), '正确未填分支不能补已填依据或遮另一条件/动作错误');
+      checked++;
+    }
+  }
+  assert.equal(checked, 14, '两语准确正确分支前后4正与10必要相反关系边界');
+});
+
 test('当前token风险显示：原生字典源码错位和部分保护变异必须失败', () => {
   for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
     resetHooks();

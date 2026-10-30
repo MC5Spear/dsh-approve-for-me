@@ -621,6 +621,15 @@ test('已填条件与来源供给直接反转，未填正确全覆盖和其他�
   assert.deepEqual(fails('hint.reviewer.maxTokens', 'en', token + ' Another setting has no model or provider default.'), []);
 });
 
+test('正确未填not-only全覆盖不是已填only关系反转，也不能补已填事实', () => {
+  const current = 'Tools under auto-approval, one name per line. Empty covers every tool; once filled, only listed tools are handled and the rest keep the host flow.';
+  const correct = "When unfilled, not only listed tools are handled: every tool's escalations are covered.";
+  assert.deepEqual(fails('help.tools', 'en', current + ' ' + correct), []);
+  assert.deepEqual(fails('help.tools', 'en', correct + ' ' + current), []);
+  assert.ok(fails('help.tools', 'en', current.replace('once filled', 'when not filled') + ' ' + correct).includes('填写后只处理名单内'));
+  assert.ok(fails('help.tools', 'en', current.replace('once filled, only listed tools are handled', correct)).includes('填写后只处理名单内'));
+});
+
 test('反例：说明缺失整条报缺失', () => {
   assert.deepEqual(fails('hint.mode', 'zh', ''), ['说明缺失']);
   assert.deepEqual(fails('hint.mode', 'zh', undefined), ['说明缺失']);

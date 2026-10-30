@@ -596,6 +596,33 @@ function thresholdEvent(text, lang, boundary, action, joinComma = false) {
   return found;
 }
 
+/** 已填＋仅名单内处理是依据；未填＋不只名单内且全覆盖是正确相反分支，但不能补足已填义务。 */
+function filledToolsRelation(text, lang) {
+  const marker = lang === 'zh' ? /填写|填入|填/u : /\bfilled\b|\bunfilled\b/iu;
+  const opposite = lang === 'zh' ? /(?:未|没有)(?:填写|填入|填)/u : /\bnot filled\b|\bunfilled\b/iu;
+  const relation = lang === 'zh'
+    ? /(?:(不|并非))?(?:只|仅)\s*(?:(不|未)\s*)?(?:处理|办理)(?:名单|清单|列表)(?:之)?内(?:的)?工具/u
+    : /(?:(not)\s+)?(?:only|just)\s+(?:the\s+)?listed tools\s+(?:(?:are\s+)?(?:(not|never)\s+)?handled|enter automatic review)/iu;
+  let found = false;
+  for (const sentence of sents(text)) {
+    const parts = sentence.split(lang === 'zh' ? /(?=未填写|没有填写|填写后|填入后|一旦填)/u : /(?=when (?:not filled|unfilled)|once filled)/iu);
+    for (const part of parts) {
+      if (!marker.test(part)) continue;
+      const match = part.match(relation);
+      if (!match) continue;
+      const filled = !opposite.test(part);
+      const onlyListed = !match[1];
+      const handled = !match[2];
+      if (filled) {
+        if (!onlyListed || !handled) return false;
+        found = true;
+      } else if (onlyListed && handled) return false;
+      else if (!onlyListed && handled && !(lang === 'zh' ? /覆盖(?:全部|所有)工具/u : /(?:every|all) tools?(?:['’]s)?[^.;]{0,24}(?:covered|handled)/iu).test(part)) return false;
+    }
+  }
+  return found;
+}
+
 /** 内部前置、阈值、范围与时序独立于主分类；只核已登记事实当前承载的短关系。 */
 const SUBCONDITION_FACTS = {
   '强度自动低档': {
@@ -603,14 +630,7 @@ const SUBCONDITION_FACTS = {
     en: (text) => sents(text).some((part) => /(?:use\s*`?low`?\s+when the model supports it|when the model supports\s*`?low`?[^.;]{0,4}use\s*`?low`?)/iu.test(part) && !/(?:does not|doesn't|cannot|can't) support[^.;]{0,8}(?:it|`?low`?)/iu.test(part)),
   },
   '否则模型默认': { zh: (text) => /否则|不然|若不支持/u.test(text), en: (text) => /otherwise|else|if not/iu.test(text) },
-  '填写后只处理名单内': {
-    zh: (text) => conditionRelation(text, /填写|填入|填/u, /(?:未|没有)(?:填写|填入|填)/u, /(?:只|仅)[^。；]{0,8}(?:名单|清单|列表)(?:之)?内/u, (part) => !/(?:不只|不仅)[^。；]{0,8}(?:名单|清单|列表)(?:之)?内/u.test(part))
-      && !sents(text).some((part) => /填写|填入|填/u.test(part) && /(?:只|仅)\s*(?:不|未)\s*处理(?:名单|清单|列表)(?:之)?内工具/u.test(part))
-      && !/(?:未|没有)(?:填写|填入|填)[^。；]{0,12}(?:只|仅)处理(?:名单|清单|列表)(?:之)?内工具/u.test(text),
-    en: (text) => conditionRelation(text, /\bfilled\b/iu, /\bnot filled\b|\bunfilled\b/iu, /(?:only|just) (?:the )?listed tools/iu, (part) => !/not (?:only|just) (?:the )?listed tools/iu.test(part))
-      && !sents(text).some((part) => /filled/iu.test(part) && /\b(?:only|just)\s+(?:the\s+)?listed tools\s+are\s+(?:not|never)\s+handled\b/iu.test(part))
-      && !/\b(?:not filled|unfilled)\b[^.;]{0,16}\b(?:only|just)\s+(?:the\s+)?listed tools\s+are\s+handled\b/iu.test(text),
-  },
+  '填写后只处理名单内': { zh: (text) => filledToolsRelation(text, 'zh'), en: (text) => filledToolsRelation(text, 'en') },
   '完整id作用范围': { zh: (text) => /完整.{0,4}模型/u.test(text) && !/(?:不完整|部分).{0,4}模型/u.test(text), en: (text) => /(?:full|complete) model id/iu.test(text) && !/(?:not full|not complete|partial) model id/iu.test(text) },
   '唯一条件': { zh: (text) => /同一作用范围(?:与|和|加)(?:同一)?执行助手模型[^。；]{0,8}(?:一条|唯一)/u.test(text), en: (text) => /one rule (?:per|for each) scope (?:and|plus) agent model|(?:each )?scope plus (?:one )?agent model[^.;]{0,20}one rule/iu.test(text) },
   '每条件唯一': { zh: (text) => /同一作用范围(?:与|加|和)(?:同一)?执行助手模型[^。；]{0,8}(?:一条|唯一)/u.test(text), en: (text) => /one rule (?:per|for each) scope (?:and|plus) agent model|(?:each )?scope plus (?:one )?agent model[^.;]{0,20}one rule/iu.test(text) },
