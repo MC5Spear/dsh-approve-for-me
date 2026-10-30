@@ -507,8 +507,11 @@ test('逃逸分支注入文本过脱敏：error 里的秘密被遮蔽后才注�
 test('装配接线：rt.review 按请求构造工具上下文快照并随任务传入（静态扫描），审计读取器并入脱敏清单', async () => {
   const { readFileSync } = await import('node:fs');
   const source = readFileSync(new URL('../lib/index.js', import.meta.url), 'utf8');
-  // 反例先行：扫描对退回 setter 接线必须命中（防恒真）——rt.review 内不得出现四个 setter 调用。
-  assert.ok(!/tools\.set(Root|Lang|ToolTimeoutMs|RedactPatterns)\??\(/u.test(source), 'rt.review 不得经共享 setter 现设（并发下会改写在飞任务，design §6.1）');
+  // 负向源码扫描：rt.review 内不得出现四个 setter 调用。先对合成串证明正则本身能命中（防恒不匹配），
+  // 再对真实源码断言零命中；正反两个方向都成立，「未命中」才是有效结论。
+  const setterCall = /tools\.set(Root|Lang|ToolTimeoutMs|RedactPatterns)\??\(/u;
+  assert.ok(setterCall.test('await tools.setRoot(dir);'), '扫描正则须能命中 setter 调用形态（防恒不匹配）');
+  assert.ok(!setterCall.test(source), 'rt.review 不得经共享 setter 现设（并发下会改写在飞任务，design §6.1）');
   // 上下文在进入调度器之前按本请求快照构造（rootDir/lang/超时/清单四字段齐）。
   const at = (token) => source.indexOf(token);
   assert.ok(at('const toolContext = {') >= 0, '请求绑定的工具上下文必须构造');

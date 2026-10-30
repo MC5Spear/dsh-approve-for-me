@@ -236,7 +236,9 @@ test('approvalCoverage：纪元显式参数化与缺口判定', async () => {
     assert.equal(badEpoch.code, 2, '不可解析纪元退出码 2');
     const goodEpoch = await approvalCli(['--trace-epoch', '1970-01-01T00:00:05Z'], { DSH_HOME: home });
     assert.equal(goodEpoch.code, 0);
-    assert.ok(goodEpoch.out.some((line) => line.includes('MISSING(no epoch)') === false), '给出纪元后不落无纪元降级');
+    // 全称断言：给出纪元后所有行都不落无纪元降级；下行 noEpoch 的 some 证明该标记真实可出现，
+    // 两方向都有真实输出支撑，全称断言不是空转。
+    assert.ok(goodEpoch.out.every((line) => !line.includes('MISSING(no epoch)')), '给出纪元后所有行都不落无纪元降级');
     assert.ok(goodEpoch.out.some((line) => line.includes('MISSING')), '晚于纪元的缺口仍可见');
     const noEpoch = await approvalCli([], { DSH_HOME: home });
     assert.ok(noEpoch.out.some((line) => line.includes('MISSING(no epoch)')), '未给纪元时可见降级标注');

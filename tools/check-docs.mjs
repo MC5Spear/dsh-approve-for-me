@@ -34,7 +34,7 @@ const DIR_SKIP = new Set(['.git', '.local', 'node_modules', 'scratch', 'test', '
 
 /**
  * 枚举公开文档：根级白名单 + docs 目录全部 .md。直接走文件系统（含未暂存新文件），
- * 不用 git ls-files——git 只列跟踪文件，会漏掉本轮新增文档。
+ * 不用 git ls-files——git 只列跟踪文件，会漏掉尚未提交的新文档。
  * @param {string} root 仓库根（或包根）。
  * @returns {string[]} 绝对路径列表。
  */
@@ -423,7 +423,7 @@ export function checkReferenceTables(root, facts) {
   for (const name of ['docs/user-reference.md', 'docs/user-reference.en.md']) {
     const full = path.join(root, name);
     if (!existsSync(full)) {
-      issues.push({ file: name, line: 0, problem: '用户参考文件不存在（本轮新增文档落地前检查器按设计明确失败）' });
+      issues.push({ file: name, line: 0, problem: '用户参考文件缺失：两语用户参考是随包公开资料，缺失即失败；从源码仓库或交付源码恢复后重查' });
       continue;
     }
     const text = readFileSync(full, 'utf8');
@@ -619,7 +619,7 @@ export function checkVersionIdentity(root, opts = {}) {
   for (const name of ['README.md', 'README.en.md']) {
     const full = path.join(root, name);
     if (!existsSync(full)) {
-      issues.push({ file: name, line: 0, problem: '两语首页之一不存在（本轮新增文档落地前检查器按设计明确失败）' });
+      issues.push({ file: name, line: 0, problem: '两语首页之一缺失：README 是随包公开资料，缺失即失败；从源码仓库或交付源码恢复后重查' });
       continue;
     }
     const text = readFileSync(full, 'utf8');
@@ -654,7 +654,7 @@ export function checkVersionIdentity(root, opts = {}) {
 
 // ── 包内容检查（--package / --pack） ─────────────────────────────────────────
 
-/** 包内必须在场的文件（真实 files 白名单 + 本轮补分的公开资料；LICENSES 目录须含具体许可文件）。 */
+/** 包内必须在场的文件（真实 files 白名单 + 检查器要求随包在场的公开资料；LICENSES 目录须含具体许可文件）。 */
 export const PACKAGE_REQUIRED = [
   'lib/index.js',
   'client.js',

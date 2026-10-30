@@ -158,23 +158,44 @@ test('超时文案（两语言）都不含「绕过拒绝」末句（requirement
 });
 
 // 通道故障模板的事实判定器（T1–T7，两语）：保护 requirements §4.3 点名的事实，不冻结普通措辞
-// 与排版。T4/T5 是方向性判定：T4 要求「停止词＋重试」同分句共现（反转句如「可以连续重试」
-// 不命中）；T5 命中「报告…用户」的分句不得带否定框架——否定框架检查按分句（逗号/分号/句号
-// 切分的最小分句）进行，整句口径会把末句「不要」误判进 T5 框架。
+// 与排版。T3/T4/T5 是方向性判定，动作与其否定绑定在同一分句（逗号/分号/句号切分的最小分句）内：
+// T3「允许重试」的表述被就近否定（如「不可直接重试」）不算允许，且任一分句出现被否定的允许
+// 即判缺失；T4 约束重试的停止词被就近取消（如「不要停止…重试」）后，该分句不再算约束；
+// T5 命中「报告…用户」的分句不得带否定框架——整句口径会把末句「不要」误判进 T5 框架。
 const clausesOf = (text) => text.split(/[,，;；.。]/u).filter((clause) => clause.trim() !== '');
-const zhNegationFrame = /(不必|无需|不要)/u;
-const enNegationFrame = /(no need to|not necessary to|without|do not|don't)/iu;
+const zhNegationFrame = /(不必|无需|无须|不要|不应|不得|不能|不会|别)/u;
+const enNegationFrame = /(no need to|not necessary to|without|do not|don't|should not|must not|need not|never)/iu;
 const factChecks = {
   T1: (_lang, body) => body.startsWith('[approve-for-me] '),
   T2: (lang, body) => (lang === 'zh'
     ? /(不是|并非)[^。]*(判定为危险|危险判定)/u.test(body)
     : /not a[^.\n]*(judged dangerous|safety|dangerous)/iu.test(body) || /reached no conclusion/iu.test(body)),
-  T3: (lang, body) => (lang === 'zh'
-    ? /直接重试|重新发起[^。]*审查|重新申请[^。]*审查/u.test(body)
-    : /(may|can)\b[^.;\n]{0,60}\bretr(?:y|ies|ying)|retry the same|fresh automatic review/iu.test(body)),
-  T4: (lang, body) => (lang === 'zh'
-    ? /(停止|不要|别|避免)[^。；]*重试/u.test(body)
-    : /(stop|do not keep|avoid)\b[^.;\n]*\b(?:retr(?:y|ies)|retrying)/iu.test(body)),
+  T3: (lang, body) => {
+    const allow = lang === 'zh'
+      ? /直接重试|重新发起[^。]*审查|重新申请[^。]*审查/gu
+      : /(?:may|can)\b[^.;\n]{0,60}\bretr(?:y|ies|ying)|retry the same|fresh automatic review/giu;
+    const negatedPrefix = lang === 'zh' ? /(不可|不能|无法|禁止|不必|无需|无须|不要|不|别)$/u : /\b(?:not|never|no)\s*$/iu;
+    let allowed = false;
+    for (const clause of clausesOf(body)) {
+      for (const match of clause.matchAll(allow)) {
+        // en 的 may/can 与 retry 之间的片段随整段命中，中间藏否定（may not retry）同样算被否定。
+        const innerNegated = lang === 'en' && /\bnot\b|n['’]t/iu.test(match[0]);
+        if (negatedPrefix.test(clause.slice(0, match.index)) || innerNegated) return false;
+        allowed = true;
+      }
+    }
+    return allowed;
+  },
+  T4: (lang, body) => {
+    const restraint = lang === 'zh'
+      ? /(?:停止|避免|不要|别)[^，,。；;]*重试/u
+      : /\b(?:stop|do not keep|avoid|cease)\b[^,;.\n]*\b(?:retr(?:y|ies)|retrying)/iu;
+    // 停止/避免被就近取消时（不要停止…重试 / do not stop retrying），该分句表达的是继续重试。
+    const cancelled = lang === 'zh'
+      ? /(?:不要|别|无须|无需|不用|不能|不会|不可)(?:连续|反复|再|立刻|马上)?(?:停止|避免)/u
+      : /\b(?:do not|don't|not|never)\s+(?:stop|avoid|cease)\b/iu;
+    return clausesOf(body).some((clause) => restraint.test(clause) && !cancelled.test(clause));
+  },
   T5: (lang, body) => {
     const hit = lang === 'zh' ? /(报告|告知|通知)[^，。；]*用户/u : /(inform|report|tell)\b[^,;.\n]*\buser/iu;
     const neg = lang === 'zh' ? zhNegationFrame : enNegationFrame;
@@ -225,6 +246,23 @@ test('通道故障事实判定器：等义改写（含空行、超四行、英�
   assert.deepEqual(missingFacts('en', badPlaceholderEn), ['T6'], 'en 换占位名 → 占位集断言挂');
   const rejectTailZh = `${equivalentZh}\n${REJECTION_INSTRUCTIONS_ZH}`;
   assert.deepEqual(missingFacts('zh', rejectTailZh), ['T7'], 'zh 拼拒绝末句 → T7 挂');
+});
+
+test('通道故障事实判定器：直接极性反转各自失败（允许重试/停止重试/报告用户）', () => {
+  const zh = agentT('zh', 'gate.error.body');
+  const en = agentT('en', 'gate.error.body');
+  const reversal = (base, from, to) => {
+    const mutated = base.replace(from, to);
+    assert.notEqual(mutated, base, `反转必须真实改到当前模板：${from}→${to}`);
+    return mutated;
+  };
+  // 四例均为对既有明确事实的单点反转（不新增产品措辞要求）；判定器必须按分句内极性识别。
+  assert.ok(missingFacts('zh', reversal(zh, '同一操作可以直接重试', '同一操作不可直接重试')).includes('T3'), '「可以直接重试」→「不可直接重试」必须缺 T3');
+  assert.ok(missingFacts('zh', reversal(zh, '不要连续反复重试', '不要停止连续反复重试')).includes('T4'), '「不要连续反复重试」→「不要停止连续反复重试」必须缺 T4');
+  assert.ok(missingFacts('zh', reversal(zh, '把故障报告用户', '不应把故障告知用户')).includes('T5'), '「把故障报告用户」→「不应把故障告知用户」必须缺 T5');
+  assert.ok(missingFacts('en', reversal(en, 'do not keep retrying in a row', 'do not stop retrying in a row')).includes('T4'), '「do not keep retrying」→「do not stop retrying」必须缺 T4');
+  // 同概念等义换措辞（不带否定框架）仍通过，证明判定器绑定极性而非字面。
+  assert.deepEqual(missingFacts('zh', zh.replace('把故障报告用户', '请把故障告知用户')), [], '等义换措辞须全过');
 });
 
 test('轮次用尽指令：两语言各自成句且互不残留；兼容导出＝zh 现行', () => {

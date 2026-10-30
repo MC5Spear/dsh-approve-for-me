@@ -19,10 +19,12 @@ export function errorCopyFailures(kind, lang, text) {
     if (currentArgs.some((part) => /(?:并非|不是|不属于|没有).{0,5}(?:无效|非法|不合法)|(?:并非|不是)\s*不是\s*(?:合法|有效)\s*JSON|\b(?:not|never)\s+(?:invalid|malformed)\s+JSON|JSON\s+(?:is\s+)?not\s+(?:invalid|malformed)|\bnot not valid\s+JSON|\bit is not (?:true|the case) that\s+(?:the\s+)?(?:arguments?|parameters?)\s+(?:are|is)\s+(?:invalid|malformed|not valid)\s+JSON/iu.test(part))) failures.push('invalid-json-reversal');
   } else if (kind === 'channel') {
     has('prefix', /^\[approve-for-me\]/u, /^\[approve-for-me\]/u);
-    has('channel-failure', /通道.{0,5}(?:故障|失败|异常)/u, /channel.{0,10}(?:failure|failed|error)/iu);
-    has('one-escalation', /本次.{0,5}升权/u, /this.{0,15}escalation/iu);
-    has('rejected', /(?:按|予以|作).{0,5}拒绝|拒绝处理/u, /\brejected\b|\breject\b.{0,30}request/iu);
-    if (/(?:不|不会|并非|不是|无需).{0,5}拒绝|\b(?:not|never)\s+(?:be\s+)?rejected\b|\b(?:do|does|will|shall)\s+not\s+reject\b/iu.test(value)) failures.push('rejection-reversal');
+    // 概念级判定：通道故障与「此次/本次」限定、单次升权的拒绝结果各自接受合理中文等义，
+    // 极性由下方 rejection-reversal 反转检查约束；不冻结某个固定措辞。
+    has('channel-failure', /通道.{0,5}(?:故障|失败|异常|错误|失效|中断)/u, /channel.{0,10}(?:failure|failed|error|broken|down)/iu);
+    has('one-escalation', /(?:本次|此次|这次).{0,5}升权/u, /this.{0,15}escalation/iu);
+    has('rejected', /(?:按|予以|作|被|已|遭).{0,5}拒(?:绝|回)|拒绝处理/u, /\brejected\b|\breject\b.{0,30}request/iu);
+    if (/(?:不|不会|并非|不是|无需|未|没|没有).{0,5}拒绝|\b(?:not|never)\s+(?:be\s+)?rejected\b|\b(?:do|does|will|shall)\s+not\s+reject\b/iu.test(value)) failures.push('rejection-reversal');
     const danger = /危险判定|判定.{0,4}危险|danger verdict|judged dangerous/giu;
     const affirmedDanger = value.split(/[。；;，,.\n]/u).some((part) => [...part.matchAll(danger)].some((match) => !/(?:不是|并非|不属于|不算)\s*$|\b(?:not|never)\s+(?:(?:a|the)\s+)?$/iu.test(part.slice(0, match.index))));
     if (affirmedDanger) failures.push('failure-not-danger');

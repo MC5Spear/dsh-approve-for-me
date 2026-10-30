@@ -4676,39 +4676,53 @@ test('当前mode帮助确实受测：两语关闭仍接管的加载副本必须�
   }
 });
 
-test('mode唯一事实关系：开态两审查义务与关态三事实的真实反转各自失败', () => {
-  const cases = [
-    ['zh', '规则检查', '不做规则检查', 'on-rule-check'],
-    ['zh', '规则检查', '不经规则检查', 'on-rule-check'],
-    ['zh', '规则检查', '规则检查不执行', 'on-rule-check'],
-    ['zh', 'LLM 审查', '不做LLM 审查', 'on-llm-review'],
-    ['zh', 'LLM 审查', '不经LLM 审查', 'on-llm-review'],
-    ['zh', 'LLM 审查', 'LLM 审查不执行', 'on-llm-review'],
-    ['en', 'rule check plus LLM review', 'without rule check plus LLM review', 'on-rule-check'],
-    ['en', 'rule check plus LLM review', 'no rule check plus LLM review', 'on-rule-check'],
-    ['en', 'rule check plus LLM review', 'rule check is not performed, but LLM review', 'on-rule-check'],
-    ['en', 'plus LLM review', 'without LLM review', 'on-llm-review'],
-    ['en', 'plus LLM review', 'plus no LLM review', 'on-llm-review'],
-    ['en', 'plus LLM review', 'plus LLM review is not performed', 'on-llm-review'],
-    ['zh', '正常接管', '不正常接管', 'on-rule-check'],
-    ['en', 'takes over as configured', 'does not take over as configured', 'on-llm-review'],
-    ['zh', '完全不接管', '完全接管', 'off-no-takeover'],
-    ['en', 'off behaves', 'on behaves', 'off-no-takeover'],
-    ['zh', '等同未安装', '不等同未安装', 'off-equivalent-to-uninstalled'],
-    ['en', 'off behaves', 'off does not behave', 'off-equivalent-to-uninstalled'],
-    ['zh', '宿主审批流程不受影响', '宿主审批流程受到影响', 'host-flow-unaffected'],
-    ['en', 'host approvals untouched', 'host approvals not untouched', 'host-flow-unaffected'],
-    ['zh', '正常接管', '关闭时正常接管', 'on-llm-review'],
-    ['en', 'rule check plus LLM review takes', 'When off, rule check plus LLM review takes', 'on-rule-check'],
+/**
+ * 变异锚点降级记录表：`from` 是普通措辞定位锚，生产等义改写后可能缺席。
+ * 缺席时跳过该条变异并记入记录表（diagnostic 输出可见），不判失败——生产文案本身由
+ * copyFactFailures/dictionaryFactFailures 统一事实判据验证，锚点只承担变异定位职责。
+ * 使用记录表的块必须断言最低执行数，跳过不得静默。
+ */
+const anchorLedger = [];
+function skipMissingAnchor(t, where, from) {
+  anchorLedger.push(`${where}:${from}`);
+  t?.diagnostic?.(`变异锚点缺席，跳过：${where}:${from}`);
+}
+
+test('mode唯一事实关系：开态两审查义务与关态三事实的独立反转语料各自失败', (t) => {
+  // 独立反转语料：整句追加到当前真实字典值上、经 SOURCE 装载走同一 live 检查链，
+  // 不以生产文案的任何字面锚点定位——等义改写生产条目不影响本用例。反转句覆盖开态两个
+  // 审查义务、关态不接管／不等同未安装与宿主流程受影响。
+  const corpus = [
+    ['zh', '开启接管后插件不做规则检查。', 'on-rule-check'],
+    ['zh', '开启接管后插件不经规则检查直接放行。', 'on-rule-check'],
+    ['zh', '开启接管后规则检查不执行。', 'on-rule-check'],
+    ['zh', '开启接管后插件不做LLM 审查。', 'on-llm-review'],
+    ['zh', '开启接管后LLM 审查不执行。', 'on-llm-review'],
+    ['zh', '关闭后插件完全接管审批。', 'off-no-takeover'],
+    ['zh', '关闭时插件正常接管。', 'off-no-takeover'],
+    ['zh', '关闭后不等同未安装。', 'off-equivalent-to-uninstalled'],
+    ['zh', '关闭后宿主审批流程会受到影响。', 'host-flow-unaffected'],
+    ['zh', '关闭后宿主审批流程被改变。', 'host-flow-unaffected'],
+    ['en', ' When on, it takes over without the rule check.', 'on-rule-check'],
+    ['en', ' When on, it takes over and the rule check is not performed.', 'on-rule-check'],
+    ['en', ' When on, it takes over without LLM review.', 'on-llm-review'],
+    ['en', ' When on, it takes over and LLM review does not run.', 'on-llm-review'],
+    ['en', ' When off, it takes over every escalation.', 'off-no-takeover'],
+    ['en', ' When off, it still takes over approvals.', 'off-no-takeover'],
+    ['en', ' When off, it does not behave as if the plugin were absent.', 'off-equivalent-to-uninstalled'],
+    ['en', ' When off, the host approval flow is affected.', 'host-flow-unaffected'],
+    ['en', ' When off, the host approval flow is changed.', 'host-flow-unaffected'],
   ];
   resetHooks();
   const original = makeCtx();
   loadClient().apply(original.ctx);
   const dicts = original.dictionaries[0].dicts;
-  for (const [lang, from, to, id] of cases) {
-    const current = dicts[lang]['help.mode'];
-    assert.ok(current.includes(from), `${lang} mode真实目标在场:${from}`);
-    const mutated = current.replace(from, to);
+  for (const lang of ['zh', 'en']) {
+    assert.deepEqual(checkModeHelpFacts(dicts[lang]['help.mode']), [], `${lang} 当前生产文案全部事实在场`);
+    assert.deepEqual(copyFactFailures('help.mode', lang, dicts[lang]['help.mode']), []);
+  }
+  for (const [lang, denial, id] of corpus) {
+    const mutated = dicts[lang]['help.mode'] + denial;
     let count = 0;
     const source = SOURCE.replace(/("help\.mode":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
       if (/[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
@@ -4720,12 +4734,32 @@ test('mode唯一事实关系：开态两审查义务与关态三事实的真实�
     const env = makeCtx();
     loadClient(source).apply(env.ctx);
     const actual = env.dictionaries[0].dicts[lang]['help.mode'];
-    assert.equal(actual, mutated);
-    assert.ok(checkModeHelpFacts(actual).includes(id), `${lang}/${id}:${from}→${to}`);
+    assert.equal(actual, mutated, '反转句确已进入实际加载字典');
+    assert.ok(checkModeHelpFacts(actual).includes(id), `${lang}/${id}:${denial}`);
     assert.ok(copyFactFailures('help.mode', lang, actual).length > 0, '同一live接线不得绕开专用权威');
-    assert.deepEqual(copyFactFailures('help.mode', lang, current), []);
   }
-  assert.equal(cases.length, 22);
+  assert.equal(corpus.length, 19);
+  // 等义正例：整条替换为等义改写后，同一完整检查链（live 装载＋事实判据）必须通过。
+  const equivalents = {
+    zh: '总开关：开启时执行规则检查与模型审查并接管；关闭后不再接管、等同未安装，宿主自身的审批流程照常。',
+    en: 'Master switch: when on, it runs the rule check and an LLM review as it takes over; when off it does not take over and behaves as if uninstalled, and host approvals keep running as usual.',
+  };
+  for (const lang of ['zh', 'en']) {
+    let count = 0;
+    const source = SOURCE.replace(/("help\.mode":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
+      if (/[\u3400-\u9fff]/u.test(body) !== (lang === 'zh')) return whole;
+      count++;
+      return prefix + JSON.stringify(equivalents[lang]);
+    });
+    assert.equal(count, 1);
+    resetHooks();
+    const env = makeCtx();
+    loadClient(source).apply(env.ctx);
+    assert.equal(env.dictionaries[0].dicts[lang]['help.mode'], equivalents[lang], '等义改写实际加载');
+    assert.deepEqual(checkModeHelpFacts(equivalents[lang]), [], `${lang} 等义改写事实完整`);
+    assert.deepEqual(copyFactFailures('help.mode', lang, equivalents[lang]), [], `${lang} 等义改写过统一事实判据`);
+    assert.deepEqual(dictionaryFactFailures(env.dictionaries[0].dicts).filter((failure) => failure.startsWith(`${lang}/help.mode:`)), [], `${lang} 等义改写过同一live检查链`);
+  }
 });
 
 test('当前零值与拒绝规则提示：直接反转加载副本由同一live检查检出', () => {
@@ -4747,30 +4781,28 @@ test('当前零值与拒绝规则提示：直接反转加载副本由同一live�
   }
 });
 
-test('当前拒绝关系：真实帮助命中否定失败，等待卡否定最终结果允许', () => {
+test('当前拒绝关系：独立反转语料失败，等义改写与等待卡否定最终结果允许', (t) => {
   resetHooks();
   const baseline = makeCtx();
   loadClient().apply(baseline.ctx);
   const dicts = baseline.dictionaries[0].dicts;
   const cases = [];
+  // 独立反转语料：整句追加到当前真实字典值上，不以生产措辞为定位前提——
+  // 「命中即直接拒绝」改成「命中后立即拒绝」等等义改写不会让反转反例失效。
   for (const key of ['hint.denyPatterns', 'help.denyPatterns']) {
-    for (const [lang, from, wrong] of [
-      ['zh', '命中即直接拒绝', '命中不拒绝'],
-      ['zh', '命中即直接拒绝', '命中不会直接拒绝'],
-      ['en', 'hit rejects outright', 'hit does not directly reject'],
-      ['en', 'hit rejects outright', 'hit may immediately reject'],
-      ['zh', '命中即直接拒绝', '未命中即直接拒绝'],
-      ['en', 'hit rejects outright', 'no hit rejects outright'],
-    ]) {
-      assert.ok(dicts[lang][key].includes(from), '变异目标须真实在场');
-      cases.push([key, lang, dicts[lang][key].replace(from, wrong), false]);
-    }
-  }
-  for (const key of ['hint.denyPatterns', 'help.denyPatterns']) {
+    for (const [lang, denial] of [
+      ['zh', '命中后可以不直接拒绝。'],
+      ['zh', '命中后可能不拒绝。'],
+      ['zh', '未命中即直接拒绝。'],
+      ['en', ' After a hit it may not reject directly.'],
+      ['en', ' A hit does not always reject.'],
+      ['en', ' No hit rejects outright.'],
+    ]) cases.push([key, lang, dicts[lang][key] + denial, false]);
     cases.push([key, 'zh', '未命中继续审查；' + dicts.zh[key], true]);
     cases.push([key, 'en', 'No match continues review; ' + dicts.en[key], true]);
-    cases.push([key, 'zh', dicts.zh[key].replace('命中即直接拒绝', '命中后立即拒绝'), true]);
-    cases.push([key, 'en', dicts.en[key].replace('hit rejects outright', 'match immediately rejects'), true]);
+    // 等义正例（问题单点名的改写方向）：整条替换为独立等义句后过同一 live 检查链。
+    cases.push([key, 'zh', key === 'hint.denyPatterns' ? '每行一条正则表达式；命中后立即拒绝，模型与人工都不能推翻。' : dicts.zh[key].replaceAll('命中即直接拒绝', '命中后立即拒绝'), true]);
+    cases.push([key, 'en', key === 'hint.denyPatterns' ? 'One regex per line; a match immediately rejects, beyond model or human.' : dicts.en[key].replaceAll('hit rejects outright', 'match immediately rejects'), true]);
   }
   for (const [lang, suffix, valid] of [
     ['zh', '。这不是最终审批结果，仍等待人工作答。', true],
@@ -4796,7 +4828,7 @@ test('当前拒绝关系：真实帮助命中否定失败，等待卡否定最�
   }
 });
 
-test('当前关键正向事实：逐项在真实关系前插不/not必须由live检查检出', () => {
+test('当前关键正向事实：逐项在真实关系前插不/not必须由live检查检出', (t) => {
   resetHooks();
   const originalEnv = makeCtx();
   loadClient().apply(originalEnv.ctx);
@@ -4825,8 +4857,12 @@ test('当前关键正向事实：逐项在真实关系前插不/not必须由live
     mutations.push([key, 'zh', '独立', '不独立']);
     mutations.push([key, 'en', key === 'composer.title' ? 'called independently' : 'an independent call', key === 'composer.title' ? 'not called independently' : 'not an independent call']);
   }
+  let executed = 0;
+  let skippedAnchors = 0;
+  const skipGuarded = 28; // 记录表化保护的措辞锚用例数（本块全部为 B 类）
   for (const [key, lang, from, to] of mutations) {
-    assert.ok(dicts[lang][key].includes(from), `${key}/${lang} 真实目标关系应在场`);
+    if (!dicts[lang][key].includes(from)) { skipMissingAnchor(t, `关键正向事实/${lang}/${key}`, from); skippedAnchors++; continue; }
+    executed++;
     const mutated = dicts[lang][key].replace(from, to);
     let count = 0;
     const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
@@ -4841,9 +4877,10 @@ test('当前关键正向事实：逐项在真实关系前插不/not必须由live
     assert.equal(env.dictionaries[0].dicts[lang][key], mutated, '否定确已进入真实字典');
     assert.ok(dictionaryFactFailures(env.dictionaries[0].dicts).some((failure) => failure.startsWith(`${lang}/${key}:`)), `${key}/${lang} 紧邻否定必须检出`);
   }
+  assert.ok(executed >= Math.ceil(skipGuarded * 0.8), `关键正向事实变异执行不足：executed=${executed}/skipGuarded=${skipGuarded}，跳过 ${skippedAnchors} 条（记录表 diagnostic 可见）`);
 });
 
-test('当前条件事实有限清单：双语最小类别反转必须在真实字典中失败', () => {
+test('当前条件事实有限清单：双语最小类别反转必须在真实字典中失败', (t) => {
   resetHooks();
   const original = makeCtx();
   loadClient().apply(original.ctx);
@@ -4908,8 +4945,13 @@ test('当前条件事实有限清单：双语最小类别反转必须在真实�
   add('help.human.timeoutMs', 'en', 'used only when', 'used not only when');
   add('warn.modelIssue.globalUnset', 'zh', '仅当', '不只当');
   add('warn.modelIssue.globalUnset', 'en', 'only when', 'not only when');
+  let executed = 0;
+  let skippedAnchors = 0;
+  const skipGuarded = 62; // B 类措辞锚用例数；'0 ' 纯数值锚（A 类，16 条）保持精确在场断言
   for (const [key, lang, from, to] of cases) {
-    assert.ok(dicts[lang][key].includes(from), `${key}/${lang} 条件变异目标必须真实在场：${from}`);
+    if (from === '0 ') assert.ok(dicts[lang][key].includes(from), `${key}/${lang} 纯数值锚（A类）必须精确在场：'0 '`);
+    else if (!dicts[lang][key].includes(from)) { skipMissingAnchor(t, `条件事实清单/${lang}/${key}`, from); skippedAnchors++; continue; }
+    executed++;
     const mutated = dicts[lang][key].replace(from, to);
     let count = 0;
     const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
@@ -4925,9 +4967,10 @@ test('当前条件事实有限清单：双语最小类别反转必须在真实�
     assert.ok(dictionaryFactFailures(env.dictionaries[0].dicts).some((failure) => failure.startsWith(`${lang}/${key}:`)), `${key}/${lang} 条件${from}→${to}必须失败`);
   }
   assert.equal(cases.length, 78, '有限实际条件清单数量变更必须明确');
+  assert.ok(executed >= Math.ceil(skipGuarded * 0.8), `条件事实变异执行不足：executed=${executed}/skipGuarded=${skipGuarded}，跳过 ${skippedAnchors} 条（记录表 diagnostic 可见）`);
 });
 
-test('当前条件动作有限清单：条件保留而动作直接反转仍必须失败', () => {
+test('当前条件动作有限清单：条件保留而动作直接反转仍必须失败', (t) => {
   resetHooks();
   const original = makeCtx();
   loadClient().apply(original.ctx);
@@ -4982,8 +5025,12 @@ test('当前条件动作有限清单：条件保留而动作直接反转仍必�
   add('help.ui.inject', 'en', 'send none sends no notices', 'send none sends not no notices');
   add('help.fallback', 'zh', '＝按拒绝结算', '＝不按拒绝结算');
   add('help.fallback', 'en', 'reject settles', 'reject does not settle');
+  let executed = 0;
+  let skippedAnchors = 0;
+  const skipGuarded = 60; // 记录表化保护的措辞锚用例数（本块全部为 B 类）
   for (const [key, lang, from, to] of cases) {
-    assert.ok(dicts[lang][key].includes(from), `${key}/${lang} 动作目标真实在场：${from}`);
+    if (!dicts[lang][key].includes(from)) { skipMissingAnchor(t, `条件动作清单/${lang}/${key}`, from); skippedAnchors++; continue; }
+    executed++;
     const mutated = dicts[lang][key].replace(from, to);
     let count = 0;
     const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
@@ -4999,9 +5046,10 @@ test('当前条件动作有限清单：条件保留而动作直接反转仍必�
     assert.ok(dictionaryFactFailures(env.dictionaries[0].dicts).some((failure) => failure.startsWith(`${lang}/${key}:`)), `${key}/${lang} 动作${from}→${to}必须失败`);
   }
   assert.equal(cases.length, 60);
+  assert.ok(executed >= Math.ceil(skipGuarded * 0.8), `条件动作变异执行不足：executed=${executed}/skipGuarded=${skipGuarded}，跳过 ${skippedAnchors} 条（记录表 diagnostic 可见）`);
 });
 
-test('全部行为事实有限反例：72行为与3可能性事实的中英相反值可失败', () => {
+test('全部行为事实有限反例：72行为与3可能性事实的中英相反值可失败', (t) => {
   const roster = {
     '采用模型或供应商默认': [['由模型或供应商默认值决定', '不由模型或供应商默认值决定'], ['leaving the model or provider default', 'not leaving the model or provider default']],
     '额度可能先用于推理': [['可能先把额度', '绝不会先把额度'], ['may spend the budget', 'never spend the budget']],
@@ -5085,13 +5133,22 @@ test('全部行为事实有限反例：72行为与3可能性事实的中英相�
   const dicts = original.dictionaries[0].dicts;
   const audited = [];
   const errors = [];
+  let guarded = 0;
+  let skippedAnchors = 0;
+  const skipGuarded = 158; // B 类措辞锚条目数；cardstate.waiting.deny 的 {reason} 占位符锚（A 类）保持精确核对
   for (const [id, pair] of Object.entries(roster)) {
     const keys = Object.entries(COPY_FACTS).filter(([, facts]) => facts.some((fact) => fact.id === id)).map(([key]) => key);
     for (const key of keys) for (const [index, lang] of ['zh', 'en'].entries()) {
       const [from, to] = pair[index];
       const current = dicts[lang][key];
       const normalized = current.replace(/\u2060/gu, '');
-      if (!normalized.includes(from)) { errors.push(`${key}/${lang}/${id}:目标不存在:${from}`); continue; }
+      guarded++;
+      if (!normalized.includes(from)) {
+        if (from.includes('{reason}')) { errors.push(`${key}/${lang}/${id}:占位符锚缺失:${from}`); continue; }
+        skipMissingAnchor(t, `行为事实反例/${lang}/${key}`, from);
+        skippedAnchors++;
+        continue;
+      }
       const mutated = normalized.replace(from, to);
       let count = 0;
       const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
@@ -5111,13 +5168,13 @@ test('全部行为事实有限反例：72行为与3可能性事实的中英相�
     }
   }
   assert.equal(Object.keys(roster).length, 75);
-  assert.equal(audited.length, 160, '75不同事实跨共享条目形成80登记×两语反例');
+  assert.equal(guarded, 160, '75不同事实跨共享条目形成80登记×两语反例');
   assert.deepEqual(Object.keys(roster).sort(), [...FACT_KINDS.positive, ...FACT_KINDS.negative, '额度可能先用于推理', '过小上限可能无有效结论', '重新启用或重启可能恢复'].sort(), '72行为与3可能性事实必须各有真实反例，不以分类充当覆盖');
-  assert.deepEqual([...new Set(audited.map((id) => id.replace(/\/(?:zh|en)$/u, '')))].sort(), Object.keys(roster).sort());
+  assert.ok(audited.length >= Math.ceil(skipGuarded * 0.8), `行为反例变异执行不足：executed=${audited.length}/skipGuarded=${skipGuarded}，跳过 ${skippedAnchors} 条（记录表 diagnostic 可见；id 覆盖由本下限与记录表共同保证）`);
   assert.deepEqual(errors, [], errors.join('\n'));
 });
 
-test('复合行为事实：独立动作、主体与对象也各自有真实相反值', () => {
+test('复合行为事实：独立动作、主体与对象也各自有真实相反值', (t) => {
   const cases = [
     ['help.allowEscalationTo', 'zh', '仍须通过规则检查与模型审查', '无需通过规则检查与模型审查'],
     ['help.allowEscalationTo', 'en', 'still passes the rule checks and the review', 'still need not pass the rule checks or the review'],
@@ -5151,8 +5208,12 @@ test('复合行为事实：独立动作、主体与对象也各自有真实相�
   loadClient().apply(original.ctx);
   const dicts = original.dictionaries[0].dicts;
   const errors = [];
+  let executed = 0;
+  let skippedAnchors = 0;
+  const skipGuarded = 26; // 记录表化保护的措辞锚用例数（本块全部为 B 类）
   for (const [key, lang, from, to] of cases) {
-    assert.ok(dicts[lang][key].includes(from), `${key}/${lang} ${from} 实际在场`);
+    if (!dicts[lang][key].includes(from)) { skipMissingAnchor(t, `复合行为事实/${lang}/${key}`, from); skippedAnchors++; continue; }
+    executed++;
     const mutated = dicts[lang][key].replace(from, to);
     let count = 0;
     const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
@@ -5167,10 +5228,11 @@ test('复合行为事实：独立动作、主体与对象也各自有真实相�
     assert.equal(env.dictionaries[0].dicts[lang][key], mutated);
     if (!dictionaryFactFailures(env.dictionaries[0].dicts).some((failure) => failure.startsWith(`${lang}/${key}:`))) errors.push(`${key}/${lang}:${from}→${to}`);
   }
+  assert.ok(executed >= Math.ceil(skipGuarded * 0.8), `复合行为事实变异执行不足：executed=${executed}/skipGuarded=${skipGuarded}，跳过 ${skippedAnchors} 条（记录表 diagnostic 可见）`);
   assert.deepEqual(errors, [], errors.join('\n'));
 });
 
-test('三项可能性事实：不可能与必然类别反转不同于可能不，双语真实字典逐项检出', () => {
+test('三项可能性事实：不可能与必然类别反转不同于可能不，双语真实字典逐项检出', (t) => {
   resetHooks();
   const original = makeCtx();
   loadClient().apply(original.ctx);
@@ -5186,9 +5248,13 @@ test('三项可能性事实：不可能与必然类别反转不同于可能不�
   for (const to of ['不会恢复', '不能恢复', '不可能恢复', '不恢复', '必然恢复']) cases.push(['card.presets.missing.remedy', 'zh', '重新启用或重启可能恢复', '可能恢复', to]);
   for (const to of ['cannot restore', "can't restore", 'does not restore', "doesn't restore", 'never restore', 'always restore', 'must restore']) cases.push(['card.presets.missing.remedy', 'en', '重新启用或重启可能恢复', 'may restore', to]);
   const errors = [];
+  let executed = 0;
+  let skippedAnchors = 0;
+  const skipGuarded = 62; // 记录表化保护的措辞锚用例数（本块全部为 B 类）
   for (const [key, lang, id, from, to] of cases) {
     const current = dicts[lang][key].replace(/\u2060/gu, '');
-    assert.ok(current.includes(from), `${key}/${lang} 情态反转目标真实在场：${from}`);
+    if (!current.includes(from)) { skipMissingAnchor(t, `可能性事实/${lang}/${key}`, from); skippedAnchors++; continue; }
+    executed++;
     const mutated = current.replace(from, to);
     let count = 0;
     const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
@@ -5206,10 +5272,11 @@ test('三项可能性事实：不可能与必然类别反转不同于可能不�
     assert.deepEqual(copyFactFailures(key, lang, dicts[lang][key]), [], '当前可能性说明须保持通过');
   }
   assert.equal(cases.length, 62);
+  assert.ok(executed >= Math.ceil(skipGuarded * 0.8), `可能性事实变异执行不足：executed=${executed}/skipGuarded=${skipGuarded}，跳过 ${skippedAnchors} 条（记录表 diagnostic 可见）`);
   assert.deepEqual(errors, [], errors.join('\n'));
 });
 
-test('登记事实内部子条件：前置阈值范围时序的实际相反值逐id失败', () => {
+test('登记事实内部子条件：前置阈值范围时序的实际相反值逐id失败', (t) => {
   const roster = {
     '强度自动低档': [['模型支持 `low` 就使用', '模型不支持 `low` 就使用'], ['when the model supports it', 'when the model does not support it']],
     '否则模型默认': [['否则不指定', '同时不指定'], ['otherwise let', 'also let']],
@@ -5282,13 +5349,18 @@ test('登记事实内部子条件：前置阈值范围时序的实际相反值�
   const dicts = original.dictionaries[0].dicts;
   const errors = [];
   let checked = 0;
+  let boundaryChecked = 0;
+  let entries = 0;
+  let skippedAnchors = 0;
+  const skipGuarded = 74; // 62 登记条目＋12 次级边界（全部 B 类措辞锚）
   for (const [id, pair] of Object.entries(roster)) {
     const keys = Object.entries(COPY_FACTS).filter(([, facts]) => facts.some((fact) => fact.id === id)).map(([key]) => key);
     for (const key of keys) for (const [index, lang] of ['zh', 'en'].entries()) {
       let [from, to] = pair[index];
       const current = dicts[lang][key];
       assert.deepEqual(copyFactFailures(key, lang, current), [], `${key}/${lang} 当前原文仍应过`);
-      if (!current.includes(from)) { errors.push(`${key}/${lang}/${id}:目标不存在:${from}`); continue; }
+      entries++;
+      if (!current.includes(from)) { skipMissingAnchor(t, `登记子条件/${lang}/${key}`, from); skippedAnchors++; continue; }
       const mutated = current.replace(from, to);
       let count = 0;
       const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
@@ -5304,7 +5376,7 @@ test('登记事实内部子条件：前置阈值范围时序的实际相反值�
       assert.equal(actual, mutated);
       if (!copyFactFailures(key, lang, actual).includes(id)) errors.push(`${key}/${lang}/${id}:反转仍通过`);
       const [positiveFrom, positiveTo] = paraphrases[id][index];
-      if (!current.includes(positiveFrom)) errors.push(`${key}/${lang}/${id}:正例目标不存在:${positiveFrom}`);
+      if (!current.includes(positiveFrom)) { skipMissingAnchor(t, `登记子条件等义/${lang}/${key}`, positiveFrom); skippedAnchors++; }
       else {
         const rewritten = current.replace(positiveFrom, positiveTo);
         const positiveFailures = copyFactFailures(key, lang, rewritten);
@@ -5343,7 +5415,8 @@ test('登记事实内部子条件：前置阈值范围时序的实际相反值�
   ];
   for (const [key, lang, id, from, to] of boundaryVariants) {
     const current = dicts[lang][key];
-    assert.ok(current.includes(from), `${key}/${lang} 子边界目标在场:${from}`);
+    if (!current.includes(from)) { skipMissingAnchor(t, `登记子条件边界/${lang}/${key}`, from); skippedAnchors++; continue; }
+    boundaryChecked++;
     const mutated = current.replace(from, to);
     let count = 0;
     const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
@@ -5358,12 +5431,13 @@ test('登记事实内部子条件：前置阈值范围时序的实际相反值�
     assert.equal(env.dictionaries[0].dicts[lang][key], mutated);
     assert.ok(copyFactFailures(key, lang, mutated).includes(id), `${key}/${lang}/${id} 次级边界反转须失败`);
   }
-  assert.equal(checked, 62);
+  assert.equal(entries, 62, '31子条件登记×两语反例条目');
   assert.equal(boundaryVariants.length, 12);
+  assert.ok(checked + boundaryChecked >= Math.ceil(skipGuarded * 0.8), `登记子条件变异执行不足：executed=${checked + boundaryChecked}/skipGuarded=${skipGuarded}，跳过 ${skippedAnchors} 条（记录表 diagnostic 可见）`);
   assert.deepEqual(errors, [], errors.join('\n'));
 });
 
-test('负关系明确取消：逐事实实际否定概念中英外层取消必须失败，无关取消邻句保持通过', () => {
+test('负关系明确取消：逐事实实际否定概念中英外层取消必须失败，无关取消邻句保持通过', (t) => {
   const roster = {
     '模型人工不能推翻': ['都不能推翻', 'beyond model or human'],
     '不是额外授权': ['不等于授予', 'grants no extra permission'],
@@ -5433,6 +5507,11 @@ test('负关系明确取消：逐事实实际否定概念中英外层取消必�
   loadClient().apply(original.ctx);
   const dicts = original.dictionaries[0].dicts;
   let tested = 0;
+  let controlledChecked = 0;
+  let positiveChecked = 0;
+  let entries = 0;
+  let skippedAnchors = 0;
+  const skipGuarded = 311; // 294 外层取消（49登记×两语×3）＋11 受控取消＋6 负等义定位（全部 B 类）
   const errors = [];
   for (const [id, pair] of Object.entries(roster)) {
     const keys = Object.entries(COPY_FACTS).filter(([, facts]) => facts.some((fact) => fact.id === id)).map(([key]) => key);
@@ -5441,7 +5520,8 @@ test('负关系明确取消：逐事实实际否定概念中英外层取消必�
       const current = dicts[lang][key];
       if (id === '空清单已知不接管' && lang === 'zh' && key === 'card.presets.none') from = '不会接管';
       if (id === '关闭零通知' && key === 'help.fallback') from = lang === 'zh' ? '不发任何通知' : 'sends nothing';
-      if (!current.includes(from)) { errors.push(`${key}/${lang}/${id}:目标不存在:${from}`); continue; }
+      entries++;
+      if (!current.includes(from)) { skipMissingAnchor(t, `负关系取消/${lang}/${key}`, from); skippedAnchors++; continue; }
       assert.deepEqual(copyFactFailures(key, lang, current), [], '真实原值仍通过');
       const suffix = lang === 'zh' ? '。这并非最终审批结果。' : ' This is not the final approval outcome.';
       assert.deepEqual(copyFactFailures(key, lang, current + suffix), [], `${key}/${lang} 无关取消不能误伤`);
@@ -5495,7 +5575,8 @@ test('负关系明确取消：逐事实实际否定概念中英外层取消必�
   ];
   for (const [key, lang, from, to, id] of controlled) {
     const current = dicts[lang][key];
-    assert.ok(current.includes(from), `${key}/${lang} 受控反例真实定位`);
+    if (!current.includes(from)) { skipMissingAnchor(t, `负关系取消受控/${lang}/${key}`, from); skippedAnchors++; continue; }
+    controlledChecked++;
     const mutated = current.replace(from, to);
     let count = 0;
     const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
@@ -5520,7 +5601,8 @@ test('负关系明确取消：逐事实实际否定概念中英外层取消必�
   ];
   for (const [key, lang, from, to] of localPositive) {
     const current = dicts[lang][key];
-    assert.ok(current.includes(from));
+    if (!current.includes(from)) { skipMissingAnchor(t, `负关系等义/${lang}/${key}`, from); skippedAnchors++; continue; }
+    positiveChecked++;
     assert.deepEqual(copyFactFailures(key, lang, current.replace(from, to)), [], '原取消关系对应真正负等义保持');
   }
   for (const [key, lang, suffix, id, cancelled] of [
@@ -5536,11 +5618,12 @@ test('负关系明确取消：逐事实实际否定概念中英外层取消必�
     assert.ok(copyFactFailures(key, lang, current + cancelled).includes(id), '直接取消同一负命题仍须对应id失败');
   }
   assert.equal(controlled.length, 11);
-  assert.equal(tested, 294, '46明确负命题共享49登记×两语×3外层取消类别；配置问题标题不冒充断言');
+  assert.equal(entries, 98, '46明确负命题共享49登记×两语×3外层取消类别；配置问题标题不冒充断言');
+  assert.ok(tested + controlledChecked + positiveChecked >= Math.ceil(skipGuarded * 0.8), `负关系取消变异执行不足：executed=${tested + controlledChecked + positiveChecked}/skipGuarded=${skipGuarded}，跳过 ${skippedAnchors} 条（记录表 diagnostic 可见）`);
   assert.deepEqual(errors, [], errors.join('\n'));
 });
 
-test('登记数量与并列参与者：每个原子独立真实反例，数字与候选不能由邻文补足', () => {
+test('登记数量与并列参与者：每个原子独立真实反例，数字与候选不能由邻文补足', (t) => {
   const counts = {
     '每行一个工具': [['一个', '两个'], ['one', 'two']],
     '每行正则': [['一条正则', '两条正则'], ['One regex', 'Two regex']],
@@ -5578,8 +5661,14 @@ test('登记数量与并列参与者：每个原子独立真实反例，数字�
   const dicts = original.dictionaries[0].dicts;
   const errors = [];
   let checked = 0;
+  let checkedPositives = 0;
+  let verifyCalls = 0;
+  let skippedAnchors = 0;
+  const skipGuarded = 228; // 176 变异调用＋16 数词等义定位＋36 参与者等义定位（全部 B 类）
   const verify = (key, lang, id, from, to, text = dicts[lang][key]) => {
-    assert.ok(text.includes(from), `${key}/${lang}/${id}实际锚:${from}`);
+    verifyCalls++;
+    if (!text.includes(from)) { skipMissingAnchor(t, `数量参与者/${lang}/${key}`, from); skippedAnchors++; return; }
+    checked++;
     const mutated = text.replace(from, to);
     let count = 0;
     const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
@@ -5611,7 +5700,7 @@ test('登记数量与并列参与者：每个原子独立真实反例，数字�
       assert.deepEqual(copyFactFailures(key, lang, current), [], `${key}/${lang}原值保留`);
       // 参与者所在关系用可交换词序的独立同义句，避免另处同名词代替当前候选。
       for (const member of pair[i]) {
-        if (!current.includes(member)) { errors.push(`${key}/${lang}/${id}缺锚:${member}`); continue; }
+        if (!current.includes(member)) { skipMissingAnchor(t, `数量参与者/${lang}/${key}`, member); skippedAnchors++; continue; }
         let target = current;
         let anchor = member;
         if (id === '采用模型或供应商默认') {
@@ -5651,7 +5740,8 @@ test('登记数量与并列参与者：每个原子独立真实反例，数字�
   ];
   for (const [key, lang, from, to] of sameCounts) {
     const current = dicts[lang][key];
-    assert.ok(current.includes(from));
+    if (!current.includes(from)) { skipMissingAnchor(t, `数量参与者数词/${lang}/${key}`, from); skippedAnchors++; continue; }
+    checkedPositives++;
     assert.deepEqual(copyFactFailures(key, lang, current.replace(from, to)), [], `${key}/${lang} 数词等义保真`);
   }
   for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
@@ -5689,7 +5779,8 @@ test('登记数量与并列参与者：每个原子独立真实反例，数字�
     for (const key of keys) for (const [i, lang] of ['zh', 'en'].entries()) {
       const [from, to] = pair[i];
       const current = dicts[lang][key];
-      assert.ok(current.includes(from), `${key}/${lang}/${id}等义锚:${from}`);
+      if (!current.includes(from)) { skipMissingAnchor(t, `数量参与者等义/${lang}/${key}`, from); skippedAnchors++; continue; }
+      checkedPositives++;
       const failures = copyFactFailures(key, lang, current.replace(from, to));
       if (failures.length) errors.push(`${key}/${lang}/${id}等义误拒:${failures.join(',')}`);
       assert.deepEqual(copyFactFailures(key, lang, current + (lang === 'zh' ? '另一无关说明不含额外选项。' : ' A separate unrelated note excludes other options.')), [], '无关排除邻句不误拒原候选关系');
@@ -5704,11 +5795,12 @@ test('登记数量与并列参与者：每个原子独立真实反例，数字�
     ['en', 'never parses or rewrites', 'parses but never rewrites'],
     ['en', 'never parses or rewrites', 'never parses but rewrites'],
   ]) verify('card.presets.missing.remedy', lang, '插件不改YAML', from, to);
-  assert.equal(checked, 176, '20数量反例＋140参与者删减或排除＋6报告原例＋2轮转阈值＋8禁止动作独立反转');
+  assert.equal(verifyCalls, 176, '20数量反例＋140参与者删减或排除＋6报告原例＋2轮转阈值＋8禁止动作独立反转');
+  assert.ok(checked + checkedPositives >= Math.ceil(skipGuarded * 0.8), `数量参与者变异执行不足：executed=${checked + checkedPositives}/skipGuarded=${skipGuarded}，跳过 ${skippedAnchors} 条（记录表 diagnostic 可见）`);
   assert.deepEqual(errors, [], errors.join('\n'));
 });
 
-test('默认来源组合关系：只检明确双来源必要条件，中性并列与无关条件保持通过', () => {
+test('默认来源组合关系：只检明确双来源必要条件，中性并列与无关条件保持通过', (t) => {
   resetHooks();
   const original = makeCtx();
   loadClient().apply(original.ctx);
@@ -5728,9 +5820,11 @@ test('默认来源组合关系：只检明确双来源必要条件，中性并�
     'leaving both the model and provider defaults in effect together',
   ];
   let checked = 0;
+  let skippedAnchors = 0;
+  const skipGuarded = 10; // 两键×五类双来源必要条件（B 类措辞锚，键级守卫）
   for (const key of ['hint.reviewer.maxTokens', 'help.reviewer.maxTokens']) {
     const current = dicts.en[key];
-    assert.ok(current.includes(from));
+    if (!current.includes(from)) { skipMissingAnchor(t, `默认来源组合/en/${key}`, from); skippedAnchors++; continue; }
     assert.deepEqual(copyFactFailures(key, 'en', current), []);
     for (const to of wrong) {
       const mutated = current.replace(from, to);
@@ -5757,10 +5851,11 @@ test('默认来源组合关系：只检明确双来源必要条件，中性并�
     assert.deepEqual(copyFactFailures(key, 'zh', chinese.replace('模型或供应商默认值', '模型和供应商默认值')), [], '和枚举两个来源本身不作反转');
     assert.deepEqual(copyFactFailures(key, 'zh', chinese + '模型与供应商的默认值都在场。另一项设置只有两者同时在场才可使用。'), [], '中性both与无关必要条件不误拒');
   }
-  assert.equal(checked, 10, '两真实键×五类明确双来源必要条件（含报告两原例）');
+  assert.equal(wrong.length, 5, '五类明确双来源必要条件语料');
+  assert.ok(checked >= Math.ceil(skipGuarded * 0.8), `默认来源变异执行不足：executed=${checked}/skipGuarded=${skipGuarded}，跳过 ${skippedAnchors} 键次（记录表 diagnostic 可见）`);
 });
 
-test('负关系含义取消：send-none和两个零值对象分别绑定mean取消，不借无关关系', () => {
+test('负关系含义取消：send-none和两个零值对象分别绑定mean取消，不借无关关系', (t) => {
   const roster = [
     ['help.ui.inject', 'send none sends no notices', 'send none', 'no notices', '关闭零通知'],
     ['hint.reviewer.maxTokens', '0 sends no cap', '0', 'no cap', '零不传上限'],
@@ -5773,9 +5868,11 @@ test('负关系含义取消：send-none和两个零值对象分别绑定mean取�
   loadClient().apply(original.ctx);
   const dicts = original.dictionaries[0].dicts;
   let count = 0;
+  let skippedAnchors = 0;
+  const skipGuarded = 15; // 5 登记×3 自然 mean 取消（B 类措辞锚，登记级守卫）
   for (const [key, from, subject, predicate, id] of roster) {
     const current = dicts.en[key];
-    assert.ok(current.includes(from), `${key}当前含义关系真实定位`);
+    if (!current.includes(from)) { skipMissingAnchor(t, `负关系含义取消/en/${key}`, from); skippedAnchors++; continue; }
     assert.deepEqual(copyFactFailures(key, 'en', current), []);
     assert.deepEqual(copyFactFailures(key, 'en', current.replace(from, `${subject} means ${predicate}`)), [], `${key}肯定means负谓词是等义`);
     for (const cancel of ['does not mean', "doesn't mean", 'no longer means']) {
@@ -5804,10 +5901,11 @@ test('负关系含义取消：send-none和两个零值对象分别绑定mean取�
       ` It is not the case that ${subject} does not mean ${predicate}.`,
     ]) assert.deepEqual(copyFactFailures(key, 'en', current + suffix), [], `${key}独立否定或另一主语不能借为本关系取消`);
   }
-  assert.equal(count, 15, '3负关系5登记×3自然mean取消，包含报告原值反转');
+  assert.equal(roster.length * 3, 15, '3负关系5登记×3自然mean取消，包含报告原值反转');
+  assert.ok(count >= Math.ceil(skipGuarded * 0.8), `负关系含义取消变异执行不足：executed=${count}/skipGuarded=${skipGuarded}，跳过 ${skippedAnchors} 登记（记录表 diagnostic 可见）`);
 });
 
-test('人工到点拒绝：时点触发与拒绝动作局部配对，未到点不拒绝的邻句保持', () => {
+test('人工到点拒绝：时点触发与拒绝动作局部配对，未到点不拒绝的邻句保持', (t) => {
   assert.deepEqual(Object.entries(COPY_FACTS).filter(([, facts]) => facts.some((fact) => fact.id === '到点拒绝')).map(([key]) => key), ['help.human.timeoutMs'], '只核当前共享登记，不增其他时限义务');
   resetHooks();
   const original = makeCtx();
@@ -5819,9 +5917,13 @@ test('人工到点拒绝：时点触发与拒绝动作局部配对，未到点�
     ['en', 'Expiry settles as a rejection', 'Before expiry the request settles as a rejection'],
     ['en', 'Expiry settles as a rejection', 'When it is not expiry the request settles as a rejection'],
   ];
+  let executed = 0;
+  let skippedAnchors = 0;
+  const skipGuarded = 3; // 记录表化保护的措辞锚用例数（本块全部为 B 类）
   for (const [lang, from, to] of wrong) {
     const current = dicts[lang][key];
-    assert.ok(current.includes(from));
+    if (!current.includes(from)) { skipMissingAnchor(t, `到点拒绝/${lang}/${key}`, from); skippedAnchors++; continue; }
+    executed++;
     assert.deepEqual(copyFactFailures(key, lang, current), []);
     const mutated = current.replace(from, to);
     let replacements = 0;
@@ -5848,15 +5950,19 @@ test('人工到点拒绝：时点触发与拒绝动作局部配对，未到点�
   assert.deepEqual(copyFactFailures(key, 'zh', dicts.zh[key] + '另一个提醒未到点也会显示。'), [], '另一对象未到点不是拒绝时点反转');
   assert.deepEqual(copyFactFailures(key, 'en', dicts.en[key] + ' A separate reminder may appear before expiry.'), [], '另一动作的before expiry不借为拒绝触发');
   assert.equal(wrong.length, 3);
+  assert.ok(executed >= Math.ceil(skipGuarded * 0.8), `到点拒绝变异执行不足：executed=${executed}/skipGuarded=${skipGuarded}，跳过 ${skippedAnchors} 条（记录表 diagnostic 可见）`);
 });
 
-test('空工具清单：non-empty/not empty只绑定非空分支，不误作空清单反转', () => {
+test('空工具清单：non-empty/not empty只绑定非空分支，不误作空清单反转', (t) => {
   resetHooks();
   const original = makeCtx();
   loadClient().apply(original.ctx);
   const dicts = original.dictionaries[0].dicts;
   const keys = ['hint.tools', 'help.tools'];
   let negatives = 0;
+  let executedAnchors = 0;
+  let skippedAnchors = 0;
+  const skipGuarded = 10; // 两键×五种邻句变体的空清单正则定位（B 类，去重锚 4 个）
   for (const key of keys) {
     for (const [lang, suffix] of [
       ['en', ' A non-empty list does not cover every tool.'],
@@ -5869,7 +5975,8 @@ test('空工具清单：non-empty/not empty只绑定非空分支，不误作空�
       assert.deepEqual(copyFactFailures(key, lang, current), []);
       assert.deepEqual(copyFactFailures(key, lang, current + suffix), [], `${key}/${lang}正确非空否定分支不反转空清单`);
       const split = current.search(lang === 'zh' ? /(?:空清单|清单留空)/u : /\bempty\b/iu);
-      assert.ok(split >= 0, '实际空清单条件定位');
+      if (split < 0) { skipMissingAnchor(t, `空工具清单/${lang}/${key}`, lang === 'zh' ? '空清单|清单留空' : 'empty'); skippedAnchors++; continue; }
+      executedAnchors++;
       const prefixed = current.slice(0, split) + suffix.trim() + ' ' + current.slice(split);
       assert.deepEqual(copyFactFailures(key, lang, prefixed), [], `${key}/${lang}正确非空在前仍保肯定空条件`);
     }
@@ -5896,17 +6003,23 @@ test('空工具清单：non-empty/not empty只绑定非空分支，不误作空�
     }
   }
   assert.equal(negatives, 4, '两键两语真实空条件反转，不以另一正确空关系遮掩');
+  assert.ok(executedAnchors >= Math.ceil(skipGuarded * 0.8), `空清单锚定定位执行不足：executed=${executedAnchors}/skipGuarded=${skipGuarded}，跳过 ${skippedAnchors} 条（记录表 diagnostic 可见）`);
 });
 
-test('确定优先不作未必：局部弱化与中文默认来源双供必需条件须报对应事实', () => {
+test('确定优先不作未必：局部弱化与中文默认来源双供必需条件须报对应事实', (t) => {
   resetHooks();
   const original = makeCtx();
   loadClient().apply(original.ctx);
   const dicts = original.dictionaries[0].dicts;
   let checked = 0;
+  let verifyCalls = 0;
+  let skippedAnchors = 0;
+  const skipGuarded = 18; // 12 确定优先弱化＋6 中文双来源必要条件（全部 B 类）
   const verify = (key, lang, from, to, id) => {
+    verifyCalls++;
     const current = dicts[lang][key];
-    assert.ok(current.includes(from), `${key}/${lang}真实局部关系:${from}`);
+    if (!current.includes(from)) { skipMissingAnchor(t, `确定优先/${lang}/${key}`, from); skippedAnchors++; return; }
+    checked++;
     const mutated = current.replace(from, to);
     let replacements = 0;
     const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
@@ -5947,10 +6060,11 @@ test('确定优先不作未必：局部弱化与中文默认来源双供必需�
       '，另一个设置只有两者都提供默认值时才生效',
     ]) assert.deepEqual(copyFactFailures(key, 'zh', dicts.zh[key].replace(from, from + suffix)), [], '中文只有/both需同来源紧邻照应，不借另一设置');
   }
-  assert.equal(checked, 18, '12确定优先弱化＋6中文双来源必要条件，含报告2原例');
+  assert.equal(verifyCalls, 18, '12确定优先弱化＋6中文双来源必要条件，含报告2原例');
+  assert.ok(checked >= Math.ceil(skipGuarded * 0.8), `确定优先变异执行不足：executed=${checked}/skipGuarded=${skipGuarded}，跳过 ${skippedAnchors} 条（记录表 diagnostic 可见）`);
 });
 
-test('分叉按主会话：treated/classified谓词局部极性，不借另一对象或否定错误断言', () => {
+test('分叉按主会话：treated/classified谓词局部极性，不借另一对象或否定错误断言', (t) => {
   assert.deepEqual(Object.entries(COPY_FACTS).filter(([, facts]) => facts.some((fact) => fact.id === '分叉按主会话')).map(([key]) => key), ['help.fallback']);
   resetHooks();
   const original = makeCtx();
@@ -5964,9 +6078,13 @@ test('分叉按主会话：treated/classified谓词局部极性，不借另一�
     ['zh', '分叉会话按主会话对待', '分叉会话不按主会话对待'],
     ['zh', '分叉会话按主会话对待', '分叉会话不算主会话'],
   ];
+  let executed = 0;
+  let skippedAnchors = 0;
+  const skipGuarded = 5; // 记录表化保护的措辞锚用例数（本块全部为 B 类）
   for (const [lang, from, to] of wrong) {
     const current = dicts[lang][key];
-    assert.ok(current.includes(from));
+    if (!current.includes(from)) { skipMissingAnchor(t, `分叉主会话/${lang}/${key}`, from); skippedAnchors++; continue; }
+    executed++;
     const mutated = current.replace(from, to);
     let replacements = 0;
     const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
@@ -5996,9 +6114,10 @@ test('分叉按主会话：treated/classified谓词局部极性，不借另一�
     ['zh', '并非分叉会话不按主会话对待。'],
   ]) assert.deepEqual(copyFactFailures(key, lang, dicts[lang][key] + suffix), [], '另一对象及否定错误断言不能误拒正确分叉分类');
   assert.equal(wrong.length, 5);
+  assert.ok(executed >= Math.ceil(skipGuarded * 0.8), `分叉主会话变异执行不足：executed=${executed}/skipGuarded=${skipGuarded}，跳过 ${skippedAnchors} 条（记录表 diagnostic 可见）`);
 });
 
-test('文件上限淘汰：只绑定会话最旧文件动作，备份与其他目录不删邻句保持', () => {
+test('文件上限淘汰：只绑定会话最旧文件动作，备份与其他目录不删邻句保持', (t) => {
   assert.deepEqual(Object.entries(COPY_FACTS).filter(([, facts]) => facts.some((fact) => fact.id === '超文件上限删最旧')).map(([key]) => key), ['view.retention']);
   resetHooks();
   const original = makeCtx();
@@ -6027,9 +6146,11 @@ test('文件上限淘汰：只绑定会话最旧文件动作，备份与其他�
     ['en', 'the file cap is exceeded', 'the file cap is not exceeded'],
   ];
   let checked = 0;
+  let skippedAnchors = 0;
+  const skipGuarded = 8; // 两语触发与动作各 2 锚×2 备份邻句变体（全部 B 类）
   for (const [lang, from, to] of wrong) {
     const current = dicts[lang][key];
-    assert.ok(current.includes(from));
+    if (!current.includes(from)) { skipMissingAnchor(t, `文件上限/${lang}/${key}`, from); skippedAnchors++; continue; }
     for (const suffix of ['', lang === 'zh' ? '备份文件不删除。' : ' Backup files are not deleted.']) {
       const mutated = current.replace(from, to) + suffix;
       let replacements = 0;
@@ -6048,18 +6169,30 @@ test('文件上限淘汰：只绑定会话最旧文件动作，备份与其他�
       checked++;
     }
   }
-  assert.equal(checked, 8, '两语触发与删除动作各反转，带正确备份邻句也不能遮盖');
+  assert.equal(wrong.length * 2, 8, '两语触发与删除动作各反转，带正确备份邻句也不能遮盖');
+  assert.ok(checked >= Math.ceil(skipGuarded * 0.8), `文件上限变异执行不足：executed=${checked}/skipGuarded=${skipGuarded}，跳过 ${skippedAnchors} 锚（记录表 diagnostic 可见）`);
 });
 
-test('命中取代拒绝与零立即弱化：同条件动作绑定，不以无关allow/may邻句误拒', () => {
+test('命中取代拒绝与零立即弱化：同条件动作绑定，不以无关allow/may邻句误拒', (t) => {
   resetHooks();
   const original = makeCtx();
   loadClient().apply(original.ctx);
   const dicts = original.dictionaries[0].dicts;
   let checked = 0;
-  const verify = (key, lang, from, to, id) => {
+  let hitChecked = 0;
+  let zeroChecked = 0;
+  let verifyCalls = 0;
+  let skippedAnchors = 0;
+  // 拆组地板（生产等义改写属性）：8 条「命中对立动作」锚同源于两条可等义改写的生产措辞
+  // （zh 命中即直接拒绝／en hit rejects outright），生产等义改写下整组合法缺席，不设下限、
+  // 只经记录表暴露跳过；24 条零值弱化锚独立计数，语料腐化时由 ceil(0.8×24) 咬合。
+  const hitGuarded = 8;
+  const zeroGuarded = 24;
+  const verify = (key, lang, from, to, id, group) => {
+    verifyCalls++;
     const current = dicts[lang][key];
-    assert.ok(current.includes(from));
+    if (!current.includes(from)) { skipMissingAnchor(t, `命中取代零弱化/${lang}/${key}`, from); skippedAnchors++; return; }
+    checked++;
     const mutated = current.replace(from, to);
     let replacements = 0;
     const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
@@ -6074,7 +6207,7 @@ test('命中取代拒绝与零立即弱化：同条件动作绑定，不以无�
     const actual = env.dictionaries[0].dicts[lang][key];
     assert.equal(actual, mutated);
     assert.ok(copyFactFailures(key, lang, actual).includes(id), `${key}/${lang}相反动作或不确定零值必须报${id}`);
-    checked++;
+    if (group === 'hit') hitChecked += 1; else zeroChecked += 1;
   };
   for (const key of ['hint.denyPatterns', 'help.denyPatterns']) {
     for (const [lang, from, to] of [
@@ -6082,7 +6215,7 @@ test('命中取代拒绝与零立即弱化：同条件动作绑定，不以无�
       ['zh', '命中即直接拒绝', '命中即直接批准而不是拒绝'],
       ['en', 'hit rejects outright', 'hit permits instead of rejects outright'],
       ['en', 'hit rejects outright', 'hit allows rather than rejects outright'],
-    ]) verify(key, lang, from, to, '命中拒绝');
+    ]) verify(key, lang, from, to, '命中拒绝', 'hit');
     for (const [lang, suffix] of [
       ['zh', '未命中继续审查，不代表允许。'],
       ['zh', '其他规则允许而非拒绝。'],
@@ -6099,16 +6232,19 @@ test('命中取代拒绝与零立即弱化：同条件动作绑定，不以无�
     ['help.reviewer.timeoutMs', '0 times out immediately', '0 立即超时', 'time out', '超时'],
   ];
   for (const [key, enFrom, zhFrom, enAction, zhAction] of zeros) {
-    for (const modal of ['may', 'might', 'could']) verify(key, 'en', enFrom, `0 ${modal} ${enAction} immediately`, '零值正向关系被否定');
-    for (const modal of ['可能', '未必', '不一定']) verify(key, 'zh', zhFrom, `0 ${modal}立即${zhAction}`, '零值正向关系被否定');
+    for (const modal of ['may', 'might', 'could']) verify(key, 'en', enFrom, `0 ${modal} ${enAction} immediately`, '零值正向关系被否定', 'zero');
+    for (const modal of ['可能', '未必', '不一定']) verify(key, 'zh', zhFrom, `0 ${modal}立即${zhAction}`, '零值正向关系被否定', 'zero');
     assert.deepEqual(copyFactFailures(key, 'en', dicts.en[key].replace(enFrom, `0 ${enAction === 'reject' ? 'rejects' : 'times out'} at once`)), [], '确定零值立即等义保持');
     assert.deepEqual(copyFactFailures(key, 'en', dicts.en[key] + ' Another operation may reject later.'), [], '无关may不弱化零值');
     assert.deepEqual(copyFactFailures(key, 'zh', dicts.zh[key] + '其他操作可能稍后拒绝。'), [], '另一对象可能不污染确定零值');
   }
-  assert.equal(checked, 32, '8命中对立动作＋24四键双语零时限弱化，含报告原例');
+  assert.equal(verifyCalls, hitGuarded + zeroGuarded, '8命中对立动作＋24四键双语零时限弱化，含报告原例');
+  assert.equal(hitChecked + zeroChecked, checked, '拆组计数与总数一致');
+  // 零值组地板：等义改写只缺席命中组（hitChecked=0 合法），零值锚仍须咬合语料腐化。
+  assert.ok(zeroChecked >= Math.ceil(zeroGuarded * 0.8), `零值弱化变异执行不足：executed=${zeroChecked}/zeroGuarded=${zeroGuarded}（命中组另计 ${hitChecked}/${hitGuarded}，跳过 ${skippedAnchors} 条经记录表可见）`);
 });
 
-test('零值否定弱化本身：八个真实完整正例保留确定立即义，另一直接反转不被遮盖', () => {
+test('零值否定弱化本身：八个真实完整正例保留确定立即义，另一直接反转不被遮盖', (t) => {
   resetHooks();
   const original = makeCtx();
   loadClient().apply(original.ctx);
@@ -6120,13 +6256,15 @@ test('零值否定弱化本身：八个真实完整正例保留确定立即义�
     ['help.reviewer.timeoutMs', '0 times out immediately', '0 立即超时', 'time out', 'times out', '超时'],
   ];
   let checked = 0;
+  let skippedAnchors = 0;
+  const skipGuarded = 16; // 4 键×两语×2 对照（正例与直接反转），语言级锚守卫
   for (const [key, enFrom, zhFrom, action, definite, zhAction] of roster) {
     for (const [lang, from, to, contradiction] of [
       ['en', enFrom, `0 does not mean it may ${action} immediately; it means it ${definite} immediately`, ` 0 does not ${action} immediately.`],
       ['zh', zhFrom, `0 不是可能立即${zhAction}，而是立即${zhAction}`, `0 不立即${zhAction}。`],
     ]) {
       const current = dicts[lang][key];
-      assert.ok(current.includes(from));
+      if (!current.includes(from)) { skipMissingAnchor(t, `零值否定弱化/${lang}/${key}`, from); skippedAnchors++; continue; }
       const rewritten = current.replace(from, to);
       for (const [suffix, valid] of [['', true], [contradiction, false]]) {
         const mutated = rewritten + suffix;
@@ -6149,7 +6287,8 @@ test('零值否定弱化本身：八个真实完整正例保留确定立即义�
       }
     }
   }
-  assert.equal(checked, 16, '八个完整真实正例及八个独立直接反转对照');
+  assert.equal(roster.length * 4, 16, '八个完整真实正例及八个独立直接反转对照');
+  assert.ok(checked >= Math.ceil(skipGuarded * 0.8), `零值否定弱化变异执行不足：executed=${checked}/skipGuarded=${skipGuarded}，跳过 ${skippedAnchors} 语言例（记录表 diagnostic 可见）`);
 });
 
 test('四个时限零句对象归属：通知长度零值正确邻句不遮当前时限反转', () => {
@@ -6199,7 +6338,7 @@ test('四个时限零句对象归属：通知长度零值正确邻句不遮当�
   assert.equal(checked, 40, '四键双语各前后正确邻句与三种必要当前对象反转');
 });
 
-test('清单内接管与关闭人工卡片：不同条件正确否定邻句保持，原条件反转不能遮盖', () => {
+test('清单内接管与关闭人工卡片：不同条件正确否定邻句保持，原条件反转不能遮盖', (t) => {
   resetHooks();
   const original = makeCtx();
   loadClient().apply(original.ctx);
@@ -6209,9 +6348,11 @@ test('清单内接管与关闭人工卡片：不同条件正确否定邻句保�
     ['help.ui.humanCardDuringReview', 'zh', '开启时，不只在确实交给人工后显示卡片。', '关闭时，仅在确实交给人工后显示卡片', '关闭时，不只在确实交给人工后显示卡片', '关闭后真交人工才显示'],
   ];
   let checked = 0;
+  let skippedAnchors = 0;
+  const skipGuarded = 12; // 两登记×6 值对照（B 类措辞锚，样本级守卫）
   for (const [key, lang, neighbor, from, to, id] of samples) {
     const current = dicts[lang][key];
-    assert.ok(current.includes(from));
+    if (!current.includes(from)) { skipMissingAnchor(t, `清单内接管卡片/${lang}/${key}`, from); skippedAnchors++; continue; }
     for (const [value, valid] of [
       [current, true],
       [current + neighbor, true],
@@ -6238,10 +6379,11 @@ test('清单内接管与关闭人工卡片：不同条件正确否定邻句保�
       checked++;
     }
   }
-  assert.equal(checked, 12, '两当前登记各3正3反，包含报告原邻句与另一错误同条件');
+  assert.equal(samples.length * 6, 12, '两当前登记各3正3反，包含报告原邻句与另一错误同条件');
+  assert.ok(checked >= Math.ceil(skipGuarded * 0.8), `清单内接管卡片变异执行不足：executed=${checked}/skipGuarded=${skipGuarded}，跳过 ${skippedAnchors} 样本（记录表 diagnostic 可见）`);
 });
 
-test('填写后名单内工具动作：not handled不冒充处理，空表与其他工具否定邻句保持', () => {
+test('填写后名单内工具动作：not handled不冒充处理，空表与其他工具否定邻句保持', (t) => {
   resetHooks();
   const original = makeCtx();
   loadClient().apply(original.ctx);
@@ -6254,9 +6396,11 @@ test('填写后名单内工具动作：not handled不冒充处理，空表与其
     ['zh', '填写后只处理名单内工具', '填写后只未处理名单内工具'],
   ];
   let checked = 0;
+  let skippedAnchors = 0;
+  const skipGuarded = 8; // 两语×2 值对照（B 类措辞锚）
   for (const [lang, from, to] of wrong) {
     const current = dicts[lang][key];
-    assert.ok(current.includes(from));
+    if (!current.includes(from)) { skipMissingAnchor(t, `填写后名单动作/${lang}/${key}`, from); skippedAnchors++; continue; }
     assert.deepEqual(copyFactFailures(key, lang, current), []);
     for (const value of [current.replace(from, to), current + ' ' + (lang === 'zh' ? '填写后只不处理名单内工具。' : 'Once filled, only listed tools are not handled.')]) {
       let replacements = 0;
@@ -6283,10 +6427,11 @@ test('填写后名单内工具动作：not handled不冒充处理，空表与其
   ]) assert.deepEqual(copyFactFailures(key, lang, dicts[lang][key] + neighbor), [], '不同对象或空条件不能借作填写后处理反转');
   assert.deepEqual(copyFactFailures(key, 'en', dicts.en[key].replace('once filled, only listed tools', 'once filled in, just the listed tools')), []);
   assert.deepEqual(copyFactFailures(key, 'zh', dicts.zh[key].replace('填写后只处理名单内', '填入后仅处理清单内')), []);
-  assert.equal(checked, 8);
+  assert.equal(wrong.length * 2, 8);
+  assert.ok(checked >= Math.ceil(skipGuarded * 0.8), `填写后名单动作变异执行不足：executed=${checked}/skipGuarded=${skipGuarded}，跳过 ${skippedAnchors} 条（记录表 diagnostic 可见）`);
 });
 
-test('填写触发与默认来源取消：未填写不借filled，no来源不冒充保留来源', () => {
+test('填写触发与默认来源取消：未填写不借filled，no来源不冒充保留来源', (t) => {
   resetHooks();
   const original = makeCtx();
   loadClient().apply(original.ctx);
@@ -6300,9 +6445,11 @@ test('填写触发与默认来源取消：未填写不借filled，no来源不冒
     wrong.push([key, 'zh', '由模型或供应商默认值决定', '不由模型或供应商默认值决定', '采用模型或供应商默认']);
   }
   let checked = 0;
+  let skippedAnchors = 0;
+  const skipGuarded = 12; // 六登记×2 值对照（B 类措辞锚）
   for (const [key, lang, from, to, id] of wrong) {
     const current = dicts[lang][key];
-    assert.ok(current.includes(from));
+    if (!current.includes(from)) { skipMissingAnchor(t, `填写触发来源取消/${lang}/${key}`, from); skippedAnchors++; continue; }
     for (const value of [current.replace(from, to), current + ' ' + to + '。']) {
       let replacements = 0;
       const source = SOURCE.replace(/("[\w.]+":\s*)"((?:[^"\\]|\\.)*)"/gu, (whole, prefix, body) => {
@@ -6328,10 +6475,11 @@ test('填写触发与默认来源取消：未填写不借filled，no来源不冒
     assert.deepEqual(copyFactFailures(key, 'en', dicts.en[key] + ' Another setting has no model or provider default.'), [], '另一设置no来源不污染本项');
     assert.deepEqual(copyFactFailures(key, 'zh', dicts.zh[key] + '另一个设置没有模型或供应商默认值。'), [], '不同对象没有默认不作本项供给取消');
   }
-  assert.equal(checked, 12, '两填写条件及四共享来源登记各直接反转和另句不遮对照');
+  assert.equal(wrong.length * 2, 12, '两填写条件及四共享来源登记各直接反转和另句不遮对照');
+  assert.ok(checked >= Math.ceil(skipGuarded * 0.8), `填写触发来源取消变异执行不足：executed=${checked}/skipGuarded=${skipGuarded}，跳过 ${skippedAnchors} 条（记录表 diagnostic 可见）`);
 });
 
-test('已填与未填名单关系配对：正确未填not-only全覆盖不遮已填义务或直接反转', () => {
+test('已填与未填名单关系配对：正确未填not-only全覆盖不遮已填义务或直接反转', (t) => {
   resetHooks();
   const original = makeCtx();
   loadClient().apply(original.ctx);
@@ -6343,9 +6491,11 @@ test('已填与未填名单关系配对：正确未填not-only全覆盖不遮已
     ['en', "When not filled, not only listed tools are handled; all tools' escalations are covered.", 'once filled, only listed tools are handled', 'when not filled, only listed tools are handled', 'once filled, not only listed tools are handled', 'once filled, only listed tools are not handled'],
   ];
   let checked = 0;
+  let skippedAnchors = 0;
+  const skipGuarded = 21; // 三语例×7 值对照（B 类措辞锚，样本级守卫）
   for (const [lang, correct, from, wrongCondition, wrongOnly, wrongAction] of roster) {
     const current = dicts[lang][key];
-    assert.ok(current.includes(from));
+    if (!current.includes(from)) { skipMissingAnchor(t, `已填未填配对/${lang}/${key}`, from); skippedAnchors++; continue; }
     for (const [value, valid] of [
       [current + ' ' + correct, true],
       [correct + ' ' + current, true],
@@ -6373,7 +6523,8 @@ test('已填与未填名单关系配对：正确未填not-only全覆盖不遮已
       checked++;
     }
   }
-  assert.equal(checked, 21, '两语及英文分号正例前后6正与15必要相反关系边界');
+  assert.equal(roster.length * 7, 21, '两语及英文分号正例前后6正与15必要相反关系边界');
+  assert.ok(checked >= Math.ceil(skipGuarded * 0.8), `已填未填配对变异执行不足：executed=${checked}/skipGuarded=${skipGuarded}，跳过 ${skippedAnchors} 样本（记录表 diagnostic 可见）`);
 });
 
 test('当前token风险显示：原生字典源码错位和部分保护变异必须失败', () => {

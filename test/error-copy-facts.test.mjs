@@ -67,6 +67,28 @@ test('无效JSON外层取消只核当前参数对象，另一对象并非不能�
   }
 });
 
+test('通道故障概念等义：单次升权/通道故障/拒绝结果的合理等义通过，缺事实反例失败', () => {
+  const equivalents = [
+    ['zh', '[approve-for-me] 审查通道错误，此次升权已拒绝。'],
+    ['zh', '[approve-for-me] 自动审批通道失效，这次升权遭拒绝。'],
+    ['en', '[approve-for-me] The review channel is broken; this escalation request was rejected.'],
+    ['en', '[approve-for-me] The approval channel is down; this escalation request stands rejected.'],
+  ];
+  for (const [lang, text] of equivalents) assert.deepEqual(errorCopyFailures('channel', lang, text), [], `${lang} 等义正例：${text}`);
+  const missing = [
+    ['zh', '[approve-for-me] 审查通道错误，此次升权已放行。', 'rejected'],
+    ['zh', '[approve-for-me] 本次升权已拒绝。', 'channel-failure'],
+    ['zh', '[approve-for-me] 审查通道错误，该请求已拒绝。', 'one-escalation'],
+    ['en', '[approve-for-me] Channel error; the request is rejected.', 'one-escalation'],
+    ['zh', '[approve-for-me] 审查通道错误，此次升权不会被拒绝。', 'rejection-reversal'],
+    ['zh', '[approve-for-me] 审查通道错误，此次升权未被拒绝。', 'rejection-reversal'],
+    ['zh', '[approve-for-me] 审查通道错误，此次升权没被拒绝。', 'rejection-reversal'],
+  ];
+  for (const [lang, text, id] of missing) {
+    assert.ok(errorCopyFailures('channel', lang, text).includes(id), `${lang} 缺事实/反转反例须报 ${id}：${text}`);
+  }
+});
+
 test('普通错误说明：缺失败事实、错误对象、占位符或单次拒绝事实必须失败', () => {
   const cases = [
     ['tool', 'zh', '工具 {name}：{error}'], ['tool', 'en', 'Tool {name}: {error}'],
