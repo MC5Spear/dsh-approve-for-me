@@ -885,20 +885,34 @@ test('G2 request 起算：装配等待已耗尽预算时，开卡模式弹卡后
   assert.equal(state.timers.some((entry) => entry.label === 'human'), false, '耗尽预算不建人工计时器（不重新赠予）');
 });
 
-test('G3 request 起算：预算尚有余额 → 交人工计时器只用剩余', async () => {
+test('G3 request 起算：预算尚有余额 → 交人工计时器只用剩余', async (t) => {
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
   const { rt, state, next } = makeRt(
     baseConfig({ fallback: 'ask', human: { timeoutMs: 100, timeoutFrom: 'request' }, reviewer: { timeoutMs: 2000 } }),
-    { configForDelayMs: 30, verdict: { decision: 'deny', reason: 'risky', toolCalls: 0, fields: {} } },
+    { verdict: { decision: 'deny', reason: 'risky', toolCalls: 0, fields: {} } },
   );
+  const configFor = rt.configFor;
+  rt.configFor = async (...args) => {
+    now += 30;
+    return configFor(...args);
+  };
+  // 等待真实交接事件，不用固定等待时间猜测审查是否完成。
+  let notifyHandoff;
+  const handoff = new Promise((resolve) => { notifyHandoff = resolve; });
+  const audit = rt.audit;
+  rt.audit = (fields) => {
+    audit(fields);
+    if (fields.phase === 'handoff') notifyHandoff();
+  };
   const promise = onApprovalRequest(request(), next, rt);
-  // 等装配延迟（30ms）与审查完成后再观测（setImmediate 不跨真实定时器）。
-  await delay(60);
-  await tick();
-  await tick();
+  await handoff;
   assert.ok(state.audits.some((entry) => entry.phase === 'handoff'), '预算有余额：真的交人工');
-  const humanTimer = state.timers.find((entry) => entry.label === 'human');
-  assert.ok(humanTimer, '交人工建立计时器');
-  assert.ok(humanTimer.ms <= 70, `人工计时器只用剩余预算（≤70ms，实际 ${humanTimer.ms}）`);
+  const humanTimers = state.timers.filter((entry) => entry.label === 'human');
+  assert.equal(humanTimers.length, 2, '审查期间与交人工时各建立一个计时器');
+  for (const timer of humanTimers) {
+    assert.equal(timer.ms, 100 - 30, '人工计时器精确扣除装配已耗预算');
+  }
   state.nextResolvers[0]('rejected');
   const outcome = await promise;
   assert.equal(outcome, 'rejected');
@@ -1055,7 +1069,10 @@ test('装配挂死：装配计时器按剩余预算武装并到点 → rejected/
   assert.equal(state.settles[0].outcome, 'rejected');
 });
 
-test('装配慢于真实时限：装配计时器按回溯起点到点拒绝（不开始尝试，环节记装配，计数）', async () => {
+test('装配慢于真实时限：装配计时器按回溯起点到点拒绝（不开始尝试，环节记装配，计数）', async (t) => {
+  const now = Date.now();
+  // 固定计时器武装前的墙钟，真实 30 ms 计时器仍与 60 ms 装配等待竞速。
+  t.mock.method(Date, 'now', () => now);
   const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 30 } }), {
     configForDelayMs: 60,
     verdict: { decision: 'allow', reason: 'never reached', toolCalls: 0, fields: {} },
