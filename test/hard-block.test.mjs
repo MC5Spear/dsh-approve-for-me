@@ -50,7 +50,10 @@ test('H1-PowerShell：大小写不敏感与无歧义缩写', () => {
   assert.equal(hardCmd('remove-item -RECURSE .\\sample').code, 'hard-h1-powershell');
   assert.equal(hardCmd('RM -Rec x').code, 'hard-h1-powershell');
   // 实测可绑定成功的更长无歧义前缀（-zzz 一类无法绑定的串不算）。Recurse 族命中 H1。
+  // 需求 §10 H1 定稿枚举六个缩写——此处逐一对应（-re/-rec/-recu/-recur/-recurs 与仅 -r 用例）。
+  assert.equal(hardCmd('Remove-Item -re .\\sample').code, 'hard-h1-powershell');
   assert.equal(hardCmd('Remove-Item -recu .\\sample').code, 'hard-h1-powershell');
+  assert.equal(hardCmd('Remove-Item -recur .\\sample').code, 'hard-h1-powershell');
   assert.equal(hardCmd('Remove-Item -recurs .\\sample').code, 'hard-h1-powershell');
   // Force 族前缀不构成 H1 的递归依据（H1 只认 Recurse 族，不看目标字面性）；
   // 它构成 H2 仅强制形态，H2 在该形态下按目标字面性分流。
@@ -80,6 +83,17 @@ test('仅递归不带强制不落 POSIX 分支（rm -r 按 PowerShell 缩写族�
   // rm -r 是 PowerShell 别名＋-Recurse 无歧义缩写（design §12.1 判定序裁定：PS 缩写族先于 H2 判）：
   // 按 H1-PowerShell 命中；rm --recursive 才走 H2 仅递归族。
   assert.equal(hardCmd('rm -r ./sample').code, 'hard-h1-powershell');
+});
+
+test('A8 定稿：git rm -r 纯文本判定命中 H1，Git 外层不豁免（需求 §10 H1 尾段）', () => {
+  // 需求 §10 H1 定稿：本层按命令文本判定、不依赖可确认的 Shell 身份；`git rm -r` 同样命中，
+  // 不因外层命令为 Git 而豁免。判定层是纯函数——本用例只送文本，从不执行任何删除命令。
+  assert.equal(hardCmd('git rm -r docs').code, 'hard-h1-powershell');
+  assert.equal(hardCmd('git rm -r --force docs').code, 'hard-h1-posix', '同时带递归与强制按 POSIX 族归类，同样直接拒绝');
+  // 对照（仅递归形态的 H1/H2 分流，呼应「仅递归」用例）：长选项 --recursive 不属 PS 缩写族，
+  // 字面目标交后续审查、非字面目标由 H2 拦截——不把「不命中 H1」当自动允许。
+  assert.equal(hardCmd('git rm --recursive docs'), undefined);
+  assert.equal(hardCmd('git rm --recursive $cache').code, 'hard-h2-target');
 });
 
 test('H1-PowerShell：开关绑定写法按绑定真值计（-Recurse:$true）', () => {
