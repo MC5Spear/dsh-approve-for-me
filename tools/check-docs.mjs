@@ -310,7 +310,7 @@ const COLUMN_SYNONYMS = [
   ['effective', ['生效方式', '生效时机', '生效', 'effective', 'editing and effect']],
 ];
 
-/** 图例必须定义的记号全集（用户作者定稿：N/S/T 范围档与 A/B/C 生效档）。 */
+/** 兼容旧表格的图例记号；只有表格实际使用的记号才需要定义。 */
 export const LEGEND_REQUIRED = ['N', 'S', 'T', 'A', 'B', 'C'];
 
 /** schema 类型词的同义写法（类型列写自然类型词，不强制图例记号）。 */
@@ -435,8 +435,13 @@ export function checkReferenceTables(root, facts) {
     }
     // 图例取全页前文（首个字段表之前的全部正文），覆盖「生效定义在第3节、范围代号在第5节」的布局。
     const legend = parseLegend(text.split('\n').slice(0, tables[0].headerLine - 1).join('\n'));
+    const usedLegend = new Set(tables.flatMap((table) => table.rows.flatMap((row) =>
+      ['range', 'effective'].flatMap((column) => legendTokensIn(row.cells[table.mapping.get(column)] ?? '')),
+    )));
     for (const letter of LEGEND_REQUIRED) {
-      if (!legend.has(letter)) issues.push({ file: name, line: 0, problem: `正文缺少记号 ${letter} 的图例定义（N/S/T 范围档、A/B/C 生效档须在表前定义）` });
+      if (usedLegend.has(letter) && !legend.has(letter)) {
+        issues.push({ file: name, line: 0, problem: `正文缺少记号 ${letter} 的图例定义（表格使用的记号须在表前定义）` });
+      }
     }
     const seen = new Map();
     for (const table of tables) {
@@ -460,13 +465,20 @@ export function checkReferenceTables(root, facts) {
         if (!typeWords.some((word) => typeCell.replace(/`/gu, '').trim() === word.toLowerCase())) {
           issues.push({ file: name, line: row.line, problem: `${key} 类型列应为 ${typeWords.join('/')}，实际：${get('type') || '（空）'}` });
         }
-        // 生效列：记号必须与真实生效方式一致（A=页面保存后；B=宿主热更新且无控件；C=重载）。
+        // 核对实际生效方式；接受直接说明和旧图例，不要求用户文档采用字母码。
         const effCell = get('effective');
         const effTokens = legendTokensIn(effCell);
-        if (!effTokens.includes(fact.effective) && !(fact.path === 'language.ui' && /(下一次|next)\s*(渲染|render)/i.test(effCell))) {
-          issues.push({ file: name, line: row.line, problem: `${key} 生效列记号应为 ${fact.effective}，实际记号 ${effTokens.join('') || '（无）'}` });
+        const effectiveForms = {
+          A: /页面保存后|after saving/i,
+          B: /宿主热更新|host live update/i,
+          C: /宿主重载后|after host reload/i,
+        };
+        const described = Object.entries(effectiveForms).filter(([, pattern]) => pattern.test(effCell)).map(([code]) => code);
+        const reported = [...effTokens.filter((code) => ['A', 'B', 'C'].includes(code)), ...described];
+        if (!reported.includes(fact.effective) || reported.some((code) => code !== fact.effective)) {
+          issues.push({ file: name, line: row.line, problem: `${key} 生效列记号应为 ${fact.effective} 对应的方式，实际：${effCell || '（空）'}` });
         }
-        if (fact.effective !== 'A' && effTokens.includes('A')) {
+        if (fact.effective !== 'A' && reported.includes('A')) {
           issues.push({ file: name, line: row.line, problem: `${key} 无设置页保存路径，生效列不应使用 A` });
         }
         // 默认列：JSON 字面量逐字匹配；redactPatterns 引用同页六条默认规则。
@@ -505,7 +517,7 @@ export function checkReferenceTables(root, facts) {
           if (rangeCell.includes('2147483647') || rangeCell.includes('9007199254740991')) {
             issues.push({ file: name, line: row.line, problem: `${key} schema 无显式上界，范围列不应出现具体上界` });
           }
-          if (!/(^|[^A-Za-z0-9])N(?![A-Za-z0-9])|非负|non-negative|≥\s*0/.test(rangeCell)) {
+          if (!/(^|[^A-Za-z0-9])N(?![A-Za-z0-9])|非负|non-negative|≥\s*0/i.test(rangeCell)) {
             issues.push({ file: name, line: row.line, problem: `${key} 范围列应说明非负（N）` });
           }
         } else if (fact.numericRange) {

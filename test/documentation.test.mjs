@@ -206,6 +206,33 @@ test('正例：定稿格式两语表通过；等价排版（反引号图例、�
   assert.deepEqual(withPair({ style: 'code-enum' }), []);
 });
 
+test('自然语言字段表：无需字母图例仍校验范围和生效方式', () => {
+  const natural = (lang, wrong = false) => {
+    const text = buildReference({ lang, mutate: (cells, fact) => {
+      if (fact.boundClass === 'N') cells[3] = lang === 'en' ? 'Non-negative integer' : '非负整数';
+      if (fact.boundClass === 'T') cells[3] = '0–2147483647 整数';
+      if (fact.boundClass === 'N+S') cells[3] = '非负整数；运行限 0–9007199254740991';
+      const labels = lang === 'en'
+        ? { A: 'After saving', B: 'Host live update', C: 'After host reload' }
+        : { A: '页面保存后', B: '宿主热更新', C: '宿主重载后' };
+      cells[7] = labels[wrong && fact.path === 'reviewer.timeoutMs' ? 'C' : fact.effective];
+      return cells;
+    } });
+    return text.replace(/^- \*\*[A-Z]\*\*：.*\n/gm, '');
+  };
+  const root = tmpRoot();
+  try {
+    mkdirSync(path.join(root, 'docs'), { recursive: true });
+    for (const wrong of [false, true]) {
+      writeFileSync(path.join(root, 'docs/user-reference.md'), natural('zh', wrong));
+      writeFileSync(path.join(root, 'docs/user-reference.en.md'), natural('en', wrong));
+      const issues = checkReferenceTables(root, facts);
+      if (wrong) expectIssue(issues, 'reviewer.timeoutMs 生效列');
+      else assert.deepEqual(issues, []);
+    }
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test('反例：缺字段行 / 默认值错 / 类型词错（默认值保持正确）/ 生效档错植', () => {
   expectIssue(withPair({ drop: 'context.maxEntries' }), '缺少字段 context.maxEntries');
   expectIssue(

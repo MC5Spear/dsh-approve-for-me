@@ -2,9 +2,9 @@
 
 [中文](<README.md>) · English
 
-When an Agent requests broader sandbox permissions, this plugin reviews whether to allow that operation. It runs inside DeepSeek Harness (DSH), the application that runs the Agent.
+dsh-approve-for-me is an automatic approval plugin for DeepSeek Harness (DSH). When the acting Agent requests broader sandbox permissions, the plugin calls a model to assess the operation's risk and the user's authorization. Eligible operations can be approved without asking the user each time.
 
-An independent language model reviews the operation and the user's authorization. Read-only tools let the reviewer check local evidence.
+Review runs independently of the acting Agent's session, with read-only tools available to check local evidence. The plugin preserves DSH's sandbox restrictions, and each approval applies to one operation only.
 
 This is a third-party community plugin, unaffiliated with DeepSeek.
 
@@ -13,24 +13,24 @@ This is a third-party community plugin, unaffiliated with DeepSeek.
 | Component | Current requirement |
 | --- | --- |
 | Plugin version | `0.2.2+dsh.0.2.1-rc` |
-| DSH compatibility line | `0.2.1-rc`; currently admits `0.2.1-rc.1`, `0.2.1-rc.2`, `0.2.1-rc.3`, `0.2.1-rc.4`, and `0.2.1-rc.5` |
+| DSH compatibility line | `0.2.1-rc`; supported versions are `0.2.1-rc.1`, `0.2.1-rc.2`, `0.2.1-rc.3`, `0.2.1-rc.4`, and `0.2.1-rc.5` |
 | Plugin Node declaration | `>=20`; this is not the minimum for the complete host |
 | Recommended toolchain | Node 24, used for this project's development and CI |
 
-The host must supply `@deepseek-ai/dsh-llm` and `@deepseek-ai/dsh-typert-protocol` at its own RC version from the same host installation tree. See the [user reference](<docs/user-reference.en.md#known-issues>) for the actual verification coverage.
+DSH supplies the two host interface packages, `@deepseek-ai/dsh-llm` and `@deepseek-ai/dsh-typert-protocol`. Both must match its RC version and come from the same DSH installation; do not install a separate, mismatched copy for the plugin. See the [user reference](<docs/user-reference.en.md#known-issues>) for tested platforms and features.
 
 ## Installation
 
-Ask the maintainer for an actual `.tgz` artifact or its matching complete source directory. Before installation, verify its full version, matching host, and supplied artifact or revision identity.
+Obtain a `.tgz` package or its matching complete source directory from the maintainer. Check its full version and supported DSH versions. Retain the supplied revision or file checksum for updates, rollback, and troubleshooting.
 
 Before installing:
 
-1. If this plugin is already installed, turn takeover off and switch the host default permission preset and active sessions to a standard preset, such as Workspace write.
+1. If the plugin is already installed, set Mode to “Do not take over” (`mode=off`) in its settings and save. Switch the host default permission preset and active sessions to a standard preset, such as Workspace write.
 2. Wait for host tasks to finish or stop them safely. The restart after installation interrupts running work. For a service deployment, restart from a management terminal outside the service's process tree.
 
 The host installation channel needs pnpm. Check with `corepack pnpm --version`. If unavailable, ask the deployment administrator to prepare pnpm for that host first.
 
-Replace the placeholder with the **absolute path of the real artifact supplied by the maintainer**, keeping the quotes:
+First confirm the target DSH profile: the named deployment configuration loaded by that instance. Check its startup command or ask the deployment administrator. The example uses `web`; replace it if the target uses another profile. Replace the package placeholder with the actual absolute file path, keeping the quotes:
 
 ```powershell
 dsh plugin --profile web add "<absolute-path-to-artifact.tgz>"
@@ -49,7 +49,7 @@ An installation command succeeding does not establish that automatic approval is
 
 ## Before enabling
 
-- Only covered sandbox-escalation requests are reviewed. Operations under Full access that do not trigger approval are outside this protection.
+- The plugin handles sandbox-escalation requests only for selected sessions and tools; this is called takeover below. Full-access operations that do not trigger approval are outside its protection.
 - An approval covers one operation only. Repeating the same command still needs a valid approval for that new operation.
 - Models can misjudge risk or be affected by prompt injection. Keep the sandbox, back up important data, and narrow the covered tools, permission presets, and escalation ceiling to the task.
 - Arguments, file contents, and tool results are evidence, not authorization by themselves. State the intended targets and permitted side effects explicitly.
@@ -58,20 +58,22 @@ An installation command succeeding does not establish that automatic approval is
 
 ## Settings and use
 
-1. On the plugin details page, choose the reviewer model, covered tools, and permission ceiling, then save.
+Open settings from the machine running DSH, using `127.0.0.1` or `localhost`. If a remote entry is read-only, use local management access.
+
+1. Open Plugins → Installed → `dsh-approve-for-me`. Choose the default reviewer model, tools to cover, and highest permission the plugin may approve, then save.
 2. Change Mode to “Rule check + LLM review” and save.
 3. Select the “自动审批” (`auto-approve`) preset in a session that needs automatic approval. Installation does not make it the default.
 4. Try a harmless operation that genuinely needs escalation. In the session's Review log, check the final outcome, reason, and actual model. Do not test checks with dangerous actions.
 
-Saving requires a host-local loopback entry, such as `127.0.0.1` or `localhost`. Failed saves retain the draft; leaving the page discards unsaved edits. Reset to default for one field also needs Save. See [settings and reset](<docs/user-reference.en.md#settings>).
+Failed saves retain the draft; leaving the page discards unsaved edits. Reset to default for one field also needs Save. See [settings and reset](<docs/user-reference.en.md#settings>).
 
-Main sessions show a human card during review by default, so you may answer first. This differs from the fallback after review, which defaults off and needs `fallback=ask`. Delegated subagents have no human channel; user-forked sessions are treated as main sessions.
+Main sessions show an approval card during automatic review by default. Select Reject or Allow once to decide before the review finishes. To also hand an unsuccessful review to a human, set `fallback=ask`; otherwise it rejects by default. Delegated subagents do not offer human approval; sessions forked by the user retain it.
 
 ## Before disabling or uninstalling
 
-Turn takeover off, then switch the host default permission preset and sessions you want to keep using to standard presets. Back up configuration and needed records before disabling or removing the plugin.
+Save Mode as “Do not take over” (`mode=off`), then switch the DSH default permission preset and sessions you want to keep using to standard presets. Back up configuration and needed records before disabling or removing the plugin.
 
-The host may retain the “自动审批” (`auto-approve`) entry in user configuration. Its presence does not mean the plugin is still running. Removing the entry while retaining a default reference to it can prevent permission settings from loading. Follow [disabling, removal, and recovery](<docs/user-reference.en.md#uninstall>).
+The host may retain the “自动审批” (`auto-approve`) entry in user configuration. Its presence does not mean the plugin is still running. If the default preset is still Auto approval when its configuration entry is removed, permission settings may fail to load. Follow [disabling, removal, and recovery](<docs/user-reference.en.md#uninstall>).
 
 ## User documentation
 

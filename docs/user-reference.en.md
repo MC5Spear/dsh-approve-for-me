@@ -2,18 +2,18 @@
 
 [中文](<user-reference.md>) · [English home](<../README.en.md>)
 
-This reference covers installation, settings, approval results, failures, and removal. DSH is the host application that loads the plugin and runs the acting Agent. The reviewer model independently decides whether to allow this particular escalation.
+This reference covers installation, settings, approval results, failures, and removal. DeepSeek Harness (DSH) runs the acting Agent and loads this plugin. When the Agent requests broader sandbox permissions, the plugin calls a model to independently review risk and authorization for that operation. Below, “host” means DSH, and “takeover” means the plugin handling selected approval requests.
 
 <a id="known-issues"></a>
 ## Scope and protection boundary
 
 Review covers only sandbox-escalation requests inside the coverage; see [section 2](<#coverage>) for the coverage and its exceptions. Operations under Full access that do not trigger approval are outside this protection.
 
-The read-only evidence tools deny credential-like files and directories in both literal and real path forms, and browser canonical stores (the `User Data` layout of Edge and Chrome, the `Profiles` layout of Firefox, covering login and cookie databases) are denied the same way; `grep` states its actual coverage when the directory budget is exhausted; renamed copies and hard links are not covered.
+The reviewer can check local files with read-only tools, but access to credentials, private DSH data, and browser login and cookie databases is restricted. These checks use paths and names; they do not recognize renamed copies or hard links. Retrieved content may still be sent to the model provider. See [evidence and privacy](<#evidence-records>) for details.
 
 ### Verification coverage
 
-On Windows, DSH `0.2.1-rc.1` through `0.2.1-rc.5` passed official-package module wiring checks and real-host checks using the same artifact: installation/loading, settings save and read-back, model approval, built-in dangerous-command rejection, and cancellation during review.
+On Windows, the same plugin package was tested in DSH `0.2.1-rc.1` through `0.2.1-rc.5` for installation/loading, saving and reading back settings, model approval, built-in dangerous-command rejection, and cancellation during review. Integration checks with each version’s official interface packages also passed.
 
 Additional real-session and page checks cover:
 
@@ -21,7 +21,7 @@ Additional real-session and page checks cover:
 - `0.2.1-rc.3` and `0.2.1-rc.4`: opening and rendering the Review log.
 - `0.2.1-rc.5`: tool execution after model approval, rejection for insufficient authorization, a human rejecting before review finishes, a human allowing through fallback, and session reviewer selection. Standard sessions work after removal; reinstallation preserves configuration/record read-back and tool execution after model approval.
 
-The tool-result injection counterexample and authorization control at the reviewer entry point passed. Other platforms are not verified. Check the target environment using the [verification guide](<verification.md>) before deployment.
+Reviewer tests also passed cases involving false instructions in tool results and contrasting user authorizations. These results cover specific cases, not every possible model error. Other platforms have not been verified; consult the maintainer before relying on them. For basic installation checks, follow [section 1.4](<#14-reload-confirm-and-update>) and [section 2.2](<#22-how-to-enable>). Administrators and maintainers can use the Chinese [verification guide](<verification.md>) for source tests and deployment validation; ordinary installation does not require those tools.
 
 Do not test problems with real secrets or dangerous commands.
 
@@ -33,36 +33,42 @@ Do not test problems with real secrets or dangerous commands.
 | Component | Current requirement |
 | --- | --- |
 | Plugin version | `0.2.2+dsh.0.2.1-rc` |
-| DSH compatibility line | `0.2.1-rc`; currently admits `0.2.1-rc.1`, `0.2.1-rc.2`, `0.2.1-rc.3`, `0.2.1-rc.4`, and `0.2.1-rc.5` |
+| DSH compatibility line | `0.2.1-rc`; supported versions are `0.2.1-rc.1`, `0.2.1-rc.2`, `0.2.1-rc.3`, `0.2.1-rc.4`, and `0.2.1-rc.5` |
 | Plugin Node declaration | `>=20` |
 | Recommended toolchain | Node 24, used in this project's development and CI |
 | Host installer | pnpm; check with `corepack pnpm --version` |
 
-The plugin's Node declaration does not establish that the complete host works on Node 20. Also meet the requirements of the host and its dependencies. This reference does not infer the complete host minimum. Ask the maintainer about verification before relying on another platform or Node version.
+Node 20 is the minimum declared by this plugin; the running environment must also meet DSH’s requirements and those of its dependencies. Node 24 is recommended. Ask the maintainer about verification before relying on another platform or Node version.
 
-The `+dsh.0.2.1-rc` part identifies the supported RC maintenance line. Loading uses the same explicit set of exact versions in `engines.dsh` and both host peer declarations; current members are listed above. A later RC needs updated declarations and verification before admission. Ordinary semantic-version comparisons ignore build metadata, so check the full package version and admitted host set when selecting a package.
+The `+dsh.0.2.1-rc` suffix identifies the DSH 0.2.1 RC maintenance line. Only the five RCs above are currently supported; a later RC needs updated declarations and verification by the maintainer. Check the full version and supported list when choosing a package: ordinary version comparisons ignore the part after `+`. The package’s `engines.dsh` and both host interface peer dependencies declare the same exact version list.
 
-When obtaining source or an artifact, check the full version and matching host. An adaptation branch identifies the intended host line, but its contents can move. For reproducibility, retain the revision or artifact identity actually supplied by the maintainer. Different builds can carry the same package version; the version does not replace a delivery identity.
+When obtaining source or a package, check its full version and supported DSH versions, and retain the supplied revision or package checksum. Maintenance branches can advance, and packages with the same version can contain different files. These identifiers help the maintainer reproduce problems or confirm a rollback version.
 
 ### 1.2 Install a supplied artifact
 
-Ask the maintainer for an actual `.tgz` or its matching complete source. Check the package name, full version above, intended host, and delivery identity. The commands below use that delivered file or directory.
+Obtain a `.tgz` package or matching complete source from the maintainer, and check the version and source as described above.
 
 **Restarting interrupts running work.** Before installation or update, wait for tasks to finish or stop them safely. If the plugin is installed, first save `mode=off` and switch default and active-session permission presets to standard ones. Restart service deployments from outside the service process tree.
 
-Replace the placeholder with the absolute path of the real artifact, keeping the quotes:
+Confirm the profile name from the target DSH startup command or deployment administrator. A profile is a named deployment configuration loaded by an instance. The example uses `web`; replace it for another profile and confirm that it loads the Web interface and required host services. Replace the package placeholder with the actual absolute file path, keeping the quotes:
 
 ```powershell
 dsh plugin --profile web add "<absolute-path-to-artifact.tgz>"
 ```
 
-The example uses the `web` profile: a named host deployment configuration. For another profile, replace `web` with its actual name and confirm that it loads the Web interface and required host services. The installation channel installs the package and its direct dependencies into that profile. The matching host supplies the host integration packages.
+The command installs the plugin and its direct dependencies into the selected profile. The matching DSH installation supplies its host interface packages.
 
 ### 1.3 Install a supplied source directory
 
 Use a separate complete source directory, not a working tree being edited for stable deployment. It must contain package declarations, host and client entries, installation declarations, and security policies.
 
-A directory link resolves direct dependencies from the source directory. The following prepares this plugin's direct dependencies without automatically installing its host peer packages. Replace both path placeholders with the same real source directory:
+Before installation, check the host and dependencies:
+
+1. The target DSH must be one of the supported versions above and supply `@deepseek-ai/cordis` satisfying `~4.0.4`.
+2. `@deepseek-ai/dsh-llm` and `@deepseek-ai/dsh-typert-protocol` must come from the same DSH installation and both match the target DSH RC version.
+3. If the source directory already has `node_modules`, have the deployment administrator check where its host packages resolve from, or obtain a clean directory from the maintainer. Fix mismatched versions or mixed sources first; do not bulk-delete unknown dependencies.
+
+A directory link resolves the plugin’s direct dependencies from the source directory. The commands below prepare those dependencies and install the plugin. Replace both paths with the same actual source directory, and confirm `web` is the target profile as described above:
 
 ```powershell
 cd "<absolute-source-directory>"
@@ -70,9 +76,7 @@ npm install --omit=dev --legacy-peer-deps
 dsh plugin --profile web add "<absolute-source-directory>"
 ```
 
-Here `--legacy-peer-deps` prevents npm from automatically installing host peer packages. At runtime, the target host must belong to the admitted set above and supply `@deepseek-ai/dsh-llm` and `@deepseek-ai/dsh-typert-protocol` at its own RC version from the same host installation tree, along with `@deepseek-ai/cordis` satisfying `~4.0.4`. If the two host packages differ in version or resolve from different trees, repair their resolution sources before installation and loading checks. The preceding npm step prepares this plugin's direct dependencies.
-
-Do not assume host packages in an existing source `node_modules` are correct. Ask for a clean delivery directory or have the deployment administrator check resolution sources. Do not bulk-delete unknown dependencies or treat successful installation in an ordinary npm project as successful profile loading. For resolution failures, use a maintainer-supplied tgz or report redacted loading errors.
+`--legacy-peer-deps` prevents npm from automatically installing the host interface packages; the checked DSH installation must still supply them. After the commands finish, follow the next section to confirm loading in the profile. For dependency-resolution failures, use a maintainer-supplied tgz or report redacted loading errors.
 
 ### 1.4 Reload, confirm, and update
 
@@ -92,7 +96,7 @@ For updates, recheck host and delivery identity, back up user configuration and 
 
 Read [scope and protection boundary](<#known-issues>) first.
 
-### 2.1 Four separate choices
+### 2.1 How coverage relates to authorization
 
 | Concept | What it determines | What it does not replace |
 | --- | --- | --- |
@@ -136,7 +140,7 @@ Saving requires a host-local loopback entry such as `127.0.0.1` or `localhost`. 
 2. Check validation messages and millisecond-to-seconds readouts, then select Save.
 3. Confirm success and updated effective values before issuing another request.
 
-Set individually means the user layer explicitly contains the field, even when it equals the default. Reset to default stages removal of that user override and **still needs Save**. It reveals the lower composition layer's value, or the factory default if that layer also leaves it unset. There is no global reset button.
+Set individually means the field is explicitly saved in user configuration, even when it equals the default. Reset to default removes that individual setting and **still needs Save**. The host then uses a value supplied by its other configuration, or the factory default in section 5 if no other value is set. Check the effective value after saving. There is no button to reset every field at once.
 
 Failed saves retain the draft. First copy any needed draft securely, then repair connection or validation problems and retry. Do not record credentials. Leaving the page discards unsaved edits. Save is disabled for no changes, invalid values, or a save in progress.
 
@@ -159,18 +163,26 @@ Partial configuration sections retain defaults for omitted members. An empty arr
 
 Section 5 identifies the page entry and update method separately:
 
-- **A: Page save.** No restart is needed after saving; subsequent requests use the new value.
-- **B: Host live update.** The configuration supports host updates without remounting, but this plugin's page has no control for the field. Subsequent requests use the new value after applying it through the host configuration channel. Hand-edited files still need the host's apply procedure.
-- **C: Host reload.** Ordinary configuration changes take effect after the host reloads the plugin. Handle active tasks before reload or restart.
+- **After saving.** No restart is needed after saving; subsequent requests use the new value.
+- **Host live update.** The configuration supports host updates without remounting, but this plugin's page has no control for the field. Subsequent requests use the new value after applying it through the host configuration channel. Hand-edited files still need the host's apply procedure.
+- **After host reload.** Ordinary configuration changes take effect after the host reloads the plugin. Handle active tasks before reload or restart.
 
-Page editability and live-update eligibility are different. Requests already reviewing or queued retain their entry-time configuration, directory, and capture plan. Redaction is an exception: notices, audit, and record outlets use their effective redaction list when sending or writing. UI language changes apply on the next render.
+Section 5 lists page editability separately from whether changes need a reload. Queued and reviewing requests keep their original configuration, directory, and record-capture settings. Redaction is an exception: notices, audit lines, and records use the rules effective when sent or written. UI language changes apply on the next render.
 
 Invalid types, enums, numbers, or duplicate mapping conditions produce visible errors. Resaving the same invalid value is not a repair. If loading has failed and the form is unavailable, correct configuration and reload safely.
 
 <a id="models"></a>
 ## 4. Select a reviewer model
 
-### 4.1 Selection order and unavailable choices
+### 4.1 Set the default or choose for one session
+
+- **Global default:** open Plugins → Installed → this package, set Default reviewer model and effort, then select Save.
+- **One session:** open the target session and use the reviewer dropdown on the left side of the input area to choose a model and effort. Choices save automatically; no separate settings-page Save is needed. Select Follow global (clear this session) to remove the session override and use mappings or the global default.
+- **Confirm:** check the model and nearby messages in the control, then the actual model in the Review log after an approval. Failed changes show an error and retain the previous choice.
+
+A session with an assigned id can select a reviewer before its first message. The control hides when takeover is off or the session is outside coverage, and returns when enabled. Saved choices are retained. If the host supplies no takeover state, the control remains visible.
+
+#### Selection priority and unavailable choices
 
 Order: **session choice → mapping by the acting Agent's model → global default**.
 
@@ -178,15 +190,15 @@ An unavailable session or mapping target goes directly to the global default. It
 
 Global model problems appear at the top of settings, rule problems at the mapping row, and session-choice problems beside the session control. Check the provider, model, and actual fallback shown there. A readable model catalog establishes neither working credentials nor remote service availability. For persistent failures, turn takeover off and repair model configuration instead of making repeated requests.
 
-Once a session has an id, it can select a reviewer before its first message. The control follows takeover state, hides with `mode=off`, and returns when enabled; it remains visible if the host supplies no takeover state. Clearing a session choice uses the mapping or global default. Failed writes retain the previous choice. Turning takeover off does not clear saved choices.
-
 Prefer a complete `provider/model` reference. The first slash separates provider id; remaining slashes belong to the model id. Configuration also accepts a bare model id, using the acting Agent's provider, or the first registered provider if no parent provider is available. Use complete references to avoid unintended provider resolution.
 
 Effort is model-specific. If unspecified, use `low` when supported, otherwise leave it to the model default. An explicitly unsupported effort is omitted and recorded as degraded. Reasoning may consume a small output-token cap before producing a conclusion; one model's useful cap is not a guarantee for another.
 
-### 4.2 Structured mappings
+### 4.2 Map acting models to reviewers
 
-Each row contains scope, the acting Agent's complete model id, the reviewer reference, and effort.
+To use different reviewers for different acting models, add a row under Reviewer model by the agent's model in plugin settings. Set the scope, complete acting-model id, reviewer, and effort, then save. Scope can match any provider or one specific provider.
+
+When editing configuration directly, one item in the `reviewer.parentModelRules` array has this form:
 
 ```json
 {
@@ -207,36 +219,36 @@ Specific-provider rules precede any-provider rules. One rule is allowed per cond
 - Slash-containing keys ask for confirmation: did the key mean any provider with a model id containing slashes, or a specific provider and its model id? The catalog can help check but cannot establish original intent.
 - Until confirmed, a key keeps its original value and compatible lookup behavior. It is not rewritten automatically. Only confirmation or editing moves that row to structured rules; the same new rule is not saved in both formats.
 - Multiple legacy full references that normalize to one model can be used when their choices agree. Conflicting aliases are not used; the mapping is treated as unmatched and the conflict is logged.
-- Resetting the mapping field removes user overrides for both structured rules and the legacy dictionary after Save. First check that the lower layer contains the values you intend to restore.
+- Resetting the mapping field removes user overrides for both structured rules and the legacy dictionary after Save. After saving, check that the rules supplied by the host’s other configuration are the ones you intended.
 
 <a id="configuration"></a>
 ## 5. Every configuration field
 
-Each row distinguishes accepted configuration ranges from special runtime handling. Numeric range codes used in the tables are defined here:
+Each row lists the type, default, range, special values, page entry, and update method so a field can be looked up directly.
 
-- **N:** a non-negative integer; the configuration schema adds no numeric upper bound. This does not mean unlimited resources.
-- **S:** a safe integer from `0` through `9007199254740991`. These fields have schema range N, with an additional S check when read at runtime.
-- **T:** an integer from `0` through `2147483647`, in milliseconds.
-
-“—” means no unit or not applicable. Unless stated otherwise, only omission supplies a default; invalid values are not omission. See the adjacent [timing definitions](<#settings>) for A, B, and C. “Legacy row” means a compatible row in the mapping table, not a separate dictionary editor.
+- Non-negative integer means the schema sets no additional numeric upper bound, not unlimited resources. Fields marked Runtime limit also check the safe-integer range `0` through `9007199254740991` when read.
+- Millisecond values range from `0` through `2147483647`; each row explains its zero behavior.
+- “—” means no unit or not applicable. Unless stated otherwise, only omission supplies a default; invalid values produce errors.
+- After saving needs no restart. Host live update requires applying through the host configuration channel. After host reload requires reloading the plugin. See [section 3](<#settings>) for hand-edited files.
+- Legacy row means an old configuration row in the model-mapping table.
 
 ### 5.1 Coverage and human handling
 
 | Field | Type | Default | Range | Unit | Zero or empty | Page | Effective |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `enabled` | boolean | `true` | `true` / `false` | — | `false` registers neither answerer nor child coverage | No | C |
-| `mode` | string | `"rules"` | `rules` / `off` | — | `off` leaves requests to the host flow | Yes | A |
-| `tools` | string[] | `[]` | Array of tool names | — | Empty covers every tool's escalations | Yes | A |
-| `allowEscalationTo` | string | `"danger-full-access"` | `workspace-write` / `danger-full-access` | — | Empty enum invalid | Yes | A |
-| `denyPatterns` | string[] | `[]` | Array of regex strings | — | Empty disables custom text rules, not built-in checks | Yes | A |
-| `unknownSubject` | string | `"reject"` | `reject` / `review` | — | Empty invalid; unknown actions reject by default | Yes | A |
-| `fallback` | string | `"reject"` | `reject` / `ask` | — | Empty invalid; `ask` applies only to paths with a human channel | Yes | A |
-| `trigger.presets` | string[] | `["auto-approve"]` | Array of permission preset ids | — | Empty covers no known preset; unknowns follow the next field | Yes | A |
-| `trigger.unknown` | string | `"skip"` | `skip` / `review` | — | Empty invalid; `skip` keeps the host flow | Yes | A |
-| `trigger.subagents` | string | `"review"` | `review` / `skip` | — | Empty invalid | No | B; new child coverage and subsequent checks |
-| `trigger.auditEverySkip` | boolean | `false` | `true` / `false` | — | `false` reduces repeated preset-skip logging | Yes | A |
-| `human.timeoutMs` | integer | `300000` | T | ms | Human timing requires `fallback=ask`; `0` exhausts the human budget immediately, not endless waiting | Yes | A |
-| `human.timeoutFrom` | string | `"request"` | `request` / `handoff` | — | Empty invalid | Yes | A |
+| `enabled` | boolean | `true` | `true` / `false` | — | `false` registers neither answerer nor child coverage | No | After host reload |
+| `mode` | string | `"rules"` | `rules` / `off` | — | `off` leaves requests to the host flow | Yes | After saving |
+| `tools` | string[] | `[]` | Array of tool names | — | Empty covers every tool's escalations | Yes | After saving |
+| `allowEscalationTo` | string | `"danger-full-access"` | `workspace-write` / `danger-full-access` | — | Empty enum invalid | Yes | After saving |
+| `denyPatterns` | string[] | `[]` | Array of regex strings | — | Empty disables custom text rules, not built-in checks | Yes | After saving |
+| `unknownSubject` | string | `"reject"` | `reject` / `review` | — | Empty invalid; unknown actions reject by default | Yes | After saving |
+| `fallback` | string | `"reject"` | `reject` / `ask` | — | Empty invalid; `ask` applies only to paths with a human channel | Yes | After saving |
+| `trigger.presets` | string[] | `["auto-approve"]` | Array of permission preset ids | — | Empty covers no known preset; unknowns follow the next field | Yes | After saving |
+| `trigger.unknown` | string | `"skip"` | `skip` / `review` | — | Empty invalid; `skip` keeps the host flow | Yes | After saving |
+| `trigger.subagents` | string | `"review"` | `review` / `skip` | — | Empty invalid | No | Host live update; new child coverage and subsequent checks |
+| `trigger.auditEverySkip` | boolean | `false` | `true` / `false` | — | `false` reduces repeated preset-skip logging | Yes | After saving |
+| `human.timeoutMs` | integer | `300000` | 0–2147483647 integer | ms | Human timing requires `fallback=ask`; `0` exhausts the human budget immediately, not endless waiting | Yes | After saving |
+| `human.timeoutFrom` | string | `"request"` | `request` / `handoff` | — | Empty invalid | Yes | After saving |
 
 `unknownSubject=review` submits recovered parameters with explicit missing-evidence markers; missing does not mean safe.
 
@@ -248,14 +260,14 @@ Showing a card during review does not enable human timing. With `fallback=reject
 
 | Field | Type | Default | Range | Unit | Zero or empty | Page | Effective |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `reviewer.model` | string or ModelChoice | `""` | Reference or `{model, effort}`; members are strings, each defaulting to empty | — | Empty means unset global default; falling to this layer follows the acting Agent | Yes | A |
-| `reviewer.parentModelRules` | object[] | `[]` | Structured rules; see section 4 and members below | — | Empty has no structured mapping | Yes | A |
-| `reviewer.byParentModel` | object | `{}` | Legacy dictionary of string keys to ModelChoice | — | Empty has no legacy mapping; untouched keys are not migrated | Legacy row | A; confirmed or edited legacy rows become structured rules |
-| `reviewer.timeoutMs` | integer | `90000` | T | ms | `0` immediately rejects as timeout without starting an attempt | Yes | A |
-| `reviewer.maxTokens` | integer | `0` | schema N; runtime S | token | `0` sends no cap; model or provider default applies | Yes | A |
-| `reviewer.temperature` | number | `0` | Finite `[0,2]` | — | `0` is a valid temperature, not omission | No | B |
-| `reviewer.maxToolSteps` | integer | `4` | schema N; runtime S | Tool rounds | `0` provides no evidence tools and requests a direct conclusion | No | B |
-| `reviewer.toolTimeoutMs` | integer | `5000` | T | ms | `0` immediately times out each tool call, returning evidence failure | No | B |
+| `reviewer.model` | string or ModelChoice | `""` | Reference or `{model, effort}`; members are strings, each defaulting to empty | — | Empty means unset global default; falling to this layer follows the acting Agent | Yes | After saving |
+| `reviewer.parentModelRules` | object[] | `[]` | Structured rules; see section 4 and members below | — | Empty has no structured mapping | Yes | After saving |
+| `reviewer.byParentModel` | object | `{}` | Legacy dictionary of string keys to ModelChoice | — | Empty has no legacy mapping; untouched keys are not migrated | Legacy row | After saving; confirmed or edited legacy rows become structured rules |
+| `reviewer.timeoutMs` | integer | `90000` | 0–2147483647 integer | ms | `0` immediately rejects as timeout without starting an attempt | Yes | After saving |
+| `reviewer.maxTokens` | integer | `0` | Non-negative integer; runtime limit 0–9007199254740991 | token | `0` sends no cap; model or provider default applies | Yes | After saving |
+| `reviewer.temperature` | number | `0` | Finite `[0,2]` | — | `0` is a valid temperature, not omission | No | Host live update |
+| `reviewer.maxToolSteps` | integer | `4` | Non-negative integer; runtime limit 0–9007199254740991 | Tool rounds | `0` provides no evidence tools and requests a direct conclusion | No | Host live update |
+| `reviewer.toolTimeoutMs` | integer | `5000` | 0–2147483647 integer | ms | `0` immediately times out each tool call, returning evidence failure | No | Host live update |
 
 ModelChoice is either a model-reference string or `{"model":"provider/model","effort":""}`. Structured-rule members:
 
@@ -272,11 +284,11 @@ The review limit includes assembly: reading configuration, selecting a model, re
 
 | Field | Type | Default | Range | Unit | Zero or empty | Page | Effective |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `context.maxTranscriptBytes` | integer | `24576` | N | UTF-8 bytes | `0` does not trim total context | No | C |
-| `context.maxEntryBytes` | integer | `4096` | N | UTF-8 bytes | `0` does not trim each entry; also used for standalone arguments and summaries | No | C |
-| `context.maxEntries` | integer | `40` | N | Events | `0` deliberately takes no context; real action arguments are still sent separately | No | C |
-| `context.includeToolResults` | boolean | `true` | `true` / `false` | — | `false` omits tool results from context | No | C |
-| `context.redactPatterns` | string[] | six default rules | Array of regex strings | — | Configuration replaces the whole list; empty disables masking | No | C; outlet exception in section 3 |
+| `context.maxTranscriptBytes` | integer | `24576` | Non-negative integer | UTF-8 bytes | `0` does not trim total context | No | After host reload |
+| `context.maxEntryBytes` | integer | `4096` | Non-negative integer | UTF-8 bytes | `0` does not trim each entry; also used for standalone arguments and summaries | No | After host reload |
+| `context.maxEntries` | integer | `40` | Non-negative integer | Events | `0` deliberately takes no context; real action arguments are still sent separately | No | After host reload |
+| `context.includeToolResults` | boolean | `true` | `true` / `false` | — | `false` omits tool results from context | No | After host reload |
+| `context.redactPatterns` | string[] | six default rules | Array of regex strings | — | Configuration replaces the whole list; empty disables masking | No | After host reload; notice/record redaction exception in section 3 |
 
 <a id="redaction-defaults"></a>
 The six default redaction rules below replace matches with `[redacted]` in this order. Plain expressions ignore case; `/source/flags` uses explicit flags, adding a global flag for replacement. Uncompilable entries are skipped and do not protect content.
@@ -296,13 +308,13 @@ These recognize some keys, Bearer values, password-like assignments, private-key
 
 | Field | Type | Default | Range | Unit | Zero or empty | Page | Effective |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `concurrency.max` | integer | `2` | N | Global simultaneous reviews | `0` admits no review; queued requests end at their wait limit | No | C |
-| `concurrency.queueMax` | integer | `8` | N | Global queued requests | `0` permits no waiting; immediately runnable requests can still run | No | C |
-| `concurrency.queueTimeoutMs` | integer | `30000` | T | ms | `0` expires immediately when waiting is needed | No | C |
-| `breaker.consecutiveDenials` | integer | `3` | N | Consecutive denials or errors | `0` meets the threshold after every recorded review, including allow | No | C |
-| `breaker.windowSize` | integer | `50` | N | Recent review results | `0` retains no window count; the consecutive threshold still applies | No | C |
-| `breaker.windowDenials` | integer | `10` | N | Denials or errors in window | `0` meets the window threshold after every recorded result | No | C |
-| `breaker.cooldownMs` | integer | `600000` | T | ms | `0` ends cooldown and clears counts at the next check | No | C |
+| `concurrency.max` | integer | `2` | Non-negative integer | Global simultaneous reviews | `0` admits no review; queued requests end at their wait limit | No | After host reload |
+| `concurrency.queueMax` | integer | `8` | Non-negative integer | Global queued requests | `0` permits no waiting; immediately runnable requests can still run | No | After host reload |
+| `concurrency.queueTimeoutMs` | integer | `30000` | 0–2147483647 integer | ms | `0` expires immediately when waiting is needed | No | After host reload |
+| `breaker.consecutiveDenials` | integer | `3` | Non-negative integer | Consecutive denials or errors | `0` meets the threshold after every recorded review, including allow | No | After host reload |
+| `breaker.windowSize` | integer | `50` | Non-negative integer | Recent review results | `0` retains no window count; the consecutive threshold still applies | No | After host reload |
+| `breaker.windowDenials` | integer | `10` | Non-negative integer | Denials or errors in window | `0` meets the window threshold after every recorded result | No | After host reload |
+| `breaker.cooldownMs` | integer | `600000` | 0–2147483647 integer | ms | `0` ends cooldown and clears counts at the next check | No | After host reload |
 
 Reviews in one session are always serial. There are no per-model or per-session concurrency controls. Reaching either threshold opens cooldown; models are not called during it. `allow` clears the consecutive count; `deny` and review errors count. Internal attempts count as one task. Scheduling failures before review, cooldown rejection, and aborted reviews superseded by human action or cancellation do not count. Assembly and review timeouts do count.
 
@@ -312,19 +324,19 @@ There is currently no cooldown badge or manual-clear button. Identify it from th
 
 | Field | Type | Default | Range | Unit | Zero or empty | Page | Effective |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `audit.enabled` | boolean | `true` | `true` / `false` | — | `false` disables stderr audit, not review records | No | C |
-| `audit.includePrompt` | boolean | `false` | `true` / `false` | — | `false` adds no prompt audit line | No | C |
-| `audit.includeRaw` | boolean | `false` | `true` / `false` | — | `false` adds no raw-output audit line | No | C |
-| `audit.maxLineBytes` | integer | `4096` | N | UTF-8 bytes | `0` reduces audit content to an empty line, not unlimited length | No | C |
-| `ui.inject` | string | `"all"` | `all` / `reject` / `off` | — | `off` sends no Agent notice; records remain separate | Yes | A |
-| `ui.injectMaxBytes` | integer | `2048` | schema N; runtime S | UTF-8 bytes | `0` does not trim a notice | Yes | A |
-| `ui.humanCardDuringReview` | boolean | `true` | `true` / `false` | — | `false` shows a card only on actual human handoff | Yes | A |
-| `ui.trace.ownView` | boolean | `true` | `true` / `false` | — | `false` disables the plugin record view | No | B |
-| `ui.trace.turnSummary` | boolean | `true` | `true` / `false` | — | `false` hides per-turn timing comparison | No | B |
-| `ui.trace.legacyRow` | boolean | `false` | `true` / `false` | — | Approximate trajectory row defaults off | No | B |
-| `ui.trace.capture` | string | `"summary"` | `off` / `summary` / `full` | — | `off` skips full-text details but retains outcomes, reasons, action/context summaries, and evidence-tool status summaries; these may contain secrets. It neither stops content recording nor clears history | No | B; capture plans for later requests |
-| `ui.trace.maxRecords` | integer | `200` | N | Stored rows in the per-session read-back window | `0` actually falls back to `200`, not empty or unlimited | No | C |
-| `ui.trace.maxBytes` | integer | `8192` | N | UTF-8 bytes per full field | `0` actually falls back to `8192`, not untrimmed | No | C |
+| `audit.enabled` | boolean | `true` | `true` / `false` | — | `false` disables stderr audit, not review records | No | After host reload |
+| `audit.includePrompt` | boolean | `false` | `true` / `false` | — | `false` adds no prompt audit line | No | After host reload |
+| `audit.includeRaw` | boolean | `false` | `true` / `false` | — | `false` adds no raw-output audit line | No | After host reload |
+| `audit.maxLineBytes` | integer | `4096` | Non-negative integer | UTF-8 bytes | `0` reduces audit content to an empty line, not unlimited length | No | After host reload |
+| `ui.inject` | string | `"all"` | `all` / `reject` / `off` | — | `off` sends no Agent notice; records remain separate | Yes | After saving |
+| `ui.injectMaxBytes` | integer | `2048` | Non-negative integer; runtime limit 0–9007199254740991 | UTF-8 bytes | `0` does not trim a notice | Yes | After saving |
+| `ui.humanCardDuringReview` | boolean | `true` | `true` / `false` | — | `false` shows a card only on actual human handoff | Yes | After saving |
+| `ui.trace.ownView` | boolean | `true` | `true` / `false` | — | `false` disables the plugin record view | No | Host live update |
+| `ui.trace.turnSummary` | boolean | `true` | `true` / `false` | — | `false` hides per-turn timing comparison | No | Host live update |
+| `ui.trace.legacyRow` | boolean | `false` | `true` / `false` | — | Approximate trajectory row defaults off | No | Host live update |
+| `ui.trace.capture` | string | `"summary"` | `off` / `summary` / `full` | — | `off` skips full-text details but retains outcomes, reasons, action/context summaries, and evidence-tool status summaries; these may contain secrets. It neither stops content recording nor clears history | No | Host live update; capture plans for later requests |
+| `ui.trace.maxRecords` | integer | `200` | Non-negative integer | Stored rows in the per-session read-back window | `0` actually falls back to `200`, not empty or unlimited | No | After host reload |
+| `ui.trace.maxBytes` | integer | `8192` | Non-negative integer | UTF-8 bytes per full field | `0` actually falls back to `8192`, not untrimmed | No | After host reload |
 
 `ui.inject=all` notifies allows, denials, timeouts, and failures; `reject` sends only the last three. Skipped requests, cancellation, and direct human answers do not add a model-conclusion notice.
 
@@ -334,8 +346,8 @@ Audit lines have another fixed limit: reasons are at most 200 JavaScript string 
 
 | Field | Type | Default | Range | Unit | Zero or empty | Page | Effective |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `language.ui` | string | `"auto"` | `auto` / `zh` / `en` | — | Empty invalid; auto follows the host | Yes | A; next UI render |
-| `language.agent` | string | `"en"` | `zh` / `en` | — | Empty invalid | Yes | A; subsequent reviews and notices |
+| `language.ui` | string | `"auto"` | `auto` / `zh` / `en` | — | Empty invalid; auto follows the host | Yes | After saving; next UI render |
+| `language.agent` | string | `"en"` | `zh` / `en` | — | Empty invalid | Yes | After saving; subsequent reviews and notices |
 
 UI language does not change model-facing language. `language.agent` controls system prompts, policies, evidence explanations, tool descriptions and result explanations, round guidance, and Agent notices. Model references, tool names, and host catalog data retain their values. The fixed stderr format does not switch language.
 
@@ -356,7 +368,7 @@ The approval card retains the command and Reject / Allow once buttons. Automatic
 | Human timeout | Human waiting expired without a completed answer and rejected | Confirm the task is still needed before making a new request |
 | Human answer or cancellation | The human result is used, or this request ends | Do not expect a late model result to reverse it; request again for any new operation |
 
-When a human card is already visible, you can answer before settlement. Default `ui.humanCardDuringReview=true` is compatible with default `fallback=reject`: one controls cards during review; the other controls handoff after review did not allow. Direct rule rejections and delegated children have no human fallback.
+When a human card is already visible, you can answer before settlement. `ui.humanCardDuringReview` controls whether a human approval card appears during automatic review and defaults to `true`. `fallback` controls whether an unsuccessful review is handed to a human and defaults to `reject`. Direct rule rejections and delegated children have no human fallback.
 
 A request has one final outcome. Late clicks and model results cannot change it. If an old card remains, check the record instead of treating it as a new authorization entry. After safety denial, do not use equivalent commands, indirect execution, or different tools to achieve the same dangerous result.
 
@@ -410,7 +422,9 @@ The reviewer has `read_file`, `list_dir`, `glob`, and `grep`. They do not modify
 | Traversal | Up to 4000 directories; when the budget is exhausted, grep reports the incomplete search |
 | Individual tool limit | Default 5000 ms; failure or timeout returns missing evidence to the model |
 
-Credential names, DSH sessions, authentication, and plugin records have read restrictions. Directory listings may still expose sensitive names. Name detection does not identify renamed copies or hard links. **Do not assume sensitive content is fully isolated.**
+Read checks examine both the requested path and the real path after resolving links. They restrict credential-like files and directories, DSH sessions, authentication data, and plugin records. Standard browser stores are also restricted, including login and cookie databases in Edge/Chrome-style `User Data` directories and Firefox `Profiles` directories.
+
+Directory listings may still reveal sensitive filenames, and name checks cannot identify renamed copies or hard links. Assess what local content might reach the model provider even with read-only tools. When `grep` reaches the directory traversal limit, it reports an incomplete search; an empty result is not proof that a target is safe.
 
 An unknown working directory is marked missing. Read-only relative paths may start from the plugin process directory; that is not the verified operation directory. Evidence there cannot establish that the actual target is safe.
 
