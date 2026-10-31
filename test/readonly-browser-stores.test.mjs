@@ -117,13 +117,18 @@ test('原型键段名不炸查表：constructor／__proto__ 一类路径照常�
   }
 });
 
-test('真实 IO：合成规范路径读取拒止且不回显正文；同名普通文件、列目录与搜索正例保持', async () => {
+for (const viaAlias of [false, true]) test(`真实 IO（${viaAlias ? '目录别名' : '普通路径'}）：合成规范路径读取拒止且不回显正文；同名普通文件、列目录与搜索正例保持`, async () => {
   const { root, tools, auditRows } = await makeToolkit('dsafm-browser-store-');
   const before = auditRows.length;
-  const edgeProfile = join(root, 'AppData/Local/Microsoft/Edge/User Data/Default');
-  const firefoxProfile = join(root, 'AppData/Roaming/Mozilla/Firefox/Profiles/synthetic.default');
-  const notes = join(root, 'plain-notes');
+  const fixtureRoot = join(root, 'fixture');
+  const aliasRoot = join(root, 'fixture-alias');
+  const fixturePath = viaAlias ? aliasRoot : fixtureRoot;
+  const edgeProfile = join(fixturePath, 'AppData/Local/Microsoft/Edge/User Data/Default');
+  const firefoxProfile = join(fixturePath, 'AppData/Roaming/Mozilla/Firefox/Profiles/synthetic.default');
+  const notes = join(fixturePath, 'plain-notes');
   try {
+    await mkdir(fixtureRoot);
+    if (viaAlias) await linkTo(fixtureRoot, aliasRoot);
     await mkdir(join(edgeProfile, 'Network'), { recursive: true });
     await mkdir(firefoxProfile, { recursive: true });
     await mkdir(notes, { recursive: true });
@@ -147,12 +152,13 @@ test('真实 IO：合成规范路径读取拒止且不回显正文；同名普�
       assert.equal(result.isError, true, sensitive);
       assert.ok(!result.text.includes(MARKER), `拒止结果不得回显正文：${sensitive}`);
     }
-    // 公共结果只回 {text,isError,denied}；browser 类别按设计经审计行随行写出。
+    // 短路径或目录别名可能使审计带 literal/real 前缀；类别判据须兼容双形态来源。
     const denyAudits = auditRows.slice(before).map((row) => String(row.reason ?? ''));
-    assert.equal(denyAudits.filter((reason) => reason.includes('deny=browser ')).length, 5, '五次敏感读取各留一条 browser 类别审计');
-    assert.ok(denyAudits.some((reason) => reason.includes('deny=browser user data/login data')), 'reason 标明上下文段与基名');
-    assert.ok(denyAudits.some((reason) => reason.includes('deny=browser user data/cookies')), 'Network 子目录变体同样命中');
-    assert.ok(denyAudits.some((reason) => reason.includes('deny=browser profiles/')), 'Firefox 上下文段同样命中');
+    assert.equal(denyAudits.filter((reason) => /deny=(?:(?:literal|real) )?browser /u.test(reason)).length, 5, '五次敏感读取各留一条 browser 类别审计');
+    assert.ok(denyAudits.some((reason) => /deny=(?:(?:literal|real) )?browser user data\/login data/u.test(reason)), 'reason 标明上下文段与基名');
+    assert.ok(denyAudits.some((reason) => /deny=(?:(?:literal|real) )?browser user data\/cookies/u.test(reason)), 'Network 子目录变体同样命中');
+    assert.ok(denyAudits.some((reason) => /deny=(?:(?:literal|real) )?browser profiles\//u.test(reason)), 'Firefox 上下文段同样命中');
+    if (viaAlias) assert.ok(denyAudits.every((reason) => reason.includes('deny=literal browser ')), '目录别名用例必须触发双形态来源前缀');
     for (const ordinary of [join(notes, 'Cookies'), join(notes, 'logins.json')]) {
       const result = await tools.run('read_file', { path: ordinary });
       assert.equal(result.isError, false, `普通同名文件照常可读：${ordinary}`);
@@ -163,16 +169,17 @@ test('真实 IO：合成规范路径读取拒止且不回显正文；同名普�
     assert.equal(listing.isError, false, '目录列举不拒止');
     assert.ok(listing.text.includes('Login Data'), '目录列表可见敏感名称');
     // glob：敏感命中被过滤、普通文件保留。
-    const globbed = await tools.run('glob', { pattern: '**/*ookies*', cwd: root });
+    const globbed = await tools.run('glob', { pattern: '**/*ookies*', cwd: fixturePath });
     assert.equal(globbed.isError, false);
     assert.ok(!globbed.text.includes(join(edgeProfile, 'Network', 'Cookies')), 'glob 不得列出敏感命中');
     assert.ok(globbed.text.includes(join(notes, 'Cookies')), 'glob 保留普通同名文件');
     // grep：敏感文件内容不进结果，普通文件内容照常命中。
-    const grepped = await tools.run('grep', { pattern: 'SYNTHETIC_BROWSER_STORE', path: root });
+    const grepped = await tools.run('grep', { pattern: 'SYNTHETIC_BROWSER_STORE', path: fixturePath });
     assert.equal(grepped.isError, false);
     assert.ok(!grepped.text.includes('User Data'), 'grep 输出不得含规范存储路径');
     assert.ok(grepped.text.includes('plain-notes'), 'grep 保留普通文件命中');
   } finally {
+    if (viaAlias) await removeLink(aliasRoot);
     await rm(root, { recursive: true, force: true });
   }
 });
