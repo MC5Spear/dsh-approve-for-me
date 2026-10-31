@@ -1414,14 +1414,15 @@ test('composer 下拉：写入失败时触发器出现 dsafm_badge 错误徽标�
         return { ok: true, value: { providers: [{ id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
       }
       if (endpoint === 'approveForMe/setSessionModel') {
-        return { ok: false, error: '会话级选择写入失败：本地存储不可写。' };
+        return { ok: false, error: 'session-store-unwritable' };
       }
       return { ok: true, value: { efforts: [{ id: 'low' }] } };
     },
   });
   client.apply(env.ctx);
+  const dicts = env.dictionaries[0].dicts;
   const dropdown = env.registrations.find((entry) => entry.options.name === 'conversation.input.left');
-  const props = { t: (key) => key, ...dropdown.options.inject() };
+  const props = { t: (key) => dicts.zh[key] ?? key, ...dropdown.options.inject() };
   render(dropdown.component, props);
   await tick();
   await tick();
@@ -1435,10 +1436,142 @@ test('composer 下拉：写入失败时触发器出现 dsafm_badge 错误徽标�
   hookIndex = 0;
   const after = findNode(render(dropdown.component, props), primitivesStub.Menu);
   const seat = after.props.anchor;
-  assert.match(String(seat.props.title), /composer\.failed/, '悬停标题应当显示失败');
-  assert.match(String(seat.props.title), /本地存储不可写/, '悬停标题应当带上宿主给的原因');
+  assert.match(String(seat.props.title), /切换失败/, '悬停标题应当显示失败');
+  assert.match(String(seat.props.title), /本地存储不可写/, 'zh 档按字典解释 session-store-unwritable');
+  assert.ok(!String(seat.props.title).includes('session-store-unwritable'), 'zh 档不得直显错误码');
   assert.match(JSON.stringify(seat.props.children), /dsafm_badge/, '触发器上应当出现错误徽标');
-  assert.match(JSON.stringify(seat.props.children), /composer\.failed/, '徽标文案用 composer.failed');
+  assert.match(JSON.stringify(seat.props.children), /切换失败/, '徽标文案用 composer.failed');
+});
+
+test('composer 下拉：稳定错误码按界面语言解释，已知旧整句精确映射、未知串原文显示', async () => {
+  resetHooks();
+  const client = loadClient();
+  /**
+   * 走一轮「选模型 → 失败」并取触发器标题。
+   * @param {string} lang - 字典语言档。
+   * @param {string} rpcError - setSessionModel 返回的 error 字符串。
+   * @returns {Promise<string>} 悬停标题。
+   */
+  const round = async (lang, rpcError) => {
+    resetHooks();
+    hookIndex = 0;
+    const env = makeCtx({
+      currentSession: 's1',
+      call: async (endpoint) => {
+        if (endpoint === 'approveForMe/getState') {
+          return {
+            ok: true,
+            value: {
+              found: true,
+              active: true,
+              preset: 'auto-approve',
+              sessionModel: null,
+              sessionEffort: '',
+              globalDefault: 'zai/glm-5.3',
+              globalEffort: 'low',
+              byParentModel: {},
+              effective: 'zai/glm-5.3',
+              effectiveEffort: 'low',
+              layer: 'global',
+            },
+          };
+        }
+        if (endpoint === 'approveForMe/modelCatalog') {
+          return { ok: true, value: { providers: [{ id: 'zai', models: [{ id: 'glm-5.3' }] }] } };
+        }
+        if (endpoint === 'approveForMe/setSessionModel') {
+          return { ok: false, error: rpcError };
+        }
+        return { ok: true, value: { efforts: [{ id: 'low' }] } };
+      },
+    });
+    client.apply(env.ctx);
+    const dicts = env.dictionaries[0].dicts;
+    const dropdown = env.registrations.find((entry) => entry.options.name === 'conversation.input.left');
+    const props = { t: (key) => dicts[lang][key] ?? key, ...dropdown.options.inject() };
+    render(dropdown.component, props);
+    await tick();
+    await tick();
+    hookIndex = 0;
+    const first = findNode(render(dropdown.component, props), primitivesStub.Menu);
+    first.props.onSelect('zai/glm-5.3');
+    await tick();
+    await tick();
+    await tick();
+    hookIndex = 0;
+    const after = findNode(render(dropdown.component, props), primitivesStub.Menu);
+    return String(after.props.anchor.props.title);
+  };
+  // 两个稳定错误码：zh/en 各按本语言字典解释，不直显码、不出现另一语言。
+  for (const [code, zhCopy, enCopy] of [
+    ['invalid-model-ref', '模型引用不合法', 'Invalid model reference'],
+    ['session-store-unwritable', '本地存储不可写', 'local storage is not writable'],
+  ]) {
+    const zhTitle = await round('zh', code);
+    assert.ok(zhTitle.includes(zhCopy), `zh 档 ${code} 应含「${zhCopy}」：${zhTitle}`);
+    assert.ok(!zhTitle.includes(code), `zh 档不得直显错误码 ${code}`);
+    const enTitle = await round('en', code);
+    assert.ok(enTitle.includes(enCopy), `en 档 ${code} 应含「${enCopy}」：${enTitle}`);
+    assert.ok(!enTitle.includes('模型引用不合法') && !enTitle.includes('本地存储不可写'), `en 档 ${code} 不得出现中文文案：${enTitle}`);
+  }
+  // 兼容旧桥接：两个已知旧整句精确映射到本语言解释，不在 en 档直显中文；未知字符串按原文透传。
+  const legacyKnown = await round('en', '会话级选择写入失败：本地存储不可写。');
+  assert.ok(legacyKnown.includes('local storage is not writable'), `已知旧整句应按 en 字典解释：${legacyKnown}`);
+  assert.ok(!legacyKnown.includes('会话级选择写入失败'), `en 档不得直显旧中文整句：${legacyKnown}`);
+  const legacyUnknown = await round('en', 'boom');
+  assert.ok(legacyUnknown.includes('boom'), `未知字符串应按原文显示：${legacyUnknown}`);
+  // 原型名不是映射键：Map 精确匹配，"constructor"/"toString"/"__proto__" 按原文透传，不得命中原型成员。
+  for (const proto of ['constructor', 'toString', '__proto__']) {
+    const title = await round('en', proto);
+    assert.ok(title.includes(proto), `原型名 ${proto} 应按原文显示：${title}`);
+    assert.ok(!title.includes('composer.error') && !title.includes('Switch failed: function'), `原型名 ${proto} 不得被当成错误码：${title}`);
+  }
+});
+
+test('端到端回归：真实 setSessionModel 的错误码由客户端按语言解释（design §7.5）', async (t) => {
+  // 真实生产方法（lib/bridge.js 原型）需要宿主解析环境；离线跑法按 bridge.test 同口径跳过。
+  let bridge;
+  try {
+    bridge = await import('../lib/bridge.js');
+  } catch (error) {
+    const message = String(error?.message ?? error);
+    if (error?.code === 'ERR_MODULE_NOT_FOUND' && message.includes('@deepseek-ai/')) {
+      t.skip('宿主包不可解析（离线跑法，与 bridge.test 同口径）');
+      return;
+    }
+    throw error;
+  }
+  const proto = bridge.ApproveForMeService.prototype;
+  const audits = [];
+  const runReal = (model, writeFails) =>
+    proto.setSessionModel.call(
+      { sessionOf: () => undefined, deps: { sessionStore: { write: () => !writeFails }, audit: (fields) => audits.push(fields) } },
+      's1',
+      model,
+      '',
+    );
+  // 真实方法产出两个稳定错误码（非法引用不写载体；载体不可写不报成功且记降级审计）。
+  // 空白引用非法；裸模型名按既有回退语义接受，不属非法（bridge.test 同口径）。
+  assert.deepEqual(runReal('   ', false), { ok: false, error: 'invalid-model-ref' });
+  assert.deepEqual(runReal('zai/glm-5.3', true), { ok: false, error: 'session-store-unwritable' });
+  assert.equal(audits.length, 1);
+  assert.equal(audits[0].degraded, 'session:file-store-failed');
+  // 字典双语言覆盖：zh/en 对两个码都有可读解释，互不为空、互不相同。
+  const { dicts } = await new Promise((resolve) => {
+    const client = loadClient();
+    const env = makeCtx({
+      currentSession: 's1',
+      call: async () => ({ ok: true, value: {} }),
+    });
+    client.apply(env.ctx);
+    resolve(env.dictionaries[0]);
+  });
+  for (const key of ['composer.error.invalidModelRef', 'composer.error.storeUnwritable']) {
+    assert.ok(dicts.zh[key], `缺中文 ${key}`);
+    assert.ok(dicts.en[key], `缺英文 ${key}`);
+    assert.notEqual(dicts.zh[key], dicts.en[key], `${key} 两语不得同文`);
+    assert.ok(!/[\u3400-\u9fff]/u.test(dicts.en[key]), `英文 ${key} 不得残留汉字`);
+  }
 });
 
 test('composer 分置提示（§7.2.0）：session 条目渲染在选择控件附近，空串省略「实际使用」句', async () => {
@@ -1979,6 +2112,7 @@ test('拼接标点封闭白名单（design §7.5）：英文字典零全角、cl
     if (!/[\u3000-\u303F\uFF01-\uFF60]/u.test(code)) return; // ②行注释
     const inWhitelist =
       /^\s*"[A-Za-z0-9_.\-]+":\s*"[^"]*[\u3000-\u303F\uFF01-\uFF60][^"]*",?\s*$/u.test(line) || // ①（英文侧零全角由字典层保证）
+      /^\s*\[?"[^"]*[\u3000-\u303F\uFF01-\uFF60][^"]*",\s*"composer\.error\.[A-Za-z]+"\]?,?\s*$/u.test(line) || // ①-b 旧版中文整句键（Map 数组项，值是 ASCII 字典键；兼容映射，非新拼接点）
       /\?\s*"[：、；（]"\s*:/u.test(code) || /\?\s*`（\$\{[^}]*\}）`\s*:/u.test(code) || // ④
       /（\\?\{v\\?\}）|\[:：\]|实际使用：\|Currently using:/u.test(code) || // ③
       /startsWith\("审查未执行："\)|\^审查未执行：/u.test(code) || /^const NOT_RUN_PREFIX/u.test(code); // ⑤（判定式常量实名；ATTEMPT_PREFIX 是纯 ASCII 正则，不涉全角）

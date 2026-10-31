@@ -243,7 +243,8 @@ testHost('setSessionModel：空引用被拒且不写文件载体（裸模型名�
   for (const bad of ['', '   ']) {
     const result = instance.setSessionModel('s1', bad, '');
     assert.equal(result.ok, false, `应拒绝 ${JSON.stringify(bad)}`);
-    assert.match(result.error, /provider\/model/u);
+    // 稳定错误码：客户端按界面语言解释（design §7.5），桥接层不返回硬编码中文。
+    assert.equal(result.error, 'invalid-model-ref');
   }
   assert.deepEqual(instance.writes, []);
 });
@@ -252,7 +253,7 @@ testHost('setSessionModel：落盘失败时不报成功，并记一行降级审�
   const instance = service({ session: undefined, writeFails: true });
   const result = instance.setSessionModel('s1', 'zai/glm-5.3', '');
   assert.equal(result.ok, false);
-  assert.match(result.error, /写入失败/u);
+  assert.equal(result.error, 'session-store-unwritable');
   assert.deepEqual(instance.writes, []);
   const audit = instance.audits.at(-1);
   assert.equal(audit.degraded, 'session:file-store-failed');

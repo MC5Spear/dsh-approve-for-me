@@ -101,6 +101,15 @@ window.__ModuleLoader__.load({
 		const PACKAGE_NAME = "dsh-approve-for-me";
 		/** RPC 端点前缀；八项 RPC 共用同一份 TYPERT 清单（design §7.1）。 */
 		const RPC_CHANNEL = "/api";
+		// `approveForMe/setSessionModel` 失败返回 → 字典键（design §7.5）：桥接层给稳定错误码，
+		// 界面按当前语言解释。两个已知旧版中文整句精确映射到同一解释（旧后端配新客户端不落回中文）。
+		// 用 Map 精确匹配：表外返回值（含 "constructor"/"toString" 等原型名）按原文字符串显示。
+		const SESSION_MODEL_ERROR_KEYS = new Map([
+			["invalid-model-ref", "composer.error.invalidModelRef"],
+			["session-store-unwritable", "composer.error.storeUnwritable"],
+			["模型引用不合法，应形如 provider/model", "composer.error.invalidModelRef"],
+			["会话级选择写入失败：本地存储不可写。", "composer.error.storeUnwritable"],
+		]);
 
 		const zh = {
 			"card.unset": "未设置",
@@ -172,6 +181,8 @@ window.__ModuleLoader__.load({
 			"composer.title": "本会话的审查模型；独立于执行助手调用，点开可只给这个会话指定",
 			"composer.empty": "没有可选模型",
 			"composer.failed": "切换失败",
+			"composer.error.invalidModelRef": "模型引用不合法，应形如 provider/model",
+			"composer.error.storeUnwritable": "会话级选择写入失败：本地存储不可写。",
 			"composer.fallbackBadge": "已回退",
 			"composer.pendingSession": "会话尚未开始；现在设置的值会在会话开始后生效",
 			"composer.section.model": "模型",
@@ -434,6 +445,8 @@ window.__ModuleLoader__.load({
 			"composer.title": "This session's reviewer model — called independently of the agent; pick one to override it for this session only",
 			"composer.empty": "No selectable model",
 			"composer.failed": "Switch failed",
+			"composer.error.invalidModelRef": "Invalid model reference; it should look like provider/model",
+			"composer.error.storeUnwritable": "Failed to save the session-level choice: local storage is not writable.",
 			"composer.fallbackBadge": "Fallback",
 			"composer.pendingSession": "This session has not started yet; the value applies once it does",
 			"composer.section.model": "Model",
@@ -1529,7 +1542,10 @@ window.__ModuleLoader__.load({
 					return props.rpcCall("approveForMe/setSessionModel", { sessionId, model: nextModel, effort: settled })
 						.then((response) => {
 							if (response?.ok !== true) {
-								setError(response?.error ?? t("composer.failed"));
+								// 稳定错误码及两个已知旧中文错误走字典按语言解释；其他字符串保留原文显示。
+								const raw = typeof response?.error === "string" && response.error.length > 0 ? response.error : "";
+								const copyKey = SESSION_MODEL_ERROR_KEYS.get(raw);
+								setError(copyKey !== undefined ? t(copyKey) : raw.length > 0 ? raw : t("composer.failed"));
 								return undefined;
 							}
 							return props.rpcCall("approveForMe/getState", { sessionId }).then((next) => {
@@ -2129,7 +2145,7 @@ window.__ModuleLoader__.load({
 							? "dsafm_review_decision dsafm_review_decision_deny"
 							: "dsafm_review_decision";
 				const truncated = detail?.truncated === true;
-				// 全文段任一在场即证实 capture=full（design §8.5.1 分派链第二级的依据）。
+				// prompt、input、output 任一字段为字符串即证实 capture=full（design §8.5.1 分派链第二级的依据）。
 				const fullTextPresent =
 					typeof detail?.prompt === "string" || typeof detail?.input === "string" || typeof detail?.output === "string";
 				// 第二级反证依据（design §8.5.1）：degraded 多值拆分与 multiEnumText 同口径（逗号与 +
@@ -2143,14 +2159,14 @@ window.__ModuleLoader__.load({
 				const captureOfDetail = typeof detail?.capture === "string" ? detail.capture : undefined;
 				/**
 				 * 缺段说明的三级分派（design §8.5.1）：①读取失败在场 → 一律「本次未记录此项」；
-				 * ②全文采集证实（任一全文段在场）先查反证——evidence 缺且 degraded 含上下文采集异常
+				 * ②全文采集证实（prompt/input/output 任一字段为字符串）先查反证——evidence 缺且 degraded 含上下文采集异常
 				 * 标记（读取失败或截断，具体原因由 degraded 段承载）、probes 缺且 tools 大于 0 或缺失
 				 * （计数证伪「未调用」）时走「本次未记录此项」；无反证时 evidence→未取上下文、
 				 * probes 缺且 tools 在场为 0→未调用取证工具、reasoning→模型未提供、output 缺且结算为
 				 * 故障类（decision=error）→模型未提供、其余→「本次未记录此项」；
-				 * ③全文段均不在场：以记录级 capture 标记为唯一可靠依据——审查已执行（decision 在场）
+				 * ③prompt/input/output 均非字符串：以记录级 capture 标记为唯一可靠依据——审查已执行（decision 在场）
 				 * 且 capture 为 summary/off（写入时确实未开启全文采集）时 prompt/input/output/reasoning
-				 * 显示「未开启全文采集」；capture=full 但全文段缺失（模型不可用早退、提示构建抛错，
+				 * 显示「未开启全文采集」；capture=full 但这三个字段均缺失（模型不可用早退、提示构建抛错，
 				 * 全文未形成）与 capture 缺失（旧记录，无法确认）走「本次未记录此项」；审查未执行
 				 * （decision 缺失）的全部缺段同样走「本次未记录此项」。
 				 * @param {string} segment - 段名（reason/evidence/probes/prompt/input/reasoning/output）。

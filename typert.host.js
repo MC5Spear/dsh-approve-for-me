@@ -54,7 +54,7 @@ export const modelEffortsResultSchema = z.object({
   defaultEffort: z.string(),
 });
 
-/** `setSessionModel` 结果；失败时 `error` 直接展示给用户。 */
+/** `setSessionModel` 结果；失败时 `error` 为稳定错误码（或旧版整句），由客户端按界面语言解释。 */
 export const setSessionModelResultSchema = z.object({ ok: z.boolean(), error: z.string().optional() });
 
 /** `modelCatalog` 结果：按 provider 分组的模型清单。 */

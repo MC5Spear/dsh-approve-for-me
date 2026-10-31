@@ -11,7 +11,11 @@ Review covers only sandbox-escalation requests inside the coverage; see [section
 
 The read-only evidence tools deny credential-like files and directories in both literal and real path forms, and browser canonical stores (the `User Data` layout of Edge and Chrome, the `Profiles` layout of Firefox, covering login and cookie databases) are denied the same way; `grep` states its actual coverage when the directory budget is exhausted; renamed copies and hard links are not covered.
 
-The current delivery is verified on Windows with DSH `0.2.1-rc.2`; other platforms and host versions are not verified. Before deploying to those environments, choose and run the relevant checks in the [verification guide](<verification.md>).
+### Verification coverage
+
+On Windows, module wiring checks passed against official packages for DSH `0.2.1-rc.1` through `0.2.1-rc.5`. Real-host verification covers `0.2.1-rc.5` installation/loading, settings save, model approval followed by execution, zero-review-timeout rejection, and built-in dangerous-command rejection.
+
+Real loading and page interactions on the other four RCs, and complete authorization, delegation, human-answer/cancellation, and removal/recovery checks remain pending. Other platforms are not verified. Check the target environment using the [verification guide](<verification.md>) before deployment.
 
 Do not test problems with real secrets or dangerous commands.
 
@@ -22,15 +26,15 @@ Do not test problems with real secrets or dangerous commands.
 
 | Component | Current requirement |
 | --- | --- |
-| Plugin version | `0.2.2+dsh.0.2.1-rc.2` |
-| DSH host | Exactly `0.2.1-rc.2` |
+| Plugin version | `0.2.2+dsh.0.2.1-rc` |
+| DSH compatibility line | `0.2.1-rc`; currently admits `0.2.1-rc.1`, `0.2.1-rc.2`, `0.2.1-rc.3`, `0.2.1-rc.4`, and `0.2.1-rc.5` |
 | Plugin Node declaration | `>=20` |
 | Recommended toolchain | Node 24, used in this project's development and CI |
 | Host installer | pnpm; check with `corepack pnpm --version` |
 
 The plugin's Node declaration does not establish that the complete host works on Node 20. Also meet the requirements of the host and its dependencies. This reference does not infer the complete host minimum. Ask the maintainer about verification before relying on another platform or Node version.
 
-The `+dsh.0.2.1-rc.2` part identifies the intended host. Ordinary semantic-version comparisons ignore this build metadata, so they cannot select host compatibility for you. The host also checks the plugin's exact host requirement. Do not widen declarations or use a version exemption to force loading.
+The `+dsh.0.2.1-rc` part identifies the supported RC maintenance line. Loading uses the same explicit set of exact versions in `engines.dsh` and both host peer declarations; current members are listed above. A later RC needs updated declarations and verification before admission. Ordinary semantic-version comparisons ignore build metadata, so check the full package version and admitted host set when selecting a package.
 
 When obtaining source or an artifact, check the full version and matching host. An adaptation branch identifies the intended host line, but its contents can move. For reproducibility, retain the revision or artifact identity actually supplied by the maintainer. Different builds can carry the same package version; the version does not replace a delivery identity.
 
@@ -60,7 +64,7 @@ npm install --omit=dev --legacy-peer-deps
 dsh plugin --profile web add "<absolute-source-directory>"
 ```
 
-Here `--legacy-peer-deps` prevents npm from automatically installing host peer packages. It does not establish that the plugin loaded and does not replace the host installation channel. Runtime still requires DSH `0.2.1-rc.2` to supply `@deepseek-ai/dsh-llm` and `@deepseek-ai/dsh-typert-protocol` from its own installation tree, along with `@deepseek-ai/cordis` satisfying `~4.0.4`. The preceding npm step prepares this plugin's direct dependencies.
+Here `--legacy-peer-deps` prevents npm from automatically installing host peer packages. At runtime, the target host must belong to the admitted set above and supply `@deepseek-ai/dsh-llm` and `@deepseek-ai/dsh-typert-protocol` at its own RC version from the same host installation tree, along with `@deepseek-ai/cordis` satisfying `~4.0.4`. If the two host packages differ in version or resolve from different trees, repair their resolution sources before installation and loading checks. The preceding npm step prepares this plugin's direct dependencies.
 
 Do not assume host packages in an existing source `node_modules` are correct. Ask for a clean delivery directory or have the deployment administrator check resolution sources. Do not bulk-delete unknown dependencies or treat successful installation in an ordinary npm project as successful profile loading. For resolution failures, use a maintainer-supplied tgz or report redacted loading errors.
 

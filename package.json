@@ -1,6 +1,6 @@
 {
   "name": "dsh-approve-for-me",
-  "version": "0.2.2+dsh.0.2.1-rc.2",
+  "version": "0.2.2+dsh.0.2.1-rc",
   "description": "Independent LLM review for DSH sandbox-escalation approvals.",
   "license": "MIT",
   "author": "MC5Spear (https://github.com/MC5Spear)",

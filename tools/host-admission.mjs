@@ -30,7 +30,7 @@ const PRERELEASE_SEGMENT = `(?:${NUMERIC}|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)`;
 const EXACT_VERSION = new RegExp(`^${NUMERIC}\\.${NUMERIC}\\.${NUMERIC}(?:-${PRERELEASE_SEGMENT}(?:\\.${PRERELEASE_SEGMENT})*)?$`, 'u');
 
 /**
- * 归一处声明。
+ * 归一一处版本声明。
  * @param {unknown} value 声明原文（须为字符串）。
  * @param {string} label 声明位置名，用于报错。
  * @returns {{ok: true, versions: string[]}} 去重后的版本清单（保持出现顺序）；

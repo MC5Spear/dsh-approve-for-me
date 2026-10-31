@@ -12,10 +12,12 @@ This is a third-party community plugin, unaffiliated with DeepSeek.
 
 | Component | Current requirement |
 | --- | --- |
-| Plugin version | `0.2.2+dsh.0.2.1-rc.2` |
-| DSH host | Exactly `0.2.1-rc.2` |
+| Plugin version | `0.2.2+dsh.0.2.1-rc` |
+| DSH compatibility line | `0.2.1-rc`; currently admits `0.2.1-rc.1`, `0.2.1-rc.2`, `0.2.1-rc.3`, `0.2.1-rc.4`, and `0.2.1-rc.5` |
 | Plugin Node declaration | `>=20`; this is not the minimum for the complete host |
 | Recommended toolchain | Node 24, used for this project's development and CI |
+
+The host must supply `@deepseek-ai/dsh-llm` and `@deepseek-ai/dsh-typert-protocol` at its own RC version from the same host installation tree. See the [user reference](<docs/user-reference.en.md#known-issues>) for the actual verification coverage.
 
 ## Installation
 

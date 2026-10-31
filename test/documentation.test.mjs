@@ -485,8 +485,9 @@ function buildPackageFixture(repoRoot, { mutate } = {}) {
   for (const rel of ['lib/index.js', 'assets/tenant-policy.md', 'assets/tenant-policy.zh.md']) writeFileSync(path.join(pkgDir, rel), 'stub\n', 'utf8');
   for (const rel of ['lib/config.js', 'lib/policy.js', 'lib/trace-store.js']) copyFileSync(path.join(repoRoot, rel), path.join(pkgDir, rel));
   writeFileSync(path.join(pkgDir, 'LICENSES', 'Apache-2.0.txt'), 'Apache License\n', 'utf8');
+  const compatibilityIdentity = /\+dsh\.(.+)$/u.exec(repoPkg.version)?.[1] ?? '';
   for (const rel of ['README.md', 'README.en.md']) {
-    writeFileSync(path.join(pkgDir, rel), `# x\n\n\`${repoPkg.version}\`；宿主 \`${repoPkg.engines.dsh}\`。\n`, 'utf8');
+    writeFileSync(path.join(pkgDir, rel), `# x\n\n\`${repoPkg.version}\`；兼容线 \`${compatibilityIdentity}\`；宿主 \`${repoPkg.engines.dsh}\`。\n`, 'utf8');
   }
   for (const rel of ['CONTRIBUTING.md', 'CHANGELOG.md', 'docs/documentation-principles.md', 'docs/verification.md', 'docs/requirements.md', 'docs/design.md']) {
     writeFileSync(path.join(pkgDir, rel), `# ${rel}\n`, 'utf8');

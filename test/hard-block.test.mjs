@@ -85,9 +85,9 @@ test('仅递归不带强制不落 POSIX 分支（rm -r 按 PowerShell 缩写族�
   assert.equal(hardCmd('rm -r ./sample').code, 'hard-h1-powershell');
 });
 
-test('A8 定稿：git rm -r 纯文本判定命中 H1，Git 外层不豁免（需求 §10 H1 尾段）', () => {
-  // 需求 §10 H1 定稿：本层按命令文本判定、不依赖可确认的 Shell 身份；`git rm -r` 同样命中，
-  // 不因外层命令为 Git 而豁免。判定层是纯函数——本用例只送文本，从不执行任何删除命令。
+test('H1：git rm -r 按命令文本直接拒绝，Git 外层不豁免（需求 §10 H1）', () => {
+  // H1 按命令文本判定，`git rm -r` 命中 PowerShell 的 rm 别名与 -Recurse 缩写；
+  // 外层 Git 命令不改变判定。本用例将命令文本传给纯函数。
   assert.equal(hardCmd('git rm -r docs').code, 'hard-h1-powershell');
   assert.equal(hardCmd('git rm -r --force docs').code, 'hard-h1-posix', '同时带递归与强制按 POSIX 族归类，同样直接拒绝');
   // 对照（仅递归形态的 H1/H2 分流，呼应「仅递归」用例）：长选项 --recursive 不属 PS 缩写族，

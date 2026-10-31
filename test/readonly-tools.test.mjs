@@ -8,6 +8,12 @@ import { agentT } from '../lib/agent-texts.js';
 import { errorCopyFailures } from './helpers/error-copy-facts.mjs';
 
 /**
+ * 拒止文件的合成正文 marker：独立合成标记用于区分内容与拒止消息中的路径
+ * （拒止消息回显的绝对路径含仓库名 approve-for-me，不能拿它当敏感内容判据）。
+ */
+const DENIED_MARKER = 'DSAFM-DENIED-BODY-MARKER-8e42c1';
+
+/**
  * 建一棵临时目录树。
  * @returns {Promise<string>} 根目录。
  */
@@ -21,7 +27,7 @@ async function fixture() {
   await writeFile(join(root, 'id_rsa'), 'PRIVATE\n');
   // 裸点形态（基名即扩展名，无主干名）必须真实落在磁盘上验证端到端拒止。
   await writeFile(join(root, '.pem'), 'BARE-PEM-PRIVATE\n');
-  await writeFile(join(root, 'settings.yaml'), 'approve-for-me: {}\n');
+  await writeFile(join(root, 'settings.yaml'), `session-model: ${DENIED_MARKER}\n`);
   // 大写名必须落在独立目录：NTFS 上同目录写 settings.yaml 与 SETTINGS.YAML 是同一个文件，
   // 磁盘名会保持先写的小写，用例就无法区分大小写敏感与否。
   await mkdir(join(root, 'UPPER'), { recursive: true });
@@ -204,17 +210,28 @@ test('只读工具不修改目标文件', async () => {
 test('grep 的拒止判定经过 realpath 归一化：大小写变体不可绕过', async () => {
   const root = await fixture();
   const tools = createReadonlyTools({ rootDir: root });
-  const upper = await tools.run('grep', { pattern: 'approve', path: join(root, 'SETTINGS.YAML') });
-  assert.doesNotMatch(upper.text, /approve-for-me/, `大写变体不应读到内容：${upper.text}`);
-  const lower = await tools.run('grep', { pattern: 'approve', path: join(root, 'settings.yaml') });
-  assert.doesNotMatch(lower.text, /approve-for-me/);
+  // 大小写变体在 Windows 上指向同一文件；两个形态都必须拒止且不泄漏正文 marker。
+  for (const target of [join(root, 'SETTINGS.YAML'), join(root, 'settings.yaml')]) {
+    const hit = await tools.run('grep', { pattern: DENIED_MARKER, path: target });
+    assert.equal(hit.denied, true, `应拒止：${target}`);
+    assert.ok(!String(hit.text).includes(DENIED_MARKER), `拒止消息不得泄漏正文 marker：${hit.text}`);
+  }
+  // 正常对照：同一 grep 方法在非拒止文件上确实返回正文——「不泄 marker」由此才是有效判据。
+  const control = await tools.run('grep', { pattern: 'hello', path: join(root, 'src') });
+  assert.ok(String(control.text).includes('hello world'), '对照组应返回正文命中');
 });
 
 test('grep 与 glob 不因 NTFS 备用数据流后缀而绕过拒止', async () => {
   const root = await fixture();
   const tools = createReadonlyTools({ rootDir: root });
-  const stream = await tools.run('grep', { pattern: 'approve', path: join(root, 'settings.yaml::$DATA') });
-  assert.doesNotMatch(stream.text, /approve-for-me/, `ADS 变体不应读到内容：${stream.text}`);
+  const stream = await tools.run('grep', { pattern: DENIED_MARKER, path: join(root, 'settings.yaml::$DATA') });
+  assert.equal(stream.denied, true, 'ADS 后缀形态应拒止');
+  assert.ok(!String(stream.text).includes(DENIED_MARKER), `拒止消息不得泄漏正文 marker：${stream.text}`);
+  const listed = await tools.run('glob', { pattern: 'settings.yaml*', cwd: root });
+  assert.ok(!String(listed.text).includes(DENIED_MARKER), 'glob 不得泄正文 marker');
+  // 正常对照：同一 grep 方法在非拒止文件上确实返回正文——「不泄 marker」由此才是有效判据。
+  const control = await tools.run('grep', { pattern: 'hello', path: join(root, 'src', 'a.txt') });
+  assert.ok(String(control.text).includes('hello world'), '对照组应返回正文命中');
 });
 
 test('glob 过滤拒止清单且拒止目录不可作为枚举起点', async () => {
