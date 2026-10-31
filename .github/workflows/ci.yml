@@ -2,61 +2,48 @@ name: CI
 
 on:
   push:
-    branches: ['adapt/dsh-0.2.1-rc.2']
+    branches: ['adapt/dsh-0.2.1']
   pull_request:
   workflow_dispatch:
 
+# 结构（design §10.5）：static 提取准入集合并跑 RC 无关检查；matrix 以「Node × 锚点 RC」
+# 全交叉跑宿主接线测试；guard-negatives 执行守卫三类反例。锚点 RC 取值由共享归一模块
+# 从 package.json 动态生成——声明不可解析或三处不一致直接使本工作流失败，不退化为缺省清单。
+
 jobs:
-  test:
+  static:
     runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        node: ['22', '24']
-    env:
-      # 宿主锚点：本包两枚宿主包（dsh-llm/dsh-typert-protocol）按 peer 精确钉版，锚点必须指向同版宿主安装树
-      DSAFM_HOST_MODULES: ${{ github.workspace }}\node_modules
+    outputs:
+      matrix_rc: ${{ steps.admission.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
-      - name: 公开范围边界检查（结构 / 本机指纹 / 内部引用，三类判据零命中）
-        run: npm run check:public-surface
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
+          node-version: '24'
           cache: npm
+      - name: 公开范围边界检查（结构 / 本机指纹 / 内部引用，三类判据零命中）
+        run: npm run check:public-surface
+      - name: 提取准入集合（失败即工作流失败，不输出缺省清单）
+        id: admission
+        shell: pwsh
+        run: |
+          # package.json 的三处声明（engines.dsh 与两条宿主 peer）是准入集合唯一来源；
+          # 归一失败（非法段/三处不一致）时模块以非零退出，本步骤随之失败。
+          $list = node tools/host-admission.mjs --list
+          if ($LASTEXITCODE -ne 0) { throw "准入声明不可解析，矩阵无法生成：$list" }
+          $json = ($list -split '\s+' | ForEach-Object { '"'+$_+'"' }) -join ','
+          "matrix=[$json]" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "准入集合（矩阵维度）：$json"
       - name: 安装本包依赖
         run: npm ci --omit=dev --no-audit --no-fund
-      - name: 安装宿主锚点包（两枚钉版宿主包按 peer 精确版、cordis 与 schemastery 按 peer/依赖区间满足；client-ui-primitives 与 session-format-v3-to-v4 是套件实际 import 的宿主包、不在本包依赖图内，由此步补装：0.2.1 宿主安装树已无 client-ui-primitives 实体目录（内联进 web-frontend 发行物），session-format-v3-to-v4 的实体目录仍在；不写回 lockfile）
-        run: npm install --no-save --no-package-lock --no-audit --no-fund @deepseek-ai/cordis@4.0.5 @deepseek-ai/dsh-llm@0.2.1-rc.2 @deepseek-ai/dsh-typert-protocol@0.2.1-rc.2 @deepseek-ai/schemastery@3.18.5 @deepseek-ai/dsh-client-ui-primitives@0.2.1-rc.2 @deepseek-ai/dsh-session-format-v3-to-v4@0.2.1-rc.2
       - name: 语法自检
         run: npm run check
       - name: 文档事实与链接检查
         run: npm run check:docs
       - name: 实际安装包文档与分发检查
         run: npm run check:docs:pack
-      - name: typert 清单校验
-        run: npm run probe:typert
       - name: 单测（不注册宿主解析钩子）
         run: npm run test:offline
-      - name: 全量单测（含宿主接线）
-        run: npm test
-      - name: 负向对照——锚点指向「版本不对但可用」的树时，钉版守卫必须红
-        shell: pwsh
-        run: |
-          # 注意：不能指向「不存在的树」——那样钩子会回退到本地 node_modules（CI 里装的正是钉版），
-          # 守卫照样绿，负向对照就成了恒真断言。必须造一棵「能解析但版本不对」的树。
-          $wrong = Join-Path $env:RUNNER_TEMP 'wrong-host-tree'
-          npm install --prefix $wrong --no-audit --no-fund --no-package-lock zod @deepseek-ai/schemastery@3.18.4 @deepseek-ai/dsh-llm@0.2.1-rc.1 @deepseek-ai/dsh-typert-protocol@0.2.1-rc.1
-          if ($LASTEXITCODE -ne 0) { throw '负向对照准备失败：装不出错误版本的锚点树' }
-          $env:DSAFM_HOST_MODULES = Join-Path $wrong 'node_modules'
-          node --import ./tools/_host-hooks.mjs --test test/host-tree.test.mjs
-          if ($LASTEXITCODE -eq 0) {
-            throw '锚点守卫在错误版本锚点下没有变红——守卫失效，CI 形同虚设'
-          }
-          Write-Host '负向对照通过：错误版本锚点下守卫按预期变红'
-          # pwsh 步骤包装器以最后一条原生命令的退出码收尾；上面的 node 是预期红（非零），
-          # 已被显式检查消费，末尾必须归零退出码，否则「对照通过」仍会被误判成步骤失败。
-          exit 0
       - name: 负向对照——种下本机指纹时，边界检查器的退出码必须非零
         shell: pwsh
         run: |
@@ -81,6 +68,105 @@ jobs:
           }
           Write-Host "负向对照通过：种下指纹后边界检查器退出码为 $code"
 
+  matrix:
+    needs: static
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+        rc: ${{ fromJSON(needs.static.outputs.matrix_rc) }}
+    env:
+      # 宿主锚点：锚点树按矩阵 RC 显式版本安装；期望版本注入使守卫把「装错版本」
+      # 直接判红（等值断言收紧集合成员断言），安装参数化失效时该行不会绿着重复测同一 RC。
+      DSAFM_HOST_MODULES: ${{ github.workspace }}\node_modules
+      DSAFM_EXPECT_HOST: ${{ matrix.rc }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: 安装本包依赖
+        run: npm ci --omit=dev --no-audit --no-fund
+      - name: 安装宿主锚点包（全部钉矩阵 RC；cordis 与 schemastery 按 peer/依赖区间满足；client-ui-primitives 与 session-format-v3-to-v4 是套件实际 import 的宿主包、不在本包依赖图内，由此步补装；不写回 lockfile）
+        run: npm install --no-save --no-package-lock --no-audit --no-fund @deepseek-ai/cordis@4.0.5 @deepseek-ai/dsh-llm@${{ matrix.rc }} @deepseek-ai/dsh-typert-protocol@${{ matrix.rc }} @deepseek-ai/schemastery@3.18.5 @deepseek-ai/dsh-client-ui-primitives@${{ matrix.rc }} @deepseek-ai/dsh-session-format-v3-to-v4@${{ matrix.rc }}
+      - name: typert 清单校验
+        run: npm run probe:typert
+      - name: 全量单测（含宿主接线与守卫；守卫按期望版本断言实体等值）
+        run: npm test
+
+  guard-negatives:
+    needs: static
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: 安装本包依赖
+        run: npm ci --omit=dev --no-audit --no-fund
+      - name: 负向对照一——锚点指向「集合外可解析树」（0.2.1-alpha.5）时，守卫必须红
+        shell: pwsh
+        run: |
+          # 错版取官方 npm 可解析、两种 semver 语义下均不满足准入声明的版本（design §10.5）。
+          # alpha 通道不在显式精确枚举内 → 「实体 ∈ 准入集合」断言假 → 测试非零。
+          # 不能指向「不存在的树」——解析钩子会回退默认树（CI 里正是集合内版本），对照恒真。
+          $wrong = Join-Path $env:RUNNER_TEMP 'out-of-set-tree'
+          npm install --prefix $wrong --no-audit --no-fund --no-package-lock zod @deepseek-ai/schemastery@3.18.5 @deepseek-ai/dsh-llm@0.2.1-alpha.5 @deepseek-ai/dsh-typert-protocol@0.2.1-alpha.5
+          if ($LASTEXITCODE -ne 0) { throw '负向对照准备失败：装不出集合外锚点树' }
+          $env:DSAFM_HOST_MODULES = Join-Path $wrong 'node_modules'
+          node --import ./tools/_host-hooks.mjs --test test/host-tree.test.mjs
+          if ($LASTEXITCODE -eq 0) {
+            throw '守卫在集合外锚点下没有变红——准入判据失效'
+          }
+          Write-Host '负向对照通过：集合外锚点下守卫按预期变红'
+          # pwsh 步骤包装器以最后一条原生命令的退出码收尾；上面的 node 是预期红（非零），
+          # 已被显式检查消费，末尾必须归零退出码，否则「对照通过」仍会被误判成步骤失败。
+          exit 0
+      - name: 负向对照二——两包异版（各自在集合内、彼此不同）时，同版断言必须红
+        shell: pwsh
+        run: |
+          # 异版装置验证守卫判据本身，与具体 RC 无关：取准入集合首末两个成员。
+          $list = node tools/host-admission.mjs --list
+          if ($LASTEXITCODE -ne 0) { throw "准入声明不可解析：$list" }
+          $members = $list -split '\s+'
+          $a = $members[0]
+          $b = $members[-1]
+          if ($a -eq $b) { throw "准入集合成员不足两个，异版反例不可构造：$list" }
+          $mixed = Join-Path $env:RUNNER_TEMP 'mixed-version-tree'
+          npm install --prefix $mixed --no-audit --no-fund --no-package-lock zod @deepseek-ai/schemastery@3.18.5 "@deepseek-ai/dsh-llm@$a" "@deepseek-ai/dsh-typert-protocol@$b"
+          if ($LASTEXITCODE -ne 0) { throw '负向对照准备失败：装不出异版锚点树' }
+          $env:DSAFM_HOST_MODULES = Join-Path $mixed 'node_modules'
+          node --import ./tools/_host-hooks.mjs --test test/host-tree.test.mjs
+          if ($LASTEXITCODE -eq 0) {
+            throw '守卫在两包异版锚点下没有变红——同版判据失效'
+          }
+          Write-Host "负向对照通过：异版（dsh-llm=$a、dsh-typert-protocol=$b）锚点下守卫按预期变红"
+          exit 0
+      - name: 负向对照三——混树（两包各自可解析、来自不同 node_modules 树）时，同树断言必须红
+        shell: pwsh
+        run: |
+          # 两层目录装置：外层树装一枚宿主包，内层锚点树装另一枚与 zod、schemastery。
+          # 两枚钉同一成员——版本断言（②）必须先过，红只能来自同树断言（③），隔离树判据。
+          $list = node tools/host-admission.mjs --list
+          if ($LASTEXITCODE -ne 0) { throw "准入声明不可解析：$list" }
+          $a = ($list -split '\s+')[0]
+          $outer = Join-Path $env:RUNNER_TEMP 'mixed-tree-outer'
+          $inner = Join-Path $outer 'node_modules' 'inner'
+          npm install --prefix $outer --no-audit --no-fund --no-package-lock "@deepseek-ai/dsh-llm@$a"
+          if ($LASTEXITCODE -ne 0) { throw '负向对照准备失败：装不出外层树' }
+          npm install --prefix $inner --no-audit --no-fund --no-package-lock zod @deepseek-ai/schemastery@3.18.5 "@deepseek-ai/dsh-typert-protocol@$a"
+          if ($LASTEXITCODE -ne 0) { throw '负向对照准备失败：装不出内层锚点树' }
+          $env:DSAFM_HOST_MODULES = Join-Path $inner 'node_modules'
+          node --import ./tools/_host-hooks.mjs --test test/host-tree.test.mjs
+          if ($LASTEXITCODE -eq 0) {
+            throw '守卫在混树锚点下没有变红——同树判据失效'
+          }
+          Write-Host '负向对照通过：混树锚点下守卫按预期变红'
+          exit 0
+
   # 说明：
   # - 「跳过不等于通过」：日志里若出现 skipped，先确认是环境缺失（宿主解析不到）还是真的没跑。
-  # - 需要真实实例的探针（浏览器驱动、实例 RPC）与端到端验证不在此工作流内，属手动验证。
+  # - 需要真实实例的探针（浏览器驱动、实例 RPC）与端到端验证不在此工作流内，属手动验证（design §10.5）。
