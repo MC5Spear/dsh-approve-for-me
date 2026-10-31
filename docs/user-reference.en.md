@@ -13,9 +13,15 @@ The read-only evidence tools deny credential-like files and directories in both 
 
 ### Verification coverage
 
-On Windows, module wiring checks passed against official packages for DSH `0.2.1-rc.1` through `0.2.1-rc.5`. Real-host verification covers `0.2.1-rc.5` installation/loading, settings save, model approval followed by execution, zero-review-timeout rejection, and built-in dangerous-command rejection.
+On Windows, DSH `0.2.1-rc.1` through `0.2.1-rc.5` passed official-package module wiring checks and real-host checks using the same artifact: installation/loading, settings save and read-back, model approval, built-in dangerous-command rejection, and cancellation during review.
 
-Real loading and page interactions on the other four RCs, and complete authorization, delegation, human-answer/cancellation, and removal/recovery checks remain pending. Other platforms are not verified. Check the target environment using the [verification guide](<verification.md>) before deployment.
+Additional real-session and page checks cover:
+
+- `0.2.1-rc.3`: delegated-child takeover and notices.
+- `0.2.1-rc.3` and `0.2.1-rc.4`: opening and rendering the Review log.
+- `0.2.1-rc.5`: tool execution after model approval, rejection for insufficient authorization, a human rejecting before review finishes, a human allowing through fallback, and session reviewer selection. Standard sessions work after removal; reinstallation preserves configuration/record read-back and tool execution after model approval.
+
+The tool-result injection counterexample and authorization control at the reviewer entry point passed. Other platforms are not verified. Check the target environment using the [verification guide](<verification.md>) before deployment.
 
 Do not test problems with real secrets or dangerous commands.
 
@@ -491,6 +497,8 @@ Before editing, stop the host or establish that no settings writes are underway,
 If unsure of the edit scope, settings remain unavailable, or recovery fails, retain the backup and redacted host logs for the maintainer. Do not keep trying bulk configuration deletion.
 
 ### 9.4 Removing plugin data
+
+Uninstall preserves profile plugin configuration and plugin data by default. Reinstallation can read the existing configuration, session reviewer choices, and review records. Handle the `auto-approve` permission-table entry separately as described above.
 
 Disabling or uninstalling preserves `$DSH_HOME/approve-for-me/`, or `~/.dsh/approve-for-me/` when `DSH_HOME` is unset. To erase it deliberately, stop every host using that directory and back it up first, then delete only that plugin data directory. Review records and session model choices are lost together; uninstall cannot restore them.
 
