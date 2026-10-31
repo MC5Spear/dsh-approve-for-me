@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { agentLangOf, allowText, guardNext, onApprovalRequest, rejectText, REVIEW_SUPERSEDED, REVIEW_TIMEOUT_ABORT_MESSAGE, timeoutText } from '../lib/gate.js';
+import { agentLangOf, allowText, ApprovalPassthroughError, guardNext, onApprovalRequest, rejectText, REVIEW_SUPERSEDED, REVIEW_TIMEOUT_ABORT_MESSAGE, timeoutText } from '../lib/gate.js';
 import { createScheduler } from '../lib/scheduler.js';
 import { DEFAULT_DENY_PATTERNS, screen } from '../lib/policy.js';
 
@@ -441,6 +441,34 @@ test('skip 路径原样下传且 next() 只调用一次', async () => {
   assert.equal(state.audits[0].phase, 'screen');
   assert.equal(state.audits[0].action, 'skip');
   assert.equal(state.audits[0].reason, 'not a sandbox escalation');
+});
+
+test('skip 路径 next() 异常（宿主取消等）：受控封套上抛，不按内部错误结算、不注入、不落记录', async () => {
+  // 三类 skip（mode=off／工具清单过滤／非升权）同走一个下传分支，逐因验证透传口径一致。
+  // 拒绝值覆盖对象、冻结 Error、字符串与 null：封套携带原值，原值自身零改动。
+  for (const why of ['plugin disabled (mode=off)', 'tool not covered', 'not a sandbox escalation']) {
+    for (const raw of [new Error('typert gateway: Remote event was cancelled'), Object.freeze(new Error('frozen boom')), 'plain string reject', null]) {
+      const { rt, state, next } = makeRt(baseConfig(), { pre: { action: 'skip', why, fields: { action: 'skip' } } });
+      const promise = onApprovalRequest(request(), next, rt);
+      await tick();
+      assert.equal(state.nextCalls, 1, why);
+      state.nextRejectors[0](raw);
+      // 透传上抛：封套携带原值；不吞成 rejected，不写 decide/error 审计、不注入（不接管不注入不记录）。
+      await assert.rejects(
+        promise,
+        (error) => error instanceof ApprovalPassthroughError && error.cause === raw,
+        `${why}/${String(raw)}`,
+      );
+      assert.equal(state.injections.length, 0, why);
+      assert.equal(state.audits.filter((entry) => entry.phase === 'decide' || entry.phase === 'error').length, 0, `${why}：无结算/错误审计行`);
+      assert.equal(state.settles.length, 0, `${why}：无插件结算记录`);
+      // 原值零改动：对象值保持原冻结态、不带任何插件符号属性（无侵入封套）。
+      if (raw !== null && typeof raw === 'object') {
+        if (raw.message === 'frozen boom') assert.equal(Object.isFrozen(raw), true, '冻结 Error 保持冻结');
+        assert.equal(Object.getOwnPropertySymbols(raw).length, 0, '不在原值上打任何插件标记');
+      }
+    }
+  }
 });
 
 test('插件内部异常：fail-closed 为 rejected + 注入 + 撤回，相位为 error', async () => {

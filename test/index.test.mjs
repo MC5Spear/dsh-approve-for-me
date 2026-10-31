@@ -473,6 +473,32 @@ test('退役静态扫描：源码零补丁框架/旧档位键/旧宿主 API 残�
 
 // ── 装配层接线：逃逸出口脱敏＋热改现设（requirements §5.2／design §8.1）──────
 
+test('跳过透传接线：mode=off 下 next() 异常原样上抛，逃逸兜底不改拒、不注入（生产 apply 层）', async (t) => {
+  const host = await loadHost();
+  if (host === undefined) {
+    t.skip('宿主包不可解析（离线环境）');
+    return;
+  }
+  // 覆盖对象、冻结 Error、字符串与 null：apply 层拆封后生产始终上抛原始值。
+  for (const raw of [new Error('typert gateway: Remote event was cancelled'), Object.freeze(new Error('frozen boom')), 'plain string reject', null]) {
+    const injected = [];
+    const env = makeCtx({ mode: 'off', language: { agent: 'zh' } });
+    host.apply(env.ctx, { mode: 'off', language: { agent: 'zh' } });
+    const answerer = env.listeners.find((entry) => entry.event === 'approval/request').handler;
+    // mode=off → 预设未命中 → 下传；next 抛出任意值经 gate 封套后，apply 层逃逸出口拆封
+    // 还原原值上抛（宿主瀑布收到原始异常/拒绝理由，而非本插件的 rejected/注入）。
+    await assert.rejects(
+      answerer(
+        { agent: { session: { id: 's1' }, inject: (message) => injected.push(message) }, toolName: 'pwsh', callId: 'c', reason: 'escalate sandbox to danger-full-access: x' },
+        async () => { throw raw; },
+      ),
+      (error) => error === raw,
+      String(raw),
+    );
+    assert.equal(injected.length, 0, '透传异常不得注入');
+  }
+});
+
 test('逃逸分支注入文本过脱敏：error 里的秘密被遮蔽后才注入', async (t) => {
   const host = await loadHost();
   if (host === undefined) {
