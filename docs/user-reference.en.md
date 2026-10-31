@@ -5,13 +5,15 @@
 This reference covers installation, settings, approval results, failures, and removal. DSH is the host application that loads the plugin and runs the acting Agent. The reviewer model independently decides whether to allow this particular escalation.
 
 <a id="known-issues"></a>
-## Current status: keep takeover off
+## Scope and protection boundary
 
-The current candidate, `0.2.2+dsh.0.2.1-rc.2`, is not released. Its protection boundary: the read-only evidence tools deny credential-like files and directories in both literal and real path forms, and browser canonical stores (the `User Data` layout of Edge and Chrome, the `Profiles` layout of Firefox, covering login and cookie databases) are denied the same way; `grep` states its actual coverage when the directory budget is exhausted; renamed copies and hard links are not covered. See the [verification record](<verification.md>) for regression and real-instance coverage.
+Review covers only sandbox-escalation requests inside the coverage; see [section 2](<#coverage>) for the coverage and its exceptions. Operations under Full access that do not trigger approval are outside this protection.
 
-Release acceptance has not passed: the real rejection path (model deciding to deny) and human pre-emption have not been exercised on a real instance; concurrency, multiple sessions, and long runs are untested; and the verification above was done only on a single Windows machine with DSH `0.2.1-rc.2`. Keep takeover off until acceptance passes and the maintainer confirms: on the plugin details page set Mode to “Do not take over” (`mode=off`) and save, and switch the default permission preset and sessions you need to standard, such as Workspace write. If settings are unavailable, ask the deployment administrator to turn takeover off through the [configuration entry](<#settings>) and reload safely. Do not test with real secrets or dangerous commands.
+The read-only evidence tools deny credential-like files and directories in both literal and real path forms, and browser canonical stores (the `User Data` layout of Edge and Chrome, the `Profiles` layout of Firefox, covering login and cookie databases) are denied the same way; `grep` states its actual coverage when the directory budget is exhausted; renamed copies and hard links are not covered.
 
-The complete configuration and operation instructions remain below. **Do not follow the enabling steps before release acceptance passes.**
+The current delivery is verified on Windows with DSH `0.2.1-rc.2`; other platforms and host versions are not verified. Before deploying to those environments, choose and run the relevant checks in the [verification guide](<verification.md>).
+
+Do not test problems with real secrets or dangerous commands.
 
 <a id="installation"></a>
 ## 1. Obtain an artifact, install, and update
@@ -20,7 +22,7 @@ The complete configuration and operation instructions remain below. **Do not fol
 
 | Component | Current requirement |
 | --- | --- |
-| Plugin version | `0.2.2+dsh.0.2.1-rc.2`, unreleased candidate |
+| Plugin version | `0.2.2+dsh.0.2.1-rc.2` |
 | DSH host | Exactly `0.2.1-rc.2` |
 | Plugin Node declaration | `>=20` |
 | Recommended toolchain | Node 24, used in this project's development and CI |
@@ -30,7 +32,7 @@ The plugin's Node declaration does not establish that the complete host works on
 
 The `+dsh.0.2.1-rc.2` part identifies the intended host. Ordinary semantic-version comparisons ignore this build metadata, so they cannot select host compatibility for you. The host also checks the plugin's exact host requirement. Do not widen declarations or use a version exemption to force loading.
 
-When obtaining source or an artifact, check the full version and matching host. An adaptation branch identifies the intended host line, but its contents can move. For reproducibility, retain the revision or artifact identity actually supplied by the maintainer. Different candidates can carry the same package version; the version does not replace a delivery identity.
+When obtaining source or an artifact, check the full version and matching host. An adaptation branch identifies the intended host line, but its contents can move. For reproducibility, retain the revision or artifact identity actually supplied by the maintainer. Different builds can carry the same package version; the version does not replace a delivery identity.
 
 ### 1.2 Install a supplied artifact
 
@@ -67,18 +69,18 @@ Do not assume host packages in an existing source `node_modules` are correct. As
 After installation, restart safely through your host management method, then reload the page:
 
 1. Open Plugins → Installed → `dsh-approve-for-me` and verify the full version.
-2. Confirm that the details page has a settings form. Immediately save `mode=off` for this candidate.
-3. Find “自动审批” (`auto-approve`) in the session permission list. This is the plugin's Auto approval preset, not the host's “Auto review” (`auto`). Retain a standard preset for this candidate.
+2. Confirm that the details page has a settings form.
+3. Find “自动审批” (`auto-approve`) in the session permission list. This is the plugin's Auto approval preset, not the host's “Auto review” (`auto`). Keep a standard preset selected.
 4. Check that an ordinary session works. An installation command succeeding does not establish that settings and client contributions loaded.
 
-Only after release acceptance passes and the maintainer confirms should you enable it under [section 2](<#coverage>) and test approval and records with a harmless escalation. An operation that needs no escalation produces no approval and cannot establish that automatic approval works.
+After you select coverage and enable takeover under [section 2](<#coverage>), test approval and records with a harmless escalation. An operation that needs no escalation produces no approval and cannot establish that automatic approval works.
 
 For updates, recheck host and delivery identity, back up user configuration and needed records, add the new artifact through the same host channel, and reload safely. Keep the previous artifact and configuration backup. If problems occur, turn takeover off first and ask the maintainer about rollback. An existing `reviewer.timeoutMs=0` configuration immediately rejects as a timeout; save a positive value if you need review time.
 
 <a id="coverage"></a>
 ## 2. Select coverage, not unrestricted permission
 
-Read the [current status](<#known-issues>) first. Keep this candidate off until acceptance passes.
+Read [scope and protection boundary](<#known-issues>) first.
 
 ### 2.1 Four separate choices
 
@@ -93,7 +95,7 @@ The preset displayed as “自动审批” (`auto-approve`, this plugin's Auto a
 
 Only requests entering the host approval channel can be handled. Full-access operations that need no approval are outside protection. If a host `never` policy prevents approval dispatch, the plugin cannot see the request. Each allow is for one operation; a previous allow cannot replace a new request.
 
-### 2.2 Enable only after acceptance passes and is confirmed
+### 2.2 How to enable
 
 1. Keep the sandbox, back up important data, and state the task's permitted modifications and external transfers.
 2. Configure the reviewer, tool list, and ceiling on the plugin details page and save.
@@ -109,7 +111,7 @@ By default only `auto-approve` is covered. Other presets retain the host approva
 - Delegated subagents have no human channel. Even with `fallback=ask`, a request not allowed is rejected. Notices go to the child that requested the operation.
 - A user-forked session is treated as a main session, using its own preset and retaining a human channel.
 - A child page may still show Workspace write. That label alone does not establish whether takeover applies; inspect actual approvals and records.
-- Delegated children created during `mode=off` are not retroactively covered when mode is enabled again. If automatic approval is needed, create a new delegated task after acceptance passes and takeover is enabled.
+- Delegated children created during `mode=off` are not retroactively covered when mode is enabled again. If automatic approval is needed, enable takeover first, then create a new delegated task.
 
 <a id="settings"></a>
 ## 3. Edit, save, and reset settings
@@ -437,7 +439,7 @@ Host stderr contains `[approve-for-me]` audit lines. One approval may have sever
 | --- | --- | --- |
 | Settings and “自动审批” (`auto-approve`) are both absent | Full plugin version, exact host version, enabled state | After tasks finish, reload safely and refresh the page. Inspect `skipping profile bundle "dsh-approve-for-me"` or other loading errors and use a matching version |
 | Save fails or settings are read-only | Local loopback access and valid fields | Retain the draft; fix access or validation and save again. For failed configuration loading, ask an administrator to repair and reload |
-| Session reviewer control is absent | Session id, `mode=off`, and coverage | This candidate should stay off. After takeover is enabled, check coverage; do not widen permissions just to show the control |
+| Session reviewer control is absent | Session id, `mode=off`, and coverage | The control is hidden while `mode=off`. After takeover is enabled, check coverage; do not widen permissions just to show the control |
 | An operation rejects immediately | Rule, ceiling, missing action, or model judgment | Follow section 6. Emptying custom rules does not disable built-in checks |
 | Unavailable model, empty/truncated output, or repeated timeouts | The chosen model and fallback, zero budgets, cooldown | Turn takeover off and repair model or budget. Wait during cooldown. Stop repeated requests and report persistent failure |
 | Search is empty | Skipped candidates, truncation, or evidence failure | Empty does not prove a complete no-match search or safety; check the incomplete-search notice before concluding |

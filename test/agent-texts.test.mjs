@@ -249,11 +249,15 @@ test('通道故障事实判定器：等义改写（含空行、超四行、英�
 });
 
 test('通道故障事实判定器：直接极性反转各自失败（允许重试/停止重试/报告用户）', () => {
-  const zh = agentT('zh', 'gate.error.body');
-  const en = agentT('en', 'gate.error.body');
+  // 负例用自有样本文本承载同一组事实（T1–T7 全过），不依赖生产模板的固定短语：
+  // 生产文案等义改写不会让这里的 replace 落空而误失败。
+  const zh = '[approve-for-me] 自动审批通道故障，本次升权按拒绝处理。\n\n原因：{reason}\n这并非危险判定：自动审查没有得出结论。同一操作可以直接重试，重试会重新发起一次自动审查。\n\n若故障持续：不要连续反复重试，并把故障报告用户。';
+  const en = '[approve-for-me] The automatic approval channel failed; this escalation request is treated as rejected.\n\nReason: {reason}\nThis is not a safety verdict - the review reached no conclusion. You may retry the same operation directly; a retry starts a fresh automatic review.\n\nIf failures continue: do not keep retrying in a row, and inform the user of the failure.';
+  assert.deepEqual(missingFacts('zh', zh), [], 'zh 样本自身七项全过，反转失败须归因于反转本身');
+  assert.deepEqual(missingFacts('en', en), [], 'en 样本自身七项全过');
   const reversal = (base, from, to) => {
     const mutated = base.replace(from, to);
-    assert.notEqual(mutated, base, `反转必须真实改到当前模板：${from}→${to}`);
+    assert.notEqual(mutated, base, `反转必须真实改到样本文本：${from}→${to}`);
     return mutated;
   };
   // 四例均为对既有明确事实的单点反转（不新增产品措辞要求）；判定器必须按分句内极性识别。
@@ -261,8 +265,10 @@ test('通道故障事实判定器：直接极性反转各自失败（允许重�
   assert.ok(missingFacts('zh', reversal(zh, '不要连续反复重试', '不要停止连续反复重试')).includes('T4'), '「不要连续反复重试」→「不要停止连续反复重试」必须缺 T4');
   assert.ok(missingFacts('zh', reversal(zh, '把故障报告用户', '不应把故障告知用户')).includes('T5'), '「把故障报告用户」→「不应把故障告知用户」必须缺 T5');
   assert.ok(missingFacts('en', reversal(en, 'do not keep retrying in a row', 'do not stop retrying in a row')).includes('T4'), '「do not keep retrying」→「do not stop retrying」必须缺 T4');
-  // 同概念等义换措辞（不带否定框架）仍通过，证明判定器绑定极性而非字面。
-  assert.deepEqual(missingFacts('zh', zh.replace('把故障报告用户', '请把故障告知用户')), [], '等义换措辞须全过');
+  // 正例：生产文案的等义替换（同一→相同、可以→可）不改变事实，仍按同一事实检查全过。
+  const equivalentRetry = agentT('zh', 'gate.error.body').replace('同一操作可以直接重试', '相同操作可直接重试');
+  assert.deepEqual(missingFacts('zh', equivalentRetry), [], '生产文案「同一操作可以直接重试」→「相同操作可直接重试」等义替换须全过');
+  assert.deepEqual(missingFacts('zh', agentT('zh', 'gate.error.body').replace('把故障报告用户', '请把故障告知用户')), [], '等义换措辞须全过');
 });
 
 test('轮次用尽指令：两语言各自成句且互不残留；兼容导出＝zh 现行', () => {

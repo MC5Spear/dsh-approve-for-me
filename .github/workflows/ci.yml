@@ -36,7 +36,7 @@ jobs:
         run: npm run check:docs:pack
       - name: typert 清单校验
         run: npm run probe:typert
-      - name: 离线单测（不依赖宿主）
+      - name: 单测（不注册宿主解析钩子）
         run: npm run test:offline
       - name: 全量单测（含宿主接线）
         run: npm test

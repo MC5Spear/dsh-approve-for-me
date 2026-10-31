@@ -12,16 +12,14 @@ This is a third-party community plugin, unaffiliated with DeepSeek.
 
 | Component | Current requirement |
 | --- | --- |
-| Plugin version | `0.2.2+dsh.0.2.1-rc.2`, not yet released |
+| Plugin version | `0.2.2+dsh.0.2.1-rc.2` |
 | DSH host | Exactly `0.2.1-rc.2` |
 | Plugin Node declaration | `>=20`; this is not the minimum for the complete host |
 | Recommended toolchain | Node 24, used for this project's development and CI |
 
-**Release acceptance has not passed: the real rejection path and human pre-emption have not been exercised on a real instance, and concurrency, multiple sessions, and long runs are untested. Keep automatic approval off until acceptance passes and the maintainer confirms; do not use it for unattended work.** After installation, set Mode to “Do not take over” (`mode=off`) and save. See [current status and action](<docs/user-reference.en.md#known-issues>).
-
 ## Installation
 
-This adaptation line has not been released. Ask the maintainer for an actual `.tgz` artifact or its matching complete source directory. Before installation, verify its full version, matching host, and supplied artifact or revision identity.
+Ask the maintainer for an actual `.tgz` artifact or its matching complete source directory. Before installation, verify its full version, matching host, and supplied artifact or revision identity.
 
 Before installing:
 
@@ -41,15 +39,13 @@ For source-directory dependencies, installation, and updates, see the [installat
 ### First checks
 
 1. Open `dsh-approve-for-me` under Plugins → Installed and verify its full version.
-2. Confirm that the details page has a settings form. Immediately set Mode to “Do not take over” and save.
-3. Find “自动审批” (`auto-approve`) in the session permission list. This is the plugin's Auto approval preset, not the host's “Auto review” (`auto`). Keep a standard preset selected for this candidate.
+2. Confirm that the details page has a settings form.
+3. Find “自动审批” (`auto-approve`) in the session permission list. This is the plugin's Auto approval preset, not the host's “Auto review” (`auto`). Keep a standard preset selected.
 4. Check that an ordinary session works. If settings or presets are missing, follow [troubleshooting](<docs/user-reference.en.md#troubleshooting>); do not widen version requirements to force loading.
 
-A successful installation does not establish that automatic approval is safe to use. Keep this candidate off until release acceptance passes and the maintainer confirms.
+An installation command succeeding does not establish that automatic approval is active. Complete the setup under “Settings and use” below, then confirm approval and records with a harmless escalation.
 
 ## Before enabling
-
-These precautions also apply to versions that pass acceptance:
 
 - Only covered sandbox-escalation requests are reviewed. Operations under Full access that do not trigger approval are outside this protection.
 - An approval covers one operation only. Repeating the same command still needs a valid approval for that new operation.
@@ -59,8 +55,6 @@ These precautions also apply to versions that pass acceptance:
 - Read-only evidence collection can send local content to the configured model provider. Redaction recognizes only limited patterns. Check storage permissions before enabling full-text records too.
 
 ## Settings and use
-
-**First save `mode=off` for now. Use the enabling steps below after release acceptance passes and the maintainer confirms.**
 
 1. On the plugin details page, choose the reviewer model, covered tools, and permission ceiling, then save.
 2. Change Mode to “Rule check + LLM review” and save.
