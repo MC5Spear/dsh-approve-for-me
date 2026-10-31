@@ -143,53 +143,106 @@ async function measureInEdge(edge, html, width, height) {
     ],
     { stdio: 'ignore' },
   );
+  let socket = null;
+  // spawn 同步参数错误走 throw；异步失败（如二进制不可执行）走 'error' 事件——接住并转成
+  // 等待失败，保证下方 try/finally 与断言路径都能执行。
+  const spawnFailed = new Promise((_, fail) => child.on('error', (error) => fail(new Error(`Edge 进程启动失败：${error?.message ?? error}`))));
+  // 提前挂一个 no-op 处理器：fetch 等待期间 spawnFailed 先拒绝也不会短暂处于无处理器状态。
+  spawnFailed.catch(() => {});
   try {
-    // 等 DevTools 端点起来并出现页面目标，再等页面解析完成并取回测量结果。
+    // 等 DevTools 端点起来并出现页面目标。总上界约 20 秒（时钟判定）＋最后一次 fetch 自身的
+    // 中止上界；fetch 的中止时限取「2 秒与剩余 deadline 的较小值」，越界不超过一次 fetch。
+    const targetDeadline = Date.now() + 20000;
     let target = null;
-    for (let attempt = 0; attempt < 50 && target === null; attempt += 1) {
-      await sleep(300);
+    while (target === null && Date.now() < targetDeadline) {
+      await Promise.race([sleep(300), spawnFailed]);
       try {
-        const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
+        const budget = Math.max(1, Math.min(2000, targetDeadline - Date.now()));
+        const list = await (await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(budget) })).json();
         target = list.find((entry) => entry.type === 'page' && entry.url.startsWith('file:///')) ?? null;
       } catch {
-        // 端点未就绪，继续等。
+        // 端点未就绪或本轮 fetch 超时，继续等。
       }
     }
-    assert.ok(target !== null, '应能在 DevTools 端点找到页面目标（Edge 启动失败或被环境拦截）');
-    const socket = new WebSocket(target.webSocketDebuggerUrl);
-    await new Promise((done, fail) => {
-      socket.addEventListener('open', () => done());
+    assert.ok(target !== null, '应能在 DevTools 端点找到页面目标（20 秒内无页面目标：Edge 启动失败或被环境拦截）');
+    socket = new WebSocket(target.webSocketDebuggerUrl);
+    // 连接期与请求期共用的失败信号：连接错误或 socket 提前关闭都立即结束等待，不无限挂起。
+    const transportFailed = new Promise((_, fail) => {
       socket.addEventListener('error', () => fail(new Error('DevTools WebSocket 连接失败')));
+      socket.addEventListener('close', () => fail(new Error('DevTools WebSocket 在完成前关闭')));
     });
-    let payload = null;
-    for (let attempt = 0; attempt < 40 && payload === null; attempt += 1) {
-      const reply = await new Promise((done) => {
-        const onMessage = (event) => {
-          const data = JSON.parse(event.data);
-          if (data.id === attempt + 1) {
-            socket.removeEventListener('message', onMessage);
-            done(data);
-          }
+    const opened = new Promise((done) => socket.addEventListener('open', () => done(), { once: true }));
+    // 有界等待且不遗留定时器：正常 open 后 clearTimeout，不让悬挂的 10 秒定时器拖住测试进程。
+    let openTimer = null;
+    const openTimeout = new Promise((_, fail) => { openTimer = setTimeout(() => fail(new Error('DevTools WebSocket 连接超时（10 秒无 open 事件）')), 10000); });
+    try {
+      await Promise.race([opened, transportFailed, spawnFailed, openTimeout]);
+    } finally {
+      clearTimeout(openTimer);
+    }
+    /**
+     * 发一条 CDP 请求并等待同 id 回复；每请求 5 秒截止。socket/spawn 异常立即拒绝，且无论哪路
+     * 先结算，回复路径的定时器与监听器都在收尾统一清理（不残留到 5 秒后）。
+     * @param {object} message - CDP 请求（含 id/method/params）。
+     * @returns {Promise<object>} 回复报文。
+     */
+    const sendBounded = async (message) => {
+      let cleanup = () => {};
+      const reply = new Promise((done, fail) => {
+        let timer = null;
+        let settled = false;
+        const finish = (fn, value) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          socket.removeEventListener('message', onMessage);
+          fn(value);
         };
+        const onMessage = (event) => {
+          // 非 JSON 帧（如事件通知）不得让监听器同步抛出——那会变成进程级 uncaughtException。
+          let data = null;
+          try { data = JSON.parse(event.data); } catch { return; }
+          if (data.id === message.id) finish(done, data);
+        };
+        cleanup = () => {
+          clearTimeout(timer);
+          socket.removeEventListener('message', onMessage);
+        };
+        timer = setTimeout(() => finish(fail, new Error(`CDP 请求 ${message.id}（${message.method}）超时：5 秒无回复`)), 5000);
         socket.addEventListener('message', onMessage);
-        socket.send(JSON.stringify({
-          id: attempt + 1,
-          method: 'Runtime.evaluate',
-          params: { expression: MEASURE_EXPRESSION, returnByValue: true },
-        }));
+        socket.send(JSON.stringify(message));
+      });
+      try {
+        return await Promise.race([reply, transportFailed, spawnFailed]);
+      } finally {
+        cleanup();
+      }
+    };
+    // 测量轮询总上界约 20 秒（40 次上限＋时钟判定），另加最后一条在途请求自身的 5 秒截止。
+    let payload = null;
+    const measureDeadline = Date.now() + 20000;
+    for (let attempt = 0; attempt < 40 && payload === null && Date.now() < measureDeadline; attempt += 1) {
+      const reply = await sendBounded({
+        id: attempt + 1,
+        method: 'Runtime.evaluate',
+        params: { expression: MEASURE_EXPRESSION, returnByValue: true },
       });
       const text = reply?.result?.result?.value;
       if (typeof text === 'string' && text !== 'PENDING') {
         payload = text;
         break;
       }
-      await sleep(250);
+      await Promise.race([sleep(250), transportFailed]);
     }
-    socket.close();
     assert.ok(payload !== null, '应能取回页面测量结果（页面未就绪或脚本失败）');
+    // 正常收尾：请求浏览器自关（让 Edge 进程自然退出），随后本地关闭 socket。
+    try { await sendBounded({ id: 1000, method: 'Browser.close' }); } catch { /* 已在退出路径，忽略 */ }
+    socket.close();
     return JSON.parse(payload);
   } finally {
+    // 兜底终止：无论成功、断言失败还是超时，都结束 Edge 进程并清理夹具。
     child.kill();
+    try { socket?.close(); } catch { /* 已关闭。 */ }
     // 夹具 HTML 即时清理；Edge profile 目录尽力清理——进程刚 kill 时句柄可能尚未释放，
     // 删不掉就留待系统临时目录清理（惰性残留无害，且 pid 后缀避免重跑冲突）。
     try { unlinkSync(file); } catch { /* 句柄未释放，留待系统清理。 */ }
