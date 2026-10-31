@@ -46,43 +46,43 @@ Node 20 是本插件声明的最低版本；运行时还须满足 DSH 及其依�
 
 取得源码或安装包时，核对完整版本和支持的 DSH 版本，并保留提交标识或安装包校验信息。维护分支会继续更新，同版本也可能包含不同文件；这些信息可帮助维护者定位问题或确认回退版本。
 
-### 1.2 从仓库制作安装包并安装
+### 1.2 默认方式：从 GitHub 安装
 
-从[GitHub 仓库](https://github.com/MC5Spear/dsh-approve-for-me)取得完整源码。本适配线使用 `adapt/dsh-0.2.1` 分支；可用 Git 克隆，也可在仓库页面选择该分支后下载 ZIP 并解压。
+默认使用本仓库的 `adapt/dsh-0.2.1` 适配分支，无需手动克隆、准备源码依赖或打包。确认 Git 和 pnpm 可用，且网络可访问 GitHub 和依赖包源。
 
-使用 Git、Node.js 和 npm，先在独立的部署目录中执行：
+**重启会中断运行任务。** 安装或更新前，等待任务结束或安全停止。已有插件时先保存 `mode=off`，将默认权限预设及活动会话切回标准档。服务部署从服务进程树之外的管理终端重启。
+
+先从目标 DSH 的启动命令或部署管理员处确认 profile 名称。profile 是实例加载的一组具名部署配置，以下默认使用 `web`；目标使用其他 profile 时，替换命令中的 `web`，并确认该配置加载 Web 界面和所需宿主服务：
+
+```powershell
+dsh plugin --profile web add github:MC5Spear/dsh-approve-for-me#adapt/dsh-0.2.1
+```
+
+宿主安装通道会取得插件并安装直接依赖；宿主接口包由对应的 DSH 安装提供。完成后按第1.4节重启并确认加载。分支会继续更新；需要固定版本或回退时，保留安装来源对应的完整提交标识、配置备份及已有安装包。
+
+### 1.3 备用方式：源码目录或本地安装包
+
+需要检查源码、安装指定源码副本，或通过本地文件部署时，可从 [GitHub 仓库](https://github.com/MC5Spear/dsh-approve-for-me)克隆源码，也可选择对应分支下载 ZIP。为部署保留独立副本，不要将正在开发的工作树链接到稳定实例。
+
+准备 Git、Node.js 和 npm，在独立部署目录中获取源码并记录提交：
 
 ```powershell
 git clone --branch adapt/dsh-0.2.1 https://github.com/MC5Spear/dsh-approve-for-me.git
 cd dsh-approve-for-me
 git rev-parse HEAD
-$package = (npm pack --ignore-scripts --json | ConvertFrom-Json)[0]
-if ($LASTEXITCODE -ne 0) { throw "npm pack failed" }
 ```
 
-记录输出的提交标识，并核对源码中包声明的版本和支持的 DSH 版本。`npm pack` 无需先安装开发依赖，会在当前目录生成 `.tgz`，并把文件名存入 `$package`。下载 ZIP 时，保留下载页面对应的完整提交标识；进入解压后的源码根目录执行上面两行打包命令。该步骤只制作本地安装包，不安装插件，也不向包源发布。
+下载 ZIP 时，保留下载页面对应的完整提交标识，并进入解压后的源码根目录。核对包声明中的插件版本与支持的 DSH 版本，再选择下面一种安装方式。两种方式均须遵守第1.2节的 profile、停任务和重启要求。
 
-**重启会中断运行任务。** 安装或更新前，等待任务结束或安全停止。已有插件时先保存 `mode=off`，将默认权限预设及活动会话切回标准档。服务部署从服务进程树之外的管理终端重启。
+#### 从源码目录安装
 
-先从目标 DSH 的启动命令或部署管理员处确认 profile 名称。profile 是实例加载的一组具名部署配置，以下以 `web` 为例；目标使用其他 profile 时，替换命令中的 `web`，并确认该配置加载 Web 界面和所需宿主服务。保持终端位于刚才打包的源码根目录，直接安装生成的文件：
-
-```powershell
-dsh plugin --profile web add (Join-Path $PWD.Path $package.filename)
-```
-
-安装命令把插件及其直接依赖装入所选 profile；宿主接口包由对应的 DSH 安装提供。
-
-### 1.3 直接从源码目录安装
-
-也可跳过打包，直接使用上一节从仓库取得的完整源码目录。为部署保留独立副本，不要将正在开发的工作树链接到稳定实例；源码目录须包含包声明、宿主和客户端入口、安装声明与安全策略。
-
-安装前先核对宿主与依赖：
+安装前核对宿主与依赖：
 
 1. 目标 DSH 必须是上表支持的版本，并提供满足 `~4.0.4` 的 `@deepseek-ai/cordis`。
 2. `@deepseek-ai/dsh-llm` 和 `@deepseek-ai/dsh-typert-protocol` 必须来自同一份 DSH 安装，且都与目标 DSH 的 RC 版本一致。
 3. 源码目录若已有 `node_modules`，先核对宿主包的解析来源，或从仓库重新克隆独立副本。发现错版或来源混杂时先修正；不确定时请部署管理员协助，不要批量删除未知依赖。
 
-目录链接会从源码目录解析插件的直接依赖。进入上一节取得的源码根目录后执行以下命令，并按上节确认 `web` 是目标 profile；`$PWD.Path` 自动使用当前目录的绝对路径：
+在源码根目录执行；`$PWD.Path` 自动使用当前目录的绝对路径：
 
 ```powershell
 npm install --omit=dev --legacy-peer-deps
@@ -90,7 +90,19 @@ if ($LASTEXITCODE -ne 0) { throw "npm install failed" }
 dsh plugin --profile web add $PWD.Path
 ```
 
-`--legacy-peer-deps` 用于避免 npm 自动安装宿主接口包；这些包仍由已核对的 DSH 安装提供。命令完成后按下节确认 profile 中实际加载成功。若依赖解析失败，可按上一节从干净源码制作 `.tgz` 后安装；仍失败时，通过项目 issue 提供脱敏加载错误。
+`--legacy-peer-deps` 避免 npm 自动安装宿主接口包，这些包仍由已核对的 DSH 安装提供。源码目录链接会从该目录解析插件的直接依赖。
+
+#### 制作本地安装包
+
+也可在源码根目录打包再安装，无需先安装开发依赖，也没有产品构建步骤：
+
+```powershell
+$package = (npm pack --ignore-scripts --json | ConvertFrom-Json)[0]
+if ($LASTEXITCODE -ne 0) { throw "npm pack failed" }
+dsh plugin --profile web add (Join-Path $PWD.Path $package.filename)
+```
+
+`npm pack` 在当前目录生成 `.tgz`，上述命令自动使用生成的文件路径；它不向包源发布。源码安装出现依赖解析问题时，可从干净源码制作安装包后重试；仍失败时，通过项目 issue 提供脱敏加载错误。
 
 ### 1.4 重载、首次确认与更新
 
@@ -103,7 +115,7 @@ dsh plugin --profile web add $PWD.Path
 
 按[第2节](<#coverage>)选择接管范围并启用后，用无害的升权请求检查审批和记录。无升权的操作不会产生审批，不能用来证明自动审批在工作。
 
-更新时从仓库取得新的独立源码副本，记录提交并重新核对宿主兼容性。备份用户配置和需要留存的记录，再按第1.2节制作新安装包，通过同一 profile 添加并安全重载。保留上一份安装件和配置备份，出现异常先关闭接管，向维护者确认回退方案。已设 `reviewer.timeoutMs=0` 的配置会立即超时拒绝；需要等待审查时改为正值并保存。
+更新前核对宿主兼容性，并备份用户配置和需要留存的记录。默认按第1.2节使用 GitHub 来源重新安装到同一 profile；使用本地源码或安装包的部署则按第1.3节准备新版本，再安全重载。保留上一份安装件和配置备份，出现异常先关闭接管，向维护者确认回退方案。已设 `reviewer.timeoutMs=0` 的配置会立即超时拒绝；需要等待审查时改为正值并保存。
 
 <a id="coverage"></a>
 ## 2. 选择接管范围，而不是授予任意权限

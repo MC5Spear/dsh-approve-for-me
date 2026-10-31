@@ -21,7 +21,7 @@ DSH 提供插件所需的两个宿主接口包：`@deepseek-ai/dsh-llm` 和 `@de
 
 ## 安装
 
-从[GitHub 仓库](https://github.com/MC5Spear/dsh-approve-for-me)获取源码并在本地制作安装包。本适配线使用 `adapt/dsh-0.2.1` 分支；安装前核对上表版本，并用 `git rev-parse HEAD` 记录实际使用的提交，便于更新、回退和排障。
+默认直接从 [GitHub 仓库](https://github.com/MC5Spear/dsh-approve-for-me)的 `adapt/dsh-0.2.1` 分支安装，无需手动克隆源码或制作安装包。安装前核对上表中的插件与 DSH 版本。
 
 安装前，先完成两件事：
 
@@ -32,20 +32,13 @@ DSH 提供插件所需的两个宿主接口包：`@deepseek-ai/dsh-llm` 和 `@de
 
 先确认目标 DSH 使用的 profile，也就是该实例加载的一组具名部署配置；可由启动命令或部署管理员确认。下面以 `web` 为例，其他 profile 要替换 `web`。
 
-准备 Git、Node.js 和 npm，在用于部署的独立目录中获取源码并打包：
+确认 Git 和 pnpm 可用，且网络可访问 GitHub 和依赖包源，然后执行：
 
 ```powershell
-git clone --branch adapt/dsh-0.2.1 https://github.com/MC5Spear/dsh-approve-for-me.git
-cd dsh-approve-for-me
-git rev-parse HEAD
-$package = (npm pack --ignore-scripts --json | ConvertFrom-Json)[0]
-if ($LASTEXITCODE -ne 0) { throw "npm pack failed" }
-dsh plugin --profile web add (Join-Path $PWD.Path $package.filename)
+dsh plugin --profile web add github:MC5Spear/dsh-approve-for-me#adapt/dsh-0.2.1
 ```
 
-`npm pack` 在当前目录生成 `.tgz`，命令自动取出文件名并安装，无需填写路径。无需先安装开发依赖，也没有产品构建步骤。
-
-源码目录的依赖准备、安装和更新方法见[安装参考](<docs/user-reference.md#installation>)。安装后安全重启宿主，再重新加载页面。
+安装后安全重启 DSH，再重新加载页面。需要备用方式时，可从源码目录安装或在本地制作 `.tgz`，见[安装参考](<docs/user-reference.md#installation>)。
 
 ### 首次确认
 

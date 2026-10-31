@@ -21,7 +21,7 @@ DSH supplies the two host interface packages, `@deepseek-ai/dsh-llm` and `@deeps
 
 ## Installation
 
-Get the source from the [GitHub repository](https://github.com/MC5Spear/dsh-approve-for-me) and create an installation package locally. This adaptation line uses `adapt/dsh-0.2.1`. Check the versions above and record the source revision with `git rev-parse HEAD` for updates, rollback, and troubleshooting.
+Install directly from the `adapt/dsh-0.2.1` branch of the [GitHub repository](https://github.com/MC5Spear/dsh-approve-for-me) by default. No manual clone or local packaging is needed. Check the plugin and DSH versions above before installing.
 
 Before installing:
 
@@ -32,20 +32,13 @@ The host installation channel needs pnpm. Check with `corepack pnpm --version`. 
 
 First confirm the target DSH profile: the named deployment configuration loaded by that instance. Check its startup command or ask the deployment administrator. The example uses `web`; replace it if the target uses another profile.
 
-With Git, Node.js, and npm available, obtain the source in a separate deployment directory and create a package:
+Ensure Git and pnpm are available and the machine can access GitHub and the dependency registry, then run:
 
 ```powershell
-git clone --branch adapt/dsh-0.2.1 https://github.com/MC5Spear/dsh-approve-for-me.git
-cd dsh-approve-for-me
-git rev-parse HEAD
-$package = (npm pack --ignore-scripts --json | ConvertFrom-Json)[0]
-if ($LASTEXITCODE -ne 0) { throw "npm pack failed" }
-dsh plugin --profile web add (Join-Path $PWD.Path $package.filename)
+dsh plugin --profile web add github:MC5Spear/dsh-approve-for-me#adapt/dsh-0.2.1
 ```
 
-`npm pack` creates a `.tgz` in the current directory. The commands use its filename automatically, with no path placeholder to fill in. No prior development-dependency installation or product build is needed.
-
-For source-directory dependencies, installation, and updates, see the [installation reference](<docs/user-reference.en.md#installation>). Restart the host safely after installation, then reload the page.
+Restart DSH safely after installation, then reload the page. For source-directory installation or a locally created `.tgz` as alternatives, see the [installation reference](<docs/user-reference.en.md#installation>).
 
 ### First checks
 

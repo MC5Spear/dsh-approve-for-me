@@ -44,43 +44,43 @@ The `+dsh.0.2.1-rc` suffix identifies the DSH 0.2.1 RC maintenance line. Only th
 
 When obtaining source or a package, check its full version and supported DSH versions, and retain the source revision or package checksum. Maintenance branches can advance, and packages with the same version can contain different files. These identifiers help the maintainer reproduce problems or confirm a rollback version.
 
-### 1.2 Create a package from the repository and install it
+### 1.2 Default: install from GitHub
 
-Get the complete source from the [GitHub repository](https://github.com/MC5Spear/dsh-approve-for-me). This adaptation line uses `adapt/dsh-0.2.1`. Clone it with Git, or select that branch on GitHub and download and extract its ZIP.
+Use this repository’s `adapt/dsh-0.2.1` adaptation branch by default, without manually cloning, preparing source dependencies, or packaging. Ensure Git and pnpm are available and the machine can access GitHub and the dependency registry.
 
-With Git, Node.js, and npm available, run in a separate deployment directory:
+**Restarting interrupts running work.** Before installation or update, wait for tasks to finish or stop them safely. If the plugin is installed, first save `mode=off` and switch default and active-session permission presets to standard ones. Restart service deployments from outside the service process tree.
+
+Confirm the profile name from the target DSH startup command or deployment administrator. A profile is a named deployment configuration loaded by an instance. The command defaults to `web`; replace it for another profile and confirm that it loads the Web interface and required host services:
+
+```powershell
+dsh plugin --profile web add github:MC5Spear/dsh-approve-for-me#adapt/dsh-0.2.1
+```
+
+The host installation channel obtains the plugin and installs its direct dependencies; the matching DSH installation supplies its host interface packages. Follow section 1.4 to restart and confirm loading. Branches advance; for reproducibility or rollback, retain the full source revision, configuration backups, and any existing installation package.
+
+### 1.3 Alternatives: source directory or local package
+
+To inspect source, install a particular source copy, or deploy from a local file, clone the [GitHub repository](https://github.com/MC5Spear/dsh-approve-for-me) or download the matching branch as a ZIP. Keep a separate deployment copy rather than linking an actively edited development tree to a stable instance.
+
+With Git, Node.js, and npm available, obtain source in a separate deployment directory and record its revision:
 
 ```powershell
 git clone --branch adapt/dsh-0.2.1 https://github.com/MC5Spear/dsh-approve-for-me.git
 cd dsh-approve-for-me
 git rev-parse HEAD
-$package = (npm pack --ignore-scripts --json | ConvertFrom-Json)[0]
-if ($LASTEXITCODE -ne 0) { throw "npm pack failed" }
 ```
 
-Record the printed revision and check the package version and supported DSH versions in the source package metadata. `npm pack` needs no prior development-dependency installation. It creates a `.tgz` in the current directory and stores its filename in `$package`. For a ZIP download, retain the full commit id from its download page and run the two packaging lines above from the extracted source root. Packaging creates a local file; it neither installs the plugin nor publishes to a registry.
+For a ZIP download, retain the full commit id from its download page and enter the extracted source root. Check the plugin version and supported DSH versions in the package metadata, then choose one method below. Both methods require the profile, task-stopping, and restart precautions in section 1.2.
 
-**Restarting interrupts running work.** Before installation or update, wait for tasks to finish or stop them safely. If the plugin is installed, first save `mode=off` and switch default and active-session permission presets to standard ones. Restart service deployments from outside the service process tree.
-
-Confirm the profile name from the target DSH startup command or deployment administrator. A profile is a named deployment configuration loaded by an instance. The example uses `web`; replace it for another profile and confirm that it loads the Web interface and required host services. Keep the terminal in the source root used for packaging, then install the generated file directly:
-
-```powershell
-dsh plugin --profile web add (Join-Path $PWD.Path $package.filename)
-```
-
-The command installs the plugin and its direct dependencies into the selected profile. The matching DSH installation supplies its host interface packages.
-
-### 1.3 Install directly from a source directory
-
-Alternatively, skip packaging and use the complete repository source from the preceding section. Keep a separate deployment copy rather than linking an actively edited development tree to a stable instance. It must contain package declarations, host and client entries, installation declarations, and security policies.
+#### Install from a source directory
 
 Before installation, check the host and dependencies:
 
 1. The target DSH must be one of the supported versions above and supply `@deepseek-ai/cordis` satisfying `~4.0.4`.
 2. `@deepseek-ai/dsh-llm` and `@deepseek-ai/dsh-typert-protocol` must come from the same DSH installation and both match the target DSH RC version.
-3. If the source directory already has `node_modules`, check where its host packages resolve from or clone a fresh separate copy from the repository. Fix mismatched versions or mixed sources first. Ask the deployment administrator if unsure; do not bulk-delete unknown dependencies.
+3. If the source directory already has `node_modules`, check where its host packages resolve from or clone a fresh separate copy. Fix mismatched versions or mixed sources first. Ask the deployment administrator if unsure; do not bulk-delete unknown dependencies.
 
-A directory link resolves the plugin’s direct dependencies from the source directory. Enter the source root obtained above, then run these commands. Confirm `web` is the target profile; `$PWD.Path` automatically supplies the current directory’s absolute path:
+Run from the source root; `$PWD.Path` automatically supplies the current directory’s absolute path:
 
 ```powershell
 npm install --omit=dev --legacy-peer-deps
@@ -88,7 +88,19 @@ if ($LASTEXITCODE -ne 0) { throw "npm install failed" }
 dsh plugin --profile web add $PWD.Path
 ```
 
-`--legacy-peer-deps` prevents npm from automatically installing the host interface packages; the checked DSH installation must still supply them. After the commands finish, follow the next section to confirm loading in the profile. For dependency-resolution failures, try a `.tgz` made from clean source as described above. If the problem persists, report redacted loading errors in a project issue.
+`--legacy-peer-deps` prevents npm from automatically installing the host interface packages; the checked DSH installation must supply them. The directory link resolves the plugin’s direct dependencies from this source directory.
+
+#### Create a local installation package
+
+Alternatively, package and install from the source root. No prior development-dependency installation or product build is needed:
+
+```powershell
+$package = (npm pack --ignore-scripts --json | ConvertFrom-Json)[0]
+if ($LASTEXITCODE -ne 0) { throw "npm pack failed" }
+dsh plugin --profile web add (Join-Path $PWD.Path $package.filename)
+```
+
+`npm pack` creates a `.tgz` in the current directory; the commands automatically use its path. It does not publish to a registry. For source-install dependency-resolution problems, try a package made from clean source. If the problem persists, report redacted loading errors in a project issue.
 
 ### 1.4 Reload, confirm, and update
 
@@ -101,7 +113,7 @@ After installation, restart safely through your host management method, then rel
 
 After you select coverage and enable takeover under [section 2](<#coverage>), test approval and records with a harmless escalation. An operation that needs no escalation produces no approval and cannot establish that automatic approval works.
 
-For updates, obtain a new separate source copy from the repository, record its revision, and recheck host compatibility. Back up user configuration and needed records, create a new package under section 1.2, add it to the same profile, and reload safely. Keep the previous artifact and configuration backup. If problems occur, turn takeover off first and ask the maintainer about rollback. An existing `reviewer.timeoutMs=0` configuration immediately rejects as a timeout; save a positive value if you need review time.
+Before updating, recheck host compatibility and back up user configuration and needed records. By default, reinstall the GitHub source into the same profile under section 1.2. For local source or package deployments, prepare the new version under section 1.3, then reload safely. Keep the previous artifact and configuration backup. If problems occur, turn takeover off first and ask the maintainer about rollback. An existing `reviewer.timeoutMs=0` configuration immediately rejects as a timeout; save a positive value if you need review time.
 
 <a id="coverage"></a>
 ## 2. Select coverage, not unrestricted permission
