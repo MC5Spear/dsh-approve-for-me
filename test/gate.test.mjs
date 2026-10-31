@@ -1017,16 +1017,20 @@ test('G9 预算耗尽立即结算后，迟到的 allow 不改判、不重复通�
 
 // ── 装配并入审查时限 ──────────────────────────────────────────────
 
-test('装配挂死：装配计时器按剩余预算武装并到点 → rejected/timeout，环节记装配，与真实超时同路计数', async () => {
+test('装配挂死：装配计时器按剩余预算武装并到点 → rejected/timeout，环节记装配，与真实超时同路计数', async (t) => {
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
   const { rt, state, next } = makeRt(baseConfig({ reviewer: { timeoutMs: 30000 } }), {
-    locateDelayMs: 200,
     configForNever: true,
     verdict: { decision: 'allow', reason: 'never reached', toolCalls: 0, fields: {} },
   });
+  const locate = rt.locate;
+  rt.locate = async (...args) => {
+    now += 200;
+    return locate(...args);
+  };
   const promise = onApprovalRequest(request(), next, rt);
-  // locate 的 200 ms 延迟落在计时器武装之前（同步筛选计入装配预算，design §4.3）；
-  // 250 ms 只等延迟结束与武装完成，不真实到点。
-  await delay(250);
+  // 受控时钟使筛选恰好消耗 200 ms，避免真实定时器提前唤醒造成毫秒级误差。
   await tick();
   const assemblyTimer = state.timers.find((entry) => entry.label === 'assembly' && entry.cleared === false);
   if (assemblyTimer === undefined) {
@@ -1038,9 +1042,8 @@ test('装配挂死：装配计时器按剩余预算武装并到点 → rejected/
   assemblyTimer.fire();
   const outcome = await promise;
   assert.equal(outcome, 'rejected');
-  // 武装值＝先验真实时限减已耗部分：200 ms 筛选耗时被扣、不补回（requirements §4.2）。
-  // 上界同时红「固定内部默认 90 s」与「向生产重赠全额」两种回归，下界红「入口即耗尽」。
-  assert.ok(assemblyTimer.ms > 0 && assemblyTimer.ms <= 30000 - 200, `装配计时器按剩余预算武装（实测 ${assemblyTimer.ms} ms，应 > 0 且 ≤ 29800）`);
+  // 武装值精确等于配置时限减筛选耗时；固定默认、重赠全额或入口即耗尽均须失败。
+  assert.equal(assemblyTimer.ms, 30000 - 200, '装配计时器扣除筛选已耗预算');
   assert.match(state.injections[0], new RegExp(`超时环节：装配超时 ${assemblyTimer.ms} ms`, 'u'), '注入文案毫秒数与武装值一致（生产用武装时剩余值）');
   assert.equal(state.reviewSignals.length, 0, '审查从未开始');
   assert.equal(state.nextCalls, 0, '卡片未弹（装配期无人工）');
