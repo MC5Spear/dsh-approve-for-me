@@ -114,27 +114,25 @@ C:/Program Files/Microsoft/Edge/Application/msedge.exe
 
 ### 3.1 准备宿主解析树
 
-完整宿主接线测试需要以下包可解析：
+完整宿主接线测试需要以下包可解析（`<RC>` 为目标 RC，取自 package.json 准入集合成员；逐 RC 验证矩阵见 design §10.5）：
 
-- `@deepseek-ai/dsh-llm@0.2.1-rc.2`
-- `@deepseek-ai/dsh-typert-protocol@0.2.1-rc.2`
+- `@deepseek-ai/dsh-llm@<RC>` 与 `@deepseek-ai/dsh-typert-protocol@<RC>`（两枚钉同一 RC）
 - `@deepseek-ai/cordis` 满足 `~4.0.4`
 - `@deepseek-ai/schemastery` 满足 `^3.18.4`
-- `@deepseek-ai/dsh-client-ui-primitives@0.2.1-rc.2`
-- `@deepseek-ai/dsh-session-format-v3-to-v4@0.2.1-rc.2`
+- `@deepseek-ai/dsh-client-ui-primitives@<RC>` 与 `@deepseek-ai/dsh-session-format-v3-to-v4@<RC>`
 
-后两包是测试额外读取的宿主制品，不在本插件依赖图内。还需可解析的 zod。CI 当前补装 cordis `4.0.5`、schemastery `3.18.5`。
+后两包是测试额外读取的宿主制品，不在本插件依赖图内。还需可解析的 zod。CI 与本地装置补装 cordis `4.0.5`、schemastery `3.18.5`。
 
-可以指向已有匹配安装树，也可在独立目录安装：
+可以指向已有匹配安装树，也可在独立目录安装（以 `0.2.1-rc.3` 为例；换 RC 只替换版本号）：
 
 ```powershell
-npm install --prefix "<独立依赖目录>" --no-save --no-package-lock --no-audit --no-fund @deepseek-ai/cordis@4.0.5 @deepseek-ai/dsh-llm@0.2.1-rc.2 @deepseek-ai/dsh-typert-protocol@0.2.1-rc.2 @deepseek-ai/schemastery@3.18.5 @deepseek-ai/dsh-client-ui-primitives@0.2.1-rc.2 @deepseek-ai/dsh-session-format-v3-to-v4@0.2.1-rc.2 zod@4.4.3
+npm install --prefix "<独立依赖目录>" --no-save --no-package-lock --no-audit --no-fund @deepseek-ai/cordis@4.0.5 @deepseek-ai/dsh-llm@0.2.1-rc.3 @deepseek-ai/dsh-typert-protocol@0.2.1-rc.3 @deepseek-ai/schemastery@3.18.5 @deepseek-ai/dsh-client-ui-primitives@0.2.1-rc.3 @deepseek-ai/dsh-session-format-v3-to-v4@0.2.1-rc.3 zod@4.4.3
 $env:DSAFM_HOST_MODULES = "<独立依赖目录>\node_modules"
 ```
 
-此步骤联网并写目标目录。完成后不要把独立依赖目录提交。解析钩子按本机 `hostModules`、`<DSH_HOME>/profiles/node_modules`、Windows npm 全局 DSH 依赖树尝试候选。候选须能读取 zod 和带 `.volatile()` 的 schemastery；没有可用候选时交回 Node 默认解析。目录存在不代表它会被选中。
+逐 RC 验证一律用显式版本号从官方 npm registry 装到独立临时目录，安装不写回锁文件，验证后弃置；每个 RC 记录实际使用的树来源，不与默认锁树混淆（默认锁树钉基准 RC，当前 `0.2.1-rc.2`）。装好后可注入期望版本收紧守卫（`$env:DSAFM_EXPECT_HOST = "<RC>"`）：守卫把「实体 ∈ 准入集合」收紧为「实体 = 期望」，装错版本直接判红。此步骤联网并写目标目录。完成后不要把独立依赖目录提交。解析钩子按本机 `hostModules`、`<DSH_HOME>/profiles/node_modules`、Windows npm 全局 DSH 依赖树尝试候选。候选须能读取 zod 和带 `.volatile()` 的 schemastery；没有可用候选时交回 Node 默认解析。目录存在不代表它会被选中。
 
-宿主版本守卫核对两个精确宿主包的实际版本及同树来源。缺包、错版和混树都要处理。部分缺包跳过不能代替守卫，也不能用不相干宿主树的通过结果证明当前适配线。
+宿主版本守卫核对两个精确宿主包的实际版本及同树来源。缺包、错版和混树都要处理。部分缺包跳过不能代替守卫，也不能用不相干宿主树的通过结果证明当前适配线。守卫三类反例（集合外版本、两包异版、混树）的装置与执行位置在 CI 的 guard-negatives 作业（design §10.5）；本地复现按同一装置装临时树后设 `DSAFM_HOST_MODULES` 运行 `node --import ./tools/_host-hooks.mjs --test test/host-tree.test.mjs`，预期非零退出。
 
 `tools/probe-tool-visibility.mjs` 还需 `@deepseek-ai/dsh-scope` 与 `@deepseek-ai/dsh-tools`。它在离线进程中建立上下文和临时工具注册，打印可见性读数，不操作运行中的实例；结束时释放注册和作用域。其读数不是当前部署工具目录的完整证明。
 
