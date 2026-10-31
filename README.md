@@ -21,7 +21,7 @@ DSH 提供插件所需的两个宿主接口包：`@deepseek-ai/dsh-llm` 和 `@de
 
 ## 安装
 
-向维护者取得 `.tgz` 安装包，或对应的完整源码目录。核对包的完整版本及支持的 DSH 版本，并保留随包提供的提交标识或文件校验信息，便于更新、回退和排障。
+从[GitHub 仓库](https://github.com/MC5Spear/dsh-approve-for-me)获取源码并在本地制作安装包。本适配线使用 `adapt/dsh-0.2.1` 分支；安装前核对上表版本，并用 `git rev-parse HEAD` 记录实际使用的提交，便于更新、回退和排障。
 
 安装前，先完成两件事：
 
@@ -30,11 +30,20 @@ DSH 提供插件所需的两个宿主接口包：`@deepseek-ai/dsh-llm` 和 `@de
 
 宿主安装通道需要 pnpm。用 `corepack pnpm --version` 检查；不可用时，先请部署管理员为该宿主准备 pnpm。
 
-先确认目标 DSH 使用的 profile，也就是该实例加载的一组具名部署配置；可由启动命令或部署管理员确认。下面以 `web` 为例，其他 profile 要替换 `web`。再把安装包占位符替换为实际文件的绝对路径，保留引号：
+先确认目标 DSH 使用的 profile，也就是该实例加载的一组具名部署配置；可由启动命令或部署管理员确认。下面以 `web` 为例，其他 profile 要替换 `web`。
+
+准备 Git、Node.js 和 npm，在用于部署的独立目录中获取源码并打包：
 
 ```powershell
-dsh plugin --profile web add "<安装件的绝对路径.tgz>"
+git clone --branch adapt/dsh-0.2.1 https://github.com/MC5Spear/dsh-approve-for-me.git
+cd dsh-approve-for-me
+git rev-parse HEAD
+$package = (npm pack --ignore-scripts --json | ConvertFrom-Json)[0]
+if ($LASTEXITCODE -ne 0) { throw "npm pack failed" }
+dsh plugin --profile web add (Join-Path $PWD.Path $package.filename)
 ```
+
+`npm pack` 在当前目录生成 `.tgz`，命令自动取出文件名并安装，无需填写路径。无需先安装开发依赖，也没有产品构建步骤。
 
 源码目录的依赖准备、安装和更新方法见[安装参考](<docs/user-reference.md#installation>)。安装后安全重启宿主，再重新加载页面。
 

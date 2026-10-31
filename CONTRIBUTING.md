@@ -21,7 +21,15 @@
 
 维护分支按 `adapt/dsh-<主版本.次版本.修订版本>` 命名，例如 `adapt/dsh-0.2.0`、`adapt/dsh-0.2.1`，不带 `-rc.2` 等预发布后缀。本线使用 `adapt/dsh-0.2.1`；完整宿主版本仍由 `engines.dsh` 和依赖约束精确声明。分支中的提交可以继续变化；分支名不是固定安装件。
 
-请使用维护者交付的匹配源码快照或工作树。取得源码时，先核实完整提交或标签确实存在，再检出该对象。保留完整提交标识或安装包校验信息，便于把源码、测试结果与待交付的同一份文件对应起来。
+从[GitHub 仓库](https://github.com/MC5Spear/dsh-approve-for-me)克隆匹配的适配分支。复现已安装版本的问题时，检出安装时记录的完整提交或对应已发布标签；维护分支会继续更新，最新提交未必与已安装文件相同。
+
+```powershell
+git clone --branch adapt/dsh-0.2.1 https://github.com/MC5Spear/dsh-approve-for-me.git
+cd dsh-approve-for-me
+git rev-parse HEAD
+```
+
+保留完整提交标识或安装包校验信息，便于对应源码、测试结果和安装内容。
 
 在源码根目录核对身份：
 
@@ -30,7 +38,7 @@ git rev-parse HEAD
 node -p "JSON.stringify({version:require('./package.json').version,host:require('./package.json').engines.dsh})"
 ```
 
-无 Git 历史的快照，使用交付方提供的提交标识与文件校验信息。版本号相同，不表示文件相同。
+通过 GitHub 下载 ZIP 时，保留下载页面对应的完整提交标识；发布附件另保留其校验信息。版本号相同，不表示文件相同。
 
 ## 准备开发环境
 

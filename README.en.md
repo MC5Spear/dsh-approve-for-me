@@ -21,7 +21,7 @@ DSH supplies the two host interface packages, `@deepseek-ai/dsh-llm` and `@deeps
 
 ## Installation
 
-Obtain a `.tgz` package or its matching complete source directory from the maintainer. Check its full version and supported DSH versions. Retain the supplied revision or file checksum for updates, rollback, and troubleshooting.
+Get the source from the [GitHub repository](https://github.com/MC5Spear/dsh-approve-for-me) and create an installation package locally. This adaptation line uses `adapt/dsh-0.2.1`. Check the versions above and record the source revision with `git rev-parse HEAD` for updates, rollback, and troubleshooting.
 
 Before installing:
 
@@ -30,11 +30,20 @@ Before installing:
 
 The host installation channel needs pnpm. Check with `corepack pnpm --version`. If unavailable, ask the deployment administrator to prepare pnpm for that host first.
 
-First confirm the target DSH profile: the named deployment configuration loaded by that instance. Check its startup command or ask the deployment administrator. The example uses `web`; replace it if the target uses another profile. Replace the package placeholder with the actual absolute file path, keeping the quotes:
+First confirm the target DSH profile: the named deployment configuration loaded by that instance. Check its startup command or ask the deployment administrator. The example uses `web`; replace it if the target uses another profile.
+
+With Git, Node.js, and npm available, obtain the source in a separate deployment directory and create a package:
 
 ```powershell
-dsh plugin --profile web add "<absolute-path-to-artifact.tgz>"
+git clone --branch adapt/dsh-0.2.1 https://github.com/MC5Spear/dsh-approve-for-me.git
+cd dsh-approve-for-me
+git rev-parse HEAD
+$package = (npm pack --ignore-scripts --json | ConvertFrom-Json)[0]
+if ($LASTEXITCODE -ne 0) { throw "npm pack failed" }
+dsh plugin --profile web add (Join-Path $PWD.Path $package.filename)
 ```
+
+`npm pack` creates a `.tgz` in the current directory. The commands use its filename automatically, with no path placeholder to fill in. No prior development-dependency installation or product build is needed.
 
 For source-directory dependencies, installation, and updates, see the [installation reference](<docs/user-reference.en.md#installation>). Restart the host safely after installation, then reload the page.
 

@@ -42,41 +42,53 @@ Node 20 is the minimum declared by this plugin; the running environment must als
 
 The `+dsh.0.2.1-rc` suffix identifies the DSH 0.2.1 RC maintenance line. Only the five RCs above are currently supported; a later RC needs updated declarations and verification by the maintainer. Check the full version and supported list when choosing a package: ordinary version comparisons ignore the part after `+`. The package’s `engines.dsh` and both host interface peer dependencies declare the same exact version list.
 
-When obtaining source or a package, check its full version and supported DSH versions, and retain the supplied revision or package checksum. Maintenance branches can advance, and packages with the same version can contain different files. These identifiers help the maintainer reproduce problems or confirm a rollback version.
+When obtaining source or a package, check its full version and supported DSH versions, and retain the source revision or package checksum. Maintenance branches can advance, and packages with the same version can contain different files. These identifiers help the maintainer reproduce problems or confirm a rollback version.
 
-### 1.2 Install a supplied artifact
+### 1.2 Create a package from the repository and install it
 
-Obtain a `.tgz` package or matching complete source from the maintainer, and check the version and source as described above.
+Get the complete source from the [GitHub repository](https://github.com/MC5Spear/dsh-approve-for-me). This adaptation line uses `adapt/dsh-0.2.1`. Clone it with Git, or select that branch on GitHub and download and extract its ZIP.
+
+With Git, Node.js, and npm available, run in a separate deployment directory:
+
+```powershell
+git clone --branch adapt/dsh-0.2.1 https://github.com/MC5Spear/dsh-approve-for-me.git
+cd dsh-approve-for-me
+git rev-parse HEAD
+$package = (npm pack --ignore-scripts --json | ConvertFrom-Json)[0]
+if ($LASTEXITCODE -ne 0) { throw "npm pack failed" }
+```
+
+Record the printed revision and check the package version and supported DSH versions in the source package metadata. `npm pack` needs no prior development-dependency installation. It creates a `.tgz` in the current directory and stores its filename in `$package`. For a ZIP download, retain the full commit id from its download page and run the two packaging lines above from the extracted source root. Packaging creates a local file; it neither installs the plugin nor publishes to a registry.
 
 **Restarting interrupts running work.** Before installation or update, wait for tasks to finish or stop them safely. If the plugin is installed, first save `mode=off` and switch default and active-session permission presets to standard ones. Restart service deployments from outside the service process tree.
 
-Confirm the profile name from the target DSH startup command or deployment administrator. A profile is a named deployment configuration loaded by an instance. The example uses `web`; replace it for another profile and confirm that it loads the Web interface and required host services. Replace the package placeholder with the actual absolute file path, keeping the quotes:
+Confirm the profile name from the target DSH startup command or deployment administrator. A profile is a named deployment configuration loaded by an instance. The example uses `web`; replace it for another profile and confirm that it loads the Web interface and required host services. Keep the terminal in the source root used for packaging, then install the generated file directly:
 
 ```powershell
-dsh plugin --profile web add "<absolute-path-to-artifact.tgz>"
+dsh plugin --profile web add (Join-Path $PWD.Path $package.filename)
 ```
 
 The command installs the plugin and its direct dependencies into the selected profile. The matching DSH installation supplies its host interface packages.
 
-### 1.3 Install a supplied source directory
+### 1.3 Install directly from a source directory
 
-Use a separate complete source directory, not a working tree being edited for stable deployment. It must contain package declarations, host and client entries, installation declarations, and security policies.
+Alternatively, skip packaging and use the complete repository source from the preceding section. Keep a separate deployment copy rather than linking an actively edited development tree to a stable instance. It must contain package declarations, host and client entries, installation declarations, and security policies.
 
 Before installation, check the host and dependencies:
 
 1. The target DSH must be one of the supported versions above and supply `@deepseek-ai/cordis` satisfying `~4.0.4`.
 2. `@deepseek-ai/dsh-llm` and `@deepseek-ai/dsh-typert-protocol` must come from the same DSH installation and both match the target DSH RC version.
-3. If the source directory already has `node_modules`, have the deployment administrator check where its host packages resolve from, or obtain a clean directory from the maintainer. Fix mismatched versions or mixed sources first; do not bulk-delete unknown dependencies.
+3. If the source directory already has `node_modules`, check where its host packages resolve from or clone a fresh separate copy from the repository. Fix mismatched versions or mixed sources first. Ask the deployment administrator if unsure; do not bulk-delete unknown dependencies.
 
-A directory link resolves the plugin’s direct dependencies from the source directory. The commands below prepare those dependencies and install the plugin. Replace both paths with the same actual source directory, and confirm `web` is the target profile as described above:
+A directory link resolves the plugin’s direct dependencies from the source directory. Enter the source root obtained above, then run these commands. Confirm `web` is the target profile; `$PWD.Path` automatically supplies the current directory’s absolute path:
 
 ```powershell
-cd "<absolute-source-directory>"
 npm install --omit=dev --legacy-peer-deps
-dsh plugin --profile web add "<absolute-source-directory>"
+if ($LASTEXITCODE -ne 0) { throw "npm install failed" }
+dsh plugin --profile web add $PWD.Path
 ```
 
-`--legacy-peer-deps` prevents npm from automatically installing the host interface packages; the checked DSH installation must still supply them. After the commands finish, follow the next section to confirm loading in the profile. For dependency-resolution failures, use a maintainer-supplied tgz or report redacted loading errors.
+`--legacy-peer-deps` prevents npm from automatically installing the host interface packages; the checked DSH installation must still supply them. After the commands finish, follow the next section to confirm loading in the profile. For dependency-resolution failures, try a `.tgz` made from clean source as described above. If the problem persists, report redacted loading errors in a project issue.
 
 ### 1.4 Reload, confirm, and update
 
@@ -89,7 +101,7 @@ After installation, restart safely through your host management method, then rel
 
 After you select coverage and enable takeover under [section 2](<#coverage>), test approval and records with a harmless escalation. An operation that needs no escalation produces no approval and cannot establish that automatic approval works.
 
-For updates, recheck host and delivery identity, back up user configuration and needed records, add the new artifact through the same host channel, and reload safely. Keep the previous artifact and configuration backup. If problems occur, turn takeover off first and ask the maintainer about rollback. An existing `reviewer.timeoutMs=0` configuration immediately rejects as a timeout; save a positive value if you need review time.
+For updates, obtain a new separate source copy from the repository, record its revision, and recheck host compatibility. Back up user configuration and needed records, create a new package under section 1.2, add it to the same profile, and reload safely. Keep the previous artifact and configuration backup. If problems occur, turn takeover off first and ask the maintainer about rollback. An existing `reviewer.timeoutMs=0` configuration immediately rejects as a timeout; save a positive value if you need review time.
 
 <a id="coverage"></a>
 ## 2. Select coverage, not unrestricted permission
@@ -470,7 +482,7 @@ Host stderr contains `[approve-for-me]` audit lines. One approval may have sever
 | Records are missing | Producing session, capture level, I/O errors, and rotation | Preserve evidence before reporting. Do not delete records to “repair” the issue |
 | Permission row is absent or logs say `unknown preset` | Default still references a missing `auto-approve` | Restore the reference or backup under the next section; do not delete all configuration |
 
-For help, submit a [project issue](https://github.com/MC5Spear/dsh-approve-for-me/issues) with full plugin version and delivery identity, host and Node versions, platform, reproduction steps, redacted configuration, and related audit lines or screenshots. Remove credentials, private paths, session content, and token-bearing URLs. Redact security reports too; do not reproduce with real dangerous operations.
+For help, submit a [project issue](https://github.com/MC5Spear/dsh-approve-for-me/issues) with full plugin version, source revision or package checksum, host and Node versions, platform, reproduction steps, redacted configuration, and related audit lines or screenshots. Remove credentials, private paths, session content, and token-bearing URLs. Redact security reports too; do not reproduce with real dangerous operations.
 
 <a id="uninstall"></a>
 ## 9. Disable, uninstall, and recover
