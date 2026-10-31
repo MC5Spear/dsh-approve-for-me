@@ -376,12 +376,26 @@ const VERSION_PKG = {
   peerDependencies: { '@deepseek-ai/cordis': '~4.0.4', '@deepseek-ai/dsh-llm': '0.2.1-rc.2', '@deepseek-ai/dsh-typert-protocol': '0.2.1-rc.2' },
 };
 
-const writeVersionFixture = (root, { pkg = VERSION_PKG, lock } = {}) => {
+/** 准入集合的枚举声明（design §1.3.1：三处同一集合的显式枚举形态）。 */
+const UNION = '0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4 || 0.2.1-rc.5';
+const VERSION_PKG_UNION = {
+  ...VERSION_PKG,
+  engines: { ...VERSION_PKG.engines, dsh: UNION },
+  peerDependencies: { ...VERSION_PKG.peerDependencies, '@deepseek-ai/dsh-llm': UNION, '@deepseek-ai/dsh-typert-protocol': UNION },
+};
+
+/** 发布形态的包版本：线标识后缀，README 的独立标识不得后随 .数字（只是某个 rc.N 的前缀）。 */
+const VERSION_PKG_RELEASE = { ...VERSION_PKG_UNION, version: '0.2.2+dsh.0.2.1-rc' };
+
+const writeVersionFixture = (root, { pkg = VERSION_PKG, lock, readme } = {}) => {
+  const identity = /\+dsh\.(.+)$/u.exec(pkg.version)?.[1] ?? null;
   mkdirSync(root, { recursive: true });
   writeFileSync(path.join(root, 'package.json'), JSON.stringify(pkg, null, 2), 'utf8');
-  // 宿主串独立在场（反引号内的字面量也算）。
-  writeFileSync(path.join(root, 'README.md'), '# x\n\n版本 `0.2.2+dsh.0.2.1-rc.2`；宿主 `0.2.1-rc.2`。\n', 'utf8');
-  writeFileSync(path.join(root, 'README.en.md'), '# x\n\nVersion `0.2.2+dsh.0.2.1-rc.2`; host `0.2.1-rc.2`.\n', 'utf8');
+  // 兼容线标识独立在场（反引号内的字面量也算；默认随声明取集合内具体 RC）。
+  const zh = readme?.zh ?? `# x\n\n版本 \`${pkg.version}\`；宿主 \`${identity ?? ''}\`。\n`;
+  const en = readme?.en ?? `# x\n\nVersion \`${pkg.version}\`; host \`${identity ?? ''}\`.\n`;
+  writeFileSync(path.join(root, 'README.md'), zh, 'utf8');
+  writeFileSync(path.join(root, 'README.en.md'), en, 'utf8');
   const lockRoot = lock ?? {
     version: pkg.version,
     packages: { '': { name: pkg.name, version: pkg.version, license: pkg.license, engines: { dsh: pkg.engines.dsh, node: pkg.engines.node }, dependencies: pkg.dependencies, peerDependencies: pkg.peerDependencies } },
@@ -389,7 +403,7 @@ const writeVersionFixture = (root, { pkg = VERSION_PKG, lock } = {}) => {
   writeFileSync(path.join(root, 'package-lock.json'), JSON.stringify(lockRoot), 'utf8');
 };
 
-test('版本身份：正例三处互核一致通过（lock engines 键序不同不算不一致）', () => {
+test('版本身份：正例三处互核一致通过（lock engines 键序不同不算不一致；枚举声明与发布形态后缀同规则）', () => {
   const root = tmpRoot();
   try {
     writeVersionFixture(root);
@@ -398,22 +412,43 @@ test('版本身份：正例三处互核一致通过（lock engines 键序不同�
       lock: { version: VERSION_PKG.version, packages: { '': { ...VERSION_PKG, engines: { node: '>=20', dsh: '0.2.1-rc.2' } } } },
     });
     assert.deepEqual(checkVersionIdentity(root), []);
+    // 枚举声明（三处同一集合）＋过渡后缀（集合内具体 RC）。
+    writeVersionFixture(root, { pkg: VERSION_PKG_UNION });
+    assert.deepEqual(checkVersionIdentity(root), []);
+    // 枚举声明＋发布形态线标识后缀；README 独立标识不得后随 .数字。
+    writeVersionFixture(root, {
+      pkg: VERSION_PKG_RELEASE,
+      readme: {
+        zh: `# x\n\n版本 \`${VERSION_PKG_RELEASE.version}\`；兼容线 \`0.2.1-rc\`。\n`,
+        en: `# x\n\nVersion \`${VERSION_PKG_RELEASE.version}\`; compat line \`0.2.1-rc\`.\n`,
+      },
+    });
+    assert.deepEqual(checkVersionIdentity(root), []);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test('版本身份反例：engines 错宿主 / peer 错版 / lock 根 version 与 name 不一致 / 首页缺独立宿主串 / 旧 +dsh 与错 rc 宿主身份', () => {
+test('版本身份反例：engines 错宿主 / peer 错版 / lock 根 version 与 name 不一致 / 首页缺独立标识 / 旧 +dsh 与错 rc 宿主身份', () => {
   const cases = [
     [(root) => writeVersionFixture(root, { pkg: { ...VERSION_PKG, engines: { ...VERSION_PKG.engines, dsh: '0.2.1-rc.1' } } }), 'engines.dsh'],
     [(root) => writeVersionFixture(root, { pkg: { ...VERSION_PKG, peerDependencies: { ...VERSION_PKG.peerDependencies, '@deepseek-ai/dsh-llm': '0.2.1-rc.1' } } }), 'dsh-llm'],
+    [(root) => writeVersionFixture(root, { pkg: { ...VERSION_PKG_UNION, engines: { ...VERSION_PKG_UNION.engines, dsh: '>=0.2.1-rc.1' } } }), '含非精确版本段'],
+    [(root) => writeVersionFixture(root, { pkg: { ...VERSION_PKG_UNION, engines: { ...VERSION_PKG_UNION.engines, dsh: '0.2.1-rc.1 || 0.2.2-rc.1' }, peerDependencies: { ...VERSION_PKG_UNION.peerDependencies, '@deepseek-ai/dsh-llm': '0.2.1-rc.1 || 0.2.2-rc.1', '@deepseek-ai/dsh-typert-protocol': '0.2.1-rc.1 || 0.2.2-rc.1' } } }), '不是单一 RC 线'],
+    [(root) => writeVersionFixture(root, { pkg: { ...VERSION_PKG_UNION, version: '0.2.2+dsh.0.2.1-rc.6' } }), '不是合法兼容线标识'],
     [(root) => writeVersionFixture(root, { lock: { version: '0.2.1+dsh.0.2.0-rc.2', packages: { '': { version: '0.2.2+dsh.0.2.1-rc.2' } } } }), 'lock 根 version'],
     [(root) => writeVersionFixture(root, { lock: { version: VERSION_PKG.version, packages: { '': { name: 'other-name', version: VERSION_PKG.version } } } }), 'lock 根 name'],
     [(root) => writeVersionFixture(root, { lock: { version: VERSION_PKG.version, packages: { '': { ...VERSION_PKG, version: '0.0.0+dsh.0.2.1-rc.2' } } } }), 'lock 根 version packages'],
     [(root) => writeVersionFixture(root, { lock: { version: VERSION_PKG.version, packages: { '': { ...VERSION_PKG, dependencies: { wrong: '1.0.0' } } } } }), 'lock 根 dependencies'],
     [(root) => writeVersionFixture(root, { lock: { version: VERSION_PKG.version, packages: { '': { ...VERSION_PKG, peerDependencies: { ...VERSION_PKG.peerDependencies, '@deepseek-ai/dsh-llm': '0.2.1-rc.1' } } } } }), 'lock 根 peerDependencies'],
     [(root) => { writeVersionFixture(root); writeFileSync(path.join(root, 'CONTRIBUTING.md'), '当前宿主 `0.2.1-rc.1`。\n', 'utf8'); }, '宿主身份'],
-    [(root) => { writeVersionFixture(root); writeFileSync(path.join(root, 'README.md'), '# x\n\n只有 `0.2.2+dsh.0.2.1-rc.2`，宿主不独立写。\n', 'utf8'); }, '独立的宿主版本串'],
+    [(root) => { writeVersionFixture(root, { pkg: VERSION_PKG_UNION }); writeFileSync(path.join(root, 'CONTRIBUTING.md'), '需要 dsh 0.2.2-rc.1 或更高。\n', 'utf8'); }, '不在准入集合或兼容线标识内'],
+    [(root) => { writeVersionFixture(root); writeFileSync(path.join(root, 'README.md'), '# x\n\n只有 `0.2.2+dsh.0.2.1-rc.2`，宿主不独立写。\n', 'utf8'); }, '独立兼容线标识'],
+    // 发布形态后缀下，README 只出现 rc.N 字面量（线标识仅作其前缀）不算独立标识。
+    [(root) => writeVersionFixture(root, {
+      pkg: VERSION_PKG_RELEASE,
+      readme: { zh: `# x\n\n版本 \`${VERSION_PKG_RELEASE.version}\`；宿主 \`0.2.1-rc.2\`。\n`, en: `# x\n\nVersion \`${VERSION_PKG_RELEASE.version}\`; host \`0.2.1-rc.2\`.\n` },
+    }), '独立兼容线标识'],
     [(root) => { writeVersionFixture(root); writeFileSync(path.join(root, 'CONTRIBUTING.md'), '旧版本 0.2.1+dsh.0.2.0-rc.2。\n', 'utf8'); }, '非当前包版本串'],
     [(root) => { writeVersionFixture(root); writeFileSync(path.join(root, 'CONTRIBUTING.md'), '需要 dsh 0.2.1-rc.1 或更高。\n', 'utf8'); }, '宿主身份'],
   ];

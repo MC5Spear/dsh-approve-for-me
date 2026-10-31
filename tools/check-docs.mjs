@@ -22,6 +22,7 @@ import { spawnSync } from 'node:child_process';
 import { Config, normalizeConfig } from '../lib/config.js';
 import { DEFAULT_REDACT_PATTERNS } from '../lib/policy.js';
 import { LINE_CAP_FACTOR, DEFAULT_MAX_RECORDS, DEFAULT_MAX_SESSIONS } from '../lib/trace-store.js';
+import { admissionFromPackage, deriveLine, admits } from './host-admission.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -571,9 +572,14 @@ const stable = (value) =>
     : JSON.stringify(value);
 
 /**
- * 版本身份互核：version 的 +dsh. 后缀 == engines.dsh == 两枚宿主 peer；lock 根一致
- * （version 及在场元数据字段独立比）；两语首页分别写出完整版本串与独立宿主串；
- * 公开文档（CHANGELOG 历史按职责豁免）不残留其他 +dsh. 版本串或与 dsh 连写的错误宿主串。
+ * 版本身份互核（design §9.3/§10.4，三件独立检查）：
+ * ① 兼容线身份——version 的 `+dsh.` 后缀按 9.3 文法判定（发布形态 `<线>-rc` 或
+ *    过渡形态「准入集合内的具体 RC」）；
+ * ② 准入集合一致性——engines.dsh 与两条宿主 peer 三处声明经共享归一模块后必须
+ *    同一集合；lock 根的 version 与在场元数据字段沿用独立比对；
+ * ③ 公开文档宿主字面量——合法身份集合 = 准入集合 ∪ {线标识}；README 两语首页
+ *    须含完整版本串与独立兼容线标识（CHANGELOG 历史按职责豁免）。
+ * 检查器不接触实体解析——「实体构成合法环境」由宿主树守卫独立断言。
  * @param {string} root
  * @param {object} [opts] skipLock：包目录无 lock 时跳过。
  * @returns {{file: string, line: number, problem: string}[]}
@@ -583,19 +589,26 @@ export function checkVersionIdentity(root, opts = {}) {
   const pkgPath = path.join(root, 'package.json');
   if (!existsSync(pkgPath)) return [{ file: 'package.json', line: 0, problem: 'package.json 不存在' }];
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+  // ② 准入集合一致性：三处声明共享归一，失败即报（后续两件检查失去依据时直接返回）。
+  const admission = admissionFromPackage(pkg);
+  if (!admission.ok) return admission.errors.map((problem) => ({ file: 'package.json', line: 0, problem }));
+  const members = admission.members;
+  const line = deriveLine(members);
+  if (!line.ok) return [{ file: 'package.json', line: 0, problem: line.error }];
+  // ① 兼容线身份：后缀 t 合法 ⟺ t = "<线>-rc"（发布形态）或 t ∈ 准入集合（过渡形态）。
+  const releaseIdentity = `${line.line}-rc`;
   const versionMatch = /^(\d+\.\d+\.\d+)\+dsh\.(.+)$/.exec(pkg.version);
   if (!versionMatch) {
-    issues.push({ file: 'package.json', line: 0, problem: `version 缺少 +dsh.<宿主> 后缀：${pkg.version}` });
+    return [{ file: 'package.json', line: 0, problem: `version 缺少 +dsh.<兼容线标识> 后缀：${pkg.version}` }];
+  }
+  const identity = versionMatch[2];
+  if (identity !== releaseIdentity && !admits(members, identity)) {
+    issues.push({
+      file: 'package.json',
+      line: 0,
+      problem: `version 后缀 ${identity} 不是合法兼容线标识：应为 ${releaseIdentity} 或准入集合内的具体 RC`,
+    });
     return issues;
-  }
-  const host = versionMatch[2];
-  if (pkg.engines?.dsh !== host) {
-    issues.push({ file: 'package.json', line: 0, problem: `engines.dsh (${pkg.engines?.dsh}) 与 version 后缀宿主 (${host}) 不一致` });
-  }
-  for (const name of ['@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-typert-protocol']) {
-    if (pkg.peerDependencies?.[name] !== host) {
-      issues.push({ file: 'package.json', line: 0, problem: `peerDependencies.${name} (${pkg.peerDependencies?.[name]}) 与宿主 ${host} 不一致` });
-    }
   }
   if (!opts.skipLock) {
     const lockPath = path.join(root, 'package-lock.json');
@@ -616,6 +629,8 @@ export function checkVersionIdentity(root, opts = {}) {
       }
     }
   }
+  // ③ 公开文档宿主字面量：合法身份集合 = 准入集合 ∪ {线标识}。
+  const legalIdentities = new Set([...members, releaseIdentity]);
   for (const name of ['README.md', 'README.en.md']) {
     const full = path.join(root, name);
     if (!existsSync(full)) {
@@ -624,11 +639,12 @@ export function checkVersionIdentity(root, opts = {}) {
     }
     const text = readFileSync(full, 'utf8');
     if (!text.includes(pkg.version)) issues.push({ file: name, line: 0, problem: `首页缺少当前完整版本串 ${pkg.version}` });
-    // 宿主串必须独立在场：去掉完整版本串后仍要能找到宿主版本（反引号内的宿主字面量同样算），
-    // 防止只写包版本而宿主身份错误。
+    // 兼容线标识必须独立在场：去掉完整版本串后仍要能找到与当前后缀完全相同的字面量，
+    // 防止只写包版本而身份错误。t 为线标识时，出现处不得再后随 .数字（否则只是某个 rc.N 的前缀）。
     const withoutVersion = text.split(pkg.version).join('');
-    if (!withoutVersion.includes(host)) {
-      issues.push({ file: name, line: 0, problem: `首页缺少独立的宿主版本串 ${host}（不能只由完整包版本串隐含）` });
+    const identityStandalone = new RegExp(`${identity.replace(/\./gu, '\\.')}(?!\\.\\d)`, 'u');
+    if (!identityStandalone.test(withoutVersion)) {
+      issues.push({ file: name, line: 0, problem: `首页缺少独立兼容线标识 ${identity}（不能只由完整包版本串隐含）` });
     }
   }
   for (const doc of collectPublicDocs(root)) {
@@ -636,17 +652,18 @@ export function checkVersionIdentity(root, opts = {}) {
     if (rel === 'CHANGELOG.md') continue;
     // 当前身份常用行内代码；只去围栏示例，保留代码字面量中的版本。
     const rawText = readFileSync(doc, 'utf8').replace(/```[\s\S]*?```|~~~[\s\S]*?~~~/gu, '').replace(/`/gu, '');
-    // 配套的宿主—adapt分支对应关系是维护信息，不是当前安装身份声明。
-    const text = rawText.replace(/(?:宿主|host)\s+(\d+\.\d+\.\d+-rc\.\d+)\s*(?:对应|corresponds to)\s+adapt\/dsh-\1/giu, '（宿主与分支对应关系）');
+    // 配套的宿主—adapt分支对应关系是维护信息，不是当前安装身份声明；分支侧只保留三段版本。
+    const text = rawText.replace(/(?:宿主|host)\s+(\d+\.\d+\.\d+)(?:-rc(?:\.\d+)?)?\s*(?:对应|corresponds to)\s+adapt\/dsh-\1/giu, '（宿主与分支对应关系）');
     for (const m of text.matchAll(/\d+\.\d+\.\d+\+dsh\.[0-9A-Za-z.+*-]+/g)) {
       if (m[0] !== pkg.version) issues.push({ file: rel, line: 0, problem: `文档中出现非当前包版本串 ${m[0]}` });
     }
-    // 与 dsh 连写的宿主身份声明（如「dsh.0.2.1-rc.1」「宿主 0.2.0-rc.2」）不得偏离当前宿主。
-    // 无预发布限定段的写法（如「DSH 0.2.1 起」）是底线/引入版本陈述，不是当前身份声明，不比。
-    const hostShape = host.includes('-') ? '\\d+\\.\\d+\\.\\d+-rc\\.\\d+' : '\\d+\\.\\d+\\.\\d+';
-    const hostRe = new RegExp(`(?:dsh\\.|dsh\\s|宿主\\s*|host\\s*)(${hostShape})`, 'gi');
-    for (const m of text.matchAll(hostRe)) {
-      if (m[1] !== host) issues.push({ file: rel, line: 0, problem: `文档中宿主身份 ${m[1]} 与当前宿主 ${host} 不一致（${m[0]}）` });
+    // 宿主身份声明（dsh.X、dsh X、宿主 X、host X）逐个核对；裸三段版本是底线陈述，
+    // 不作身份比较（沿用）。t 为线标识时同样不后随 .数字。
+    for (const m of text.matchAll(/(?:dsh\.|dsh\s|宿主\s*|host\s*)(\d+\.\d+\.\d+-rc(?:\.\d+)?)/gi)) {
+      const claimed = m[1];
+      if (!legalIdentities.has(claimed)) {
+        issues.push({ file: rel, line: 0, problem: `文档宿主身份 ${claimed} 不在准入集合或兼容线标识内（${m[0]}）` });
+      }
     }
   }
   return issues;
